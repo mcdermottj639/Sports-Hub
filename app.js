@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v20';
+const APP_VERSION = 'v21';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -938,41 +938,9 @@ async function renderFantasy() {
     else { tot.H += Number(ln.d.H || 0); tot.HR += Number(ln.d.HR || 0); tot.RBI += Number(ln.d.RBI || 0); tot.R += Number(ln.d.R || 0); }
   });
 
-  // analytics
-  const starters = roster.filter((p) => p.status === 'active');
-  const startersWithTeam = starters.filter((p) => p.team);
-  const startersPlaying = startersWithTeam.filter((p) => playerGame(p));
-  const idleStarters = startersWithTeam.filter((p) => !playerGame(p));
-  const benchPlaying = roster.filter((p) => p.status === 'bench' && playerGame(p));
-  const needTeam = roster.filter((p) => !p.team).length;
-  const ilCount = roster.filter((p) => p.status === 'il').length;
-
-  const card = (val, lbl, cls) => `<div class="fan-card ${cls || ''}"><div class="big">${val}</div><div class="lbl">${lbl}</div></div>`;
-  $('#fantasy-analytics').innerHTML =
-    card(`${startersPlaying.length}/${starters.length}`, 'Starters in action today', 'good') +
-    (hasTotals ? card(`${tot.H} H · ${tot.HR} HR`, `Today: ${tot.RBI} RBI, ${tot.R} R, ${tot.K} K`, 'good') : '') +
-    card(idleStarters.length, 'Starters idle (off day)', idleStarters.length ? 'warn' : '') +
-    card(benchPlaying.length, 'Bench guys playing', benchPlaying.length ? 'warn' : '') +
-    card(ilCount, 'On IL') +
-    (needTeam ? card(needTeam, 'Need team set', 'warn') : '');
-
-  // recommendations
-  const recs = [];
-  benchPlaying.forEach((b) => {
-    const idleMatch = idleStarters.find((s) => s.pos && b.pos && s.pos.split(',')[0].trim() === b.pos.split(',')[0].trim());
-    if (idleMatch) recs.push(`🔁 Consider starting <b>${b.name}</b> (playing today) over <b>${idleMatch.name}</b> (off today).`);
-    else recs.push(`▶️ <b>${b.name}</b> is on your bench but has a game today — consider activating.`);
-  });
-  idleStarters.forEach((s) => {
-    if (!benchPlaying.length) recs.push(`💤 <b>${s.name}</b> has no game today (off day) — you may be leaving a slot empty.`);
-  });
-  roster.filter((p) => p.status === 'il' && p.slot !== 'IL').forEach((p) => recs.push(`🩹 <b>${p.name}</b> is marked IL but sitting in a starting slot — swap them out.`));
-  const probableSP = starters.filter((p) => /SP/.test(p.pos) && playerGame(p) && gameState(playerGame(p).g) !== 'final');
-  if (probableSP.length) recs.push(`⚾ Pitchers with games today: ${probableSP.map((p) => `<b>${p.name}</b>`).join(', ')}.`);
-  if (needTeam) recs.push(`⚙️ Set the team for ${needTeam} player(s) below to unlock their live tracking.`);
-
-  $('#fantasy-recs').innerHTML = `<h3>Recommendations</h3>` +
-    (recs.length ? `<ul>${recs.map((r) => `<li>${r}</li>`).join('')}</ul>` : `<div class="none">Your lineup looks set — everyone active has a game today. 🔥</div>`);
+  // snapshot + hot/cold are filled asynchronously (need recent-form data)
+  $('#fantasy-analytics').innerHTML = '<div class="fan-card"><div class="big">…</div><div class="lbl">Analyzing recent form</div></div>';
+  $('#fantasy-recs').innerHTML = '<h3>Hot & Cold</h3><div class="none">Checking who’s heating up and who to drop…</div>';
 
   // roster (grouped)
   const teamOpts = (fanState.sport === 'baseball' ? MLB_TEAMS : NFL_TEAMS);
@@ -1078,18 +1046,110 @@ function seasonLine(fSport, player, s) {
   }
   return bits.join(' · ');
 }
+// nameKey -> athlete id, from a team roster.
+async function rosterIdMap(sport, teamId) {
+  const path = LEAGUES[sport].espnPath;
+  const data = await fetchJSON(`${SITE}/${path}/teams/${teamId}/roster`, 12 * 3600000).catch(() => null);
+  const map = {};
+  (data?.athletes || []).forEach((grp) => (grp.items || grp.athletes || [grp]).forEach((a) => {
+    if (a?.id && (a.displayName || a.fullName)) map[nameKey(a.displayName || a.fullName)] = a.id;
+  }));
+  return map;
+}
+// Game-by-game log for an athlete (recent-form source).
+async function athleteGamelog(sport, athleteId) {
+  const path = LEAGUES[sport].espnPath;
+  const data = await fetchJSON(`https://site.web.api.espn.com/apis/common/v3/sports/${path}/athletes/${athleteId}/gamelog`, 3 * 3600000).catch(() => null);
+  if (!data) return null;
+  const names = data.names || data.labels || [];
+  const meta = data.events || {};
+  const games = [];
+  (data.seasonTypes || []).forEach((stp) => (stp.categories || []).forEach((cat) => (cat.events || []).forEach((e) => {
+    const id = e.eventId || e.id; const m = meta[id] || {};
+    const d = m.gameDate || m.date;
+    const dict = {}; (e.stats || []).forEach((v, i) => { if (names[i]) dict[names[i]] = v; });
+    games.push({ date: d ? new Date(d) : null, dict });
+  })));
+  return games;
+}
+const numv = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+const ipToOuts = (v) => { const f = numv(v); const w = Math.floor(f); return w * 3 + Math.round((f - w) * 10); };
+// Build a hot/cold tag from 15- and 30-day windows vs season.
+function hotCold(fSport, games, pitcher) {
+  if (!games || games.length < 3) return null;
+  const dated = games.filter((g) => g.date && !isNaN(g.date));
+  const now = Date.now(), day = 86400000;
+  const within = (d) => dated.filter((g) => now - g.date.getTime() <= d * day);
+  if (fSport === 'baseball') {
+    if (pitcher) {
+      const agg = (gs) => { let er = 0, o = 0; gs.forEach((g) => { er += numv(g.dict.earnedRuns ?? g.dict.ER); o += ipToOuts(g.dict.inningsPitched ?? g.dict.IP); }); return o ? { era: (er * 27) / o, o } : null; };
+      const s = agg(games), w15 = agg(within(15)), w30 = agg(within(30));
+      if (!s) return null;
+      const e = (x) => (x ? x.era.toFixed(2) : '–');
+      let tag = '';
+      if (w30 && w30.o >= 12) tag = (s.era - w30.era >= 0.75) ? 'hot' : (w30.era - s.era >= 0.75) ? 'cold' : '';
+      return { tag, detail: `ERA ${e(w15)} (15d) / ${e(w30)} (30d) · ${e(s)} season` };
+    }
+    const agg = (gs) => { let h = 0, ab = 0; gs.forEach((g) => { h += numv(g.dict.hits ?? g.dict.H); ab += numv(g.dict.atBats ?? g.dict.AB); }); return ab ? { avg: h / ab, ab } : null; };
+    const s = agg(games), w15 = agg(within(15)), w30 = agg(within(30));
+    if (!s) return null;
+    const a = (x) => (x ? ops3(x.avg) : '–');
+    let tag = '';
+    if (w15 && w15.ab >= 15) tag = (w15.avg - s.avg >= 0.040) ? 'hot' : (s.avg - w15.avg >= 0.040) ? 'cold' : '';
+    return { tag, detail: `${a(w15)} (15d) / ${a(w30)} (30d) · ${a(s)} season` };
+  }
+  return null; // football trends added when the season has data
+}
+
 async function fillSeasonStats(roster, fSport) {
   const sport = fSport === 'baseball' ? 'mlb' : 'nfl';
   const ids = await leagueTeamIds(sport).catch(() => ({}));
   const teams = [...new Set(roster.filter((p) => p.team).map((p) => p.team))];
-  const maps = {};
-  await Promise.all(teams.map(async (t) => { const id = ids[t.toLowerCase()]; if (id) maps[t] = await teamSeasonMap(sport, id).catch(() => ({})); }));
-  roster.forEach((p, i) => {
+  const sMaps = {}, idMaps = {};
+  await Promise.all(teams.map(async (t) => {
+    const id = ids[t.toLowerCase()]; if (!id) return;
+    [sMaps[t], idMaps[t]] = await Promise.all([teamSeasonMap(sport, id).catch(() => ({})), rosterIdMap(sport, id).catch(() => ({}))]);
+  }));
+
+  const hot = [], cold = [];
+  await Promise.all(roster.map(async (p, i) => {
     const elx = document.getElementById(`fseas-${i}`);
     if (!elx) return;
     if (!p.team) { elx.textContent = ''; return; }
-    elx.textContent = seasonLine(fSport, p, (maps[p.team] || {})[nameKey(p.name)]);
-  });
+    const season = seasonLine(fSport, p, (sMaps[p.team] || {})[nameKey(p.name)]);
+    let hcHTML = '';
+    const aid = (idMaps[p.team] || {})[nameKey(p.name)];
+    if (aid) {
+      const hc = hotCold(fSport, await athleteGamelog(sport, aid).catch(() => null), isPitcher(p));
+      if (hc) {
+        const icon = hc.tag === 'hot' ? '🔥' : hc.tag === 'cold' ? '🥶' : '📊';
+        hcHTML = ` <span class="hc ${hc.tag}">${icon} ${hc.detail}</span>`;
+        if (hc.tag === 'hot') hot.push(p.name);
+        else if (hc.tag === 'cold' && p.status !== 'il') cold.push(p.name);
+      }
+    }
+    elx.innerHTML = (season || '') + hcHTML || (season ? '' : '');
+    if (!season && !hcHTML) elx.textContent = '';
+  }));
+
+  // snapshot cards
+  const card = (val, lbl, cls) => `<div class="fan-card ${cls || ''}"><div class="big">${val}</div><div class="lbl">${lbl}</div></div>`;
+  const ilCount = roster.filter((p) => p.status === 'il').length;
+  const needTeam = roster.filter((p) => !p.team).length;
+  $('#fantasy-analytics').innerHTML =
+    card(hot.length, 'Hot 🔥', hot.length ? 'good' : '') +
+    card(cold.length, 'Cold 🥶', cold.length ? 'warn' : '') +
+    card(ilCount, 'On IL') +
+    (needTeam ? card(needTeam, 'Need team set', 'warn') : '');
+
+  // hot & cold lists (drop watch)
+  const li = (arr) => arr.length ? arr.map((n) => `<li>${n}</li>`).join('') : '<li class="none">None</li>';
+  $('#fantasy-recs').innerHTML = `<h3>Hot & Cold (15–30 day trend)</h3>
+    <div class="hc-cols">
+      <div><div class="hc-h hot">🔥 Heating up</div><ul>${li(hot)}</ul></div>
+      <div><div class="hc-h cold">🥶 Cooling off — drop watch</div><ul>${li(cold)}</ul></div>
+    </div>
+    <div class="none" style="margin-top:6px">Trends compare last 15/30 days to season; players need a team set, and only those with enough recent games show a tag.</div>`;
 }
 
 $('#fan-add').addEventListener('click', () => {
