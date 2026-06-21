@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v19';
+const APP_VERSION = 'v20';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -1039,63 +1039,57 @@ async function leagueTeamIds(sport) {
   teams.forEach((t) => { const tm = t.team || t; if (tm.displayName) map[tm.displayName.toLowerCase()] = tm.id; });
   return map;
 }
-async function teamRosterIds(sport, teamId) {
+// Season stats from the team-leaders feed (the proven path that already
+// powers Top Hitters) -> nameKey -> { ABBR: value }. Covers players who
+// appear in their team's leader lists (stars/regulars).
+const STAT_CATS = {
+  mlb: { AVG: /batting average|^avg$/i, HR: /home runs|^hr$|homeruns/i, RBI: /\brbi\b|runs batted/i, OPS: /ops/i, ERA: /earned run average|^era$/i, WHIP: /whip|walks.*hits/i, W: /^wins$|^w$/i, K: /strikeouts|^so$|^k$/i },
+  nfl: { PYDS: /passing yards/i, PTD: /passing touchdowns/i, INT: /interceptions/i, RYDS: /rushing yards/i, RTD: /rushing touchdowns/i, REC: /receptions/i, RECYDS: /receiving yards/i, RECTD: /receiving touchdowns/i },
+};
+async function teamSeasonMap(sport, teamId) {
+  const y = new Date().getFullYear();
+  const core = sport === 'mlb' ? BBCORE : FBCORE;
   const path = LEAGUES[sport].espnPath;
-  const data = await fetchJSON(`${SITE}/${path}/teams/${teamId}/roster`, 12 * 3600000).catch(() => null);
-  const map = {};
-  (data?.athletes || []).forEach((grp) => (grp.items || grp.athletes || [grp]).forEach((a) => {
-    if (a?.id && (a.displayName || a.fullName)) map[nameKey(a.displayName || a.fullName)] = a.id;
-  }));
-  return map;
-}
-async function athleteStatDict(sport, athleteId) {
-  const core = sport === 'baseball' ? BBCORE : FBCORE;
-  const data = await fetchJSON(`${core}/seasons/${new Date().getFullYear()}/types/2/athletes/${athleteId}/statistics`, 6 * 3600000).catch(() => null);
-  const out = {};
-  (data?.splits?.categories || []).forEach((c) => {
-    const key = (c.name || '').toLowerCase();
-    out[key] = {};
-    (c.stats || []).forEach((s) => { const a = (s.abbreviation || s.name || '').toUpperCase(); out[key][a] = s.displayValue ?? s.value; });
+  const [lead, roster] = await Promise.all([
+    safeJSON(`${core}/seasons/${y}/types/2/teams/${teamId}/leaders`, 6 * 3600000),
+    safeJSON(`${SITE}/${path}/teams/${teamId}/roster`, 12 * 3600000),
+  ]);
+  const idName = {};
+  (roster?.athletes || []).forEach((grp) => (grp.items || grp.athletes || [grp]).forEach((a) => { if (a?.id) idName[a.id] = nameKey(a.displayName || a.fullName); }));
+  const cats = lead?.categories || [];
+  const stat = {};
+  Object.entries(STAT_CATS[sport] || {}).forEach(([abbr, re]) => {
+    const c = cats.find((c) => re.test(`${c.abbreviation || ''}|${c.name || ''}|${c.displayName || ''}`));
+    (c?.leaders || []).forEach((L) => { const k = idName[refId(L.athlete?.$ref)]; if (k) (stat[k] = stat[k] || {})[abbr] = L.displayValue ?? L.value; });
   });
-  return out;
+  return stat;
 }
-function seasonLineFromDict(sport, player, dict) {
-  if (!dict) return null;
-  if (sport === 'baseball') {
-    if (isPitcher(player)) {
-      const d = dict.pitching; if (!d) return null;
-      const w = d.W ?? d.WINS, l = d.L ?? d.LOSSES;
-      return `${w ?? '–'}-${l ?? '–'} · ${d.ERA ?? '–'} ERA · ${d.WHIP ?? '–'} WHIP · ${d.SO ?? d.K ?? '–'} K`;
-    }
-    const d = dict.batting; if (!d) return null;
-    return `${d.AVG ?? '–'} AVG · ${d.HR ?? '–'} HR · ${d.RBI ?? '–'} RBI · ${d.OPS ?? '–'} OPS`;
+function seasonLine(fSport, player, s) {
+  if (!s) return '';
+  const bits = [];
+  if (fSport === 'baseball') {
+    if (isPitcher(player)) { if (s.W != null) bits.push(`${s.W} W`); if (s.ERA != null) bits.push(`${s.ERA} ERA`); if (s.WHIP != null) bits.push(`${s.WHIP} WHIP`); if (s.K != null) bits.push(`${s.K} K`); }
+    else { if (s.AVG != null) bits.push(`${s.AVG} AVG`); if (s.HR != null) bits.push(`${s.HR} HR`); if (s.RBI != null) bits.push(`${s.RBI} RBI`); if (s.OPS != null) bits.push(`${s.OPS} OPS`); }
+  } else {
+    const pos = (player.pos || player.slot || '').toUpperCase();
+    if (/QB/.test(pos)) { if (s.PYDS != null) bits.push(`${s.PYDS} yds`); if (s.PTD != null) bits.push(`${s.PTD} TD`); if (s.INT != null) bits.push(`${s.INT} INT`); }
+    else if (/RB|HB|FB/.test(pos)) { if (s.RYDS != null) bits.push(`${s.RYDS} rush`); if (s.RTD != null) bits.push(`${s.RTD} TD`); }
+    else if (/WR|TE/.test(pos)) { if (s.REC != null) bits.push(`${s.REC} rec`); if (s.RECYDS != null) bits.push(`${s.RECYDS} yds`); if (s.RECTD != null) bits.push(`${s.RECTD} TD`); }
   }
-  // football
-  const pos = (player.pos || player.slot || '').toUpperCase();
-  if (/QB/.test(pos) && dict.passing) { const d = dict.passing; return `${d.YDS ?? '–'} yds · ${d.TD ?? '–'} TD · ${d.INT ?? '–'} INT · ${d.QBR ?? d.RAT ?? '–'} rtg`; }
-  if (/RB|HB|FB/.test(pos) && dict.rushing) { const d = dict.rushing; return `${d.YDS ?? '–'} rush yds · ${d.TD ?? '–'} TD`; }
-  if (/WR|TE/.test(pos) && dict.receiving) { const d = dict.receiving; return `${d.REC ?? '–'} rec · ${d.YDS ?? '–'} yds · ${d.TD ?? '–'} TD`; }
-  const any = dict.passing || dict.rushing || dict.receiving;
-  return any ? Object.entries(any).slice(0, 3).map(([k, v]) => `${v} ${k}`).join(' · ') : null;
+  return bits.join(' · ');
 }
 async function fillSeasonStats(roster, fSport) {
   const sport = fSport === 'baseball' ? 'mlb' : 'nfl';
-  let ids;
-  try { ids = await leagueTeamIds(sport); } catch (_) { ids = {}; }
-  await Promise.all(roster.map(async (p, i) => {
+  const ids = await leagueTeamIds(sport).catch(() => ({}));
+  const teams = [...new Set(roster.filter((p) => p.team).map((p) => p.team))];
+  const maps = {};
+  await Promise.all(teams.map(async (t) => { const id = ids[t.toLowerCase()]; if (id) maps[t] = await teamSeasonMap(sport, id).catch(() => ({})); }));
+  roster.forEach((p, i) => {
     const elx = document.getElementById(`fseas-${i}`);
-    if (!elx || !p.team) return;
-    try {
-      const teamId = ids[p.team.toLowerCase()];
-      if (!teamId) { elx.textContent = ''; return; }
-      const rmap = await teamRosterIds(sport, teamId);
-      const aid = rmap[nameKey(p.name)];
-      if (!aid) { elx.textContent = ''; return; }
-      const dict = await athleteStatDict(fSport, aid);
-      const line = seasonLineFromDict(fSport, p, dict);
-      elx.textContent = line || '';
-    } catch (_) { elx.textContent = ''; }
-  }));
+    if (!elx) return;
+    if (!p.team) { elx.textContent = ''; return; }
+    elx.textContent = seasonLine(fSport, p, (maps[p.team] || {})[nameKey(p.name)]);
+  });
 }
 
 $('#fan-add').addEventListener('click', () => {
