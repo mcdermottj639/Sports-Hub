@@ -479,6 +479,52 @@ function gameLabel(pg) {
   return { text: `${vs} · ${fmtTime(pg.g.date) || 'Today'}`, cls: '' };
 }
 
+// Per-player live stat lines from each game's box score (baseball).
+function parseName(name) {
+  const parts = (name || '').replace(/\b(Jr\.?|Sr\.?|II|III|IV)\b/g, '').trim().split(/\s+/).filter(Boolean);
+  return { init: (parts[0] || '')[0] || '', last: (parts[parts.length - 1] || '') };
+}
+function nameMatches(full, init, last) {
+  const f = parseName(full);
+  return f.last.toLowerCase() === last.toLowerCase() && f.init.toLowerCase() === init.toLowerCase();
+}
+function parseBoxscore(data) {
+  const out = [];
+  (data.boxscore?.players || []).forEach((tb) => {
+    (tb.statistics || []).forEach((grp) => {
+      const labels = grp.labels || grp.names || [];
+      const type = (grp.type || grp.name || '').toLowerCase();
+      (grp.athletes || []).forEach((a) => {
+        const dict = {};
+        labels.forEach((l, i) => (dict[l] = (a.stats || [])[i]));
+        out.push({ name: a.athlete?.displayName || a.athlete?.shortName || '', type, dict });
+      });
+    });
+  });
+  return out;
+}
+async function loadStatLines(roster) {
+  const ids = new Set();
+  roster.forEach((p) => { const pg = playerGame(p); if (pg && gameState(pg.g) !== 'scheduled' && pg.g.id) ids.add(pg.g.id); });
+  const path = LEAGUES['mlb'].espnPath;
+  const map = {};
+  await Promise.allSettled([...ids].map(async (id) => {
+    try { map[id] = parseBoxscore(await fetchJSON(`${SITE}/${path}/summary?event=${id}`, 30000)); } catch (_) { map[id] = []; }
+  }));
+  return map;
+}
+const isPitcher = (p) => /\b(SP|RP|P)\b/.test(p.pos || '') || ['SP', 'RP', 'P'].includes(p.slot);
+function playerLine(p, entries) {
+  const { init, last } = parseName(p.name);
+  const want = isPitcher(p) ? 'pitching' : 'batting';
+  const e = (entries || []).find((x) => x.type === want && nameMatches(x.name, init, last));
+  if (!e) return null;
+  const d = e.dict;
+  if (want === 'pitching') return { text: `${d.IP ?? '0.0'} IP · ${d.K ?? 0} K · ${d.ER ?? 0} ER`, d, pitcher: true };
+  const hr = Number(d.HR || 0), rbi = Number(d.RBI || 0);
+  return { text: `${d.H ?? 0}-${d.AB ?? 0}${hr ? `, ${hr} HR` : ''}${rbi ? `, ${rbi} RBI` : ''}`, d, pitcher: false };
+}
+
 async function renderFantasy() {
   // sport chips
   const chips = $('#fantasy-sport');
@@ -496,6 +542,23 @@ async function renderFantasy() {
 
   const roster = loadRoster(fanState.sport);
 
+  // live per-player stat lines (baseball only) + team totals
+  const statMap = fanState.sport === 'baseball' ? await loadStatLines(roster) : {};
+  const lineFor = (p) => {
+    const pg = playerGame(p);
+    if (!pg || !pg.g.id || gameState(pg.g) === 'scheduled') return null;
+    return playerLine(p, statMap[pg.g.id]);
+  };
+  const tot = { H: 0, HR: 0, RBI: 0, R: 0, K: 0 };
+  let hasTotals = false;
+  roster.filter((p) => p.status === 'active').forEach((p) => {
+    const ln = lineFor(p);
+    if (!ln) return;
+    hasTotals = true;
+    if (ln.pitcher) tot.K += Number(ln.d.K || 0);
+    else { tot.H += Number(ln.d.H || 0); tot.HR += Number(ln.d.HR || 0); tot.RBI += Number(ln.d.RBI || 0); tot.R += Number(ln.d.R || 0); }
+  });
+
   // analytics
   const starters = roster.filter((p) => p.status === 'active');
   const startersWithTeam = starters.filter((p) => p.team);
@@ -508,6 +571,7 @@ async function renderFantasy() {
   const card = (val, lbl, cls) => `<div class="fan-card ${cls || ''}"><div class="big">${val}</div><div class="lbl">${lbl}</div></div>`;
   $('#fantasy-analytics').innerHTML =
     card(`${startersPlaying.length}/${starters.length}`, 'Starters in action today', 'good') +
+    (hasTotals ? card(`${tot.H} H · ${tot.HR} HR`, `Today: ${tot.RBI} RBI, ${tot.R} R, ${tot.K} K`, 'good') : '') +
     card(idleStarters.length, 'Starters idle (off day)', idleStarters.length ? 'warn' : '') +
     card(benchPlaying.length, 'Bench guys playing', benchPlaying.length ? 'warn' : '') +
     card(ilCount, 'On IL') +
@@ -546,12 +610,14 @@ async function renderFantasy() {
     rows.forEach(({ p, i }) => {
       const pg = playerGame(p);
       const gl = gameLabel(pg);
+      const ln = lineFor(p);
+      const lineHTML = ln ? ` <b style="color:var(--accent)">— ${ln.text}</b>` : '';
       const row = el('div', 'fan-row');
       const teamSel = `<select data-i="${i}" data-f="team"><option value="">— set team —</option>${teamOpts.map((t) => `<option ${t === p.team ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
       const statSel = `<select data-i="${i}" data-f="status">${['active','bench','il'].map((s) => `<option value="${s}" ${s === p.status ? 'selected' : ''}>${s === 'active' ? 'Starter' : s === 'bench' ? 'Bench' : 'IL'}</option>`).join('')}</select>`;
       row.innerHTML = `
         <div><div class="pname">${p.name}</div><div class="ppos">${p.slot} · ${p.pos || ''}</div>
-          <div class="pgame ${gl.cls}">${gl.text}</div></div>
+          <div class="pgame ${gl.cls}">${gl.text}${lineHTML}</div></div>
         <div>${teamSel}</div>
         <div>${statSel}</div>
         <button class="rm" data-i="${i}" title="Remove">×</button>`;
