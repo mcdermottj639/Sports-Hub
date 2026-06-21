@@ -37,16 +37,18 @@ body {
 }
 .badge.live { background: var(--accent); color: #06241b; border-color: transparent; }
 .badge.demo { background: var(--gold); color: #3a2c00; border-color: transparent; }
+.head-right { display: flex; align-items: center; gap: 8px; }
+.version { font-size: 11px; font-weight: 700; color: rgba(255,255,255,.75); background: rgba(0,0,0,.2); border: 1px solid rgba(255,255,255,.2); padding: 3px 8px; border-radius: 999px; }
 
 .tabs {
-  display: flex; gap: 4px; padding: 10px 14px; overflow-x: auto;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 8px 8px;
   position: sticky; top: 0; z-index: 5;
   background: rgba(14,20,22,.92); backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(255,255,255,.06);
 }
 .tabs button {
   background: transparent; color: var(--muted); border: none;
-  padding: 9px 16px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  padding: 8px 13px; border-radius: 10px; font-size: 14px; font-weight: 600;
   cursor: pointer; white-space: nowrap;
 }
 .tabs button:hover { color: var(--text); }

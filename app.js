@@ -1,6 +1,8 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
+const APP_VERSION = 'v6';
+
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'] },
   nba:    { label: 'NBA',    emoji: '🏀', espnPath: 'basketball/nba', fav: ['Philadelphia 76ers'] },
@@ -675,4 +677,6 @@ function showTab(name) {
 $('#tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
 $('#scores-date').addEventListener('change', renderScores);
 
+const verEl = $('#app-version');
+if (verEl) verEl.textContent = APP_VERSION;
 showTab('home');

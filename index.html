@@ -6,7 +6,7 @@
   <title>Sports-Hub</title>
   <meta name="description" content="Personal multi-sport hub — NFL, NBA, MLB and Soccer live scores and standings." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏟️</text></svg>" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=6" />
 </head>
 <body>
   <header class="topbar">
@@ -14,7 +14,10 @@
       <span class="brand-mark">🏟️</span>
       <h1>Sports-Hub</h1>
     </div>
-    <div id="mode-badge" class="badge">…</div>
+    <div class="head-right">
+      <span id="app-version" class="version"></span>
+      <div id="mode-badge" class="badge">…</div>
+    </div>
   </header>
 
   <nav class="tabs" id="tabs">
@@ -96,6 +99,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
