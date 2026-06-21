@@ -5,7 +5,7 @@ const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'] },
   nba:    { label: 'NBA',    emoji: '🏀', espnPath: 'basketball/nba', fav: ['Philadelphia 76ers'] },
   mlb:    { label: 'MLB',    emoji: '⚾', espnPath: 'baseball/mlb',    fav: ['Philadelphia Phillies'] },
-  soccer: { label: 'Soccer', emoji: '⚽', espnPath: 'soccer/eng.1',   fav: [] }, // eng.1 = Premier League
+  soccer: { label: 'World Cup', emoji: '🌎', espnPath: 'soccer/fifa.world', fav: ['USA'] }, // FIFA World Cup
 };
 const FEATURED = { sport: 'nfl', name: 'Philadelphia Eagles' };
 
@@ -147,8 +147,95 @@ function gameCard(sport, g) {
     <div class="game-meta">
       <span class="game-league">${cfg.emoji} ${cfg.label}</span>
       <span class="${cls}">${label}</span>
-    </div>${row(g.away)}${row(g.home)}`;
+    </div>${row(g.away)}${row(g.home)}
+    <div class="tap-hint">tap for live stats →</div>`;
+  if (g.id) card.onclick = () => openGameDetail(sport, g.id);
   return card;
+}
+
+// --- game detail modal ----------------------------------------------------
+const modal = () => $('#game-modal');
+function closeModal() { modal().classList.add('hidden'); }
+$('#modal-close').addEventListener('click', closeModal);
+$('#modal-x').addEventListener('click', closeModal);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+async function openGameDetail(sport, id) {
+  modal().classList.remove('hidden');
+  $('#modal-body').innerHTML = '<div class="empty">Loading live stats…</div>';
+  try {
+    const path = LEAGUES[sport].espnPath;
+    const data = await fetchJSON(`${SITE}/${path}/summary?event=${id}`, 30000);
+    $('#modal-body').innerHTML = renderGameDetail(sport, data);
+  } catch (_) {
+    $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>';
+  }
+}
+
+function renderGameDetail(sport, data) {
+  const comp = data.header?.competitions?.[0] || data.competitions?.[0] || {};
+  const cs = comp.competitors || [];
+  const home = cs.find((c) => c.homeAway === 'home') || cs[0] || {};
+  const away = cs.find((c) => c.homeAway === 'away') || cs[1] || {};
+  const teamCell = (c) => {
+    const t = c.team || {};
+    const logo = t.logos?.[0]?.href || t.logo;
+    return `<div class="md-team">${logo ? `<img src="${logo}" alt=""/>` : ''}
+      <div class="nm">${t.shortDisplayName || t.displayName || t.abbreviation || 'TBD'}</div>
+      <div class="sc">${c.score ?? '–'}</div></div>`;
+  };
+  const st = comp.status?.type || {};
+  const live = st.state === 'in';
+  let html = `<div class="md-head">${teamCell(away)}<div style="color:var(--muted);font-weight:700">@</div>${teamCell(home)}</div>
+    <div class="md-status ${live ? 'live' : ''}">${st.detail || st.shortDetail || ''}</div>`;
+
+  // line score (innings / quarters)
+  const aLine = away.linescores || [], hLine = home.linescores || [];
+  if (aLine.length || hLine.length) {
+    const n = Math.max(aLine.length, hLine.length);
+    const cols = Array.from({ length: n }, (_, i) => `<th>${i + 1}</th>`).join('');
+    const cell = (arr, i) => `<td>${arr[i]?.displayValue ?? arr[i]?.value ?? ''}</td>`;
+    const rowFor = (c, arr) => `<tr><td>${c.team?.abbreviation || c.team?.shortDisplayName || ''}</td>${Array.from({ length: n }, (_, i) => cell(arr, i)).join('')}<td><b>${c.score ?? ''}</b></td></tr>`;
+    html += `<div class="md-section-title">${sport === 'mlb' ? 'By Inning' : 'By Period'}</div>
+      <table class="md-line"><thead><tr><th></th>${cols}<th>T</th></tr></thead>
+      <tbody>${rowFor(away, aLine)}${rowFor(home, hLine)}</tbody></table>`;
+  }
+
+  // leaders / top performers
+  const leadersHTML = [];
+  (data.leaders || []).forEach((teamBlock) => {
+    (teamBlock.leaders || []).slice(0, 2).forEach((cat) => {
+      const top = cat.leaders?.[0];
+      if (!top) return;
+      const ath = top.athlete || {};
+      leadersHTML.push(`<div class="md-leader">
+        ${ath.headshot?.href ? `<img src="${ath.headshot.href}" alt=""/>` : '<img alt=""/>'}
+        <div><div class="cat">${cat.displayName || cat.name} · ${teamBlock.team?.abbreviation || ''}</div>
+        <div class="who">${ath.displayName || ath.shortName || ''}</div></div>
+        <div class="val">${top.displayValue || top.value || ''}</div></div>`);
+    });
+  });
+  if (leadersHTML.length) html += `<div class="md-section-title">Top Performers</div>${leadersHTML.join('')}`;
+
+  // team stats comparison (a few key rows)
+  const teams = data.boxscore?.teams || [];
+  if (teams.length === 2 && (teams[0].statistics || []).length) {
+    const a = teams.find((t) => (t.homeAway || '') === 'away') || teams[0];
+    const h = teams.find((t) => (t.homeAway || '') === 'home') || teams[1];
+    const byName = (t) => Object.fromEntries((t.statistics || []).map((s) => [s.name || s.label, s.displayValue]));
+    const sa = byName(a), sh = byName(h);
+    const keys = Object.keys(sa).slice(0, 6);
+    if (keys.length) {
+      html += `<div class="md-section-title">Team Stats</div><table class="md-line"><thead><tr><th>${a.team?.abbreviation || 'Away'}</th><th></th><th>${h.team?.abbreviation || 'Home'}</th></tr></thead><tbody>`;
+      keys.forEach((k) => { html += `<tr><td style="text-align:center">${sa[k] ?? ''}</td><td>${k}</td><td>${sh[k] ?? ''}</td></tr>`; });
+      html += '</tbody></table>';
+    }
+  }
+
+  if (!aLine.length && !hLine.length && !leadersHTML.length && !teams.length) {
+    html += '<div class="empty" style="margin-top:14px">Detailed stats will appear once the game is underway.</div>';
+  }
+  return html;
 }
 
 function renderGames(container, bySport) {
@@ -294,7 +381,7 @@ async function renderPredictions() {
         const btns = el('div', 'pick-btns');
         [g.away, g.home].forEach((team) => {
           const b = el('button', preds[g.id] === team.name ? 'picked' : '', team.name);
-          b.onclick = () => { const p = getPreds(); p[g.id] = team.name; savePreds(p); renderPredictions(); };
+          b.onclick = (e) => { e.stopPropagation(); const p = getPreds(); p[g.id] = team.name; savePreds(p); renderPredictions(); };
           btns.appendChild(b);
         });
         card.appendChild(btns);
@@ -316,6 +403,195 @@ async function renderPredictions() {
   $('#pred-score').textContent = decided ? `${correct}/${decided} correct (${Math.round((correct / decided) * 100)}%)` : '';
 }
 
+// --- FANTASY --------------------------------------------------------------
+const MLB_TEAMS = ['Arizona Diamondbacks','Athletics','Atlanta Braves','Baltimore Orioles','Boston Red Sox','Chicago Cubs','Chicago White Sox','Cincinnati Reds','Cleveland Guardians','Colorado Rockies','Detroit Tigers','Houston Astros','Kansas City Royals','Los Angeles Angels','Los Angeles Dodgers','Miami Marlins','Milwaukee Brewers','Minnesota Twins','New York Mets','New York Yankees','Philadelphia Phillies','Pittsburgh Pirates','San Diego Padres','San Francisco Giants','Seattle Mariners','St. Louis Cardinals','Tampa Bay Rays','Texas Rangers','Toronto Blue Jays','Washington Nationals'];
+const NFL_TEAMS = ['Arizona Cardinals','Atlanta Falcons','Baltimore Ravens','Buffalo Bills','Carolina Panthers','Chicago Bears','Cincinnati Bengals','Cleveland Browns','Dallas Cowboys','Denver Broncos','Detroit Lions','Green Bay Packers','Houston Texans','Indianapolis Colts','Jacksonville Jaguars','Kansas City Chiefs','Las Vegas Raiders','Los Angeles Chargers','Los Angeles Rams','Miami Dolphins','Minnesota Vikings','New England Patriots','New Orleans Saints','New York Giants','New York Jets','Philadelphia Eagles','Pittsburgh Steelers','San Francisco 49ers','Seattle Seahawks','Tampa Bay Buccaneers','Tennessee Titans','Washington Commanders'];
+
+// Pre-loaded from the Duran Duran ESPN roster (teams pre-filled where known;
+// set the rest with the dropdown to enable live game tracking).
+const DEFAULT_ROSTERS = {
+  baseball: [
+    { name: 'C. Jensen', slot: 'C', pos: 'C, DH', status: 'active', team: '' },
+    { name: 'K. Clemens', slot: '1B', pos: '1B, 2B, OF', status: 'active', team: '' },
+    { name: 'O. Lopez', slot: '2B', pos: 'SS, 2B', status: 'active', team: '' },
+    { name: 'E. Suarez', slot: '3B', pos: '3B, DH', status: 'active', team: 'Arizona Diamondbacks' },
+    { name: 'M. Betts', slot: 'SS', pos: 'SS', status: 'active', team: 'Los Angeles Dodgers' },
+    { name: 'L. Garcia Jr.', slot: '2B/SS', pos: '2B, 1B', status: 'active', team: 'Washington Nationals' },
+    { name: 'S. Antonacci', slot: '1B/3B', pos: '2B, 3B, OF', status: 'active', team: '' },
+    { name: 'J. Caballero', slot: 'OF', pos: 'OF, 2B, 3B, SS', status: 'active', team: 'Tampa Bay Rays' },
+    { name: 'C. Carroll', slot: 'OF', pos: 'OF', status: 'active', team: 'Arizona Diamondbacks' },
+    { name: 'J. Duran', slot: 'OF', pos: 'OF', status: 'active', team: 'Boston Red Sox' },
+    { name: 'J. Lee', slot: 'OF', pos: 'OF', status: 'active', team: '' },
+    { name: 'K. Schwarber', slot: 'UTIL', pos: 'DH', status: 'active', team: 'Philadelphia Phillies' },
+    { name: 'S. Baz', slot: 'SP', pos: 'SP', status: 'active', team: 'Tampa Bay Rays' },
+    { name: 'D. Bednar', slot: 'RP', pos: 'RP', status: 'active', team: 'Pittsburgh Pirates' },
+    { name: 'J. Duran', slot: 'RP', pos: 'RP', status: 'active', team: 'Minnesota Twins' },
+    { name: 'F. Griffin', slot: 'SP', pos: 'SP', status: 'active', team: '' },
+    { name: 'D. Martin', slot: 'SP', pos: 'SP', status: 'active', team: '' },
+    { name: 'J. Ritchie', slot: 'SP', pos: 'SP', status: 'active', team: '' },
+    { name: 'E. Rodriguez', slot: 'SP', pos: 'SP', status: 'active', team: 'Arizona Diamondbacks' },
+    { name: 'B. Young', slot: 'SP', pos: 'SP', status: 'active', team: '' },
+    { name: 'J. Wilson', slot: 'BE', pos: 'SS', status: 'bench', team: '' },
+    { name: 'Z. Gallen', slot: 'BE', pos: 'SP', status: 'bench', team: 'Arizona Diamondbacks' },
+    { name: 'J. Leiter', slot: 'BE', pos: 'SP', status: 'bench', team: 'Texas Rangers' },
+    { name: 'C. Rodon', slot: 'BE', pos: 'SP', status: 'bench', team: 'New York Yankees' },
+    { name: 'R. Sasaki', slot: 'BE', pos: 'SP', status: 'bench', team: 'Los Angeles Dodgers' },
+    { name: 'R. Anthony', slot: 'IL', pos: 'OF, DH', status: 'il', team: 'Boston Red Sox' },
+    { name: 'M. Murakami', slot: 'IL', pos: '3B, 1B', status: 'il', team: '' },
+    { name: 'C. Estevez', slot: 'IL', pos: 'RP', status: 'il', team: '' },
+  ],
+  football: [],
+};
+
+const fanState = { sport: 'baseball', gamesByTeam: {} };
+const fanKey = (s) => `sportshub:fantasy:${s}`;
+function loadRoster(sport) {
+  const saved = localStorage.getItem(fanKey(sport));
+  if (saved) { try { return JSON.parse(saved); } catch (_) {} }
+  return JSON.parse(JSON.stringify(DEFAULT_ROSTERS[sport]));
+}
+const saveRoster = (sport, roster) => localStorage.setItem(fanKey(sport), JSON.stringify(roster));
+
+// Map every team playing today -> its game, so we can attach a game to each player.
+function buildGameIndex(games) {
+  const idx = {};
+  (games || []).forEach((g) => {
+    if (g.home.name) idx[g.home.name] = { g, side: 'home', opp: g.away };
+    if (g.away.name) idx[g.away.name] = { g, side: 'away', opp: g.home };
+  });
+  return idx;
+}
+function playerGame(player) {
+  if (!player.team) return null;
+  return fanState.gamesByTeam[player.team] || null;
+}
+function gameLabel(pg) {
+  if (!pg) return { text: 'No game today', cls: 'off' };
+  const st = gameState(pg.g);
+  const vs = (pg.side === 'home' ? 'vs ' : '@ ') + (pg.opp.abbr || pg.opp.name || 'TBD');
+  if (st === 'live') return { text: `${vs} · ${pg.g.statusText || 'LIVE'}`, cls: 'live' };
+  if (st === 'final') {
+    const me = pg.side === 'home' ? pg.g.home.score : pg.g.away.score;
+    const them = pg.side === 'home' ? pg.g.away.score : pg.g.home.score;
+    const res = me != null && them != null ? (me > them ? 'W' : me < them ? 'L' : 'T') : '';
+    return { text: `${vs} · Final ${res} ${me ?? ''}-${them ?? ''}`.trim(), cls: 'final' };
+  }
+  return { text: `${vs} · ${fmtTime(pg.g.date) || 'Today'}`, cls: '' };
+}
+
+async function renderFantasy() {
+  // sport chips
+  const chips = $('#fantasy-sport');
+  chips.innerHTML = '';
+  [['baseball', '⚾ Baseball'], ['football', '🏈 Football']].forEach(([s, label]) => {
+    const c = el('button', 'chip' + (s === fanState.sport ? ' active' : ''), label);
+    c.onclick = () => { fanState.sport = s; renderFantasy(); };
+    chips.appendChild(c);
+  });
+
+  const leagueKey = fanState.sport === 'baseball' ? 'mlb' : 'nfl';
+  let games = [];
+  try { games = await getGames(leagueKey, ymd(new Date())); } catch (_) {}
+  fanState.gamesByTeam = buildGameIndex(games);
+
+  const roster = loadRoster(fanState.sport);
+
+  // analytics
+  const starters = roster.filter((p) => p.status === 'active');
+  const startersWithTeam = starters.filter((p) => p.team);
+  const startersPlaying = startersWithTeam.filter((p) => playerGame(p));
+  const idleStarters = startersWithTeam.filter((p) => !playerGame(p));
+  const benchPlaying = roster.filter((p) => p.status === 'bench' && playerGame(p));
+  const needTeam = roster.filter((p) => !p.team).length;
+  const ilCount = roster.filter((p) => p.status === 'il').length;
+
+  const card = (val, lbl, cls) => `<div class="fan-card ${cls || ''}"><div class="big">${val}</div><div class="lbl">${lbl}</div></div>`;
+  $('#fantasy-analytics').innerHTML =
+    card(`${startersPlaying.length}/${starters.length}`, 'Starters in action today', 'good') +
+    card(idleStarters.length, 'Starters idle (off day)', idleStarters.length ? 'warn' : '') +
+    card(benchPlaying.length, 'Bench guys playing', benchPlaying.length ? 'warn' : '') +
+    card(ilCount, 'On IL') +
+    (needTeam ? card(needTeam, 'Need team set', 'warn') : '');
+
+  // recommendations
+  const recs = [];
+  benchPlaying.forEach((b) => {
+    const idleMatch = idleStarters.find((s) => s.pos && b.pos && s.pos.split(',')[0].trim() === b.pos.split(',')[0].trim());
+    if (idleMatch) recs.push(`🔁 Consider starting <b>${b.name}</b> (playing today) over <b>${idleMatch.name}</b> (off today).`);
+    else recs.push(`▶️ <b>${b.name}</b> is on your bench but has a game today — consider activating.`);
+  });
+  idleStarters.forEach((s) => {
+    if (!benchPlaying.length) recs.push(`💤 <b>${s.name}</b> has no game today (off day) — you may be leaving a slot empty.`);
+  });
+  roster.filter((p) => p.status === 'il' && p.slot !== 'IL').forEach((p) => recs.push(`🩹 <b>${p.name}</b> is marked IL but sitting in a starting slot — swap them out.`));
+  const probableSP = starters.filter((p) => /SP/.test(p.pos) && playerGame(p) && gameState(playerGame(p).g) !== 'final');
+  if (probableSP.length) recs.push(`⚾ Pitchers with games today: ${probableSP.map((p) => `<b>${p.name}</b>`).join(', ')}.`);
+  if (needTeam) recs.push(`⚙️ Set the team for ${needTeam} player(s) below to unlock their live tracking.`);
+
+  $('#fantasy-recs').innerHTML = `<h3>Recommendations</h3>` +
+    (recs.length ? `<ul>${recs.map((r) => `<li>${r}</li>`).join('')}</ul>` : `<div class="none">Your lineup looks set — everyone active has a game today. 🔥</div>`);
+
+  // roster (grouped)
+  const teamOpts = (fanState.sport === 'baseball' ? MLB_TEAMS : NFL_TEAMS);
+  const groups = { active: 'Starters', bench: 'Bench', il: 'Injured List' };
+  const container = $('#fantasy-roster');
+  container.innerHTML = '';
+  if (!roster.length) {
+    container.appendChild(el('div', 'empty', 'No players yet. Tap “Add player” to build your roster.'));
+  }
+  Object.entries(groups).forEach(([statusKey, label]) => {
+    const rows = roster.map((p, i) => ({ p, i })).filter(({ p }) => p.status === statusKey);
+    if (!rows.length) return;
+    container.appendChild(el('div', 'roster-group', label));
+    rows.forEach(({ p, i }) => {
+      const pg = playerGame(p);
+      const gl = gameLabel(pg);
+      const row = el('div', 'fan-row');
+      const teamSel = `<select data-i="${i}" data-f="team"><option value="">— set team —</option>${teamOpts.map((t) => `<option ${t === p.team ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+      const statSel = `<select data-i="${i}" data-f="status">${['active','bench','il'].map((s) => `<option value="${s}" ${s === p.status ? 'selected' : ''}>${s === 'active' ? 'Starter' : s === 'bench' ? 'Bench' : 'IL'}</option>`).join('')}</select>`;
+      row.innerHTML = `
+        <div><div class="pname">${p.name}</div><div class="ppos">${p.slot} · ${p.pos || ''}</div>
+          <div class="pgame ${gl.cls}">${gl.text}</div></div>
+        <div>${teamSel}</div>
+        <div>${statSel}</div>
+        <button class="rm" data-i="${i}" title="Remove">×</button>`;
+      container.appendChild(row);
+    });
+  });
+
+  // wire row controls
+  container.querySelectorAll('select').forEach((sel) => {
+    sel.onchange = () => {
+      const r = loadRoster(fanState.sport);
+      r[+sel.dataset.i][sel.dataset.f] = sel.value;
+      saveRoster(fanState.sport, r);
+      renderFantasy();
+    };
+  });
+  container.querySelectorAll('.rm').forEach((btn) => {
+    btn.onclick = () => {
+      const r = loadRoster(fanState.sport);
+      r.splice(+btn.dataset.i, 1);
+      saveRoster(fanState.sport, r);
+      renderFantasy();
+    };
+  });
+}
+
+$('#fan-add').addEventListener('click', () => {
+  const name = prompt('Player name?');
+  if (!name) return;
+  const r = loadRoster(fanState.sport);
+  r.push({ name: name.trim(), slot: 'BE', pos: '', status: 'bench', team: '' });
+  saveRoster(fanState.sport, r);
+  renderFantasy();
+});
+$('#fan-reset').addEventListener('click', () => {
+  if (!confirm('Reset this roster to the default? Your edits will be lost.')) return;
+  localStorage.removeItem(fanKey(fanState.sport));
+  renderFantasy();
+});
+
 // --- mode badge + tabs + boot --------------------------------------------
 function setMode(live) {
   state.liveOK = live;
@@ -324,7 +600,7 @@ function setMode(live) {
   else { b.textContent = 'OFFLINE'; b.className = 'badge demo'; $('#about-status').textContent = 'Status: could not reach ESPN — showing sample data.'; }
 }
 
-const renderers = { home: renderHome, scores: renderScores, standings: renderStandings, predictions: renderPredictions, about: () => {} };
+const renderers = { home: renderHome, scores: renderScores, standings: renderStandings, predictions: renderPredictions, fantasy: renderFantasy, about: () => {} };
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));

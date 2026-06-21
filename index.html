@@ -22,6 +22,7 @@
     <button data-tab="scores">Scores</button>
     <button data-tab="standings">Standings</button>
     <button data-tab="predictions">Predictions</button>
+    <button data-tab="fantasy">Fantasy</button>
     <button data-tab="about">About</button>
   </nav>
 
@@ -56,21 +57,44 @@
       <div id="pred-results" class="games-grid"></div>
     </section>
 
+    <section id="fantasy" class="tab-panel">
+      <div class="fantasy-head">
+        <h2 class="section-title" style="margin-top:0">Fantasy Tracker</h2>
+        <div id="fantasy-sport" class="chips"></div>
+      </div>
+      <div id="fantasy-analytics" class="fan-cards"></div>
+      <div id="fantasy-recs" class="recs-box"></div>
+      <div id="fantasy-roster"></div>
+      <div class="fan-actions">
+        <button id="fan-add" class="fan-btn">+ Add player</button>
+        <button id="fan-reset" class="fan-btn ghost">Reset to default roster</button>
+      </div>
+      <p class="muted" style="margin-top:14px">Your roster is saved in this browser. Tracking, analytics and start/sit tips use each player’s real game today from ESPN’s live feed — so set each player’s MLB/NFL team to light them up.</p>
+    </section>
+
     <section id="about" class="tab-panel">
       <div class="setup-card">
         <h2>About Sports-Hub</h2>
         <p>A personal hub for <strong>NFL 🦅, NBA, MLB and Soccer</strong> — live scores, standings, and a prediction game, all in your browser.</p>
         <p class="muted">Live data comes from ESPN’s free public sports feed, fetched directly in your browser. No login, no API key, nothing to configure.</p>
         <h3>Make it yours</h3>
-        <p>Edit the <code>LEAGUES</code> block near the top of <code>app.js</code> to change your favorite teams (highlighted everywhere) or swap the soccer league:</p>
-        <pre><code>soccer: { ..., espnPath: 'soccer/eng.1' }  // eng.1 = Premier League
-// usa.1 = MLS · esp.1 = La Liga · uefa.champions = UCL · fifa.world = World Cup</code></pre>
+        <p>Soccer is set to the <strong>FIFA World Cup</strong>. Edit the <code>LEAGUES</code> block near the top of <code>app.js</code> to change favorite teams or the competition:</p>
+        <pre><code>soccer: { ..., espnPath: 'soccer/fifa.world' }  // FIFA World Cup
+// eng.1 = Premier League · usa.1 = MLS · uefa.champions = UCL</code></pre>
         <div id="about-status" class="muted"></div>
       </div>
     </section>
   </main>
 
   <footer class="footer"><span>Go Birds 🦅 — live data via ESPN</span></footer>
+
+  <div id="game-modal" class="modal hidden">
+    <div class="modal-backdrop" id="modal-close"></div>
+    <div class="modal-card">
+      <button class="modal-x" id="modal-x">×</button>
+      <div id="modal-body">Loading…</div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
