@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sports-Hub</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">🏟️</span>
+      <h1>Sports-Hub</h1>
+    </div>
+    <div id="mode-badge" class="badge">…</div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="home" class="active">Home</button>
+    <button data-tab="scores">Scores</button>
+    <button data-tab="standings">Standings</button>
+    <button data-tab="predictions">Predictions</button>
+    <button data-tab="setup">Setup</button>
+  </nav>
+
+  <main>
+    <!-- HOME -->
+    <section id="home" class="tab-panel active">
+      <div id="featured" class="featured-card">Loading your teams…</div>
+      <h2 class="section-title">Today’s Games</h2>
+      <div id="home-games" class="games-grid"></div>
+    </section>
+
+    <!-- SCORES -->
+    <section id="scores" class="tab-panel">
+      <div class="controls">
+        <div id="sport-filter" class="chips"></div>
+        <input type="date" id="scores-date" />
+      </div>
+      <div id="scores-games" class="games-grid"></div>
+    </section>
+
+    <!-- STANDINGS -->
+    <section id="standings" class="tab-panel">
+      <div id="standings-filter" class="chips"></div>
+      <div id="standings-content"></div>
+    </section>
+
+    <!-- PREDICTIONS -->
+    <section id="predictions" class="tab-panel">
+      <div class="pred-header">
+        <h2 class="section-title">Make Your Picks</h2>
+        <div id="pred-score" class="pred-score"></div>
+      </div>
+      <p class="muted">Pick the winner of upcoming games. Once a game finishes, you’ll see if you nailed it.</p>
+      <div id="pred-upcoming" class="games-grid"></div>
+      <h2 class="section-title">Your Results</h2>
+      <div id="pred-results" class="games-grid"></div>
+    </section>
+
+    <!-- SETUP -->
+    <section id="setup" class="tab-panel">
+      <div class="setup-card">
+        <h2>Go live with real data</h2>
+        <ol>
+          <li>Create a free account at <a href="https://dashboard.api-sports.io" target="_blank" rel="noopener">dashboard.api-sports.io</a> and copy your API key.</li>
+          <li>In the project, copy <code>.env.example</code> to <code>.env</code>.</li>
+          <li>Paste your key into <code>API_SPORTS_KEY=</code>.</li>
+          <li>Restart the app (<code>npm start</code>). The badge up top will switch to <strong>LIVE</strong>.</li>
+        </ol>
+        <p class="muted">One key works for NFL, NBA, MLB and Soccer. The backend caches every response so you stay under the free tier’s ~100 requests/day per sport.</p>
+        <p>Edit your favorite teams and leagues in <code>config/teams.js</code> and <code>.env</code>.</p>
+        <div id="setup-status"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Go Birds 🦅 — built on API-Sports</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
