@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v11';
+const APP_VERSION = 'v12';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'] },
@@ -61,6 +61,7 @@ const fmtTime = (date) => {
 function teamObj(c) {
   const t = c?.team || {};
   return {
+    id: t.id,
     name: t.displayName || t.name,
     abbr: t.abbreviation,
     logo: t.logo || t.logos?.[0]?.href || null,
@@ -178,37 +179,17 @@ async function openGameDetail(sport, id, g) {
   $('#modal-body').innerHTML = '<div class="empty">Loading live stats…</div>';
   try {
     const path = LEAGUES[sport].espnPath;
-    const [data, standings] = await Promise.all([
+    const [data, pred] = await Promise.all([
       fetchJSON(`${SITE}/${path}/summary?event=${id}`, 30000),
-      getStandings(sport).catch(() => []),
+      g ? predictGame(sport, g).catch(() => null) : Promise.resolve(null),
     ]);
-    $('#modal-body').innerHTML = renderGameDetail(sport, data, g, standings);
+    $('#modal-body').innerHTML = renderGameDetail(sport, data, pred);
   } catch (_) {
     $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>';
   }
 }
 
-// AI pick + plain-English reasoning for the game detail modal.
-function aiPickBlock(g, standings) {
-  if (!g) return '';
-  const strength = teamStrength(standings);
-  const p = predictGame(g, strength);
-  const rec = (name) => {
-    const r = (standings || []).find((s) => (s.team || '').toLowerCase() === (name || '').toLowerCase());
-    return r ? `${r.wins ?? 0}-${r.losses ?? 0}` : '';
-  };
-  const hr = rec(g.home.name), ar = rec(g.away.name);
-  const reason = [];
-  reason.push(`<b>${g.away.name}</b>${ar ? ` (${ar})` : ''} at <b>${g.home.name}</b>${hr ? ` (${hr})` : ''}.`);
-  reason.push(p.why.charAt(0).toUpperCase() + p.why.slice(1) + '.');
-  reason.push(`Model gives <b>${p.winner.name}</b> a ${p.conf}% win probability${p.homePick ? ' (boosted by playing at home)' : ' even on the road'}.`);
-  return `<div class="md-section-title">🤖 AI Pick</div>
-    <div class="ai-pick">Pick: <b>${p.winner.name}</b> <span class="ai-conf">${p.conf}%</span></div>
-    <div class="conf-bar"><span style="width:${p.conf}%"></span></div>
-    <div class="ai-why">${reason.join('<br>')}</div>`;
-}
-
-function renderGameDetail(sport, data, g, standings) {
+function renderGameDetail(sport, data, pred) {
   const comp = data.header?.competitions?.[0] || data.competitions?.[0] || {};
   const cs = comp.competitors || [];
   const home = cs.find((c) => c.homeAway === 'home') || cs[0] || {};
@@ -225,7 +206,7 @@ function renderGameDetail(sport, data, g, standings) {
   let html = `<div class="md-head">${teamCell(away)}<div style="color:var(--muted);font-weight:700">@</div>${teamCell(home)}</div>
     <div class="md-status ${live ? 'live' : ''}">${st.detail || st.shortDetail || ''}</div>`;
 
-  html += aiPickBlock(g, standings);
+  html += aiPickBlock(pred);
 
   // line score (innings / quarters)
   const aLine = away.linescores || [], hLine = home.linescores || [];
@@ -394,34 +375,91 @@ async function renderStandings() {
   }
 }
 
-// --- AI PICKS -------------------------------------------------------------
-// A lightweight prediction model: team strength from record (win %) plus a
-// home-field edge, turned into a win probability via a logistic function.
-function teamStrength(standings) {
-  const m = {};
-  (standings || []).forEach((r) => {
-    const w = Number(r.wins) || 0, l = Number(r.losses) || 0, gp = w + l;
-    if (gp > 0) m[(r.team || '').toLowerCase()] = w / gp;
+// --- AI PICKS (multi-factor model) ---------------------------------------
+// Each team's profile is built from its game-by-game schedule: scoring
+// margin, recent form, home/road splits and rest. Factors combine in
+// log-odds, so every pick comes with an explainable breakdown.
+const logistic = (z) => 1 / (1 + Math.exp(-z));
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const PD_SCALE = { nfl: 7, nba: 6, mlb: 1.3, soccer: 1.0 }; // typical per-game margin
+
+async function teamProfile(sport, teamId) {
+  if (!teamId) return null;
+  const path = LEAGUES[sport].espnPath;
+  const data = await fetchJSON(`${SITE}/${path}/teams/${teamId}/schedule`, 3 * 3600000).catch(() => null);
+  const games = [];
+  (data?.events || []).forEach((ev) => {
+    const comp = ev.competitions?.[0]; if (!comp?.status?.type?.completed) return;
+    const me = (comp.competitors || []).find((c) => String(c.team?.id) === String(teamId));
+    const opp = (comp.competitors || []).find((c) => String(c.team?.id) !== String(teamId));
+    const ms = Number(me?.score?.value ?? me?.score?.displayValue);
+    const os = Number(opp?.score?.value ?? opp?.score?.displayValue);
+    if (!me || isNaN(ms) || isNaN(os)) return;
+    games.push({ date: ev.date, margin: ms - os, home: me.homeAway === 'home', win: me.winner === true || ms > os });
   });
-  return m;
+  if (!games.length) return null;
+  games.sort((a, b) => new Date(a.date) - new Date(b.date));
+  const gp = games.length;
+  const sum = (f) => games.reduce((s, g) => s + f(g), 0);
+  const recent = games.slice(-5);
+  let wsum = 0, wtot = 0;
+  recent.forEach((g, i) => { const w = i + 1; wsum += g.margin * w; wtot += w; });
+  const homeG = games.filter((g) => g.home), roadG = games.filter((g) => !g.home);
+  const wp = (arr) => (arr.length ? arr.filter((g) => g.win).length / arr.length : null);
+  return {
+    gp,
+    winPct: sum((g) => (g.win ? 1 : 0)) / gp,
+    pdpg: sum((g) => g.margin) / gp,
+    form: wtot ? wsum / wtot : 0,
+    homeWP: wp(homeG),
+    roadWP: wp(roadG),
+    lastDate: games[gp - 1].date,
+  };
 }
-function predictGame(g, strength) {
-  const ph = strength[(g.home.name || '').toLowerCase()];
-  const pa = strength[(g.away.name || '').toLowerCase()];
-  const haveData = ph != null && pa != null;
-  const sh = ph ?? 0.5, sa = pa ?? 0.5;
-  const z = (sh - sa) * 3.2 + 0.28; // 0.28 ≈ home-field edge
-  const pHome = 1 / (1 + Math.exp(-z));
-  const homePick = pHome >= 0.5;
-  const conf = Math.round((homePick ? pHome : 1 - pHome) * 100);
-  const winner = homePick ? g.home : g.away;
-  let why;
-  if (haveData) {
-    why = `${(sh * 100).toFixed(0)}% vs ${(sa * 100).toFixed(0)}% win rate${homePick ? ' + home edge' : ''}`;
+
+async function predictGame(sport, g) {
+  const [hf, af] = await Promise.all([teamProfile(sport, g.home.id), teamProfile(sport, g.away.id)]);
+  const scale = PD_SCALE[sport] || 5;
+  const factors = []; // { label, c (log-odds toward home), detail }
+  let z = 0;
+  const add = (label, c, detail) => { if (c && isFinite(c)) { z += c; factors.push({ label, c, detail }); } };
+
+  if (hf && af) {
+    add('Record', 1.1 * (hf.winPct - af.winPct), `${(hf.winPct * 100).toFixed(0)}% vs ${(af.winPct * 100).toFixed(0)}% win`);
+    add('Scoring margin', 0.9 * clamp((hf.pdpg - af.pdpg) / scale, -3, 3), `${hf.pdpg >= 0 ? '+' : ''}${hf.pdpg.toFixed(1)} vs ${af.pdpg >= 0 ? '+' : ''}${af.pdpg.toFixed(1)} per game`);
+    add('Recent form', 0.6 * clamp((hf.form - af.form) / scale, -3, 3), `last 5: ${hf.form >= 0 ? '+' : ''}${hf.form.toFixed(1)} vs ${af.form >= 0 ? '+' : ''}${af.form.toFixed(1)}`);
+    if (hf.homeWP != null && af.roadWP != null) {
+      add('Home/road split', 1.0 * (hf.homeWP - af.roadWP), `home ${(hf.homeWP * 100).toFixed(0)}% vs road ${(af.roadWP * 100).toFixed(0)}%`);
+    } else { add('Home field', 0.28, 'standard home edge'); }
+    const day = 86400000;
+    const hr = g.date && hf.lastDate ? clamp(Math.round((new Date(g.date) - new Date(hf.lastDate)) / day), 0, 10) : null;
+    const ar = g.date && af.lastDate ? clamp(Math.round((new Date(g.date) - new Date(af.lastDate)) / day), 0, 10) : null;
+    if (hr != null && ar != null && hr !== ar) add('Rest', 0.05 * clamp(hr - ar, -5, 5), `${hr}d vs ${ar}d rest`);
   } else {
-    why = 'Limited data — leaning on home-field edge';
+    add('Home field', 0.3, 'limited data — home edge only');
   }
-  return { winner, conf, why, homePick };
+
+  const pHome = logistic(z);
+  const homePick = pHome >= 0.5;
+  const winner = homePick ? g.home : g.away;
+  const conf = clamp(Math.round((homePick ? pHome : 1 - pHome) * 100), 50, 92);
+  // per-factor probability impact toward the home team
+  const breakdown = factors.map((f) => {
+    const pct = Math.round((logistic(z) - logistic(z - f.c)) * 100);
+    return { label: f.label, detail: f.detail, favor: f.c >= 0 ? g.home.name : g.away.name, pct: Math.abs(pct) };
+  }).filter((b) => b.pct > 0).sort((a, b) => b.pct - a.pct);
+  return { winner, conf, homePick, breakdown, thin: !(hf && af) };
+}
+
+function aiPickBlock(pred) {
+  if (!pred) return '';
+  const rows = pred.breakdown.map((b) =>
+    `<div class="fac-row"><span class="fac-l">${b.label}</span><span class="fac-d">${b.detail}</span><span class="fac-p">${b.favor.split(' ').slice(-1)[0]} +${b.pct}%</span></div>`).join('');
+  return `<div class="md-section-title">🤖 AI Pick</div>
+    <div class="ai-pick">Pick: <b>${pred.winner.name}</b> <span class="ai-conf">${pred.conf}%</span></div>
+    <div class="conf-bar"><span style="width:${pred.conf}%"></span></div>
+    <div class="fac-list">${rows || '<div class="ai-why">Limited data — leaning on home-field edge.</div>'}</div>
+    ${pred.thin ? '<div class="ai-why">Not enough games played yet for full analysis.</div>' : ''}`;
 }
 
 async function renderPredictions() {
@@ -430,36 +468,31 @@ async function renderPredictions() {
   const container = $('#ai-picks');
   container.innerHTML = '<div class="empty">Crunching the numbers…</div>';
 
-  const [games, standings] = await Promise.all([
-    getGames(sport, ymd(new Date())).catch(() => []),
-    getStandings(sport).catch(() => []),
-  ]);
-  const strength = teamStrength(standings);
+  const games = await getGames(sport, ymd(new Date())).catch(() => []);
+  const playable = games.filter((g) => g.id);
+  if (!playable.length) { container.innerHTML = ''; container.appendChild(el('div', 'empty', 'No games today for this sport.')); $('#ai-score').textContent = ''; return; }
 
+  const preds = await Promise.all(playable.map((g) => predictGame(sport, g).catch(() => null)));
   container.innerHTML = '';
   let right = 0, graded = 0;
-  const playable = games.filter((g) => g.id);
-  if (!playable.length) { container.appendChild(el('div', 'empty', 'No games today for this sport.')); $('#ai-score').textContent = ''; return; }
-
-  playable.forEach((g) => {
-    const p = predictGame(g, strength);
+  playable.forEach((g, i) => {
+    const p = preds[i];
     const card = gameCard(sport, g);
-    const block = el('div', 'ai-block');
-    let resultTag = '';
-    if (gameState(g) === 'final') {
-      const actual = winnerName(g);
-      if (actual && actual !== 'TIE') {
-        graded++;
-        const hit = actual === p.winner.name;
-        if (hit) right++;
-        resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
+    if (p) {
+      const block = el('div', 'ai-block');
+      let resultTag = '';
+      if (gameState(g) === 'final') {
+        const actual = winnerName(g);
+        if (actual && actual !== 'TIE') { graded++; const hit = actual === p.winner.name; if (hit) right++; resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`; }
       }
+      const top = p.breakdown.slice(0, 2).map((b) => `${b.label} (${b.favor.split(' ').slice(-1)[0]} +${b.pct}%)`).join(' · ');
+      block.innerHTML = `
+        <div class="ai-pick">🤖 Pick: <b>${p.winner.name}</b> <span class="ai-conf">${p.conf}%</span></div>
+        <div class="conf-bar"><span style="width:${p.conf}%"></span></div>
+        <div class="ai-why">${top || 'Home-field edge'}${resultTag ? '' : ''}</div>
+        <div class="ai-why" style="margin-top:4px;opacity:.8">Tap the game for the full breakdown</div>${resultTag}`;
+      card.appendChild(block);
     }
-    block.innerHTML = `
-      <div class="ai-pick">🤖 Pick: <b>${p.winner.name}</b> <span class="ai-conf">${p.conf}%</span></div>
-      <div class="conf-bar"><span style="width:${p.conf}%"></span></div>
-      <div class="ai-why">${p.why}</div>${resultTag}`;
-    card.appendChild(block);
     container.appendChild(card);
   });
   $('#ai-score').textContent = graded ? `Model today: ${right}/${graded} correct` : '';

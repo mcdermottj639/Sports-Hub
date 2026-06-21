@@ -123,6 +123,11 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .conf-bar { height: 7px; background: var(--card-2); border-radius: 999px; overflow: hidden; margin: 7px 0 6px; }
 .conf-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--eagles-green-light), var(--accent)); }
 .ai-why { font-size: 12px; color: var(--muted); }
+.fac-list { margin-top: 8px; }
+.fac-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-top: 1px solid rgba(255,255,255,.05); font-size: 12px; }
+.fac-row .fac-l { font-weight: 700; min-width: 96px; }
+.fac-row .fac-d { color: var(--muted); flex: 1; }
+.fac-row .fac-p { font-weight: 800; color: var(--accent); white-space: nowrap; }
 .ai-result { font-size: 12px; font-weight: 700; margin-top: 6px; }
 .ai-result.win { color: var(--accent); }
 .ai-result.loss { color: var(--live); }
