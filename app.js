@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v10';
+const APP_VERSION = 'v11';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'] },
@@ -162,7 +162,7 @@ function gameCard(sport, g) {
       <span class="${cls}">${label}</span>
     </div>${row(g.away)}${row(g.home)}
     <div class="tap-hint">tap for live stats →</div>`;
-  if (g.id) card.onclick = () => openGameDetail(sport, g.id);
+  if (g.id) card.onclick = () => openGameDetail(sport, g.id, g);
   return card;
 }
 
@@ -173,19 +173,42 @@ $('#modal-close').addEventListener('click', closeModal);
 $('#modal-x').addEventListener('click', closeModal);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
-async function openGameDetail(sport, id) {
+async function openGameDetail(sport, id, g) {
   modal().classList.remove('hidden');
   $('#modal-body').innerHTML = '<div class="empty">Loading live stats…</div>';
   try {
     const path = LEAGUES[sport].espnPath;
-    const data = await fetchJSON(`${SITE}/${path}/summary?event=${id}`, 30000);
-    $('#modal-body').innerHTML = renderGameDetail(sport, data);
+    const [data, standings] = await Promise.all([
+      fetchJSON(`${SITE}/${path}/summary?event=${id}`, 30000),
+      getStandings(sport).catch(() => []),
+    ]);
+    $('#modal-body').innerHTML = renderGameDetail(sport, data, g, standings);
   } catch (_) {
     $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>';
   }
 }
 
-function renderGameDetail(sport, data) {
+// AI pick + plain-English reasoning for the game detail modal.
+function aiPickBlock(g, standings) {
+  if (!g) return '';
+  const strength = teamStrength(standings);
+  const p = predictGame(g, strength);
+  const rec = (name) => {
+    const r = (standings || []).find((s) => (s.team || '').toLowerCase() === (name || '').toLowerCase());
+    return r ? `${r.wins ?? 0}-${r.losses ?? 0}` : '';
+  };
+  const hr = rec(g.home.name), ar = rec(g.away.name);
+  const reason = [];
+  reason.push(`<b>${g.away.name}</b>${ar ? ` (${ar})` : ''} at <b>${g.home.name}</b>${hr ? ` (${hr})` : ''}.`);
+  reason.push(p.why.charAt(0).toUpperCase() + p.why.slice(1) + '.');
+  reason.push(`Model gives <b>${p.winner.name}</b> a ${p.conf}% win probability${p.homePick ? ' (boosted by playing at home)' : ' even on the road'}.`);
+  return `<div class="md-section-title">🤖 AI Pick</div>
+    <div class="ai-pick">Pick: <b>${p.winner.name}</b> <span class="ai-conf">${p.conf}%</span></div>
+    <div class="conf-bar"><span style="width:${p.conf}%"></span></div>
+    <div class="ai-why">${reason.join('<br>')}</div>`;
+}
+
+function renderGameDetail(sport, data, g, standings) {
   const comp = data.header?.competitions?.[0] || data.competitions?.[0] || {};
   const cs = comp.competitors || [];
   const home = cs.find((c) => c.homeAway === 'home') || cs[0] || {};
@@ -201,6 +224,8 @@ function renderGameDetail(sport, data) {
   const live = st.state === 'in';
   let html = `<div class="md-head">${teamCell(away)}<div style="color:var(--muted);font-weight:700">@</div>${teamCell(home)}</div>
     <div class="md-status ${live ? 'live' : ''}">${st.detail || st.shortDetail || ''}</div>`;
+
+  html += aiPickBlock(g, standings);
 
   // line score (innings / quarters)
   const aLine = away.linescores || [], hLine = home.linescores || [];
@@ -698,7 +723,8 @@ $('#fan-reset').addEventListener('click', () => {
 // --- EAGLES ---------------------------------------------------------------
 const NFL_TEAM = `${SITE}/football/nfl/teams/${EAGLES.teamId}`;
 const FBCORE = 'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl';
-const STAT_SEASON = 2025; // last completed season (offseason analytics)
+const STAT_SEASON = 2025; // last completed season (stats/leaders/depth)
+const SCHEDULE_SEASON = 2026; // upcoming 2026-27 season schedule
 const refId = (ref) => (ref || '').match(/\/(?:athletes|teams)\/(\d+)/)?.[1];
 const safeJSON = (url, ttl) => fetchJSON(url, ttl).catch(() => null);
 
@@ -922,9 +948,10 @@ async function renderEaglesLeaders(idMap) {
 
 // Full schedule + results + W/L trend.
 async function renderEaglesSchedule() {
-  $('#eagles-sched-season').textContent = `(${STAT_SEASON})`;
+  $('#eagles-sched-season').textContent = '(2026-27)';
   const elx = $('#eagles-schedule');
-  const data = await safeJSON(`${SITE}/football/nfl/teams/${EAGLES.teamId}/schedule?season=${STAT_SEASON}`, 6 * 3600000);
+  let data = await safeJSON(`${SITE}/football/nfl/teams/${EAGLES.teamId}/schedule?season=${SCHEDULE_SEASON}`, 6 * 3600000);
+  if (!data?.events?.length) data = await safeJSON(`${SITE}/football/nfl/teams/${EAGLES.teamId}/schedule`, 6 * 3600000);
   const events = data?.events || [];
   if (!events.length) { elx.innerHTML = '<div class="empty">Schedule not available yet.</div>'; return; }
   let wins = 0, losses = 0;
@@ -937,7 +964,8 @@ async function renderEaglesSchedule() {
     const oppName = opp?.team?.abbreviation || opp?.team?.displayName || 'TBD';
     const home = me?.homeAway === 'home';
     const done = comp.status?.type?.completed;
-    let res = '<span class="res up">—</span>';
+    const when = ev.date ? new Date(ev.date).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+    let res = `<span class="res up">${when || '—'}</span>`;
     if (done && me) {
       const win = me.winner === true;
       if (win) { wins++; trend.push('w'); } else { losses++; trend.push('l'); }
@@ -1010,4 +1038,14 @@ $('#scores-date').addEventListener('change', renderScores);
 
 const verEl = $('#app-version');
 if (verEl) verEl.textContent = APP_VERSION;
+
+// back-to-top button
+const toTop = $('#to-top');
+if (toTop) {
+  const onScroll = () => toTop.classList.toggle('show', window.scrollY > 300);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  toTop.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  onScroll();
+}
+
 showTab('home');

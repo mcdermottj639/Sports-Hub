@@ -262,3 +262,6 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .muted { color: var(--muted); font-size: 14px; }
 .empty { color: var(--muted); padding: 24px; text-align: center; background: var(--card); border-radius: var(--radius); }
 .footer { text-align: center; color: var(--muted); padding: 24px; font-size: 13px; }
+.to-top { position: fixed; right: 16px; bottom: 18px; width: 46px; height: 46px; border-radius: 50%; background: var(--eagles-green); color: #fff; border: 1px solid rgba(255,255,255,.25); font-size: 22px; cursor: pointer; z-index: 45; box-shadow: 0 4px 14px rgba(0,0,0,.45); opacity: 0; pointer-events: none; transform: translateY(10px); transition: opacity .2s, transform .2s; }
+.to-top.show { opacity: 1; pointer-events: auto; transform: none; }
+.to-top:hover { background: var(--eagles-green-light); }
