@@ -128,6 +128,10 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .fac-row .fac-l { font-weight: 700; min-width: 96px; }
 .fac-row .fac-d { color: var(--muted); flex: 1; }
 .fac-row .fac-p { font-weight: 800; color: var(--accent); white-space: nowrap; }
+.hit-team { font-size: 11px; color: var(--gold); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin: 8px 0 4px; }
+.hit-row { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-top: 1px solid rgba(255,255,255,.05); font-size: 13px; }
+.hit-row .hit-n { font-weight: 700; }
+.hit-row .hit-s { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
 .ai-result { font-size: 12px; font-weight: 700; margin-top: 6px; }
 .ai-result.win { color: var(--accent); }
 .ai-result.loss { color: var(--live); }

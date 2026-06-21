@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -201,7 +201,10 @@ async function openGameDetail(sport, id, g) {
       g ? predictGame(sport, g).catch(() => null) : Promise.resolve(null),
       g && sport === 'mlb' ? Promise.all([topHitters(g.home.id), topHitters(g.away.id)]).catch(() => null) : Promise.resolve(null),
     ]);
-    const extra = hitters && g ? hittersHTML(g, hitters[0], hitters[1]) : '';
+    let extra = '';
+    if (g && sport === 'mlb') {
+      extra = startersHTML(g) + (hitters ? hittersHTML(g, hitters[0], hitters[1]) : '');
+    }
     $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra);
   } catch (_) {
     $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>';
@@ -256,14 +259,21 @@ function renderGameDetail(sport, data, pred, extra) {
   });
   if (leadersHTML.length) html += `<div class="md-section-title">Top Performers</div>${leadersHTML.join('')}`;
 
-  // team stats comparison (a few key rows)
+  // team stats comparison — flatten nested categories (MLB) or flat list (NFL)
   const teams = data.boxscore?.teams || [];
-  if (teams.length === 2 && (teams[0].statistics || []).length) {
+  if (teams.length === 2) {
     const a = teams.find((t) => (t.homeAway || '') === 'away') || teams[0];
     const h = teams.find((t) => (t.homeAway || '') === 'home') || teams[1];
-    const byName = (t) => Object.fromEntries((t.statistics || []).map((s) => [s.name || s.label, s.displayValue]));
-    const sa = byName(a), sh = byName(h);
-    const keys = Object.keys(sa).slice(0, 6);
+    const flat = (t) => {
+      const out = {};
+      (t.statistics || []).forEach((s) => {
+        if (Array.isArray(s.stats)) s.stats.forEach((x) => { const k = x.label || x.displayName || x.name; if (k) out[k] = x.displayValue ?? x.value; });
+        else { const k = s.label || s.displayName || s.name; if (k) out[k] = s.displayValue ?? s.value; }
+      });
+      return out;
+    };
+    const sa = flat(a), sh = flat(h);
+    const keys = Object.keys(sh).filter((k) => k in sa && sh[k] != null && sa[k] != null && sh[k] !== '').slice(0, 8);
     if (keys.length) {
       html += `<div class="md-section-title">Team Stats</div><table class="md-line"><thead><tr><th>${a.team?.abbreviation || 'Away'}</th><th></th><th>${h.team?.abbreviation || 'Home'}</th></tr></thead><tbody>`;
       keys.forEach((k) => { html += `<tr><td style="text-align:center">${sa[k] ?? ''}</td><td>${k}</td><td>${sh[k] ?? ''}</td></tr>`; });
@@ -506,7 +516,8 @@ async function teamOPS(teamId) {
   return null;
 }
 
-// Top 3 hitters by OPS for a team, excluding injured players.
+const ops3n = (v) => { const n = parseFloat(v); return isNaN(n) ? (v ?? '') : ops3(n); };
+// Top 3 hitters by OPS for a team (with AVG/HR/RBI when available), injured out.
 async function topHitters(teamId, n = 3) {
   if (!teamId) return [];
   const y = new Date().getFullYear();
@@ -521,25 +532,46 @@ async function topHitters(teamId, n = 3) {
     const injured = (Array.isArray(a.injuries) && a.injuries.length > 0) || /injur|^il$|\bil\b|day-to-day|out|\d+-day/i.test(stat);
     info[a.id] = { name: a.displayName || a.fullName, injured };
   }));
-  const cat = (lead?.categories || []).find((c) => /ops/i.test(`${c.abbreviation || ''}${c.name || ''}${c.displayName || ''}`));
-  if (!cat) return [];
-  const out = [];
-  for (const L of (cat.leaders || [])) {
-    const id = refId(L.athlete?.$ref);
-    const meta = info[id];
-    const name = meta?.name || L.athlete?.displayName;
-    if (!name || meta?.injured) continue;
-    out.push({ name, val: L.displayValue ?? L.value });
-    if (out.length >= n) break;
-  }
-  return out;
+  const cats = lead?.categories || [];
+  const findCat = (re) => cats.find((c) => re.test(`${c.abbreviation || ''}|${c.name || ''}|${c.displayName || ''}`));
+  const map = { ops: findCat(/ops/i), avg: findCat(/batting average|^avg$/i), hr: findCat(/home runs|^hr$|homeruns/i), rbi: findCat(/\brbi\b|runs batted/i) };
+  if (!map.ops) return [];
+  const players = {};
+  Object.entries(map).forEach(([k, c]) => (c?.leaders || []).forEach((L) => {
+    const id = refId(L.athlete?.$ref); if (!id) return;
+    (players[id] = players[id] || { id })[k] = L.displayValue ?? L.value;
+  }));
+  return Object.values(players)
+    .map((p) => ({ ...p, name: info[p.id]?.name || '', injured: info[p.id]?.injured }))
+    .filter((p) => p.name && p.ops != null && !p.injured)
+    .sort((a, b) => parseFloat(b.ops) - parseFloat(a.ops))
+    .slice(0, n);
 }
 function hittersHTML(g, ht, at) {
-  if (!ht.length && !at.length) return '';
-  const fmt = (arr) => arr.map((p) => `${p.name.split(' ').slice(-1)[0]} ${typeof p.val === 'number' ? ops3(p.val) : p.val}`).join(', ') || '—';
-  return `<div class="md-section-title">Top Hitters (OPS · healthy)</div>
-    <div class="ai-why"><b>${g.home.abbr || 'Home'}:</b> ${fmt(ht)}</div>
-    <div class="ai-why"><b>${g.away.abbr || 'Away'}:</b> ${fmt(at)}</div>`;
+  const line = (p) => {
+    const extra = [p.avg != null ? `${ops3n(p.avg)} AVG` : '', p.hr != null ? `${p.hr} HR` : '', p.rbi != null ? `${p.rbi} RBI` : ''].filter(Boolean).join(' · ');
+    return `<div class="hit-row"><span class="hit-n">${p.name}</span><span class="hit-s">${ops3n(p.ops)} OPS${extra ? ' · ' + extra : ''}</span></div>`;
+  };
+  const block = (label, arr) => `<div class="hit-team">${label}</div>${arr.length ? arr.map(line).join('') : '<div class="ai-why">Not available</div>'}`;
+  return `<div class="md-section-title">Top 3 Hitters (OPS · healthy)</div>${block(g.away.abbr || 'Away', at)}${block(g.home.abbr || 'Home', ht)}`;
+}
+// Projected starting pitchers with their key stats (from the scoreboard feed).
+function startersHTML(g) {
+  const sp = (side) => {
+    const p = side.probables?.[0]; if (!p) return null;
+    const a = p.athlete || {};
+    const era = statVal(p.statistics, ['ERA', 'earnedRunAverage']);
+    const whip = statVal(p.statistics, ['WHIP', 'walksHitsPerInningPitched']);
+    const k = statVal(p.statistics, ['K', 'SO', 'strikeouts']);
+    const get = (keys) => { const s = (p.statistics || []).find((x) => keys.includes((x.abbreviation || '').toUpperCase()) || keys.includes(x.name)); return s ? (s.displayValue ?? s.value) : null; };
+    const wl = get(['W-L', 'wins-losses', 'record']);
+    const bits = [era != null ? `${era.toFixed(2)} ERA` : '', whip != null ? `${whip.toFixed(2)} WHIP` : '', wl ? `${wl}` : '', k != null ? `${k} K` : ''].filter(Boolean).join(' · ');
+    return { name: a.displayName || a.shortName || 'TBD', bits: bits || 'season stats pending' };
+  };
+  const h = sp(g.home), a = sp(g.away);
+  if (!h && !a) return '<div class="md-section-title">Projected Starters</div><div class="ai-why">Not announced yet.</div>';
+  const row = (label, p) => p ? `<div class="hit-row"><span class="hit-n">${label} · ${p.name}</span><span class="hit-s">${p.bits}</span></div>` : '';
+  return `<div class="md-section-title">Projected Starters</div>${row(g.away.abbr || 'Away', a)}${row(g.home.abbr || 'Home', h)}`;
 }
 
 // Player-matchup signal: MLB starting pitchers (ERA + WHIP) and team OPS;
@@ -589,7 +621,7 @@ async function predictGame(sport, g) {
   if (hf && af) {
     add('Record', 1.1 * (hf.winPct - af.winPct), `${(hf.winPct * 100).toFixed(0)}% vs ${(af.winPct * 100).toFixed(0)}% win`);
     add('Scoring margin', 0.9 * clamp((hf.pdpg - af.pdpg) / scale, -3, 3), `${hf.pdpg >= 0 ? '+' : ''}${hf.pdpg.toFixed(1)} vs ${af.pdpg >= 0 ? '+' : ''}${af.pdpg.toFixed(1)} per game`);
-    add('Recent form', 0.6 * clamp((hf.form - af.form) / scale, -3, 3), `last 5: ${hf.form >= 0 ? '+' : ''}${hf.form.toFixed(1)} vs ${af.form >= 0 ? '+' : ''}${af.form.toFixed(1)}`);
+    add('Recent form', 0.4 * clamp((hf.form - af.form) / scale, -3, 3), `last 5: ${hf.form >= 0 ? '+' : ''}${hf.form.toFixed(1)} vs ${af.form >= 0 ? '+' : ''}${af.form.toFixed(1)}`);
     if (hf.homeWP != null && af.roadWP != null) {
       add('Home/road split', 1.0 * (hf.homeWP - af.roadWP), `home ${(hf.homeWP * 100).toFixed(0)}% vs road ${(af.roadWP * 100).toFixed(0)}%`);
     } else { add('Home field', 0.28, 'standard home edge'); }
@@ -609,24 +641,25 @@ async function predictGame(sport, g) {
   const homePick = pHome >= 0.5;
   const winner = homePick ? g.home : g.away;
   const conf = clamp(Math.round((homePick ? pHome : 1 - pHome) * 100), 50, 92);
-  // per-factor probability impact toward the home team
+  // Calibrated attribution: split the actual edge over 50% across factors in
+  // proportion to each factor's log-odds, so the parts add up to the pick.
+  const edge = (pHome - 0.5) * 100; // home edge in points (can be negative)
   const breakdown = factors.map((f) => {
-    const pct = Math.round((logistic(z) - logistic(z - f.c)) * 100);
-    return { label: f.label, detail: f.detail, favor: f.c >= 0 ? g.home.name : g.away.name, pct: Math.abs(pct) };
-  }).filter((b) => b.pct > 0).sort((a, b) => b.pct - a.pct);
+    const pts = Math.abs(z) > 1e-6 ? (f.c / z) * edge : 0; // toward home if positive
+    return { label: f.label, detail: f.detail, favor: f.c >= 0 ? g.home.name : g.away.name, pct: Math.abs(pts) };
+  }).filter((b) => b.pct >= 0.1).sort((a, b) => b.pct - a.pct);
   return { winner, conf, homePick, breakdown, notes: mu.notes, thin: !(hf && af) };
 }
 
 function aiPickBlock(pred) {
   if (!pred) return '';
   const rows = pred.breakdown.map((b) =>
-    `<div class="fac-row"><span class="fac-l">${b.label}</span><span class="fac-d">${b.detail}</span><span class="fac-p">${b.favor.split(' ').slice(-1)[0]} +${b.pct}%</span></div>`).join('');
-  const notes = (pred.notes || []).map((n) => `<div class="ai-why">⭐ ${n}</div>`).join('');
+    `<div class="fac-row"><span class="fac-l">${b.label}</span><span class="fac-d">${b.detail}</span><span class="fac-p">${b.favor.split(' ').slice(-1)[0]} +${b.pct.toFixed(1)}%</span></div>`).join('');
   return `<div class="md-section-title">🤖 AI Pick</div>
     <div class="ai-pick">Pick: <b>${pred.winner.name}</b> <span class="ai-conf">${pred.conf}%</span></div>
     <div class="conf-bar"><span style="width:${pred.conf}%"></span></div>
-    ${notes}
     <div class="fac-list">${rows || '<div class="ai-why">Limited data — leaning on home-field edge.</div>'}</div>
+    <div class="ai-why" style="margin-top:6px">Factors above the 50% coin-flip add up to the ${pred.conf}% pick.</div>
     ${pred.thin ? '<div class="ai-why">Not enough games played yet for full analysis.</div>' : ''}`;
 }
 
@@ -653,7 +686,7 @@ async function renderPredictions() {
         const actual = winnerName(g);
         if (actual && actual !== 'TIE') { graded++; const hit = actual === p.winner.name; if (hit) right++; resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`; }
       }
-      const top = p.breakdown.slice(0, 2).map((b) => `${b.label} (${b.favor.split(' ').slice(-1)[0]} +${b.pct}%)`).join(' · ');
+      const top = p.breakdown.slice(0, 2).map((b) => `${b.label} (${b.favor.split(' ').slice(-1)[0]} +${b.pct.toFixed(1)}%)`).join(' · ');
       block.innerHTML = `
         <div class="ai-pick">🤖 Pick: <b>${p.winner.name}</b> <span class="ai-conf">${p.conf}%</span></div>
         <div class="conf-bar"><span style="width:${p.conf}%"></span></div>
