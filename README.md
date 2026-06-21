@@ -34,9 +34,9 @@ It's plain HTML/CSS/JS — open `index.html`, or serve the folder:
 python3 -m http.server 8080   # then visit http://localhost:8080
 ```
 
-## Deploy
+## Deploy (one-time GitHub Pages setup)
 
-A GitHub Actions workflow ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)) publishes the site to GitHub Pages automatically on every push.
+In the repo: **Settings → Pages → Build and deployment → Source: "Deploy from a branch"**, pick the branch and the `/ (root)` folder, then **Save**. After about a minute the site is live at the URL above, and it re-publishes automatically on every push to that branch.
 
 ## Notes
 
