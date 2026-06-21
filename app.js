@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v18';
+const APP_VERSION = 'v19';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -996,6 +996,7 @@ async function renderFantasy() {
       const statSel = `<select data-i="${i}" data-f="status">${['active','bench','il'].map((s) => `<option value="${s}" ${s === p.status ? 'selected' : ''}>${s === 'active' ? 'Starter' : s === 'bench' ? 'Bench' : 'IL'}</option>`).join('')}</select>`;
       row.innerHTML = `
         <div><div class="pname">${p.name}</div><div class="ppos">${p.slot} · ${p.pos || ''}</div>
+          <div class="seas" id="fseas-${i}">${p.team ? 'season stats…' : ''}</div>
           <div class="pgame ${gl.cls}">${gl.text}${lineHTML}</div></div>
         <div>${teamSel}</div>
         <div>${statSel}</div>
@@ -1021,6 +1022,80 @@ async function renderFantasy() {
       renderFantasy();
     };
   });
+
+  // fill season stats asynchronously per row (so the list shows instantly)
+  fillSeasonStats(roster, fanState.sport);
+}
+
+// --- fantasy season stats -------------------------------------------------
+const norm = (s) => (s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+const nameKey = (name) => { const p = parseName(name); return `${norm(p.last)}|${norm(p.init)}`; };
+
+async function leagueTeamIds(sport) {
+  const path = LEAGUES[sport].espnPath;
+  const data = await fetchJSON(`${SITE}/${path}/teams`, 24 * 3600000).catch(() => null);
+  const map = {};
+  const teams = data?.sports?.[0]?.leagues?.[0]?.teams || [];
+  teams.forEach((t) => { const tm = t.team || t; if (tm.displayName) map[tm.displayName.toLowerCase()] = tm.id; });
+  return map;
+}
+async function teamRosterIds(sport, teamId) {
+  const path = LEAGUES[sport].espnPath;
+  const data = await fetchJSON(`${SITE}/${path}/teams/${teamId}/roster`, 12 * 3600000).catch(() => null);
+  const map = {};
+  (data?.athletes || []).forEach((grp) => (grp.items || grp.athletes || [grp]).forEach((a) => {
+    if (a?.id && (a.displayName || a.fullName)) map[nameKey(a.displayName || a.fullName)] = a.id;
+  }));
+  return map;
+}
+async function athleteStatDict(sport, athleteId) {
+  const core = sport === 'baseball' ? BBCORE : FBCORE;
+  const data = await fetchJSON(`${core}/seasons/${new Date().getFullYear()}/types/2/athletes/${athleteId}/statistics`, 6 * 3600000).catch(() => null);
+  const out = {};
+  (data?.splits?.categories || []).forEach((c) => {
+    const key = (c.name || '').toLowerCase();
+    out[key] = {};
+    (c.stats || []).forEach((s) => { const a = (s.abbreviation || s.name || '').toUpperCase(); out[key][a] = s.displayValue ?? s.value; });
+  });
+  return out;
+}
+function seasonLineFromDict(sport, player, dict) {
+  if (!dict) return null;
+  if (sport === 'baseball') {
+    if (isPitcher(player)) {
+      const d = dict.pitching; if (!d) return null;
+      const w = d.W ?? d.WINS, l = d.L ?? d.LOSSES;
+      return `${w ?? '–'}-${l ?? '–'} · ${d.ERA ?? '–'} ERA · ${d.WHIP ?? '–'} WHIP · ${d.SO ?? d.K ?? '–'} K`;
+    }
+    const d = dict.batting; if (!d) return null;
+    return `${d.AVG ?? '–'} AVG · ${d.HR ?? '–'} HR · ${d.RBI ?? '–'} RBI · ${d.OPS ?? '–'} OPS`;
+  }
+  // football
+  const pos = (player.pos || player.slot || '').toUpperCase();
+  if (/QB/.test(pos) && dict.passing) { const d = dict.passing; return `${d.YDS ?? '–'} yds · ${d.TD ?? '–'} TD · ${d.INT ?? '–'} INT · ${d.QBR ?? d.RAT ?? '–'} rtg`; }
+  if (/RB|HB|FB/.test(pos) && dict.rushing) { const d = dict.rushing; return `${d.YDS ?? '–'} rush yds · ${d.TD ?? '–'} TD`; }
+  if (/WR|TE/.test(pos) && dict.receiving) { const d = dict.receiving; return `${d.REC ?? '–'} rec · ${d.YDS ?? '–'} yds · ${d.TD ?? '–'} TD`; }
+  const any = dict.passing || dict.rushing || dict.receiving;
+  return any ? Object.entries(any).slice(0, 3).map(([k, v]) => `${v} ${k}`).join(' · ') : null;
+}
+async function fillSeasonStats(roster, fSport) {
+  const sport = fSport === 'baseball' ? 'mlb' : 'nfl';
+  let ids;
+  try { ids = await leagueTeamIds(sport); } catch (_) { ids = {}; }
+  await Promise.all(roster.map(async (p, i) => {
+    const elx = document.getElementById(`fseas-${i}`);
+    if (!elx || !p.team) return;
+    try {
+      const teamId = ids[p.team.toLowerCase()];
+      if (!teamId) { elx.textContent = ''; return; }
+      const rmap = await teamRosterIds(sport, teamId);
+      const aid = rmap[nameKey(p.name)];
+      if (!aid) { elx.textContent = ''; return; }
+      const dict = await athleteStatDict(fSport, aid);
+      const line = seasonLineFromDict(fSport, p, dict);
+      elx.textContent = line || '';
+    } catch (_) { elx.textContent = ''; }
+  }));
 }
 
 $('#fan-add').addEventListener('click', () => {

@@ -273,6 +273,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .fan-row .pgame.live { color: var(--live); font-weight: 700; }
 .fan-row .pgame.final { color: var(--silver); }
 .fan-row .pgame.off { color: var(--muted); }
+.fan-row .seas { font-size: 11px; color: var(--silver); margin-top: 2px; font-variant-numeric: tabular-nums; }
 .fan-row select, .fan-row input { background: var(--card-2); color: var(--text); border: 1px solid rgba(255,255,255,.1); border-radius: 8px; padding: 6px 8px; font-size: 12px; width: 100%; }
 .fan-row .rm { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0 4px; }
 .fan-row .rm:hover { color: var(--live); }
