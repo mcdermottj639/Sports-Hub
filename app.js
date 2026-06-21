@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v21';
+const APP_VERSION = 'v22';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -1082,28 +1082,49 @@ function hotCold(fSport, games, pitcher) {
   const within = (d) => dated.filter((g) => now - g.date.getTime() <= d * day);
   if (fSport === 'baseball') {
     if (pitcher) {
-      const agg = (gs) => { let er = 0, o = 0; gs.forEach((g) => { er += numv(g.dict.earnedRuns ?? g.dict.ER); o += ipToOuts(g.dict.inningsPitched ?? g.dict.IP); }); return o ? { era: (er * 27) / o, o } : null; };
+      const agg = (gs) => {
+        let er = 0, o = 0, bb = 0, h = 0;
+        gs.forEach((g) => { er += numv(g.dict.earnedRuns ?? g.dict.ER); o += ipToOuts(g.dict.inningsPitched ?? g.dict.IP); bb += numv(g.dict.walks ?? g.dict.BB); h += numv(g.dict.hits ?? g.dict.H); });
+        return o ? { era: (er * 27) / o, whip: ((bb + h) * 3) / o, o } : null;
+      };
       const s = agg(games), w15 = agg(within(15)), w30 = agg(within(30));
       if (!s) return null;
-      const e = (x) => (x ? x.era.toFixed(2) : '–');
+      const e = (x) => (x ? x.era.toFixed(2) : '–'), wh = (x) => (x ? x.whip.toFixed(2) : '–');
       let tag = '';
-      if (w30 && w30.o >= 12) tag = (s.era - w30.era >= 0.75) ? 'hot' : (w30.era - s.era >= 0.75) ? 'cold' : '';
-      return { tag, detail: `ERA ${e(w15)} (15d) / ${e(w30)} (30d) · ${e(s)} season` };
+      if (w30 && w30.o >= 12) { const eImp = s.era - w30.era, whImp = s.whip - w30.whip; tag = (eImp >= 0.75 || whImp >= 0.15) ? 'hot' : (eImp <= -0.75 || whImp <= -0.15) ? 'cold' : ''; }
+      return { tag, detail: `ERA ${e(w15)}/${e(w30)} · WHIP ${wh(w15)}/${wh(w30)} (15/30d) · ${e(s)}/${wh(s)} szn` };
     }
-    const agg = (gs) => { let h = 0, ab = 0; gs.forEach((g) => { h += numv(g.dict.hits ?? g.dict.H); ab += numv(g.dict.atBats ?? g.dict.AB); }); return ab ? { avg: h / ab, ab } : null; };
+    // hitters by OPS
+    const agg = (gs) => {
+      let h = 0, ab = 0, d = 0, t = 0, hr = 0, bb = 0, hbp = 0, sf = 0;
+      gs.forEach((g) => {
+        h += numv(g.dict.hits ?? g.dict.H); ab += numv(g.dict.atBats ?? g.dict.AB);
+        d += numv(g.dict.doubles ?? g.dict['2B']); t += numv(g.dict.triples ?? g.dict['3B']); hr += numv(g.dict.homeRuns ?? g.dict.HR);
+        bb += numv(g.dict.walks ?? g.dict.BB); hbp += numv(g.dict.hitByPitch ?? g.dict.HBP); sf += numv(g.dict.sacrificeFlies ?? g.dict.SF);
+      });
+      if (!ab) return null;
+      const tb = h + d + 2 * t + 3 * hr;
+      return { ops: (h + bb + hbp) / ((ab + bb + hbp + sf) || ab) + tb / ab, ab };
+    };
     const s = agg(games), w15 = agg(within(15)), w30 = agg(within(30));
     if (!s) return null;
-    const a = (x) => (x ? ops3(x.avg) : '–');
+    const o = (x) => (x ? ops3(x.ops) : '–');
     let tag = '';
-    if (w15 && w15.ab >= 15) tag = (w15.avg - s.avg >= 0.040) ? 'hot' : (s.avg - w15.avg >= 0.040) ? 'cold' : '';
-    return { tag, detail: `${a(w15)} (15d) / ${a(w30)} (30d) · ${a(s)} season` };
+    if (w15 && w15.ab >= 15) { const diff = w15.ops - s.ops; tag = diff >= 0.060 ? 'hot' : diff <= -0.060 ? 'cold' : ''; }
+    return { tag, detail: `${o(w15)} (15d) / ${o(w30)} (30d) OPS · ${o(s)} szn` };
   }
   return null; // football trends added when the season has data
 }
 
 async function fillSeasonStats(roster, fSport) {
   const sport = fSport === 'baseball' ? 'mlb' : 'nfl';
+  // Resolve team IDs: start from the teams endpoint, then override with the
+  // live scoreboard IDs (the source that's proven to work in-browser).
   const ids = await leagueTeamIds(sport).catch(() => ({}));
+  Object.entries(fanState.gamesByTeam || {}).forEach(([name, pg]) => {
+    const id = pg.side === 'home' ? pg.g.home.id : pg.g.away.id;
+    if (id) ids[name.toLowerCase()] = id;
+  });
   const teams = [...new Set(roster.filter((p) => p.team).map((p) => p.team))];
   const sMaps = {}, idMaps = {};
   await Promise.all(teams.map(async (t) => {
