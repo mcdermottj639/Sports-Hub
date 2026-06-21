@@ -134,6 +134,34 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .setup-card a { color: var(--accent); }
 
 /* Eagles tab */
+.season-tag { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: none; letter-spacing: 0; }
+.stat-row { display: flex; align-items: center; justify-content: space-between; background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: 10px; padding: 10px 12px; margin-bottom: 7px; }
+.stat-row .sname { font-size: 14px; }
+.stat-row .sval { display: flex; align-items: center; gap: 10px; }
+.stat-row .sval .v { font-weight: 800; font-variant-numeric: tabular-nums; }
+.stat-row .rank { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--card-2); color: var(--silver); }
+.stat-row .rank.top { background: var(--accent); color: #06241b; }
+.stat-row .rank.bot { background: rgba(255,77,77,.2); color: #ff9a9a; }
+.leader-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+.leader-row .cat { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; width: 96px; flex-shrink: 0; }
+.leader-row .who { font-weight: 600; font-size: 14px; }
+.leader-row .val { margin-left: auto; font-weight: 800; }
+.sched-row { display: grid; grid-template-columns: 42px 1fr auto; gap: 10px; align-items: center; background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }
+.sched-row .wk { font-size: 11px; color: var(--muted); font-weight: 700; }
+.sched-row .opp { font-size: 14px; font-weight: 600; }
+.sched-row .res { font-weight: 800; font-size: 13px; }
+.sched-row .res.w { color: var(--accent); }
+.sched-row .res.l { color: var(--live); }
+.sched-row .res.up { color: var(--muted); font-weight: 600; }
+.trend { display: flex; gap: 5px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+.trend .pill { width: 24px; height: 24px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; }
+.trend .pill.w { background: var(--accent); color: #06241b; }
+.trend .pill.l { background: var(--live); color: #fff; }
+.trend .rec { font-weight: 800; margin-right: 6px; }
+.opp-card { background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: var(--radius); padding: 16px; display: flex; align-items: center; gap: 14px; }
+.opp-card img { width: 48px; height: 48px; object-fit: contain; }
+.opp-card .on { font-weight: 700; font-size: 16px; }
+.opp-card .od { color: var(--muted); font-size: 13px; margin-top: 2px; }
 .staff-card { background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: var(--radius); padding: 14px; text-align: center; }
 .staff-card .role { font-size: 11px; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
 .staff-card .who { font-size: 16px; font-weight: 700; margin-top: 4px; }

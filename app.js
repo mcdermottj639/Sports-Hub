@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v7';
+const APP_VERSION = 'v8';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'] },
@@ -673,12 +673,17 @@ $('#fan-reset').addEventListener('click', () => {
 
 // --- EAGLES ---------------------------------------------------------------
 const NFL_TEAM = `${SITE}/football/nfl/teams/${EAGLES.teamId}`;
+const FBCORE = 'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl';
+const STAT_SEASON = 2025; // last completed season (offseason analytics)
+const refId = (ref) => (ref || '').match(/\/(?:athletes|teams)\/(\d+)/)?.[1];
+const safeJSON = (url, ttl) => fetchJSON(url, ttl).catch(() => null);
 
 async function renderEagles() {
+  const id = EAGLES.teamId;
   const [teamR, rosterR, newsR] = await Promise.allSettled([
     fetchJSON(NFL_TEAM, 5 * 60000),
     fetchJSON(`${NFL_TEAM}/roster`, 30 * 60000),
-    fetchJSON(`${SITE}/football/nfl/news?team=${EAGLES.teamId}`, 10 * 60000),
+    fetchJSON(`${SITE}/football/nfl/news?team=${id}`, 10 * 60000),
   ]);
 
   // hero
@@ -705,41 +710,23 @@ async function renderEagles() {
     .map((s) => `<div class="staff-card"><div class="role">${s.role}</div><div class="who">${s.name}</div></div>`)
     .join('');
 
-  // roster / depth chart
+  // roster map (id -> player) used by depth chart + leaders
   const groups = rosterR.status === 'fulfilled' ? (rosterR.value.athletes || []) : [];
   const allPlayers = [];
-  const depthEl = $('#eagles-depth');
-  if (!groups.length) {
-    depthEl.innerHTML = '<div class="empty">Roster unavailable right now.</div>';
-  } else {
-    depthEl.innerHTML = '';
-    groups.forEach((grp) => {
-      const items = grp.items || [];
-      items.forEach((a) => allPlayers.push(a));
-      const byPos = {};
-      items.forEach((a) => {
-        const pos = a.position?.abbreviation || a.position?.name || '—';
-        (byPos[pos] = byPos[pos] || []).push(a);
-      });
-      const block = el('div', 'depth-group');
-      const title = (grp.position || '').replace(/^\w/, (c) => c.toUpperCase()).replace('Specialteam', 'Special Teams');
-      block.innerHTML = `<h4>${title || 'Players'}</h4>` + Object.entries(byPos).map(([pos, players]) =>
-        `<div class="depth-pos"><div class="pos-label">${pos}</div>${players.map((p) =>
-          `<span class="depth-player"><span class="jersey">${p.jersey ? '#' + p.jersey : ''}</span> ${p.displayName || p.fullName}${p.age ? ` <span class="age">${p.age}y</span>` : ''}</span>`).join('')}</div>`
-      ).join('');
-      depthEl.appendChild(block);
-    });
-  }
+  const idMap = {};
+  groups.forEach((grp) => (grp.items || []).forEach((a) => {
+    allPlayers.push(a);
+    if (a.id) idMap[a.id] = a;
+  }));
+  const card = (val, lbl) => `<div class="fan-card"><div class="big">${val}</div><div class="lbl">${lbl}</div></div>`;
 
   // analytics (by the numbers)
   const ages = allPlayers.map((a) => a.age).filter((n) => typeof n === 'number');
   const avgAge = ages.length ? (ages.reduce((s, n) => s + n, 0) / ages.length).toFixed(1) : '–';
   const youngest = allPlayers.filter((a) => a.age).sort((a, b) => a.age - b.age)[0];
   const oldest = allPlayers.filter((a) => a.age).sort((a, b) => b.age - a.age)[0];
-  const card = (val, lbl) => `<div class="fan-card"><div class="big">${val}</div><div class="lbl">${lbl}</div></div>`;
   $('#eagles-analytics').innerHTML = allPlayers.length
-    ? card(allPlayers.length, 'Players on roster') +
-      card(avgAge, 'Average age') +
+    ? card(allPlayers.length, 'Players on roster') + card(avgAge, 'Average age') +
       (youngest ? card(`${youngest.age}`, `Youngest · ${youngest.displayName}`) : '') +
       (oldest ? card(`${oldest.age}`, `Oldest · ${oldest.displayName}`) : '')
     : card('–', 'Roster loading');
@@ -747,18 +734,152 @@ async function renderEagles() {
   // news
   const articles = newsR.status === 'fulfilled' ? (newsR.value.articles || []) : [];
   const newsEl = $('#eagles-news');
-  if (!articles.length) {
-    newsEl.innerHTML = '<div class="empty">No recent Eagles news right now — check back as camp opens.</div>';
-  } else {
-    newsEl.innerHTML = articles.slice(0, 10).map((a) => {
-      const href = a.links?.web?.href || a.links?.mobile?.href || '#';
-      const img = a.images?.[0]?.url;
-      const when = a.published ? new Date(a.published).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
-      return `<a class="news-item" href="${href}" target="_blank" rel="noopener">
-        ${img ? `<img src="${img}" alt="" onerror="this.style.display='none'">` : ''}
-        <div><div class="nh">${a.headline || ''}</div><div class="nd">${a.description || ''}</div><div class="nt">${when}</div></div></a>`;
-    }).join('');
+  newsEl.innerHTML = !articles.length
+    ? '<div class="empty">No recent Eagles news right now — check back as camp opens.</div>'
+    : articles.slice(0, 10).map((a) => {
+        const href = a.links?.web?.href || a.links?.mobile?.href || '#';
+        const img = a.images?.[0]?.url;
+        const when = a.published ? new Date(a.published).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+        return `<a class="news-item" href="${href}" target="_blank" rel="noopener">
+          ${img ? `<img src="${img}" alt="" onerror="this.style.display='none'">` : ''}
+          <div><div class="nh">${a.headline || ''}</div><div class="nd">${a.description || ''}</div><div class="nt">${when}</div></div></a>`;
+      }).join('');
+
+  // fire off the heavier analytics in parallel; each renders independently
+  renderEaglesDepth(idMap, groups);
+  renderEaglesTeamStats();
+  renderEaglesLeaders(idMap);
+  renderEaglesSchedule();
+  renderEaglesNextOpp(teamR.status === 'fulfilled' ? teamR.value.team : null);
+}
+
+// Ordered depth chart from ESPN core API; falls back to roster-by-position.
+async function renderEaglesDepth(idMap, groups) {
+  const elx = $('#eagles-depth');
+  const dc = await safeJSON(`${FBCORE}/seasons/${STAT_SEASON}/teams/${EAGLES.teamId}/depthcharts`, 24 * 3600000);
+  const rows = [];
+  (dc?.items || []).forEach((unit) => {
+    const positions = unit.positions || {};
+    Object.values(positions).forEach((pos) => {
+      const label = pos.position?.displayName || pos.position?.abbreviation || '';
+      const players = (pos.athletes || [])
+        .sort((a, b) => (a.rank || 99) - (b.rank || 99))
+        .map((a) => idMap[refId(a.athlete?.$ref)])
+        .filter(Boolean);
+      if (label && players.length) rows.push({ label, players });
+    });
+  });
+
+  if (rows.length) {
+    elx.innerHTML = '<div class="depth-group"><h4>Starters → Backups (by position)</h4>' +
+      rows.map((r) => `<div class="depth-pos"><div class="pos-label">${r.label}</div>${r.players.map((p, i) =>
+        `<span class="depth-player"><span class="jersey">${i === 0 ? '★' : i + 1}</span> ${p.displayName}${p.jersey ? ` #${p.jersey}` : ''}</span>`).join('')}</div>`).join('') + '</div>';
+    return;
   }
+
+  // fallback: roster grouped by position
+  if (!groups.length) { elx.innerHTML = '<div class="empty">Roster unavailable right now.</div>'; return; }
+  elx.innerHTML = '';
+  groups.forEach((grp) => {
+    const items = grp.items || [];
+    const byPos = {};
+    items.forEach((a) => { const pos = a.position?.abbreviation || '—'; (byPos[pos] = byPos[pos] || []).push(a); });
+    const block = el('div', 'depth-group');
+    const title = (grp.position || '').replace(/^\w/, (c) => c.toUpperCase()).replace('Specialteam', 'Special Teams');
+    block.innerHTML = `<h4>${title || 'Players'}</h4>` + Object.entries(byPos).map(([pos, players]) =>
+      `<div class="depth-pos"><div class="pos-label">${pos}</div>${players.map((p) =>
+        `<span class="depth-player"><span class="jersey">${p.jersey ? '#' + p.jersey : ''}</span> ${p.displayName || p.fullName}</span>`).join('')}</div>`).join('');
+    elx.appendChild(block);
+  });
+}
+
+// Team stats with league rankings.
+async function renderEaglesTeamStats() {
+  $('#eagles-stats-season').textContent = `(${STAT_SEASON})`;
+  const elx = $('#eagles-teamstats');
+  const data = await safeJSON(`${FBCORE}/seasons/${STAT_SEASON}/types/2/teams/${EAGLES.teamId}/statistics`, 6 * 3600000);
+  const cats = data?.splits?.categories || [];
+  const flat = [];
+  cats.forEach((c) => (c.stats || []).forEach((s) => { if (s.rank) flat.push(s); }));
+  const want = ['totalPointsPerGame', 'yardsPerGame', 'netPassingYardsPerGame', 'rushingYardsPerGame', 'totalTakeaways', 'sacks', 'thirdDownConvPct', 'totalGiveaways'];
+  let picked = flat.filter((s) => want.includes(s.name));
+  if (picked.length < 4) picked = flat.slice(0, 8);
+  if (!picked.length) { elx.innerHTML = '<div class="empty">Team stats will appear once the season is underway.</div>'; return; }
+  elx.innerHTML = picked.slice(0, 8).map((s) => {
+    const rank = s.rank;
+    const rc = rank <= 8 ? 'top' : rank >= 25 ? 'bot' : '';
+    return `<div class="stat-row"><div class="sname">${s.displayName || s.name}</div>
+      <div class="sval"><span class="v">${s.perGameDisplayValue || s.displayValue}</span>
+      <span class="rank ${rc}">${s.rankDisplayValue || ('#' + rank)}</span></div></div>`;
+  }).join('');
+}
+
+// Statistical leaders (passing/rushing/receiving, etc).
+async function renderEaglesLeaders(idMap) {
+  const elx = $('#eagles-leaders');
+  const data = await safeJSON(`${FBCORE}/seasons/${STAT_SEASON}/types/2/teams/${EAGLES.teamId}/leaders`, 6 * 3600000);
+  const cats = (data?.categories || []).filter((c) => (c.leaders || []).length);
+  if (!cats.length) { elx.innerHTML = '<div class="empty">Player leaders will appear during the season.</div>'; return; }
+  const rows = cats.slice(0, 8).map((c) => {
+    const top = c.leaders[0];
+    const who = idMap[refId(top.athlete?.$ref)]?.displayName || '';
+    return `<div class="leader-row"><span class="cat">${c.displayName || c.name}</span>
+      <span class="who">${who || '—'}</span><span class="val">${top.displayValue || top.value || ''}</span></div>`;
+  });
+  elx.innerHTML = rows.join('');
+}
+
+// Full schedule + results + W/L trend.
+async function renderEaglesSchedule() {
+  $('#eagles-sched-season').textContent = `(${STAT_SEASON})`;
+  const elx = $('#eagles-schedule');
+  const data = await safeJSON(`${SITE}/football/nfl/teams/${EAGLES.teamId}/schedule?season=${STAT_SEASON}`, 6 * 3600000);
+  const events = data?.events || [];
+  if (!events.length) { elx.innerHTML = '<div class="empty">Schedule not available yet.</div>'; return; }
+  let wins = 0, losses = 0;
+  const trend = [];
+  const rowsHTML = events.map((ev) => {
+    const comp = ev.competitions?.[0] || {};
+    const me = (comp.competitors || []).find((c) => String(c.team?.id) === String(EAGLES.teamId));
+    const opp = (comp.competitors || []).find((c) => String(c.team?.id) !== String(EAGLES.teamId));
+    const wk = ev.week?.number ? `W${ev.week.number}` : '';
+    const oppName = opp?.team?.abbreviation || opp?.team?.displayName || 'TBD';
+    const home = me?.homeAway === 'home';
+    const done = comp.status?.type?.completed;
+    let res = '<span class="res up">—</span>';
+    if (done && me) {
+      const win = me.winner === true;
+      if (win) { wins++; trend.push('w'); } else { losses++; trend.push('l'); }
+      const ms = me.score?.displayValue ?? me.score?.value ?? '';
+      const os = opp?.score?.displayValue ?? opp?.score?.value ?? '';
+      res = `<span class="res ${win ? 'w' : 'l'}">${win ? 'W' : 'L'} ${ms}-${os}</span>`;
+    }
+    return `<div class="sched-row"><span class="wk">${wk}</span><span class="opp">${home ? 'vs' : '@'} ${oppName}</span>${res}</div>`;
+  }).join('');
+  const trendHTML = trend.length
+    ? `<div class="trend"><span class="rec">${wins}-${losses}</span>${trend.map((r) => `<span class="pill ${r}">${r.toUpperCase()}</span>`).join('')}</div>`
+    : '';
+  elx.innerHTML = trendHTML + rowsHTML;
+}
+
+// Next opponent scouting (from the team's nextEvent).
+async function renderEaglesNextOpp(team) {
+  const elx = $('#eagles-nextopp');
+  const next = team?.nextEvent?.[0];
+  const comp = next?.competitions?.[0];
+  const opp = (comp?.competitors || []).find((c) => String(c.team?.id) !== String(EAGLES.teamId));
+  if (!opp?.team) { elx.innerHTML = '<div class="empty">No upcoming opponent yet — the 2026 schedule will populate this.</div>'; return; }
+  const oid = opp.team.id;
+  const od = await safeJSON(`${SITE}/football/nfl/teams/${oid}`, 60 * 60000);
+  const ot = od?.team;
+  const rec = ot?.record?.items?.[0]?.summary;
+  const standing = ot?.standingSummary;
+  const logo = ot?.logos?.[0]?.href || opp.team.logo;
+  const when = next.date ? new Date(next.date).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }) : '';
+  elx.innerHTML = `<div class="opp-card">${logo ? `<img src="${logo}" alt="">` : ''}
+    <div><div class="on">${ot?.displayName || opp.team.displayName}</div>
+    <div class="od">${[rec ? `Record ${rec}` : '', standing].filter(Boolean).join(' • ') || 'Season not started'}</div>
+    <div class="od">${next.name || ''}${when ? ' · ' + when : ''}</div></div></div>`;
 }
 
 // --- mode badge + tabs + boot --------------------------------------------
