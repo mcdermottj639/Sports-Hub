@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v6';
+const APP_VERSION = 'v7';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'] },
@@ -10,6 +10,17 @@ const LEAGUES = {
   soccer: { label: 'World Cup', emoji: '🌎', espnPath: 'soccer/fifa.world', fav: ['USA'] }, // FIFA World Cup
 };
 const FEATURED = { sport: 'nfl', name: 'Philadelphia Eagles' };
+
+// Eagles tab config. ESPN team id for PHI = 21. Coaching staff isn't in the
+// public live feed, so it's set here — update if the staff changes.
+const EAGLES = {
+  teamId: 21,
+  staff: [
+    { role: 'Head Coach', name: 'Nick Sirianni' },
+    { role: 'Offensive Coordinator', name: 'Kevin Patullo' },
+    { role: 'Defensive Coordinator', name: 'Vic Fangio' },
+  ],
+};
 
 const SITE = 'https://site.api.espn.com/apis/site/v2/sports';
 const CORE = 'https://site.api.espn.com/apis/v2/sports';
@@ -660,6 +671,96 @@ $('#fan-reset').addEventListener('click', () => {
   renderFantasy();
 });
 
+// --- EAGLES ---------------------------------------------------------------
+const NFL_TEAM = `${SITE}/football/nfl/teams/${EAGLES.teamId}`;
+
+async function renderEagles() {
+  const [teamR, rosterR, newsR] = await Promise.allSettled([
+    fetchJSON(NFL_TEAM, 5 * 60000),
+    fetchJSON(`${NFL_TEAM}/roster`, 30 * 60000),
+    fetchJSON(`${SITE}/football/nfl/news?team=${EAGLES.teamId}`, 10 * 60000),
+  ]);
+
+  // hero
+  const t = teamR.status === 'fulfilled' ? teamR.value.team : null;
+  const logo = t?.logos?.[0]?.href;
+  const rec = t?.record?.items?.[0]?.summary;
+  const standing = t?.standingSummary;
+  const next = t?.nextEvent?.[0];
+  let hero = `<h2>${logo ? `<img src="${logo}" style="height:30px;vertical-align:middle;margin-right:8px">` : '🦅 '}${t?.displayName || 'Philadelphia Eagles'}</h2>`;
+  if (rec || standing) hero += `<div class="muted">${[rec ? `Record ${rec}` : '', standing].filter(Boolean).join(' • ')}</div>`;
+  hero += '<div class="featured-line">';
+  if (next) {
+    const nm = next.name || next.shortName || '';
+    const when = next.date ? new Date(next.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + fmtTime(next.date) : '';
+    hero += `<div class="featured-game"><div><strong>Next:</strong> ${nm}</div><span class="status">${when}</span></div>`;
+  } else {
+    hero += `<div class="muted">No game scheduled — schedule fills in as the season approaches.</div>`;
+  }
+  hero += '</div>';
+  $('#eagles-hero').innerHTML = hero;
+
+  // coaching staff
+  $('#eagles-staff').innerHTML = EAGLES.staff
+    .map((s) => `<div class="staff-card"><div class="role">${s.role}</div><div class="who">${s.name}</div></div>`)
+    .join('');
+
+  // roster / depth chart
+  const groups = rosterR.status === 'fulfilled' ? (rosterR.value.athletes || []) : [];
+  const allPlayers = [];
+  const depthEl = $('#eagles-depth');
+  if (!groups.length) {
+    depthEl.innerHTML = '<div class="empty">Roster unavailable right now.</div>';
+  } else {
+    depthEl.innerHTML = '';
+    groups.forEach((grp) => {
+      const items = grp.items || [];
+      items.forEach((a) => allPlayers.push(a));
+      const byPos = {};
+      items.forEach((a) => {
+        const pos = a.position?.abbreviation || a.position?.name || '—';
+        (byPos[pos] = byPos[pos] || []).push(a);
+      });
+      const block = el('div', 'depth-group');
+      const title = (grp.position || '').replace(/^\w/, (c) => c.toUpperCase()).replace('Specialteam', 'Special Teams');
+      block.innerHTML = `<h4>${title || 'Players'}</h4>` + Object.entries(byPos).map(([pos, players]) =>
+        `<div class="depth-pos"><div class="pos-label">${pos}</div>${players.map((p) =>
+          `<span class="depth-player"><span class="jersey">${p.jersey ? '#' + p.jersey : ''}</span> ${p.displayName || p.fullName}${p.age ? ` <span class="age">${p.age}y</span>` : ''}</span>`).join('')}</div>`
+      ).join('');
+      depthEl.appendChild(block);
+    });
+  }
+
+  // analytics (by the numbers)
+  const ages = allPlayers.map((a) => a.age).filter((n) => typeof n === 'number');
+  const avgAge = ages.length ? (ages.reduce((s, n) => s + n, 0) / ages.length).toFixed(1) : '–';
+  const youngest = allPlayers.filter((a) => a.age).sort((a, b) => a.age - b.age)[0];
+  const oldest = allPlayers.filter((a) => a.age).sort((a, b) => b.age - a.age)[0];
+  const card = (val, lbl) => `<div class="fan-card"><div class="big">${val}</div><div class="lbl">${lbl}</div></div>`;
+  $('#eagles-analytics').innerHTML = allPlayers.length
+    ? card(allPlayers.length, 'Players on roster') +
+      card(avgAge, 'Average age') +
+      (youngest ? card(`${youngest.age}`, `Youngest · ${youngest.displayName}`) : '') +
+      (oldest ? card(`${oldest.age}`, `Oldest · ${oldest.displayName}`) : '')
+    : card('–', 'Roster loading');
+
+  // news
+  const articles = newsR.status === 'fulfilled' ? (newsR.value.articles || []) : [];
+  const newsEl = $('#eagles-news');
+  if (!articles.length) {
+    newsEl.innerHTML = '<div class="empty">No recent Eagles news right now — check back as camp opens.</div>';
+  } else {
+    newsEl.innerHTML = articles.slice(0, 10).map((a) => {
+      const href = a.links?.web?.href || a.links?.mobile?.href || '#';
+      const img = a.images?.[0]?.url;
+      const when = a.published ? new Date(a.published).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+      return `<a class="news-item" href="${href}" target="_blank" rel="noopener">
+        ${img ? `<img src="${img}" alt="" onerror="this.style.display='none'">` : ''}
+        <div><div class="nh">${a.headline || ''}</div><div class="nd">${a.description || ''}</div><div class="nt">${when}</div></div></a>`;
+    }).join('');
+  }
+}
+
 // --- mode badge + tabs + boot --------------------------------------------
 function setMode(live) {
   state.liveOK = live;
@@ -668,7 +769,7 @@ function setMode(live) {
   else { b.textContent = 'OFFLINE'; b.className = 'badge demo'; $('#about-status').textContent = 'Status: could not reach ESPN — showing sample data.'; }
 }
 
-const renderers = { home: renderHome, scores: renderScores, standings: renderStandings, predictions: renderPredictions, fantasy: renderFantasy, about: () => {} };
+const renderers = { home: renderHome, eagles: renderEagles, scores: renderScores, standings: renderStandings, predictions: renderPredictions, fantasy: renderFantasy, about: () => {} };
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));

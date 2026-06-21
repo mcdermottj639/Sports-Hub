@@ -133,6 +133,23 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .setup-card pre code { background: none; padding: 0; }
 .setup-card a { color: var(--accent); }
 
+/* Eagles tab */
+.staff-card { background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: var(--radius); padding: 14px; text-align: center; }
+.staff-card .role { font-size: 11px; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+.staff-card .who { font-size: 16px; font-weight: 700; margin-top: 4px; }
+.depth-group { margin-bottom: 18px; }
+.depth-group h4 { margin: 0 0 8px; font-size: 13px; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; }
+.depth-pos { margin-bottom: 10px; }
+.depth-pos .pos-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
+.depth-player { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: 999px; padding: 5px 11px; margin: 0 6px 6px 0; font-size: 13px; }
+.depth-player .jersey { color: var(--accent); font-weight: 800; font-size: 11px; }
+.depth-player .age { color: var(--muted); font-size: 11px; }
+.news-item { display: flex; gap: 12px; background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: 12px; padding: 12px; margin-bottom: 10px; text-decoration: none; color: var(--text); }
+.news-item img { width: 84px; height: 60px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+.news-item .nh { font-weight: 700; font-size: 14px; line-height: 1.3; }
+.news-item .nd { color: var(--muted); font-size: 12px; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.news-item .nt { color: var(--muted); font-size: 11px; margin-top: 4px; }
+
 /* Game detail modal */
 .game-card { cursor: pointer; transition: transform .08s ease, border-color .15s ease; }
 .game-card:hover { transform: translateY(-2px); border-color: rgba(58,210,159,.4); }
