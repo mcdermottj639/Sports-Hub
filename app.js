@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v8';
+const APP_VERSION = 'v9';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'] },
@@ -369,51 +369,75 @@ async function renderStandings() {
   }
 }
 
-// --- PREDICTIONS ----------------------------------------------------------
-const PRED_KEY = 'sportshub:predictions';
-const getPreds = () => JSON.parse(localStorage.getItem(PRED_KEY) || '{}');
-const savePreds = (p) => localStorage.setItem(PRED_KEY, JSON.stringify(p));
+// --- AI PICKS -------------------------------------------------------------
+// A lightweight prediction model: team strength from record (win %) plus a
+// home-field edge, turned into a win probability via a logistic function.
+function teamStrength(standings) {
+  const m = {};
+  (standings || []).forEach((r) => {
+    const w = Number(r.wins) || 0, l = Number(r.losses) || 0, gp = w + l;
+    if (gp > 0) m[(r.team || '').toLowerCase()] = w / gp;
+  });
+  return m;
+}
+function predictGame(g, strength) {
+  const ph = strength[(g.home.name || '').toLowerCase()];
+  const pa = strength[(g.away.name || '').toLowerCase()];
+  const haveData = ph != null && pa != null;
+  const sh = ph ?? 0.5, sa = pa ?? 0.5;
+  const z = (sh - sa) * 3.2 + 0.28; // 0.28 ≈ home-field edge
+  const pHome = 1 / (1 + Math.exp(-z));
+  const homePick = pHome >= 0.5;
+  const conf = Math.round((homePick ? pHome : 1 - pHome) * 100);
+  const winner = homePick ? g.home : g.away;
+  let why;
+  if (haveData) {
+    why = `${(sh * 100).toFixed(0)}% vs ${(sa * 100).toFixed(0)}% win rate${homePick ? ' + home edge' : ''}`;
+  } else {
+    why = 'Limited data — leaning on home-field edge';
+  }
+  return { winner, conf, why, homePick };
+}
 
 async function renderPredictions() {
-  const sports = Object.keys(LEAGUES);
-  const results = await Promise.allSettled(sports.map((s) => getGames(s, ymd(new Date()))));
-  const preds = getPreds();
-  const up = $('#pred-upcoming'); const res = $('#pred-results');
-  up.innerHTML = ''; res.innerHTML = '';
-  let correct = 0, decided = 0, upCount = 0, resCount = 0;
+  const sport = state.aiSport || FEATURED.sport;
+  buildChips($('#ai-sport'), sport, (s) => { state.aiSport = s; renderPredictions(); });
+  const container = $('#ai-picks');
+  container.innerHTML = '<div class="empty">Crunching the numbers…</div>';
 
-  results.forEach((r, idx) => {
-    if (r.status !== 'fulfilled') return;
-    const sport = sports[idx];
-    for (const g of r.value) {
-      if (!g.id) continue;
-      const st = gameState(g);
-      if (st === 'scheduled') {
-        upCount++;
-        const card = gameCard(sport, g);
-        const btns = el('div', 'pick-btns');
-        [g.away, g.home].forEach((team) => {
-          const b = el('button', preds[g.id] === team.name ? 'picked' : '', team.name);
-          b.onclick = (e) => { e.stopPropagation(); const p = getPreds(); p[g.id] = team.name; savePreds(p); renderPredictions(); };
-          btns.appendChild(b);
-        });
-        card.appendChild(btns);
-        up.appendChild(card);
-      } else if (st === 'final' && preds[g.id]) {
-        resCount++; decided++;
-        const win = winnerName(g);
-        const got = win === preds[g.id];
-        if (got) correct++;
-        const card = gameCard(sport, g);
-        card.appendChild(el('div', 'pred-outcome ' + (got ? 'win' : 'loss'),
-          got ? `✅ You picked ${preds[g.id]} — correct!` : `❌ You picked ${preds[g.id]} — ${win || 'no result'}`));
-        res.appendChild(card);
+  const [games, standings] = await Promise.all([
+    getGames(sport, ymd(new Date())).catch(() => []),
+    getStandings(sport).catch(() => []),
+  ]);
+  const strength = teamStrength(standings);
+
+  container.innerHTML = '';
+  let right = 0, graded = 0;
+  const playable = games.filter((g) => g.id);
+  if (!playable.length) { container.appendChild(el('div', 'empty', 'No games today for this sport.')); $('#ai-score').textContent = ''; return; }
+
+  playable.forEach((g) => {
+    const p = predictGame(g, strength);
+    const card = gameCard(sport, g);
+    const block = el('div', 'ai-block');
+    let resultTag = '';
+    if (gameState(g) === 'final') {
+      const actual = winnerName(g);
+      if (actual && actual !== 'TIE') {
+        graded++;
+        const hit = actual === p.winner.name;
+        if (hit) right++;
+        resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
       }
     }
+    block.innerHTML = `
+      <div class="ai-pick">🤖 Pick: <b>${p.winner.name}</b> <span class="ai-conf">${p.conf}%</span></div>
+      <div class="conf-bar"><span style="width:${p.conf}%"></span></div>
+      <div class="ai-why">${p.why}</div>${resultTag}`;
+    card.appendChild(block);
+    container.appendChild(card);
   });
-  if (!upCount) up.appendChild(el('div', 'empty', 'No upcoming games to pick today.'));
-  if (!resCount) res.appendChild(el('div', 'empty', 'No graded picks yet. Make some picks above!'));
-  $('#pred-score').textContent = decided ? `${correct}/${decided} correct (${Math.round((correct / decided) * 100)}%)` : '';
+  $('#ai-score').textContent = graded ? `Model today: ${right}/${graded} correct` : '';
 }
 
 // --- FANTASY --------------------------------------------------------------
@@ -745,6 +769,13 @@ async function renderEagles() {
           <div><div class="nh">${a.headline || ''}</div><div class="nd">${a.description || ''}</div><div class="nt">${when}</div></div></a>`;
       }).join('');
 
+  // quick-jump nav widgets
+  const navItems = [['sec-stats', 'Stats'], ['sec-leaders', 'Leaders'], ['sec-nextopp', 'Next Opp'], ['sec-schedule', 'Schedule'], ['sec-depth', 'Depth'], ['sec-news', 'News'], ['sec-staff', 'Staff']];
+  const navEl = $('#eagles-nav');
+  navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
+  navEl.querySelectorAll('button').forEach((b) =>
+    (b.onclick = () => document.getElementById(b.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
+
   // fire off the heavier analytics in parallel; each renders independently
   renderEaglesDepth(idMap, groups);
   renderEaglesTeamStats();
@@ -753,44 +784,68 @@ async function renderEagles() {
   renderEaglesNextOpp(teamR.status === 'fulfilled' ? teamR.value.team : null);
 }
 
+// Classify a position abbreviation into offense / defense / special teams.
+const DEPTH_OFF = new Set(['QB', 'RB', 'FB', 'HB', 'WR', 'TE', 'OL', 'OT', 'OG', 'C', 'G', 'T', 'LT', 'LG', 'RG', 'RT']);
+const DEPTH_DEF = new Set(['DL', 'DE', 'DT', 'NT', 'EDGE', 'LB', 'ILB', 'OLB', 'MLB', 'WLB', 'SLB', 'DB', 'CB', 'S', 'FS', 'SS', 'NB', 'LCB', 'RCB', 'WDE', 'SDE']);
+const DEPTH_SPEC = new Set(['K', 'PK', 'P', 'LS', 'H', 'KR', 'PR', 'ST']);
+function unitOf(pos) {
+  const u = (pos || '').toUpperCase();
+  if (DEPTH_SPEC.has(u)) return 'special';
+  if (DEPTH_DEF.has(u)) return 'defense';
+  if (DEPTH_OFF.has(u)) return 'offense';
+  if (/CB|LB|DT|DE|NT|FS|SS|DB|SAF/.test(u)) return 'defense';
+  if (/^K$|PK|^P$|LS|RET|^H$/.test(u)) return 'special';
+  return 'offense';
+}
+
 // Ordered depth chart from ESPN core API; falls back to roster-by-position.
+// Rendered as Offense / Defense / Special Teams sub-tabs.
 async function renderEaglesDepth(idMap, groups) {
   const elx = $('#eagles-depth');
   const dc = await safeJSON(`${FBCORE}/seasons/${STAT_SEASON}/teams/${EAGLES.teamId}/depthcharts`, 24 * 3600000);
-  const rows = [];
-  (dc?.items || []).forEach((unit) => {
-    const positions = unit.positions || {};
-    Object.values(positions).forEach((pos) => {
-      const label = pos.position?.displayName || pos.position?.abbreviation || '';
-      const players = (pos.athletes || [])
-        .sort((a, b) => (a.rank || 99) - (b.rank || 99))
-        .map((a) => idMap[refId(a.athlete?.$ref)])
-        .filter(Boolean);
-      if (label && players.length) rows.push({ label, players });
+  let entries = []; // { unit, label, ordered, players:[{name,jersey}] }
+  const seen = new Set();
+  (dc?.items || []).forEach((u) => {
+    Object.values(u.positions || {}).forEach((pos) => {
+      const label = pos.position?.abbreviation || pos.position?.displayName || '';
+      if (!label || seen.has(label)) return;
+      const players = (pos.athletes || []).sort((a, b) => (a.rank || 99) - (b.rank || 99))
+        .map((a) => idMap[refId(a.athlete?.$ref)]).filter(Boolean)
+        .map((p) => ({ name: p.displayName, jersey: p.jersey }));
+      if (players.length) { seen.add(label); entries.push({ unit: unitOf(label), label, ordered: true, players }); }
     });
   });
 
-  if (rows.length) {
-    elx.innerHTML = '<div class="depth-group"><h4>Starters → Backups (by position)</h4>' +
-      rows.map((r) => `<div class="depth-pos"><div class="pos-label">${r.label}</div>${r.players.map((p, i) =>
-        `<span class="depth-player"><span class="jersey">${i === 0 ? '★' : i + 1}</span> ${p.displayName}${p.jersey ? ` #${p.jersey}` : ''}</span>`).join('')}</div>`).join('') + '</div>';
-    return;
+  if (!entries.length) {
+    // fallback: roster grouped by position (unit from the roster group)
+    groups.forEach((grp) => {
+      const unit = /def/i.test(grp.position) ? 'defense' : /special/i.test(grp.position) ? 'special' : 'offense';
+      const byPos = {};
+      (grp.items || []).forEach((a) => { const p = a.position?.abbreviation || '—'; (byPos[p] = byPos[p] || []).push(a); });
+      Object.entries(byPos).forEach(([label, players]) =>
+        entries.push({ unit, label, ordered: false, players: players.map((p) => ({ name: p.displayName || p.fullName, jersey: p.jersey })) }));
+    });
   }
 
-  // fallback: roster grouped by position
-  if (!groups.length) { elx.innerHTML = '<div class="empty">Roster unavailable right now.</div>'; return; }
-  elx.innerHTML = '';
-  groups.forEach((grp) => {
-    const items = grp.items || [];
-    const byPos = {};
-    items.forEach((a) => { const pos = a.position?.abbreviation || '—'; (byPos[pos] = byPos[pos] || []).push(a); });
-    const block = el('div', 'depth-group');
-    const title = (grp.position || '').replace(/^\w/, (c) => c.toUpperCase()).replace('Specialteam', 'Special Teams');
-    block.innerHTML = `<h4>${title || 'Players'}</h4>` + Object.entries(byPos).map(([pos, players]) =>
-      `<div class="depth-pos"><div class="pos-label">${pos}</div>${players.map((p) =>
-        `<span class="depth-player"><span class="jersey">${p.jersey ? '#' + p.jersey : ''}</span> ${p.displayName || p.fullName}</span>`).join('')}</div>`).join('');
-    elx.appendChild(block);
-  });
+  if (!entries.length) { elx.innerHTML = '<div class="empty">Depth chart unavailable right now.</div>'; return; }
+
+  const units = [['offense', 'Offense'], ['defense', 'Defense'], ['special', 'Special Teams']].filter(([u]) => entries.some((e) => e.unit === u));
+  elx.innerHTML = `<div class="chips depth-tabs" id="depth-tabs"></div><div id="depth-content"></div>`;
+  const tabsEl = $('#depth-tabs');
+  let current = units[0][0];
+  const draw = () => {
+    tabsEl.innerHTML = '';
+    units.forEach(([u, label]) => {
+      const c = el('button', 'chip' + (u === current ? ' active' : ''), label);
+      c.onclick = () => { current = u; draw(); };
+      tabsEl.appendChild(c);
+    });
+    const list = entries.filter((e) => e.unit === current);
+    $('#depth-content').innerHTML = '<div class="depth-group">' + list.map((e) =>
+      `<div class="depth-pos"><div class="pos-label">${e.label}</div>${e.players.map((p, i) =>
+        `<span class="depth-player"><span class="jersey">${e.ordered ? (i === 0 ? '★' : i + 1) : (p.jersey ? '#' + p.jersey : '')}</span> ${p.name}${e.ordered && p.jersey ? ` #${p.jersey}` : ''}</span>`).join('')}</div>`).join('') + '</div>';
+  };
+  draw();
 }
 
 // Team stats with league rankings.
@@ -890,11 +945,29 @@ function setMode(live) {
   else { b.textContent = 'OFFLINE'; b.className = 'badge demo'; $('#about-status').textContent = 'Status: could not reach ESPN — showing sample data.'; }
 }
 
+// Build a "jump to section" widget bar at the top of a tab from its headings.
+// (Eagles has its own curated nav, so it's skipped here.)
+function injectJumpNav(name) {
+  const panel = document.getElementById(name);
+  if (!panel || name === 'eagles') return;
+  const titles = [...panel.querySelectorAll('.section-title')];
+  const items = titles.map((h, i) => {
+    if (!h.id) h.id = `${name}-sec-${i}`;
+    return { id: h.id, label: h.textContent.trim().replace(/\s+/g, ' ').replace(/[🤖🦅]/g, '').trim() };
+  }).filter((x) => x.label);
+  let nav = panel.querySelector(':scope > .jump-nav');
+  if (items.length < 2) { if (nav) nav.remove(); return; }
+  if (!nav) { nav = el('div', 'jump-nav'); panel.insertBefore(nav, panel.firstChild); }
+  nav.innerHTML = items.map((it) => `<button class="chip" data-target="${it.id}">${it.label}</button>`).join('');
+  nav.querySelectorAll('button').forEach((b) =>
+    (b.onclick = () => document.getElementById(b.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
+}
+
 const renderers = { home: renderHome, eagles: renderEagles, scores: renderScores, standings: renderStandings, predictions: renderPredictions, fantasy: renderFantasy, about: () => {} };
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
-  Promise.resolve(renderers[name]()).catch((e) => console.error(e));
+  Promise.resolve(renderers[name]()).then(() => injectJumpNav(name)).catch((e) => console.error(e));
 }
 $('#tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
 $('#scores-date').addEventListener('change', renderScores);

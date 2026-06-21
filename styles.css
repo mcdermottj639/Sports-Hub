@@ -114,8 +114,21 @@ td .tlogo { width: 18px; height: 18px; object-fit: contain; vertical-align: midd
 tr.fav td { background: rgba(58,210,159,.08); }
 tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
-.pred-header { display: flex; justify-content: space-between; align-items: baseline; }
+.pred-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; }
 .pred-score { font-weight: 800; color: var(--accent); }
+.ai-block { margin-top: 10px; border-top: 1px solid rgba(255,255,255,.07); padding-top: 10px; }
+.ai-pick { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.ai-pick b { color: var(--accent); }
+.ai-conf { margin-left: auto; font-weight: 800; color: var(--text); }
+.conf-bar { height: 7px; background: var(--card-2); border-radius: 999px; overflow: hidden; margin: 7px 0 6px; }
+.conf-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--eagles-green-light), var(--accent)); }
+.ai-why { font-size: 12px; color: var(--muted); }
+.ai-result { font-size: 12px; font-weight: 700; margin-top: 6px; }
+.ai-result.win { color: var(--accent); }
+.ai-result.loss { color: var(--live); }
+.jump-nav { display: flex; gap: 6px; overflow-x: auto; padding: 10px 0 4px; -webkit-overflow-scrolling: touch; position: sticky; top: 0; background: rgba(14,20,22,.96); backdrop-filter: blur(8px); z-index: 4; }
+.jump-nav .chip { flex: 0 0 auto; }
+.section-title { scroll-margin-top: 64px; }
 .pick-btns { display: flex; gap: 8px; margin-top: 10px; }
 .pick-btns button {
   flex: 1; background: var(--card-2); color: var(--text); border: 1px solid rgba(255,255,255,.1);
@@ -134,6 +147,10 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .setup-card a { color: var(--accent); }
 
 /* Eagles tab */
+.eagles-nav { display: flex; gap: 6px; overflow-x: auto; padding: 12px 0 4px; -webkit-overflow-scrolling: touch; position: sticky; top: 0; background: rgba(14,20,22,.96); backdrop-filter: blur(8px); z-index: 4; }
+.eagles-nav .chip { flex: 0 0 auto; }
+#eagles .section-title { scroll-margin-top: 60px; }
+.depth-tabs { margin-bottom: 12px; }
 .season-tag { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: none; letter-spacing: 0; }
 .stat-row { display: flex; align-items: center; justify-content: space-between; background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: 10px; padding: 10px 12px; margin-bottom: 7px; }
 .stat-row .sname { font-size: 14px; }
