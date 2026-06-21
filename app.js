@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v14';
+const APP_VERSION = 'v15';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -196,17 +196,19 @@ async function openGameDetail(sport, id, g) {
   $('#modal-body').innerHTML = '<div class="empty">Loading live stats…</div>';
   try {
     const path = LEAGUES[sport].espnPath;
-    const [data, pred] = await Promise.all([
+    const [data, pred, hitters] = await Promise.all([
       fetchJSON(`${SITE}/${path}/summary?event=${id}`, 30000),
       g ? predictGame(sport, g).catch(() => null) : Promise.resolve(null),
+      g && sport === 'mlb' ? Promise.all([topHitters(g.home.id), topHitters(g.away.id)]).catch(() => null) : Promise.resolve(null),
     ]);
-    $('#modal-body').innerHTML = renderGameDetail(sport, data, pred);
+    const extra = hitters && g ? hittersHTML(g, hitters[0], hitters[1]) : '';
+    $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra);
   } catch (_) {
     $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>';
   }
 }
 
-function renderGameDetail(sport, data, pred) {
+function renderGameDetail(sport, data, pred, extra) {
   const comp = data.header?.competitions?.[0] || data.competitions?.[0] || {};
   const cs = comp.competitors || [];
   const home = cs.find((c) => c.homeAway === 'home') || cs[0] || {};
@@ -224,6 +226,7 @@ function renderGameDetail(sport, data, pred) {
     <div class="md-status ${live ? 'live' : ''}">${st.detail || st.shortDetail || ''}</div>`;
 
   html += aiPickBlock(pred);
+  html += extra || '';
 
   // line score (innings / quarters)
   const aLine = away.linescores || [], hLine = home.linescores || [];
@@ -489,19 +492,80 @@ function statVal(arr, keys) {
   const v = Number(s.displayValue ?? s.value);
   return isNaN(v) ? null : v;
 }
-// Player-matchup signal: MLB starting pitchers (ERA) and football/basketball
-// key player. Returns a log-odds nudge toward home plus display notes.
-function matchupFactor(sport, g) {
-  const notes = []; let c = 0;
+const BBCORE = 'https://sports.core.api.espn.com/v2/sports/baseball/leagues/mlb';
+const ops3 = (v) => v.toFixed(3).replace(/^0/, ''); // 0.790 -> ".790"
+// Team OPS from ESPN's core baseball stats — best available proxy for lineup
+// hitting, since posted starting-lineup OPS isn't reliably public pregame.
+async function teamOPS(teamId) {
+  if (!teamId) return null;
+  const data = await safeJSON(`${BBCORE}/seasons/${new Date().getFullYear()}/types/2/teams/${teamId}/statistics`, 6 * 3600000);
+  for (const c of (data?.splits?.categories || [])) {
+    const s = (c.stats || []).find((x) => (x.abbreviation || '').toUpperCase() === 'OPS' || /on-base plus slugging/i.test(x.displayName || x.name || ''));
+    if (s) { const v = Number(s.value ?? s.displayValue); if (!isNaN(v)) return v; }
+  }
+  return null;
+}
+
+// Top 3 hitters by OPS for a team, excluding injured players.
+async function topHitters(teamId, n = 3) {
+  if (!teamId) return [];
+  const y = new Date().getFullYear();
+  const [lead, roster] = await Promise.all([
+    safeJSON(`${BBCORE}/seasons/${y}/types/2/teams/${teamId}/leaders`, 6 * 3600000),
+    safeJSON(`${SITE}/baseball/mlb/teams/${teamId}/roster`, 6 * 3600000),
+  ]);
+  const info = {};
+  (roster?.athletes || []).forEach((grp) => (grp.items || grp.athletes || [grp]).forEach((a) => {
+    if (!a?.id) return;
+    const stat = `${a.status?.name || a.status?.type || a.status?.abbreviation || ''}`;
+    const injured = (Array.isArray(a.injuries) && a.injuries.length > 0) || /injur|^il$|\bil\b|day-to-day|out|\d+-day/i.test(stat);
+    info[a.id] = { name: a.displayName || a.fullName, injured };
+  }));
+  const cat = (lead?.categories || []).find((c) => /ops/i.test(`${c.abbreviation || ''}${c.name || ''}${c.displayName || ''}`));
+  if (!cat) return [];
+  const out = [];
+  for (const L of (cat.leaders || [])) {
+    const id = refId(L.athlete?.$ref);
+    const meta = info[id];
+    const name = meta?.name || L.athlete?.displayName;
+    if (!name || meta?.injured) continue;
+    out.push({ name, val: L.displayValue ?? L.value });
+    if (out.length >= n) break;
+  }
+  return out;
+}
+function hittersHTML(g, ht, at) {
+  if (!ht.length && !at.length) return '';
+  const fmt = (arr) => arr.map((p) => `${p.name.split(' ').slice(-1)[0]} ${typeof p.val === 'number' ? ops3(p.val) : p.val}`).join(', ') || '—';
+  return `<div class="md-section-title">Top Hitters (OPS · healthy)</div>
+    <div class="ai-why"><b>${g.home.abbr || 'Home'}:</b> ${fmt(ht)}</div>
+    <div class="ai-why"><b>${g.away.abbr || 'Away'}:</b> ${fmt(at)}</div>`;
+}
+
+// Player-matchup signal: MLB starting pitchers (ERA + WHIP) and team OPS;
+// football/basketball key player. Returns weighted factors + display notes.
+async function matchupFactor(sport, g) {
+  const notes = [], factors = [];
   if (sport === 'mlb') {
     const hp = g.home.probables?.[0], ap = g.away.probables?.[0];
     const hn = hp?.athlete?.displayName || hp?.athlete?.shortName;
     const an = ap?.athlete?.displayName || ap?.athlete?.shortName;
-    const hERA = statVal(hp?.statistics, ['ERA', 'earnedRunAverage']);
-    const aERA = statVal(ap?.statistics, ['ERA', 'earnedRunAverage']);
     if (hn && an) {
-      notes.push(`SP: ${hn}${hERA != null ? ` (${hERA} ERA)` : ''} vs ${an}${aERA != null ? ` (${aERA} ERA)` : ''}`);
-      if (hERA != null && aERA != null) c = 0.22 * clamp((aERA - hERA) / 1.5, -2, 2); // lower ERA = edge
+      const hERA = statVal(hp?.statistics, ['ERA', 'earnedRunAverage']);
+      const aERA = statVal(ap?.statistics, ['ERA', 'earnedRunAverage']);
+      const hWHIP = statVal(hp?.statistics, ['WHIP', 'walksHitsPerInningPitched']);
+      const aWHIP = statVal(ap?.statistics, ['WHIP', 'walksHitsPerInningPitched']);
+      const fmt = (era, whip) => [era != null ? `${era} ERA` : '', whip != null ? `${whip} WHIP` : ''].filter(Boolean).join(', ');
+      notes.push(`SP: ${hn}${fmt(hERA, hWHIP) ? ` (${fmt(hERA, hWHIP)})` : ''} vs ${an}${fmt(aERA, aWHIP) ? ` (${fmt(aERA, aWHIP)})` : ''}`);
+      const parts = [];
+      if (hERA != null && aERA != null) parts.push(clamp((aERA - hERA) / 1.5, -2, 2)); // lower ERA = home edge
+      if (hWHIP != null && aWHIP != null) parts.push(clamp((aWHIP - hWHIP) / 0.25, -2, 2)); // lower WHIP = home edge
+      if (parts.length) factors.push({ label: 'Starting pitcher', c: 0.24 * (parts.reduce((s, v) => s + v, 0) / parts.length), detail: 'ERA/WHIP edge' });
+    }
+    const [hOPS, aOPS] = await Promise.all([teamOPS(g.home.id), teamOPS(g.away.id)]);
+    if (hOPS != null && aOPS != null) {
+      notes.push(`Team OPS: ${ops3(hOPS)} vs ${ops3(aOPS)}`);
+      factors.push({ label: 'Lineup OPS', c: 0.18 * clamp((hOPS - aOPS) / 0.05, -2, 2), detail: `${ops3(hOPS)} vs ${ops3(aOPS)}` }); // higher OPS = home edge
     }
   } else {
     const key = (lead) => {
@@ -512,7 +576,7 @@ function matchupFactor(sport, g) {
     const h = key(g.home.leaders), a = key(g.away.leaders);
     if (h && a) notes.push(`${sport === 'nfl' ? 'QB' : 'Leader'}: ${h.name} (${h.val}) vs ${a.name} (${a.val})`);
   }
-  return { c, notes };
+  return { factors, notes };
 }
 
 async function predictGame(sport, g) {
@@ -537,9 +601,9 @@ async function predictGame(sport, g) {
     add('Home field', 0.3, 'limited data — home edge only');
   }
 
-  // player matchup (starting pitchers / QBs)
-  const mu = matchupFactor(sport, g);
-  if (mu.c) add(sport === 'mlb' ? 'Starting pitcher' : 'Player matchup', mu.c, mu.notes[0]);
+  // player matchup (starting pitchers ERA/WHIP, team OPS, QBs)
+  const mu = await matchupFactor(sport, g);
+  mu.factors.forEach((f) => add(f.label, f.c, f.detail));
 
   const pHome = logistic(z);
   const homePick = pHome >= 0.5;
