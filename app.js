@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v9';
+const APP_VERSION = 'v10';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'] },
@@ -798,8 +798,36 @@ function unitOf(pos) {
   return 'offense';
 }
 
+// Field-view layout: rows top->bottom per unit, and L->R order within a row.
+const FIELD_ROWS = {
+  offense: [['WR', 'TE', 'SLOT', 'SWR', 'LWR', 'RWR', 'FL', 'SE'], ['LT', 'LG', 'C', 'RG', 'RT', 'OL', 'OT', 'OG', 'G', 'T'], ['QB'], ['RB', 'FB', 'HB']],
+  defense: [['FS', 'SS', 'S', 'DB', 'SAF'], ['LCB', 'CB', 'RCB', 'NB', 'WLB', 'MLB', 'SLB', 'LB', 'ILB', 'OLB'], ['LDE', 'DE', 'DT', 'NT', 'DI', 'DL', 'RDE', 'EDGE', 'WDE', 'SDE']],
+  special: [['PK', 'K', 'P', 'H', 'LS', 'KR', 'PR', 'ST']],
+};
+const FIELD_ORDER = { LT: 1, LG: 2, C: 3, RG: 4, RT: 5, LCB: 0, CB: 4, RCB: 9, FS: 4, SS: 5, WLB: 3, MLB: 4, SLB: 5, LB: 4, LDE: 1, DE: 2, DT: 3, NT: 4, DI: 4, RDE: 9, EDGE: 2 };
+const expandCount = (label) => { const u = label.toUpperCase(); if (/WR/.test(u)) return 3; if (/^CB$/.test(u)) return 2; if (/^LB$|^S$|^DL$|^EDGE$/.test(u)) return 2; return 1; };
+function rowIndex(unit, label) {
+  const rows = FIELD_ROWS[unit] || FIELD_ROWS.offense;
+  const u = label.toUpperCase();
+  const i = rows.findIndex((keys) => keys.includes(u));
+  return i >= 0 ? i : Math.min(1, rows.length - 1);
+}
+function fieldHTML(entries, unit) {
+  const spots = [];
+  entries.filter((e) => e.unit === unit).forEach((e) =>
+    e.players.slice(0, expandCount(e.label)).forEach((p) => spots.push({ label: e.label, name: p.name, jersey: p.jersey })));
+  const rows = (FIELD_ROWS[unit] || [[]]).map(() => []);
+  const extra = [];
+  spots.forEach((s) => { const r = rowIndex(unit, s.label); (rows[r] || extra).push(s); });
+  rows.forEach((r) => r.sort((a, b) => (FIELD_ORDER[a.label.toUpperCase()] ?? 50) - (FIELD_ORDER[b.label.toUpperCase()] ?? 50)));
+  const spot = (s) => `<div class="field-spot"><div class="pl">${s.label}</div><div class="pn">${(s.name || '').split(' ').slice(-1)[0]}</div>${s.jersey ? `<div class="pj">#${s.jersey}</div>` : ''}</div>`;
+  let html = '<div class="field">';
+  rows.concat([extra]).forEach((r) => { if (r.length) html += `<div class="field-row">${r.map(spot).join('')}</div>`; });
+  return html + '</div>';
+}
+
 // Ordered depth chart from ESPN core API; falls back to roster-by-position.
-// Rendered as Offense / Defense / Special Teams sub-tabs.
+// Rendered as Offense / Defense / Special Teams sub-tabs, Field or List view.
 async function renderEaglesDepth(idMap, groups) {
   const elx = $('#eagles-depth');
   const dc = await safeJSON(`${FBCORE}/seasons/${STAT_SEASON}/teams/${EAGLES.teamId}/depthcharts`, 24 * 3600000);
@@ -833,6 +861,7 @@ async function renderEaglesDepth(idMap, groups) {
   elx.innerHTML = `<div class="chips depth-tabs" id="depth-tabs"></div><div id="depth-content"></div>`;
   const tabsEl = $('#depth-tabs');
   let current = units[0][0];
+  let view = 'field';
   const draw = () => {
     tabsEl.innerHTML = '';
     units.forEach(([u, label]) => {
@@ -840,10 +869,17 @@ async function renderEaglesDepth(idMap, groups) {
       c.onclick = () => { current = u; draw(); };
       tabsEl.appendChild(c);
     });
-    const list = entries.filter((e) => e.unit === current);
-    $('#depth-content').innerHTML = '<div class="depth-group">' + list.map((e) =>
-      `<div class="depth-pos"><div class="pos-label">${e.label}</div>${e.players.map((p, i) =>
-        `<span class="depth-player"><span class="jersey">${e.ordered ? (i === 0 ? '★' : i + 1) : (p.jersey ? '#' + p.jersey : '')}</span> ${p.name}${e.ordered && p.jersey ? ` #${p.jersey}` : ''}</span>`).join('')}</div>`).join('') + '</div>';
+    const content = $('#depth-content');
+    const toggle = `<div class="depth-toggle"><button class="chip ${view === 'field' ? 'active' : ''}" data-v="field">Field</button><button class="chip ${view === 'list' ? 'active' : ''}" data-v="list">List</button></div>`;
+    if (view === 'field') {
+      content.innerHTML = toggle + fieldHTML(entries, current);
+    } else {
+      const list = entries.filter((e) => e.unit === current);
+      content.innerHTML = toggle + '<div class="depth-group">' + list.map((e) =>
+        `<div class="depth-pos"><div class="pos-label">${e.label}</div>${e.players.map((p, i) =>
+          `<span class="depth-player"><span class="jersey">${e.ordered ? (i === 0 ? '★' : i + 1) : (p.jersey ? '#' + p.jersey : '')}</span> ${p.name}${e.ordered && p.jersey ? ` #${p.jersey}` : ''}</span>`).join('')}</div>`).join('') + '</div>';
+    }
+    content.querySelectorAll('.depth-toggle button').forEach((b) => (b.onclick = () => { view = b.dataset.v; draw(); }));
   };
   draw();
 }

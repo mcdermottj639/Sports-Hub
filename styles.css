@@ -151,6 +151,13 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .eagles-nav .chip { flex: 0 0 auto; }
 #eagles .section-title { scroll-margin-top: 60px; }
 .depth-tabs { margin-bottom: 12px; }
+.depth-toggle { display: flex; gap: 6px; margin-bottom: 12px; }
+.field { background: linear-gradient(#0c3a2b, #082a20); border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 18px 10px; display: flex; flex-direction: column; gap: 16px; background-image: repeating-linear-gradient(to bottom, transparent 0 38px, rgba(255,255,255,.06) 38px 40px); }
+.field-row { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.field-spot { background: rgba(0,0,0,.4); border: 1px solid rgba(255,255,255,.18); border-radius: 9px; padding: 6px 9px; text-align: center; min-width: 66px; }
+.field-spot .pl { font-size: 10px; color: var(--gold); font-weight: 800; letter-spacing: .5px; }
+.field-spot .pn { font-size: 12px; font-weight: 700; line-height: 1.15; margin-top: 2px; }
+.field-spot .pj { font-size: 10px; color: var(--accent); font-weight: 700; }
 .season-tag { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: none; letter-spacing: 0; }
 .stat-row { display: flex; align-items: center; justify-content: space-between; background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: 10px; padding: 10px 12px; margin-bottom: 7px; }
 .stat-row .sname { font-size: 14px; }
