@@ -1,15 +1,30 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v12';
+const APP_VERSION = 'v13';
 
 const LEAGUES = {
-  nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'] },
-  nba:    { label: 'NBA',    emoji: '🏀', espnPath: 'basketball/nba', fav: ['Philadelphia 76ers'] },
-  mlb:    { label: 'MLB',    emoji: '⚾', espnPath: 'baseball/mlb',    fav: ['Philadelphia Phillies'] },
-  soccer: { label: 'World Cup', emoji: '🌎', espnPath: 'soccer/fifa.world', fav: ['USA'] }, // FIFA World Cup
+  nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
+  mlb:    { label: 'MLB',    emoji: '⚾', espnPath: 'baseball/mlb',    fav: ['Philadelphia Phillies'], type: 'team' },
+  nba:    { label: 'NBA',    emoji: '🏀', espnPath: 'basketball/nba', fav: ['Philadelphia 76ers'], type: 'team' },
+  soccer: { label: 'World Cup', emoji: '🌎', espnPath: 'soccer/fifa.world', fav: ['USA'], type: 'team' }, // FIFA World Cup
+  golf:   { label: 'Golf',   emoji: '⛳', espnPath: 'golf/pga', fav: [], type: 'golf' },
 };
 const FEATURED = { sport: 'nfl', name: 'Philadelphia Eagles' };
+
+// Roughly which months each sport is active, used to sort in-season first.
+const SEASON_MONTHS = {
+  nfl: [8, 9, 10, 11, 0, 1], mlb: [2, 3, 4, 5, 6, 7, 8, 9], nba: [9, 10, 11, 0, 1, 2, 3, 4, 5],
+  soccer: [5, 6], golf: [0, 1, 2, 3, 4, 5, 6, 7],
+};
+const BASE_ORDER = ['nfl', 'mlb', 'nba', 'soccer', 'golf'];
+function sortedSports(opts = {}) {
+  const m = new Date().getMonth();
+  let list = Object.keys(LEAGUES);
+  if (opts.teamOnly) list = list.filter((s) => LEAGUES[s].type === 'team');
+  const active = (s) => ((SEASON_MONTHS[s] || []).includes(m) ? 0 : 1);
+  return list.sort((a, b) => active(a) - active(b) || BASE_ORDER.indexOf(a) - BASE_ORDER.indexOf(b));
+}
 
 // Eagles tab config. ESPN team id for PHI = 21. Coaching staff isn't in the
 // public live feed, so it's set here — update if the staff changes.
@@ -287,7 +302,7 @@ const DEMO = {
 
 // --- HOME -----------------------------------------------------------------
 async function renderHome() {
-  const sports = Object.keys(LEAGUES);
+  const sports = sortedSports({ teamOnly: true }); // in-season first
   const results = await Promise.allSettled(sports.map((s) => getGames(s, ymd(new Date()))));
   const games = {};
   let anyOK = false;
@@ -319,23 +334,44 @@ async function renderHome() {
   html += '</div>';
   $('#featured').innerHTML = html;
   renderGames($('#home-games'), games);
+  if (SEASON_MONTHS.golf.includes(new Date().getMonth())) addGolfHomeCard();
+}
+
+async function addGolfHomeCard() {
+  const ev = await getGolfEvent();
+  if (!ev) return;
+  const leader = (ev.competitions?.[0]?.competitors || [])[0];
+  const lname = leader?.athlete?.displayName || '';
+  const lscore = leader?.score?.displayValue ?? leader?.score ?? '';
+  const card = el('div', 'game-card');
+  card.innerHTML = `<div class="game-meta"><span class="game-league">⛳ Golf</span><span class="status">${ev.status?.type?.shortDetail || ''}</span></div>
+    <div style="font-weight:700;margin:4px 0">${ev.name || 'PGA Tour'}</div>
+    <div class="muted">Leader: <b style="color:var(--text)">${lname || 'TBD'}</b> ${lscore}</div>
+    <div class="tap-hint">tap for leaderboard →</div>`;
+  card.onclick = () => { state.scoresSport = 'golf'; showTab('scores'); };
+  const grid = $('#home-games');
+  grid.insertBefore(card, grid.firstChild);
 }
 
 // --- SCORES ---------------------------------------------------------------
-function buildChips(container, current, onPick) {
+function buildChips(container, current, onPick, sports) {
   container.innerHTML = '';
-  for (const [sport, cfg] of Object.entries(LEAGUES)) {
+  (sports || sortedSports()).forEach((sport) => {
+    const cfg = LEAGUES[sport];
     const chip = el('button', 'chip' + (sport === current ? ' active' : ''), `${cfg.emoji} ${cfg.label}`);
     chip.onclick = () => onPick(sport);
     container.appendChild(chip);
-  }
+  });
 }
 async function renderScores() {
   const dateInput = $('#scores-date');
+  const isGolf = LEAGUES[state.scoresSport].type === 'golf';
+  dateInput.style.display = isGolf ? 'none' : '';
   if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
   buildChips($('#sport-filter'), state.scoresSport, (s) => { state.scoresSport = s; renderScores(); });
   const container = $('#scores-games');
   container.innerHTML = '<div class="empty">Loading…</div>';
+  if (isGolf) { renderGolfLeaderboard(container); return; }
   try {
     const games = await getGames(state.scoresSport, dateInput.value.replaceAll('-', ''));
     renderGames(container, { [state.scoresSport]: games });
@@ -344,9 +380,33 @@ async function renderScores() {
   }
 }
 
+// Golf: render the current/most-recent PGA tournament leaderboard.
+async function getGolfEvent() {
+  const data = await fetchJSON(`${SITE}/golf/pga/scoreboard`, 5 * 60000).catch(() => null);
+  const events = data?.events || [];
+  return events.find((e) => e.status?.type?.state === 'in') || events[0] || null;
+}
+async function renderGolfLeaderboard(container) {
+  const ev = await getGolfEvent();
+  if (!ev) { container.innerHTML = '<div class="empty">No PGA tournament data right now.</div>'; return; }
+  const comp = ev.competitions?.[0] || {};
+  const players = comp.competitors || [];
+  const statusTxt = ev.status?.type?.detail || ev.status?.type?.shortDetail || '';
+  const rows = players.slice(0, 30).map((c) => {
+    const pos = c.status?.position?.displayName || c.order || '';
+    const name = c.athlete?.displayName || '';
+    const toPar = c.score?.displayValue ?? c.score ?? '';
+    const thru = c.status?.thru != null ? (c.status.thru === 18 ? 'F' : `thru ${c.status.thru}`) : (c.status?.teeTime ? fmtTime(c.status.teeTime) : '');
+    const fav = (LEAGUES.golf.fav || []).some((f) => f.toLowerCase() === name.toLowerCase());
+    return `<tr class="${fav ? 'fav' : ''}"><td>${pos}</td><td>${name}</td><td class="num">${toPar}</td><td class="num">${thru}</td></tr>`;
+  }).join('');
+  container.innerHTML = `<div class="golf-head"><div class="golf-name">⛳ ${ev.name || 'PGA Tour'}</div><div class="muted">${statusTxt}</div></div>
+    <table class="md-line golf-board"><thead><tr><th>Pos</th><th>Player</th><th class="num">Score</th><th class="num">Thru</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
 // --- STANDINGS ------------------------------------------------------------
 async function renderStandings() {
-  buildChips($('#standings-filter'), state.standingsSport, (s) => { state.standingsSport = s; renderStandings(); });
+  buildChips($('#standings-filter'), state.standingsSport, (s) => { state.standingsSport = s; renderStandings(); }, sortedSports({ teamOnly: true }));
   const content = $('#standings-content');
   content.innerHTML = '<div class="empty">Loading…</div>';
   let rows = [];
@@ -464,7 +524,7 @@ function aiPickBlock(pred) {
 
 async function renderPredictions() {
   const sport = state.aiSport || FEATURED.sport;
-  buildChips($('#ai-sport'), sport, (s) => { state.aiSport = s; renderPredictions(); });
+  buildChips($('#ai-sport'), sport, (s) => { state.aiSport = s; renderPredictions(); }, sortedSports({ teamOnly: true }));
   const container = $('#ai-picks');
   container.innerHTML = '<div class="empty">Crunching the numbers…</div>';
 
@@ -1068,6 +1128,11 @@ function showTab(name) {
 }
 $('#tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
 $('#scores-date').addEventListener('change', renderScores);
+
+// default the sport selectors to whatever's in season right now
+state.scoresSport = sortedSports()[0];
+state.standingsSport = sortedSports({ teamOnly: true })[0];
+state.aiSport = sortedSports({ teamOnly: true })[0];
 
 const verEl = $('#app-version');
 if (verEl) verEl.textContent = APP_VERSION;
