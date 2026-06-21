@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v16';
+const APP_VERSION = 'v17';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -98,6 +98,7 @@ function normEvent(ev) {
     statusText: st.shortDetail || st.detail || st.description,
     home: teamObj(home),
     away: teamObj(away),
+    odds: comp.odds?.[0] || null,
   };
 }
 function getStat(stats, names) {
@@ -204,6 +205,8 @@ async function openGameDetail(sport, id, g) {
     let extra = '';
     if (g && sport === 'mlb') {
       extra = startersHTML(g) + (hitters ? hittersHTML(g, hitters[0], hitters[1]) : '');
+    } else if (g && sport === 'nfl') {
+      extra = nflKeyHTML(g);
     }
     $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra);
   } catch (_) {
@@ -230,6 +233,30 @@ function renderGameDetail(sport, data, pred, extra) {
 
   html += aiPickBlock(pred);
   html += extra || '';
+
+  // betting odds + model-vs-market comparison
+  const o = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0];
+  if (o) {
+    const ou = o.overUnder ?? o.total;
+    const hML = o.homeTeamOdds?.moneyLine, aML = o.awayTeamOdds?.moneyLine;
+    const homeName = home.team?.displayName, awayName = away.team?.displayName;
+    let favName = o.homeTeamOdds?.favorite ? homeName : o.awayTeamOdds?.favorite ? awayName
+      : (typeof hML === 'number' && typeof aML === 'number') ? (hML < aML ? homeName : awayName) : null;
+    let cmp = '';
+    if (pred && favName) {
+      cmp = pred.winner.name === favName
+        ? `✅ Model agrees with the line (${favName})`
+        : `⚡ Model sees value — likes ${pred.winner.name}, market favors ${favName}`;
+    }
+    html += `<div class="md-section-title">Betting Odds${o.provider?.name ? ` · ${o.provider.name}` : ''}</div>
+      <div class="odds-grid">
+        <div><div class="ol">Spread</div><div class="ov">${o.details ?? (o.spread ?? '—')}</div></div>
+        <div><div class="ol">O/U</div><div class="ov">${ou ?? '—'}</div></div>
+        <div><div class="ol">${away.team?.abbreviation || 'Away'} ML</div><div class="ov">${aML ?? '—'}</div></div>
+        <div><div class="ol">${home.team?.abbreviation || 'Home'} ML</div><div class="ov">${hML ?? '—'}</div></div>
+      </div>${cmp ? `<div class="ai-why" style="margin-top:6px">${cmp}</div>` : ''}
+      <div class="ai-why" style="opacity:.7;margin-top:2px">Odds for reference only — not betting advice.</div>`;
+  }
 
   // line score (innings / quarters)
   const aLine = away.linescores || [], hLine = home.linescores || [];
@@ -554,6 +581,20 @@ function hittersHTML(g, ht, at) {
   };
   const block = (label, arr) => `<div class="hit-team">${label}</div>${arr.length ? arr.map(line).join('') : '<div class="ai-why">Not available</div>'}`;
   return `<div class="md-section-title">Top 3 Hitters (OPS · healthy)</div>${block(g.away.abbr || 'Away', at)}${block(g.home.abbr || 'Home', ht)}`;
+}
+// NFL key players (QB/RB/WR leaders) from the scoreboard feed.
+function nflKeyHTML(g) {
+  const pick = (lead, re) => {
+    const c = (lead || []).find((x) => re.test(`${x.name}${x.displayName}`));
+    const t = c?.leaders?.[0];
+    return t ? { name: t.athlete?.displayName || t.athlete?.shortName, val: t.displayValue } : null;
+  };
+  const side = (lead) => [['QB', /passing/i], ['RB', /rushing/i], ['WR', /receiving/i]]
+    .map(([pos, re]) => { const p = pick(lead, re); return p ? { pos, ...p } : null; }).filter(Boolean);
+  const h = side(g.home.leaders), a = side(g.away.leaders);
+  if (!h.length && !a.length) return '<div class="md-section-title">Key Players</div><div class="ai-why">Season stats appear once the season starts.</div>';
+  const rows = (arr) => arr.length ? arr.map((p) => `<div class="hit-row"><span class="hit-n">${p.pos} · ${p.name}</span><span class="hit-s">${p.val}</span></div>`).join('') : '<div class="ai-why">Not available</div>';
+  return `<div class="md-section-title">Key Players</div><div class="hit-team">${g.away.abbr || 'Away'}</div>${rows(a)}<div class="hit-team">${g.home.abbr || 'Home'}</div>${rows(h)}`;
 }
 // Projected starting pitchers with their key stats (from the scoreboard feed).
 function startersHTML(g) {
