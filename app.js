@@ -1,11 +1,11 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v13';
+const APP_VERSION = 'v14';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
-  mlb:    { label: 'MLB',    emoji: '⚾', espnPath: 'baseball/mlb',    fav: ['Philadelphia Phillies'], type: 'team' },
+  mlb:    { label: 'MLB',    emoji: '⚾', espnPath: 'baseball/mlb',    fav: ['Philadelphia Phillies', 'Boston Red Sox'], type: 'team' },
   nba:    { label: 'NBA',    emoji: '🏀', espnPath: 'basketball/nba', fav: ['Philadelphia 76ers'], type: 'team' },
   soccer: { label: 'World Cup', emoji: '🌎', espnPath: 'soccer/fifa.world', fav: ['USA'], type: 'team' }, // FIFA World Cup
   golf:   { label: 'Golf',   emoji: '⛳', espnPath: 'golf/pga', fav: [], type: 'golf' },
@@ -81,6 +81,8 @@ function teamObj(c) {
     abbr: t.abbreviation,
     logo: t.logo || t.logos?.[0]?.href || null,
     score: c?.score != null && c.score !== '' ? Number(c.score) : null,
+    probables: c?.probables || null, // MLB probable starters
+    leaders: c?.leaders || null,     // NFL/NBA team leaders
   };
 }
 function normEvent(ev) {
@@ -477,6 +479,42 @@ async function teamProfile(sport, teamId) {
   };
 }
 
+// Pull a numeric stat from a probable pitcher's stat line.
+function statVal(arr, keys) {
+  const s = (arr || []).find((x) => {
+    const a = (x.abbreviation || '').toUpperCase(), n = (x.name || '').toLowerCase();
+    return keys.some((k) => a === k.toUpperCase() || n.includes(k.toLowerCase()));
+  });
+  if (!s) return null;
+  const v = Number(s.displayValue ?? s.value);
+  return isNaN(v) ? null : v;
+}
+// Player-matchup signal: MLB starting pitchers (ERA) and football/basketball
+// key player. Returns a log-odds nudge toward home plus display notes.
+function matchupFactor(sport, g) {
+  const notes = []; let c = 0;
+  if (sport === 'mlb') {
+    const hp = g.home.probables?.[0], ap = g.away.probables?.[0];
+    const hn = hp?.athlete?.displayName || hp?.athlete?.shortName;
+    const an = ap?.athlete?.displayName || ap?.athlete?.shortName;
+    const hERA = statVal(hp?.statistics, ['ERA', 'earnedRunAverage']);
+    const aERA = statVal(ap?.statistics, ['ERA', 'earnedRunAverage']);
+    if (hn && an) {
+      notes.push(`SP: ${hn}${hERA != null ? ` (${hERA} ERA)` : ''} vs ${an}${aERA != null ? ` (${aERA} ERA)` : ''}`);
+      if (hERA != null && aERA != null) c = 0.22 * clamp((aERA - hERA) / 1.5, -2, 2); // lower ERA = edge
+    }
+  } else {
+    const key = (lead) => {
+      const cat = (lead || []).find((x) => /passing|rating|points|qb/i.test(`${x.name}${x.displayName}`));
+      const top = cat?.leaders?.[0];
+      return top ? { name: top.athlete?.displayName || top.athlete?.shortName, val: top.displayValue } : null;
+    };
+    const h = key(g.home.leaders), a = key(g.away.leaders);
+    if (h && a) notes.push(`${sport === 'nfl' ? 'QB' : 'Leader'}: ${h.name} (${h.val}) vs ${a.name} (${a.val})`);
+  }
+  return { c, notes };
+}
+
 async function predictGame(sport, g) {
   const [hf, af] = await Promise.all([teamProfile(sport, g.home.id), teamProfile(sport, g.away.id)]);
   const scale = PD_SCALE[sport] || 5;
@@ -499,6 +537,10 @@ async function predictGame(sport, g) {
     add('Home field', 0.3, 'limited data — home edge only');
   }
 
+  // player matchup (starting pitchers / QBs)
+  const mu = matchupFactor(sport, g);
+  if (mu.c) add(sport === 'mlb' ? 'Starting pitcher' : 'Player matchup', mu.c, mu.notes[0]);
+
   const pHome = logistic(z);
   const homePick = pHome >= 0.5;
   const winner = homePick ? g.home : g.away;
@@ -508,16 +550,18 @@ async function predictGame(sport, g) {
     const pct = Math.round((logistic(z) - logistic(z - f.c)) * 100);
     return { label: f.label, detail: f.detail, favor: f.c >= 0 ? g.home.name : g.away.name, pct: Math.abs(pct) };
   }).filter((b) => b.pct > 0).sort((a, b) => b.pct - a.pct);
-  return { winner, conf, homePick, breakdown, thin: !(hf && af) };
+  return { winner, conf, homePick, breakdown, notes: mu.notes, thin: !(hf && af) };
 }
 
 function aiPickBlock(pred) {
   if (!pred) return '';
   const rows = pred.breakdown.map((b) =>
     `<div class="fac-row"><span class="fac-l">${b.label}</span><span class="fac-d">${b.detail}</span><span class="fac-p">${b.favor.split(' ').slice(-1)[0]} +${b.pct}%</span></div>`).join('');
+  const notes = (pred.notes || []).map((n) => `<div class="ai-why">⭐ ${n}</div>`).join('');
   return `<div class="md-section-title">🤖 AI Pick</div>
     <div class="ai-pick">Pick: <b>${pred.winner.name}</b> <span class="ai-conf">${pred.conf}%</span></div>
     <div class="conf-bar"><span style="width:${pred.conf}%"></span></div>
+    ${notes}
     <div class="fac-list">${rows || '<div class="ai-why">Limited data — leaning on home-field edge.</div>'}</div>
     ${pred.thin ? '<div class="ai-why">Not enough games played yet for full analysis.</div>' : ''}`;
 }
