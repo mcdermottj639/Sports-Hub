@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -208,13 +208,42 @@ async function openGameDetail(sport, id, g) {
     } else if (g && sport === 'nfl') {
       extra = nflKeyHTML(g);
     }
-    $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra);
+    $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g);
   } catch (_) {
     $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>';
   }
 }
 
-function renderGameDetail(sport, data, pred, extra) {
+// Normalize a raw odds object (from summary.pickcenter or scoreboard) and
+// figure out the market favorite by name.
+function normOdds(o, homeName, awayName) {
+  if (!o) return null;
+  const hML = o.homeTeamOdds?.moneyLine, aML = o.awayTeamOdds?.moneyLine;
+  const favName = o.homeTeamOdds?.favorite ? homeName : o.awayTeamOdds?.favorite ? awayName
+    : (typeof hML === 'number' && typeof aML === 'number') ? (hML < aML ? homeName : awayName) : null;
+  const has = (o.details != null || o.spread != null || o.overUnder != null || hML != null || aML != null);
+  return has ? { details: o.details ?? o.spread ?? null, ou: o.overUnder ?? o.total ?? null, hML, aML, favName, provider: o.provider?.name || null } : null;
+}
+function marketCompare(pred, favName) {
+  if (!pred || !favName) return '';
+  return pred.winner.name === favName
+    ? `✅ Model agrees with the line (${favName})`
+    : `⚡ Model sees value — likes ${pred.winner.name}, market favors ${favName}`;
+}
+function oddsSectionHTML(info, awayAbbr, homeAbbr, pred) {
+  if (!info) return '';
+  const cmp = marketCompare(pred, info.favName);
+  return `<div class="md-section-title">Betting Odds${info.provider ? ` · ${info.provider}` : ''}</div>
+    <div class="odds-grid">
+      <div><div class="ol">Spread</div><div class="ov">${info.details ?? '—'}</div></div>
+      <div><div class="ol">O/U</div><div class="ov">${info.ou ?? '—'}</div></div>
+      <div><div class="ol">${awayAbbr || 'Away'} ML</div><div class="ov">${info.aML ?? '—'}</div></div>
+      <div><div class="ol">${homeAbbr || 'Home'} ML</div><div class="ov">${info.hML ?? '—'}</div></div>
+    </div>${cmp ? `<div class="market-cmp">${cmp}</div>` : ''}
+    <div class="ai-why" style="opacity:.7;margin-top:2px">Odds for reference only — not betting advice.</div>`;
+}
+
+function renderGameDetail(sport, data, pred, extra, g) {
   const comp = data.header?.competitions?.[0] || data.competitions?.[0] || {};
   const cs = comp.competitors || [];
   const home = cs.find((c) => c.homeAway === 'home') || cs[0] || {};
@@ -231,32 +260,13 @@ function renderGameDetail(sport, data, pred, extra) {
   let html = `<div class="md-head">${teamCell(away)}<div style="color:var(--muted);font-weight:700">@</div>${teamCell(home)}</div>
     <div class="md-status ${live ? 'live' : ''}">${st.detail || st.shortDetail || ''}</div>`;
 
+  // betting odds + model-vs-market comparison — at the top
+  const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g?.odds;
+  const oddsInfo = normOdds(rawO, home.team?.displayName, away.team?.displayName);
+  html += oddsSectionHTML(oddsInfo, away.team?.abbreviation, home.team?.abbreviation, pred);
+
   html += aiPickBlock(pred);
   html += extra || '';
-
-  // betting odds + model-vs-market comparison
-  const o = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0];
-  if (o) {
-    const ou = o.overUnder ?? o.total;
-    const hML = o.homeTeamOdds?.moneyLine, aML = o.awayTeamOdds?.moneyLine;
-    const homeName = home.team?.displayName, awayName = away.team?.displayName;
-    let favName = o.homeTeamOdds?.favorite ? homeName : o.awayTeamOdds?.favorite ? awayName
-      : (typeof hML === 'number' && typeof aML === 'number') ? (hML < aML ? homeName : awayName) : null;
-    let cmp = '';
-    if (pred && favName) {
-      cmp = pred.winner.name === favName
-        ? `✅ Model agrees with the line (${favName})`
-        : `⚡ Model sees value — likes ${pred.winner.name}, market favors ${favName}`;
-    }
-    html += `<div class="md-section-title">Betting Odds${o.provider?.name ? ` · ${o.provider.name}` : ''}</div>
-      <div class="odds-grid">
-        <div><div class="ol">Spread</div><div class="ov">${o.details ?? (o.spread ?? '—')}</div></div>
-        <div><div class="ol">O/U</div><div class="ov">${ou ?? '—'}</div></div>
-        <div><div class="ol">${away.team?.abbreviation || 'Away'} ML</div><div class="ov">${aML ?? '—'}</div></div>
-        <div><div class="ol">${home.team?.abbreviation || 'Home'} ML</div><div class="ov">${hML ?? '—'}</div></div>
-      </div>${cmp ? `<div class="ai-why" style="margin-top:6px">${cmp}</div>` : ''}
-      <div class="ai-why" style="opacity:.7;margin-top:2px">Odds for reference only — not betting advice.</div>`;
-  }
 
   // line score (innings / quarters)
   const aLine = away.linescores || [], hLine = home.linescores || [];
@@ -704,6 +714,20 @@ function aiPickBlock(pred) {
     ${pred.thin ? '<div class="ai-why">Not enough games played yet for full analysis.</div>' : ''}`;
 }
 
+// Persistent model performance tally (vs results and vs the betting line).
+const TALLY_KEY = 'sportshub:aitally';
+const getTally = () => { try { return JSON.parse(localStorage.getItem(TALLY_KEY) || '{}'); } catch (_) { return {}; } };
+function recordResult(id, correct, edge) {
+  const t = getTally();
+  t[id] = { c: correct ? 1 : 0, e: edge }; // e: 'h' edge-hit, 'm' edge-miss, null agreed
+  localStorage.setItem(TALLY_KEY, JSON.stringify(t));
+}
+function tallyStats() {
+  const t = getTally(); let w = 0, n = 0, eh = 0, en = 0;
+  Object.values(t).forEach((r) => { n++; if (r.c) w++; if (r.e === 'h') { eh++; en++; } else if (r.e === 'm') en++; });
+  return { w, l: n - w, n, eh, el: en - eh, en };
+}
+
 async function renderPredictions() {
   const sport = state.aiSport || FEATURED.sport;
   buildChips($('#ai-sport'), sport, (s) => { state.aiSport = s; renderPredictions(); }, sortedSports({ teamOnly: true }));
@@ -712,7 +736,15 @@ async function renderPredictions() {
 
   const games = await getGames(sport, ymd(new Date())).catch(() => []);
   const playable = games.filter((g) => g.id);
-  if (!playable.length) { container.innerHTML = ''; container.appendChild(el('div', 'empty', 'No games today for this sport.')); $('#ai-score').textContent = ''; return; }
+  const renderTally = (todayTxt) => {
+    const ts = tallyStats();
+    const parts = [];
+    if (ts.n) parts.push(`All-time ${ts.w}-${ts.l} (${Math.round((ts.w / ts.n) * 100)}%)`);
+    if (ts.en) parts.push(`vs line ${ts.eh}-${ts.el}`);
+    if (todayTxt) parts.push(todayTxt);
+    $('#ai-score').textContent = parts.join(' · ');
+  };
+  if (!playable.length) { container.innerHTML = ''; container.appendChild(el('div', 'empty', 'No games today for this sport.')); renderTally(''); return; }
 
   const preds = await Promise.all(playable.map((g) => predictGame(sport, g).catch(() => null)));
   container.innerHTML = '';
@@ -721,23 +753,33 @@ async function renderPredictions() {
     const p = preds[i];
     const card = gameCard(sport, g);
     if (p) {
-      const block = el('div', 'ai-block');
+      const info = normOdds(g.odds, g.home.name, g.away.name);
+      const cmp = info ? marketCompare(p, info.favName) : '';
       let resultTag = '';
       if (gameState(g) === 'final') {
         const actual = winnerName(g);
-        if (actual && actual !== 'TIE') { graded++; const hit = actual === p.winner.name; if (hit) right++; resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`; }
+        if (actual && actual !== 'TIE') {
+          graded++; const hit = actual === p.winner.name; if (hit) right++;
+          const edge = info && info.favName ? (p.winner.name !== info.favName ? (hit ? 'h' : 'm') : null) : null;
+          recordResult(g.id, hit, edge);
+          resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
+        }
       }
       const top = p.breakdown.slice(0, 2).map((b) => `${b.label} (${b.favor.split(' ').slice(-1)[0]} +${b.pct.toFixed(1)}%)`).join(' · ');
+      const oddsLine = info ? `<div class="card-odds">📊 ${info.details ?? 'line n/a'}${info.ou != null ? ` · O/U ${info.ou}` : ''}</div>` : '';
+      const block = el('div', 'ai-block');
       block.innerHTML = `
         <div class="ai-pick">🤖 Pick: <b>${p.winner.name}</b> <span class="ai-conf">${p.conf}%</span></div>
         <div class="conf-bar"><span style="width:${p.conf}%"></span></div>
-        <div class="ai-why">${top || 'Home-field edge'}${resultTag ? '' : ''}</div>
-        <div class="ai-why" style="margin-top:4px;opacity:.8">Tap the game for the full breakdown</div>${resultTag}`;
+        ${cmp ? `<div class="market-cmp small">${cmp}</div>` : ''}
+        ${oddsLine}
+        <div class="ai-why">${top || 'Home-field edge'}</div>
+        <div class="ai-why" style="margin-top:4px;opacity:.8">Tap for full breakdown →</div>${resultTag}`;
       card.appendChild(block);
     }
     container.appendChild(card);
   });
-  $('#ai-score').textContent = graded ? `Model today: ${right}/${graded} correct` : '';
+  renderTally(graded ? `today ${right}-${graded - right}` : '');
 }
 
 // --- FANTASY --------------------------------------------------------------

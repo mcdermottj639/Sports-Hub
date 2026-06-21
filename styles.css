@@ -136,6 +136,9 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .odds-grid > div { background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: 10px; padding: 8px 6px; text-align: center; }
 .odds-grid .ol { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
 .odds-grid .ov { font-size: 15px; font-weight: 800; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.market-cmp { font-size: 12px; font-weight: 700; background: rgba(58,210,159,.12); border: 1px solid rgba(58,210,159,.3); color: var(--accent); border-radius: 8px; padding: 6px 10px; margin-top: 8px; }
+.market-cmp.small { font-size: 11px; padding: 4px 9px; }
+.card-odds { font-size: 12px; color: var(--silver); margin-top: 6px; font-weight: 600; }
 .ai-result { font-size: 12px; font-weight: 700; margin-top: 6px; }
 .ai-result.win { color: var(--accent); }
 .ai-result.loss { color: var(--live); }
