@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v27';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -942,16 +942,18 @@ async function renderFantasy() {
   $('#fantasy-analytics').innerHTML = '<div class="fan-card"><div class="big">…</div><div class="lbl">Analyzing recent form</div></div>';
   $('#fantasy-recs').innerHTML = '<h3>Hot & Cold</h3><div class="none">Checking who’s heating up and who to drop…</div>';
 
-  // roster (grouped)
+  // roster grouped by Hitters / Pitchers
   const teamOpts = (fanState.sport === 'baseball' ? MLB_TEAMS : NFL_TEAMS);
-  const groups = { active: 'Starters', bench: 'Bench', il: 'Injured List' };
+  const groups = fanState.sport === 'baseball'
+    ? [['Hitters', (p) => !isPitcher(p)], ['Pitchers', (p) => isPitcher(p)]]
+    : [['Offense', (p) => /QB|RB|HB|FB|WR|TE/.test((p.pos || p.slot || '').toUpperCase())], ['Other', (p) => !/QB|RB|HB|FB|WR|TE/.test((p.pos || p.slot || '').toUpperCase())]];
   const container = $('#fantasy-roster');
   container.innerHTML = '';
   if (!roster.length) {
     container.appendChild(el('div', 'empty', 'No players yet. Tap “Add player” to build your roster.'));
   }
-  Object.entries(groups).forEach(([statusKey, label]) => {
-    const rows = roster.map((p, i) => ({ p, i })).filter(({ p }) => p.status === statusKey);
+  groups.forEach(([label, match]) => {
+    const rows = roster.map((p, i) => ({ p, i })).filter(({ p }) => match(p));
     if (!rows.length) return;
     container.appendChild(el('div', 'roster-group', label));
     rows.forEach(({ p, i }) => {
@@ -1249,6 +1251,21 @@ $('#fan-reset').addEventListener('click', () => {
   renderFantasy();
 });
 
+// Turn a container's headers into tap-to-expand accordion sections.
+function makeAccordion(container, headerSel, openCount = 0) {
+  if (!container) return;
+  [...container.querySelectorAll(headerSel)].forEach((h, idx) => {
+    const content = []; let n = h.nextElementSibling;
+    while (n && !n.matches(headerSel)) { content.push(n); n = n.nextElementSibling; }
+    h.classList.add('acc-h');
+    if (!h.querySelector('.sec-chev')) h.insertAdjacentHTML('beforeend', '<span class="sec-chev">▸</span>');
+    const set = (o) => { h.classList.toggle('open', o); content.forEach((c) => { c.style.display = o ? '' : 'none'; }); };
+    set(idx < openCount);
+    h.onclick = () => set(!h.classList.contains('open'));
+    h._accSet = set;
+  });
+}
+
 // --- EAGLES ---------------------------------------------------------------
 const NFL_TEAM = `${SITE}/football/nfl/teams/${EAGLES.teamId}`;
 const FBCORE = 'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl';
@@ -1329,7 +1346,10 @@ async function renderEagles() {
   const navEl = $('#eagles-nav');
   navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
   navEl.querySelectorAll('button').forEach((b) =>
-    (b.onclick = () => document.getElementById(b.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
+    (b.onclick = () => { const t = document.getElementById(b.dataset.target); if (t?._accSet) t._accSet(true); t?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+
+  // collapsible sections (scannable; tap a header to expand)
+  makeAccordion(document.getElementById('eagles'), '.section-title', 2);
 
   // fire off the heavier analytics in parallel; each renders independently
   renderEaglesDepth(idMap, groups);
