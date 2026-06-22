@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v42';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -917,27 +917,58 @@ async function renderPredictions() {
     if (todayTxt) parts.push(todayTxt);
     $('#ai-score').textContent = parts.join(' · ');
   };
-  if (!playable.length) { container.innerHTML = ''; container.appendChild(el('div', 'empty', 'No games today for this sport.')); renderTally(''); return; }
+  // Full-width tracking panel: overall model record, record when the model
+  // bucked the book, and how many edges it sees today.
+  const statBar = (edgeCount) => {
+    const ts = tallyStats();
+    const tile = (val, label, sub, cls) =>
+      `<div class="ai-stat ${cls || ''}"><div class="ai-stat-v">${val}</div><div class="ai-stat-l">${label}</div><div class="ai-stat-s">${sub}</div></div>`;
+    const bar = el('div', 'ai-statbar');
+    bar.innerHTML =
+      tile(ts.n ? `${ts.w}-${ts.l}` : '—', 'Model record', ts.n ? `${Math.round((ts.w / ts.n) * 100)}% all-time` : 'no graded games yet') +
+      tile(ts.en ? `${ts.eh}-${ts.el}` : '—', 'vs the line', ts.en ? `${Math.round((ts.eh / ts.en) * 100)}% off the book` : 'edges not graded yet') +
+      tile(String(edgeCount), 'Edges today', edgeCount ? 'model disagrees w/ book' : 'model in line w/ book', edgeCount ? 'edge' : '');
+    return bar;
+  };
+  if (!playable.length) { container.innerHTML = ''; container.appendChild(statBar(0)); container.appendChild(el('div', 'empty', 'No games today for this sport.')); renderTally(''); return; }
 
   const preds = await Promise.all(playable.map((g) => predictGame(sport, g).catch(() => null)));
   container.innerHTML = '';
   let right = 0, graded = 0;
-  playable.forEach((g, i) => {
+
+  // Build a record per game and flag where the model bucks the betting favorite.
+  const rows = playable.map((g, i) => {
     const p = preds[i];
-    const card = gameCard(sport, g);
-    if (p) {
-      const info = normOdds(g.odds, g.home.name, g.away.name);
-      const cmp = info ? marketCompare(p, info.favName) : '';
-      let resultTag = '';
-      if (gameState(g) === 'final') {
-        const actual = winnerName(g);
-        if (actual && actual !== 'TIE') {
-          graded++; const hit = actual === p.winner.name; if (hit) right++;
-          const edge = info && info.favName ? (p.winner.name !== info.favName ? (hit ? 'h' : 'm') : null) : null;
-          recordResult(g.id, hit, edge);
-          resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
-        }
+    const info = p ? normOdds(g.odds, g.home.name, g.away.name) : null;
+    const isEdge = !!(p && info && info.favName && p.winner.name !== info.favName);
+    let resultTag = '';
+    if (p && gameState(g) === 'final') {
+      const actual = winnerName(g);
+      if (actual && actual !== 'TIE') {
+        graded++; const hit = actual === p.winner.name; if (hit) right++;
+        const edge = info && info.favName ? (isEdge ? (hit ? 'h' : 'm') : null) : null;
+        recordResult(g.id, hit, edge);
+        resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
       }
+    }
+    return { g, p, info, isEdge, resultTag };
+  });
+
+  const upcomingEdges = rows.filter((r) => r.isEdge && gameState(r.g) !== 'final').length;
+  container.appendChild(statBar(upcomingEdges));
+  renderTally(graded ? `today ${right}-${graded - right}` : '');
+
+  const buildCard = ({ g, p, info, isEdge, resultTag }) => {
+    const card = gameCard(sport, g);
+    if (isEdge) {
+      const abbr = (g.home.name === p.winner.name ? g.home.abbr : g.away.abbr) || (p.winner.name || '').split(' ').pop();
+      const b = el('div', 'edge-badge', `⚡ Model edge: ${abbr} <span class="edge-conf">${p.conf}%</span>`);
+      const meta = card.querySelector('.game-meta');
+      if (meta) meta.insertAdjacentElement('afterend', b); else card.appendChild(b);
+      card.classList.add('has-edge');
+    }
+    if (p) {
+      const cmp = info ? marketCompare(p, info.favName) : '';
       const top = p.breakdown.slice(0, 2).map((b) => `${b.label} (${b.favor.split(' ').slice(-1)[0]} +${b.pct.toFixed(1)}%)`).join(' · ');
       const oddsLine = info ? `<div class="card-odds">📊 ${info.details ?? 'line n/a'}${info.ou != null ? ` · O/U ${info.ou}` : ''}</div>` : '';
       const block = el('div', 'ai-block');
@@ -950,9 +981,21 @@ async function renderPredictions() {
         <div class="ai-why" style="margin-top:4px;opacity:.8">Tap for full breakdown →</div>${resultTag}`;
       card.appendChild(block);
     }
-    container.appendChild(card);
-  });
-  renderTally(graded ? `today ${right}-${graded - right}` : '');
+    return card;
+  };
+
+  // Edges to the top (highest confidence first), the rest below.
+  const byConf = (a, b) => (b.p?.conf || 0) - (a.p?.conf || 0);
+  const edges = rows.filter((r) => r.isEdge).sort(byConf);
+  const rest = rows.filter((r) => !r.isEdge).sort(byConf);
+  if (edges.length) {
+    container.appendChild(el('div', 'ai-section-head edge', `⚡ Model Edges — off the book (${edges.length})`));
+    edges.forEach((r) => container.appendChild(buildCard(r)));
+  }
+  if (rest.length) {
+    container.appendChild(el('div', 'ai-section-head', edges.length ? 'In line with the book' : 'Today’s picks'));
+    rest.forEach((r) => container.appendChild(buildCard(r)));
+  }
 }
 
 // --- FANTASY --------------------------------------------------------------

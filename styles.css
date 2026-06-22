@@ -129,6 +129,15 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
 .pred-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; }
 .pred-score { font-weight: 800; color: var(--accent); }
+.ai-statbar { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 4px; }
+.ai-stat { background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: var(--radius); padding: 12px 10px; text-align: center; }
+.ai-stat.edge { border-color: rgba(58,210,159,.5); background: rgba(58,210,159,.08); }
+.ai-stat-v { font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.1; }
+.ai-stat.edge .ai-stat-v { color: var(--accent); }
+.ai-stat-l { font-size: 12px; font-weight: 700; color: var(--silver); margin-top: 3px; }
+.ai-stat-s { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.ai-section-head { grid-column: 1 / -1; font-size: 13px; font-weight: 800; color: var(--silver); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 -2px; }
+.ai-section-head.edge { color: var(--accent); }
 .ai-block { margin-top: 10px; border-top: 1px solid rgba(255,255,255,.07); padding-top: 10px; }
 .ai-pick { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .ai-pick b { color: var(--accent); }
