@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v43';
+const APP_VERSION = 'v44';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -484,9 +484,9 @@ async function renderHome() {
   renderHomeHeadline();
 }
 
-// One big sports headline up top. ESPN orders each league's news with its
-// lead story first, so we grab those across the in-season leagues and show
-// the single newest — i.e. the biggest headline going right now.
+// Top 3 sports headlines up top, numbered 1-2-3 so they scan left to right.
+// ESPN orders each league's news with its lead story first, so we take those
+// (newest first) for variety, then backfill — the biggest stuff going now.
 async function renderHomeHeadline() {
   const box = $('#home-headline');
   if (!box) return;
@@ -494,32 +494,41 @@ async function renderHomeHeadline() {
   const results = await Promise.allSettled(
     sports.map((s) => fetchJSON(`${SITE}/${LEAGUES[s].espnPath}/news`, 10 * 60000))
   );
-  const leads = [];
+  const newest = (x, y) => new Date(y.a.published || 0) - new Date(x.a.published || 0);
+  const leads = [], more = [];
   results.forEach((r, i) => {
     if (r.status !== 'fulfilled') return;
     const arts = (r.value.articles || []).filter((a) => a.type !== 'Media' && (a.headline || a.description));
     if (arts[0]) leads.push({ sport: sports[i], a: arts[0] });
+    arts.slice(1, 3).forEach((a) => more.push({ sport: sports[i], a }));
   });
-  if (!leads.length) { box.innerHTML = ''; return; }
-  // newest lead story wins; ignore anything older than ~3 days so it stays current
-  leads.sort((x, y) => new Date(y.a.published || 0) - new Date(x.a.published || 0));
-  const top = leads.find((l) => Date.now() - new Date(l.a.published || 0) < 3 * 86400000) || leads[0];
-  const { sport, a } = top;
-  const cfg = LEAGUES[sport];
-  const img = a.images?.[0]?.url;
-  const when = a.published ? timeAgo(a.published) : '';
-  const card = el('div', 'headline-card');
-  card.innerHTML = `
-    ${img ? `<div class="headline-img" style="background-image:url('${img}')"></div>` : ''}
-    <div class="headline-body">
-      <div class="headline-eyebrow">📰 Top Story · ${cfg.emoji} ${cfg.label}${when ? ` · ${when}` : ''}</div>
-      <div class="headline-title">${a.headline || ''}</div>
-      ${a.description ? `<div class="headline-desc">${a.description}</div>` : ''}
-      <div class="tap-hint" style="text-align:left;margin-top:8px">tap to read →</div>
-    </div>`;
-  card.onclick = () => openNewsSummary(a);
-  box.innerHTML = '';
-  box.appendChild(card);
+  leads.sort(newest); more.sort(newest);
+  const picks = [], seen = new Set();
+  for (const p of [...leads, ...more]) {
+    const k = (p.a.headline || '').toLowerCase();
+    if (!k || seen.has(k)) continue;
+    seen.add(k); picks.push(p);
+    if (picks.length >= 3) break;
+  }
+  if (!picks.length) { box.innerHTML = ''; return; }
+
+  const row = el('div', 'headline-row');
+  picks.forEach(({ sport, a }, idx) => {
+    const cfg = LEAGUES[sport];
+    const img = a.images?.[0]?.url;
+    const when = a.published ? timeAgo(a.published) : '';
+    const card = el('div', 'hl-card');
+    card.innerHTML = `
+      <div class="hl-img" style="${img ? `background-image:url('${img}')` : ''}"><span class="hl-num">${idx + 1}</span></div>
+      <div class="hl-body">
+        <div class="hl-eyebrow">${cfg.emoji} ${cfg.label}${when ? ` · ${when}` : ''}</div>
+        <div class="hl-title">${a.headline || ''}</div>
+      </div>`;
+    card.onclick = () => openNewsSummary(a);
+    row.appendChild(card);
+  });
+  box.innerHTML = '<div class="section-title" style="margin:6px 0 8px">📰 Top Headlines</div>';
+  box.appendChild(row);
 }
 
 // Today's games grouped by league, with a jump-nav to each league section.
