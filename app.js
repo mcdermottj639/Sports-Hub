@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v33';
+const APP_VERSION = 'v34';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -415,11 +415,41 @@ async function renderHome() {
   }
   html += '</div>';
   $('#featured').innerHTML = html;
-  renderGames($('#home-games'), games);
-  if (SEASON_MONTHS.golf.includes(new Date().getMonth())) addGolfHomeCard();
+  renderHomeByLeague($('#home-games'), games);
 }
 
-async function addGolfHomeCard() {
+// Today's games grouped by league, with a jump-nav to each league section.
+function renderHomeByLeague(container, games) {
+  container.className = 'home-games';
+  container.innerHTML = '';
+  const nav = el('div', 'jump-nav');
+  container.appendChild(nav);
+  const addChip = (id, label) => {
+    const b = el('button', 'chip', label);
+    b.onclick = () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    nav.appendChild(b);
+  };
+  const addSection = (id, label, cards) => {
+    addChip(id, label);
+    const head = el('h3', 'games-league-head'); head.id = id; head.innerHTML = label;
+    container.appendChild(head);
+    const grid = el('div', 'games-grid');
+    cards.forEach((c) => grid.appendChild(c));
+    container.appendChild(grid);
+  };
+
+  const sportsWithGames = sortedSports({ teamOnly: true }).filter((s) => (games[s] || []).length);
+  sportsWithGames.forEach((s) => {
+    const cards = [...(games[s] || [])].sort((a, b) => (isFav(s, b) ? 1 : 0) - (isFav(s, a) ? 1 : 0)).map((g) => gameCard(s, g));
+    addSection(`home-${s}`, `${LEAGUES[s].emoji} ${LEAGUES[s].label}`, cards);
+  });
+  if (!sportsWithGames.length) container.appendChild(el('div', 'empty', 'No games today for your sports.'));
+
+  // golf as its own section (it's a leaderboard, not team games)
+  if (SEASON_MONTHS.golf.includes(new Date().getMonth())) addGolfHomeSection(addSection);
+}
+
+async function addGolfHomeSection(addSection) {
   const ev = await getGolfEvent();
   if (!ev) return;
   const leader = (ev.competitions?.[0]?.competitors || [])[0];
@@ -431,8 +461,7 @@ async function addGolfHomeCard() {
     <div class="muted">Leader: <b style="color:var(--text)">${lname || 'TBD'}</b> ${lscore}</div>
     <div class="tap-hint">tap for leaderboard →</div>`;
   card.onclick = () => { state.scoresSport = 'golf'; showTab('scores'); };
-  const grid = $('#home-games');
-  grid.insertBefore(card, grid.firstChild);
+  addSection('home-golf', '⛳ Golf', [card]);
 }
 
 // --- SCORES ---------------------------------------------------------------
@@ -1616,7 +1645,7 @@ function setMode(live) {
 // (Eagles has its own curated nav, so it's skipped here.)
 function injectJumpNav(name) {
   const panel = document.getElementById(name);
-  if (!panel || name === 'eagles') return;
+  if (!panel || name === 'eagles' || name === 'home') return;
   const titles = [...panel.querySelectorAll('.section-title')];
   const items = titles.map((h, i) => {
     if (!h.id) h.id = `${name}-sec-${i}`;

@@ -143,6 +143,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ai-result.win { color: var(--accent); }
 .ai-result.loss { color: var(--live); }
 .jump-nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 0 6px; }
+.games-league-head { font-size: 13px; color: var(--silver); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin: 16px 0 10px; scroll-margin-top: 64px; }
 .jump-nav .chip { flex: 0 0 auto; }
 .section-title { scroll-margin-top: 64px; }
 .acc-h { cursor: pointer; }
