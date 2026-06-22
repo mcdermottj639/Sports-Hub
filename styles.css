@@ -274,9 +274,14 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .fan-row .pgame.final { color: var(--silver); }
 .fan-row .pgame.off { color: var(--muted); }
 .fan-row .seas { font-size: 11px; color: var(--silver); margin-top: 2px; font-variant-numeric: tabular-nums; }
-.fan-row .hc { display: inline-block; font-weight: 700; }
-.fan-row .hc.hot { color: #ff8a5b; }
-.fan-row .hc.cold { color: #6fb6ff; }
+.fan-row .hc { margin-top: 4px; font-size: 11px; line-height: 1.45; border-left: 2px solid rgba(255,255,255,.15); padding-left: 8px; }
+.fan-row .hc.hot { border-left-color: #ff8a5b; }
+.fan-row .hc.cold { border-left-color: #6fb6ff; }
+.fan-row .hc .hc-tag { font-weight: 800; display: inline-block; margin-right: 4px; }
+.fan-row .hc.hot .hc-tag { color: #ff8a5b; }
+.fan-row .hc.cold .hc-tag { color: #6fb6ff; }
+.fan-row .hc .hc-detail { color: var(--silver); }
+.hc-cols .lead { color: var(--muted); font-weight: 600; }
 .hc-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .hc-cols ul { margin: 6px 0 0; padding-left: 18px; }
 .hc-cols li { font-size: 13px; margin: 3px 0; }

@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v23';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -1083,35 +1083,50 @@ function hotCold(fSport, games, pitcher) {
   if (fSport === 'baseball') {
     if (pitcher) {
       const agg = (gs) => {
-        let er = 0, o = 0, bb = 0, h = 0;
-        gs.forEach((g) => { er += numv(g.dict.earnedRuns ?? g.dict.ER); o += ipToOuts(g.dict.inningsPitched ?? g.dict.IP); bb += numv(g.dict.walks ?? g.dict.BB); h += numv(g.dict.hits ?? g.dict.H); });
-        return o ? { era: (er * 27) / o, whip: ((bb + h) * 3) / o, o } : null;
+        let er = 0, o = 0, bb = 0, h = 0, k = 0;
+        gs.forEach((g) => { er += numv(g.dict.earnedRuns ?? g.dict.ER); o += ipToOuts(g.dict.inningsPitched ?? g.dict.IP); bb += numv(g.dict.walks ?? g.dict.BB); h += numv(g.dict.hits ?? g.dict.H); k += numv(g.dict.strikeouts ?? g.dict.K); });
+        return o ? { era: (er * 27) / o, whip: ((bb + h) * 3) / o, o, k, g: gs.length, ip: (o / 3).toFixed(1) } : null;
       };
       const s = agg(games), w15 = agg(within(15)), w30 = agg(within(30));
       if (!s) return null;
       const e = (x) => (x ? x.era.toFixed(2) : '–'), wh = (x) => (x ? x.whip.toFixed(2) : '–');
       let tag = '';
       if (w30 && w30.o >= 12) { const eImp = s.era - w30.era, whImp = s.whip - w30.whip; tag = (eImp >= 0.75 || whImp >= 0.15) ? 'hot' : (eImp <= -0.75 || whImp <= -0.15) ? 'cold' : ''; }
-      return { tag, detail: `ERA ${e(w15)}/${e(w30)} · WHIP ${wh(w15)}/${wh(w30)} (15/30d) · ${e(s)}/${wh(s)} szn` };
+      const win = w15 || w30;
+      const detail = [
+        `Last 15d: ${e(w15)} ERA · ${wh(w15)} WHIP${w15 ? ` · ${w15.k} K in ${w15.ip} IP (${w15.g}g)` : ''}`,
+        `Last 30d: ${e(w30)} ERA · ${wh(w30)} WHIP${w30 ? ` · ${w30.k} K in ${w30.ip} IP (${w30.g}g)` : ''}`,
+        `Season: ${e(s)} ERA · ${wh(s)} WHIP`,
+      ].join('<br>');
+      const lead = win ? `${e(win)} ERA / ${wh(win)} WHIP (15d)` : '';
+      return { tag, detail, lead };
     }
     // hitters by OPS
     const agg = (gs) => {
-      let h = 0, ab = 0, d = 0, t = 0, hr = 0, bb = 0, hbp = 0, sf = 0;
+      let h = 0, ab = 0, d = 0, t = 0, hr = 0, bb = 0, hbp = 0, sf = 0, rbi = 0;
       gs.forEach((g) => {
         h += numv(g.dict.hits ?? g.dict.H); ab += numv(g.dict.atBats ?? g.dict.AB);
         d += numv(g.dict.doubles ?? g.dict['2B']); t += numv(g.dict.triples ?? g.dict['3B']); hr += numv(g.dict.homeRuns ?? g.dict.HR);
         bb += numv(g.dict.walks ?? g.dict.BB); hbp += numv(g.dict.hitByPitch ?? g.dict.HBP); sf += numv(g.dict.sacrificeFlies ?? g.dict.SF);
+        rbi += numv(g.dict.RBIs ?? g.dict.rbi ?? g.dict.RBI);
       });
       if (!ab) return null;
       const tb = h + d + 2 * t + 3 * hr;
-      return { ops: (h + bb + hbp) / ((ab + bb + hbp + sf) || ab) + tb / ab, ab };
+      return { ops: (h + bb + hbp) / ((ab + bb + hbp + sf) || ab) + tb / ab, avg: h / ab, hr, rbi, h, ab, g: gs.length };
     };
     const s = agg(games), w15 = agg(within(15)), w30 = agg(within(30));
     if (!s) return null;
-    const o = (x) => (x ? ops3(x.ops) : '–');
+    const o = (x) => (x ? ops3(x.ops) : '–'), a = (x) => (x ? ops3(x.avg) : '–');
     let tag = '';
     if (w15 && w15.ab >= 15) { const diff = w15.ops - s.ops; tag = diff >= 0.060 ? 'hot' : diff <= -0.060 ? 'cold' : ''; }
-    return { tag, detail: `${o(w15)} (15d) / ${o(w30)} (30d) OPS · ${o(s)} szn` };
+    const win = w15 || w30;
+    const detail = [
+      `Last 15d: ${o(w15)} OPS · ${a(w15)} AVG${w15 ? ` · ${w15.hr} HR · ${w15.rbi} RBI (${w15.h}-${w15.ab}, ${w15.g}g)` : ''}`,
+      `Last 30d: ${o(w30)} OPS · ${a(w30)} AVG${w30 ? ` · ${w30.hr} HR · ${w30.rbi} RBI` : ''}`,
+      `Season: ${o(s)} OPS · ${a(s)} AVG`,
+    ].join('<br>');
+    const lead = win ? `${o(win)} OPS (15d)` : '';
+    return { tag, detail, lead };
   }
   return null; // football trends added when the season has data
 }
@@ -1143,14 +1158,13 @@ async function fillSeasonStats(roster, fSport) {
     if (aid) {
       const hc = hotCold(fSport, await athleteGamelog(sport, aid).catch(() => null), isPitcher(p));
       if (hc) {
-        const icon = hc.tag === 'hot' ? '🔥' : hc.tag === 'cold' ? '🥶' : '📊';
-        hcHTML = ` <span class="hc ${hc.tag}">${icon} ${hc.detail}</span>`;
-        if (hc.tag === 'hot') hot.push(p.name);
-        else if (hc.tag === 'cold' && p.status !== 'il') cold.push(p.name);
+        const icon = hc.tag === 'hot' ? '🔥 Hot' : hc.tag === 'cold' ? '🥶 Cold' : '📊 Trend';
+        hcHTML = `<div class="hc ${hc.tag}"><span class="hc-tag">${icon}</span><span class="hc-detail">${hc.detail}</span></div>`;
+        if (hc.tag === 'hot') hot.push({ name: p.name, lead: hc.lead });
+        else if (hc.tag === 'cold' && p.status !== 'il') cold.push({ name: p.name, lead: hc.lead });
       }
     }
-    elx.innerHTML = (season || '') + hcHTML || (season ? '' : '');
-    if (!season && !hcHTML) elx.textContent = '';
+    elx.innerHTML = (season ? `<div>${season}</div>` : '') + hcHTML;
   }));
 
   // snapshot cards
@@ -1164,7 +1178,7 @@ async function fillSeasonStats(roster, fSport) {
     (needTeam ? card(needTeam, 'Need team set', 'warn') : '');
 
   // hot & cold lists (drop watch)
-  const li = (arr) => arr.length ? arr.map((n) => `<li>${n}</li>`).join('') : '<li class="none">None</li>';
+  const li = (arr) => arr.length ? arr.map((x) => `<li><b>${x.name}</b>${x.lead ? ` <span class="lead">${x.lead}</span>` : ''}</li>`).join('') : '<li class="none">None</li>';
   $('#fantasy-recs').innerHTML = `<h3>Hot & Cold (15–30 day trend)</h3>
     <div class="hc-cols">
       <div><div class="hc-h hot">🔥 Heating up</div><ul>${li(hot)}</ul></div>
