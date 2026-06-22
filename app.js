@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v34';
+const APP_VERSION = 'v35';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -262,7 +262,7 @@ function marketCompare(pred, favName) {
 function oddsSectionHTML(info, awayAbbr, homeAbbr, pred) {
   if (!info) return '';
   const cmp = marketCompare(pred, info.favName);
-  return `<div class="md-section-title">Betting Odds${info.provider ? ` · ${info.provider}` : ''}</div>
+  return `<div class="md-section-title acc-open">Betting Odds${info.provider ? ` · ${info.provider}` : ''}</div>
     <div class="odds-grid">
       <div><div class="ol">Spread</div><div class="ov">${info.details ?? '—'}</div></div>
       <div><div class="ol">O/U</div><div class="ov">${info.ou ?? '—'}</div></div>
