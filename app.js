@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v28';
+const APP_VERSION = 'v29';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -236,6 +236,7 @@ async function openGameDetail(sport, id, g) {
       extra = nflKeyHTML(g);
     }
     $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g);
+    makeAccordion($('#modal-body'), '.md-section-title', 0);
   } catch (_) {
     $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>';
   }
@@ -287,12 +288,13 @@ function renderGameDetail(sport, data, pred, extra, g) {
   let html = `<div class="md-head">${teamCell(away)}<div style="color:var(--muted);font-weight:700">@</div>${teamCell(home)}</div>
     <div class="md-status ${live ? 'live' : ''}">${st.detail || st.shortDetail || ''}</div>`;
 
-  // betting odds + model-vs-market comparison — at the top
+  // AI pick headline first (open), then collapsible detail sections
+  html += aiPickHead(pred);
+  html += aiFactors(pred);
+
   const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g?.odds;
   const oddsInfo = normOdds(rawO, home.team?.displayName, away.team?.displayName);
   html += oddsSectionHTML(oddsInfo, away.team?.abbreviation, home.team?.abbreviation, pred);
-
-  html += aiPickBlock(pred);
   html += extra || '';
 
   // line score (innings / quarters)
@@ -729,16 +731,20 @@ async function predictGame(sport, g) {
   return { winner, conf, homePick, breakdown, notes: mu.notes, thin: !(hf && af) };
 }
 
-function aiPickBlock(pred) {
+function aiPickHead(pred) {
   if (!pred) return '';
-  const rows = pred.breakdown.map((b) =>
-    `<div class="fac-row"><span class="fac-l">${b.label}</span><span class="fac-d">${b.detail}</span><span class="fac-p">${b.favor.split(' ').slice(-1)[0]} +${b.pct.toFixed(1)}%</span></div>`).join('');
-  return `<div class="md-section-title">🤖 AI Pick</div>
+  return `<div class="md-section-title acc-open">🤖 AI Pick</div>
     <div class="ai-pick">Pick: <b>${pred.winner.name}</b> <span class="ai-conf">${pred.conf}%</span></div>
     <div class="conf-bar"><span style="width:${pred.conf}%"></span></div>
-    <div class="fac-list">${rows || '<div class="ai-why">Limited data — leaning on home-field edge.</div>'}</div>
-    <div class="ai-why" style="margin-top:6px">Factors above the 50% coin-flip add up to the ${pred.conf}% pick.</div>
     ${pred.thin ? '<div class="ai-why">Not enough games played yet for full analysis.</div>' : ''}`;
+}
+function aiFactors(pred) {
+  if (!pred || !pred.breakdown.length) return '';
+  const rows = pred.breakdown.map((b) =>
+    `<div class="fac-row"><span class="fac-l">${b.label}</span><span class="fac-d">${b.detail}</span><span class="fac-p">${b.favor.split(' ').slice(-1)[0]} +${b.pct.toFixed(1)}%</span></div>`).join('');
+  return `<div class="md-section-title">Why — Factor Breakdown</div>
+    <div class="fac-list">${rows}</div>
+    <div class="ai-why" style="margin-top:6px">Factors above the 50% coin-flip add up to the ${pred.conf}% pick.</div>`;
 }
 
 // Persistent model performance tally (vs results and vs the betting line).
@@ -1139,7 +1145,7 @@ async function athleteGamelog(sport, athleteId) {
   const path = LEAGUES[sport].espnPath;
   const data = await fetchJSON(`https://site.web.api.espn.com/apis/common/v3/sports/${path}/athletes/${athleteId}/gamelog`, 3 * 3600000).catch(() => null);
   if (!data) return null;
-  const names = data.names || data.labels || [];
+  const names = (data.names || data.labels || []).map((n) => (n || '').toLowerCase());
   const meta = data.events || {};
   const games = [];
   (data.seasonTypes || []).forEach((stp) => (stp.categories || []).forEach((cat) => (cat.events || []).forEach((e) => {
@@ -1152,6 +1158,9 @@ async function athleteGamelog(sport, athleteId) {
 }
 const numv = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 const ipToOuts = (v) => { const f = numv(v); const w = Math.floor(f); return w * 3 + Math.round((f - w) * 10); };
+// pull a stat from a (lowercased-key) game dict by trying several names
+const gv = (d, ...keys) => { for (const k of keys) if (d[k] != null && d[k] !== '') return numv(d[k]); return 0; };
+const gvRaw = (d, ...keys) => { for (const k of keys) if (d[k] != null && d[k] !== '') return d[k]; return 0; };
 // Recent-form trend + a game-log-computed season line (works for everyone,
 // not just team leaders). Hitters: last 20 days. Pitchers: last 5 outings.
 function hotCold(fSport, games, pitcher) {
@@ -1165,7 +1174,14 @@ function hotCold(fSport, games, pitcher) {
     if (pitcher) {
       const agg = (gs) => {
         let er = 0, o = 0, bb = 0, h = 0, k = 0;
-        gs.forEach((g) => { er += numv(g.dict.earnedRuns ?? g.dict.ER); o += ipToOuts(g.dict.inningsPitched ?? g.dict.IP); bb += numv(g.dict.walks ?? g.dict.BB); h += numv(g.dict.hits ?? g.dict.H); k += numv(g.dict.strikeouts ?? g.dict.K); });
+        gs.forEach((g) => {
+          const d = g.dict;
+          er += gv(d, 'earnedruns', 'er');
+          o += ipToOuts(gvRaw(d, 'inningspitched', 'ip', 'innings'));
+          bb += gv(d, 'walks', 'bb', 'baseonballs');
+          h += gv(d, 'hits', 'h');
+          k += gv(d, 'strikeouts', 'k', 'so');
+        });
         return o ? { era: (er * 27) / o, whip: ((bb + h) * 3) / o, o, k, g: gs.length, ip: (o / 3).toFixed(1) } : null;
       };
       const s = agg(games), w = agg(lastN(5));
@@ -1185,10 +1201,11 @@ function hotCold(fSport, games, pitcher) {
     const agg = (gs) => {
       let h = 0, ab = 0, d = 0, t = 0, hr = 0, bb = 0, hbp = 0, sf = 0, rbi = 0;
       gs.forEach((g) => {
-        h += numv(g.dict.hits ?? g.dict.H); ab += numv(g.dict.atBats ?? g.dict.AB);
-        d += numv(g.dict.doubles ?? g.dict['2B']); t += numv(g.dict.triples ?? g.dict['3B']); hr += numv(g.dict.homeRuns ?? g.dict.HR);
-        bb += numv(g.dict.walks ?? g.dict.BB); hbp += numv(g.dict.hitByPitch ?? g.dict.HBP); sf += numv(g.dict.sacrificeFlies ?? g.dict.SF);
-        rbi += numv(g.dict.RBIs ?? g.dict.rbi ?? g.dict.RBI);
+        const x = g.dict;
+        h += gv(x, 'hits', 'h'); ab += gv(x, 'atbats', 'ab');
+        d += gv(x, 'doubles', '2b'); t += gv(x, 'triples', '3b'); hr += gv(x, 'homeruns', 'hr');
+        bb += gv(x, 'walks', 'bb'); hbp += gv(x, 'hitbypitch', 'hbp'); sf += gv(x, 'sacrificeflies', 'sacflies', 'sf');
+        rbi += gv(x, 'rbis', 'rbi', 'runsbattedin');
       });
       if (!ab) return null;
       const tb = h + d + 2 * t + 3 * hr;
@@ -1285,6 +1302,7 @@ $('#fan-reset').addEventListener('click', () => {
 });
 
 // Turn a container's headers into tap-to-expand accordion sections.
+// Headers with class "acc-open" start expanded (in addition to first openCount).
 function makeAccordion(container, headerSel, openCount = 0) {
   if (!container) return;
   [...container.querySelectorAll(headerSel)].forEach((h, idx) => {
@@ -1293,7 +1311,7 @@ function makeAccordion(container, headerSel, openCount = 0) {
     h.classList.add('acc-h');
     if (!h.querySelector('.sec-chev')) h.insertAdjacentHTML('beforeend', '<span class="sec-chev">▸</span>');
     const set = (o) => { h.classList.toggle('open', o); content.forEach((c) => { c.style.display = o ? '' : 'none'; }); };
-    set(idx < openCount);
+    set(idx < openCount || h.classList.contains('acc-open'));
     h.onclick = () => set(!h.classList.contains('open'));
     h._accSet = set;
   });
