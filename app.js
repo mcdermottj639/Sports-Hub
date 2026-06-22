@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v35';
+const APP_VERSION = 'v36';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -262,12 +262,13 @@ function marketCompare(pred, favName) {
 function oddsSectionHTML(info, awayAbbr, homeAbbr, pred) {
   if (!info) return '';
   const cmp = marketCompare(pred, info.favName);
+  const ml = (v) => (v == null ? '—' : (Number(v) > 0 ? `+${v}` : `${v}`));
   return `<div class="md-section-title acc-open">Betting Odds${info.provider ? ` · ${info.provider}` : ''}</div>
     <div class="odds-grid">
       <div><div class="ol">Spread</div><div class="ov">${info.details ?? '—'}</div></div>
       <div><div class="ol">O/U</div><div class="ov">${info.ou ?? '—'}</div></div>
-      <div><div class="ol">${awayAbbr || 'Away'} ML</div><div class="ov">${info.aML ?? '—'}</div></div>
-      <div><div class="ol">${homeAbbr || 'Home'} ML</div><div class="ov">${info.hML ?? '—'}</div></div>
+      <div><div class="ol">${awayAbbr || 'Away'} ML</div><div class="ov">${ml(info.aML)}</div></div>
+      <div><div class="ol">${homeAbbr || 'Home'} ML</div><div class="ov">${ml(info.hML)}</div></div>
     </div>${cmp ? `<div class="market-cmp">${cmp}</div>` : ''}
     <div class="ai-why" style="opacity:.7;margin-top:2px">Odds for reference only — not betting advice.</div>`;
 }
