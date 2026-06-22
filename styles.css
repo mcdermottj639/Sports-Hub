@@ -106,8 +106,10 @@ input[type="date"] {
 }
 
 table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-.standings-group { font-size: 14px; color: var(--gold); margin: 18px 0 8px; font-weight: 700; }
-.standings-group.wc { color: var(--accent); margin-top: 26px; display: flex; align-items: center; gap: 8px; }
+.standings-league { font-size: 19px; font-weight: 800; color: var(--text); margin: 26px 0 4px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,.1); }
+.standings-league:first-child { margin-top: 8px; }
+.standings-group { font-size: 13px; color: var(--gold); margin: 14px 0 6px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+.standings-group.wc { color: var(--accent); margin-top: 22px; display: flex; align-items: center; gap: 8px; }
 .standings-group.wc::before { content: "🎟"; font-size: 13px; }
 tr.wc-cut td { border-top: 2px dashed rgba(58,210,159,.55); }
 th, td { text-align: left; padding: 9px 10px; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,.05); }

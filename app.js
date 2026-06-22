@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v39';
+const APP_VERSION = 'v40';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -124,15 +124,22 @@ function normStandings(json) {
       gp: getStat(stats, ['gamesPlayed']),
     };
   };
+  // Only emit rows from the deepest node that holds entries — when a league
+  // node also carries its own aggregated standings, we want the division
+  // children, not the lumped-together league list.
   const visit = (node, ancestors) => {
     const path = [...ancestors, node];
+    const kids = node.children || [];
+    if (kids.length) { kids.forEach((ch) => visit(ch, path)); return; }
     const entries = node.standings?.entries || node.entries;
     if (entries && entries.length) {
-      const league = (path[0] && (path[0].name || path[0].displayName)) || '';
-      const division = node.name || node.displayName || node.abbreviation || league || 'Standings';
+      const division = node.name || node.displayName || node.abbreviation || 'Standings';
+      // Prefer a real league ancestor; otherwise infer it from the division
+      // name (e.g. "American League East" -> "American League", "NFC East" -> "NFC").
+      let league = path.length > 1 ? (path[0].name || path[0].displayName || '') : '';
+      if (!league) { const m = division.match(/^(.*?)\s+(East|West|North|South|Central)$/i); league = m ? m[1] : division; }
       entries.forEach((e, i) => rows.push(buildRow(e, i, league, division)));
     }
-    (node.children || []).forEach((ch) => visit(ch, path));
   };
   (json.children || []).forEach((c) => visit(c, []));
   if (!rows.length && json.standings?.entries) json.standings.entries.forEach((e, i) => rows.push(buildRow(e, i, '', 'Standings')));
@@ -148,8 +155,12 @@ async function getGames(sport, dateStr) {
 }
 async function getStandings(sport) {
   const path = LEAGUES[sport].espnPath;
-  const json = await fetchJSON(`${CORE}/${path}/standings`, 5 * 60000);
-  return normStandings(json);
+  // level=3 asks ESPN to nest by division (MLB East/Central/West, NFL divisions,
+  // soccer groups). Fall back to the default grouping if that comes back empty.
+  let rows = [];
+  try { rows = normStandings(await fetchJSON(`${CORE}/${path}/standings?level=3`, 5 * 60000)); } catch (_) {}
+  if (!rows.length) { try { rows = normStandings(await fetchJSON(`${CORE}/${path}/standings`, 5 * 60000)); } catch (_) {} }
+  return rows;
 }
 
 // --- game helpers ---------------------------------------------------------
@@ -574,12 +585,18 @@ async function renderStandings() {
   const wildcardSport = sport === 'mlb' || sport === 'nfl';
   const wcSpots = sport === 'nfl' ? 3 : 3;
 
+  const multiLeague = Object.keys(byLeague).length > 1;
   Object.entries(byLeague).forEach(([league, divs]) => {
+    const multiDiv = Object.keys(divs).length > 1;
+    // Show a league heading when it actually groups several divisions.
+    if (multiLeague || multiDiv) content.appendChild(el('div', 'standings-league', league));
     // division tables
     Object.entries(divs).forEach(([divName, teams]) => {
       teams.sort((a, b) => winPct(b) - winPct(a) || (b.wins || 0) - (a.wins || 0));
       teams.forEach((r, i) => (r._rank = i + 1));
-      content.appendChild(el('div', 'standings-group', divName));
+      // strip the league prefix so "American League East" reads as "East"
+      const shortDiv = (multiLeague || multiDiv) ? divName.replace(league, '').trim() || divName : divName;
+      content.appendChild(el('div', 'standings-group', shortDiv));
       content.appendChild(table(teams, soccer ? 'Pts' : 'GB', (r) => soccer ? (r.points ?? '–') : (r._rank === 1 ? '—' : gamesBack(teams[0], r).toFixed(1))));
     });
 
