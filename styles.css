@@ -155,6 +155,10 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ai-stat-s { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
 .ai-section-head { grid-column: 1 / -1; font-size: 13px; font-weight: 800; color: var(--silver); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 -2px; }
 .ai-section-head.edge { color: var(--accent); }
+.ai-note { grid-column: 1 / -1; background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: var(--radius); padding: 14px 16px; color: var(--silver); font-size: 13.5px; line-height: 1.5; }
+.trend-list { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
+.trend-row { background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; padding: 10px 13px; font-size: 13.5px; color: var(--text); line-height: 1.4; }
+.trend-row b { font-weight: 800; }
 .ai-block { margin-top: 10px; border-top: 1px solid rgba(255,255,255,.07); padding-top: 10px; }
 .ai-pick { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .ai-pick b { color: var(--accent); }

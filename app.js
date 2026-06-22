@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v45';
+const APP_VERSION = 'v46';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -738,7 +738,7 @@ async function teamProfile(sport, teamId) {
     const ms = Number(me?.score?.value ?? me?.score?.displayValue);
     const os = Number(opp?.score?.value ?? opp?.score?.displayValue);
     if (!me || isNaN(ms) || isNaN(os)) return;
-    games.push({ date: ev.date, margin: ms - os, home: me.homeAway === 'home', win: me.winner === true || ms > os });
+    games.push({ date: ev.date, margin: ms - os, pf: ms, pa: os, home: me.homeAway === 'home', win: me.winner === true || ms > os });
   });
   if (!games.length) return null;
   games.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -749,13 +749,21 @@ async function teamProfile(sport, teamId) {
   recent.forEach((g, i) => { const w = i + 1; wsum += g.margin * w; wtot += w; });
   const homeG = games.filter((g) => g.home), roadG = games.filter((g) => !g.home);
   const wp = (arr) => (arr.length ? arr.filter((g) => g.win).length / arr.length : null);
+  const last10arr = games.slice(-10);
+  const last10 = { w: last10arr.filter((g) => g.win).length, l: last10arr.filter((g) => !g.win).length };
+  // current streak: + for wins, - for losses
+  let streak = 0;
+  for (let i = gp - 1; i >= 0; i--) { const w = games[i].win; if (i === gp - 1) { streak = w ? 1 : -1; } else if ((w && streak > 0) || (!w && streak < 0)) { streak += w ? 1 : -1; } else break; }
   return {
     gp,
     winPct: sum((g) => (g.win ? 1 : 0)) / gp,
     pdpg: sum((g) => g.margin) / gp,
+    ppg: sum((g) => g.pf) / gp,
+    papg: sum((g) => g.pa) / gp,
     form: wtot ? wsum / wtot : 0,
     homeWP: wp(homeG),
     roadWP: wp(roadG),
+    last10, streak,
     lastDate: games[gp - 1].date,
   };
 }
@@ -1051,17 +1059,88 @@ async function renderPredictions() {
     return card;
   };
 
-  // Edges to the top (highest confidence first), the rest below.
-  const byConf = (a, b) => (b.p?.conf || 0) - (a.p?.conf || 0);
-  const edges = rows.filter((r) => r.isEdge).sort(byConf);
-  const rest = rows.filter((r) => !r.isEdge).sort(byConf);
+  // Only show games where the model disagrees with the book — the full slate
+  // already lives in the Scores tab. The rest of the space goes to trends.
+  const edges = rows.filter((r) => r.isEdge).sort((a, b) => (b.p?.conf || 0) - (a.p?.conf || 0));
   if (edges.length) {
     container.appendChild(el('div', 'ai-section-head edge', `⚡ Model Edges — off the book (${edges.length})`));
     edges.forEach((r) => container.appendChild(buildCard(r)));
+  } else {
+    container.appendChild(el('div', 'ai-note', '✅ No model edges today — the model agrees with the betting favorite on every game. Check the trends below.'));
   }
-  if (rest.length) {
-    container.appendChild(el('div', 'ai-section-head', edges.length ? 'In line with the book' : 'Today’s picks'));
-    rest.forEach((r) => container.appendChild(buildCard(r)));
+
+  renderAiTrends(container, sport, playable, rows);
+}
+
+// "Trends to pay attention to" — team form/scoring pulled from cached profiles,
+// plus MLB starting-pitcher and hot-hitter props. Fills the space under the
+// edges so AI Picks is useful even on a day with no edges.
+const TOTALS = { mlb: [7.5, 9.5, 'runs'], nba: [216, 233, 'pts'], nfl: [40.5, 48.5, 'pts'], soccer: [1.8, 3.2, 'goals'] };
+async function renderAiTrends(container, sport, games, rows) {
+  if (!games.length) return;
+  // unique teams in today's slate
+  const teams = [], seenT = new Set();
+  games.forEach((g) => [g.home, g.away].forEach((t) => { if (t.id && !seenT.has(t.id)) { seenT.add(t.id); teams.push(t); } }));
+  const profs = await Promise.all(teams.map((t) => teamProfile(sport, t.id).catch(() => null)));
+
+  // ---- team trends ----
+  const tot = TOTALS[sport];
+  const teamTrends = [];
+  teams.forEach((t, i) => {
+    const p = profs[i]; if (!p || p.gp < 6) return;
+    const nm = t.name;
+    const { w, l } = p.last10 || { w: 0, l: 0 };
+    if (w - l >= 4) teamTrends.push({ s: (w - l) + Math.abs(p.streak), t: `🔥 <b>${nm}</b> — ${w}-${l} last 10${p.streak >= 3 ? `, won ${p.streak} straight` : ''}` });
+    else if (l - w >= 4) teamTrends.push({ s: (l - w) + Math.abs(p.streak), t: `❄️ <b>${nm}</b> — ${w}-${l} last 10${p.streak <= -3 ? `, lost ${-p.streak} straight` : ''}` });
+    else if (p.streak >= 4) teamTrends.push({ s: p.streak, t: `🔥 <b>${nm}</b> — riding a ${p.streak}-game win streak` });
+    else if (p.streak <= -4) teamTrends.push({ s: -p.streak, t: `❄️ <b>${nm}</b> — ${-p.streak}-game skid` });
+    if (tot && p.ppg != null && p.papg != null) {
+      const g = p.ppg + p.papg;
+      if (g >= tot[1]) teamTrends.push({ s: (g - tot[1]) * 2, t: `📈 <b>${nm}</b> games averaging ${g.toFixed(1)} ${tot[2]} — overs trending` });
+      else if (g <= tot[0]) teamTrends.push({ s: (tot[0] - g) * 2, t: `📉 <b>${nm}</b> games averaging ${g.toFixed(1)} ${tot[2]} — unders trending` });
+    }
+  });
+  teamTrends.sort((a, b) => b.s - a.s);
+
+  // ---- player props (MLB: probable pitchers + hot hitters) ----
+  const propRows = [];
+  if (sport === 'mlb') {
+    const pitchers = [];
+    games.forEach((g) => [['away', g.away], ['home', g.home]].forEach(([, t]) => {
+      const pr = t.probables?.[0]; const nm = pr?.athlete?.displayName || pr?.athlete?.shortName;
+      if (!nm) return;
+      const era = statVal(pr?.statistics, ['ERA', 'earnedRunAverage']);
+      const whip = statVal(pr?.statistics, ['WHIP', 'walksHitsPerInningPitched']);
+      if (era != null) pitchers.push({ nm, era, whip });
+    }));
+    pitchers.sort((a, b) => a.era - b.era);
+    pitchers.slice(0, 2).forEach((p) => propRows.push(`🎯 <b>${p.nm}</b> on the mound — ${p.era} ERA${p.whip != null ? `, ${p.whip} WHIP` : ''} (Ks / unders watch)`));
+    pitchers.slice(-1).forEach((p) => { if (p.era >= 4.8) propRows.push(`⚠️ <b>${p.nm}</b> starting — ${p.era} ERA${p.whip != null ? `, ${p.whip} WHIP` : ''} (hitter / overs spot)`); });
+
+    // hot hitters from the teams in the edge games (bounded), else top form teams
+    let hitterTeams = rows.filter((r) => r.isEdge).flatMap((r) => [r.g.home, r.g.away]);
+    if (!hitterTeams.length) hitterTeams = teams.slice(0, 4);
+    const uniqH = []; const seenH = new Set();
+    hitterTeams.forEach((t) => { if (t.id && !seenH.has(t.id)) { seenH.add(t.id); uniqH.push(t); } });
+    const hh = await Promise.all(uniqH.slice(0, 6).map((t) => topHitters(t.id, 1).catch(() => [])));
+    hh.forEach((arr, i) => { const p = arr[0]; if (p && parseFloat(p.ops) >= 0.800) propRows.push(`🔥 <b>${p.name}</b> (${uniqH[i].abbr || uniqH[i].name}) — ${ops3n(p.ops)} OPS${p.hr ? `, ${p.hr} HR` : ''} (hits / TB props)`); });
+  }
+
+  // ---- render ----
+  if (teamTrends.length) {
+    container.appendChild(el('div', 'ai-section-head', '📈 Team Trends to Watch'));
+    const box = el('div', 'trend-list');
+    teamTrends.slice(0, 6).forEach((x) => box.appendChild(el('div', 'trend-row', x.t)));
+    container.appendChild(box);
+  }
+  if (propRows.length) {
+    container.appendChild(el('div', 'ai-section-head', '🎯 Player Props to Watch'));
+    const box = el('div', 'trend-list');
+    propRows.slice(0, 6).forEach((x) => box.appendChild(el('div', 'trend-row', x)));
+    container.appendChild(box);
+  }
+  if (!teamTrends.length && !propRows.length) {
+    container.appendChild(el('div', 'ai-note', 'Trends populate once teams have played enough games this season.'));
   }
 }
 
