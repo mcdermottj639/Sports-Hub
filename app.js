@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v27';
+const APP_VERSION = 'v28';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -191,6 +191,33 @@ function closeModal() { modal().classList.add('hidden'); }
 $('#modal-close').addEventListener('click', closeModal);
 $('#modal-x').addEventListener('click', closeModal);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+// News: in-app extractive summary popup (condenses the article text).
+const stripHTML = (html) => { const d = document.createElement('div'); d.innerHTML = html || ''; return (d.textContent || '').replace(/\s+/g, ' ').trim(); };
+const summarize = (text, max = 5) => { const t = stripHTML(text); if (!t) return ''; const s = t.match(/[^.!?]+[.!?]+/g) || [t]; return s.slice(0, max).join(' ').trim(); };
+async function openNewsSummary(a) {
+  if (!a) return;
+  modal().classList.remove('hidden');
+  const img = a.images?.[0]?.url;
+  const when = a.published ? new Date(a.published).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' }) : '';
+  const by = a.byline || '';
+  const href = a.links?.web?.href || a.links?.mobile?.href || '#';
+  $('#modal-body').innerHTML = `${img ? `<img class="news-hero" src="${img}" onerror="this.style.display='none'">` : ''}
+    <h2 class="news-title">${a.headline || ''}</h2>
+    <div class="news-by">${[by, when].filter(Boolean).join(' · ')}</div>
+    <div class="md-section-title">Summary</div>
+    <div class="news-summary" id="news-sum">${a.description || 'Summarizing…'}</div>
+    <a class="fan-btn" href="${href}" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;text-decoration:none">Read full article ↗</a>
+    <div class="ai-why" style="margin-top:8px;opacity:.7">Auto-condensed from the article text.</div>`;
+  const apiHref = a.links?.api?.self?.href || a.links?.api?.news?.href;
+  if (apiHref) {
+    const d = await fetchJSON(apiHref.replace(/^http:/, 'https:'), 6 * 3600000).catch(() => null);
+    const story = d?.story || d?.headlines?.[0]?.story || d?.content || (d?.articles && d.articles[0]?.story);
+    const sum = summarize(story, 5);
+    const elx = document.getElementById('news-sum');
+    if (sum && elx) elx.textContent = sum;
+  }
+}
 
 async function openGameDetail(sport, id, g) {
   modal().classList.remove('hidden');
@@ -1078,7 +1105,7 @@ async function teamSeasonMap(sport, teamId) {
   const cats = lead?.categories || [];
   const stat = {};
   Object.entries(STAT_CATS[sport] || {}).forEach(([abbr, re]) => {
-    const c = cats.find((c) => re.test(`${c.abbreviation || ''}|${c.name || ''}|${c.displayName || ''}`));
+    const c = cats.find((c) => [c.abbreviation, c.name, c.displayName].some((v) => v && re.test(v)));
     (c?.leaders || []).forEach((L) => { const k = idName[refId(L.athlete?.$ref)]; if (k) (stat[k] = stat[k] || {})[abbr] = L.displayValue ?? L.value; });
   });
   return stat;
@@ -1125,12 +1152,15 @@ async function athleteGamelog(sport, athleteId) {
 }
 const numv = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 const ipToOuts = (v) => { const f = numv(v); const w = Math.floor(f); return w * 3 + Math.round((f - w) * 10); };
-// Build a hot/cold tag from the last 20 days vs season.
+// Recent-form trend + a game-log-computed season line (works for everyone,
+// not just team leaders). Hitters: last 20 days. Pitchers: last 5 outings.
 function hotCold(fSport, games, pitcher) {
-  if (!games || games.length < 3) return null;
+  if (!games || games.length < 2) return null;
   const dated = games.filter((g) => g.date && !isNaN(g.date));
   const now = Date.now(), day = 86400000;
   const within = (d) => dated.filter((g) => now - g.date.getTime() <= d * day);
+  const desc = [...dated].sort((a, b) => b.date - a.date);
+  const lastN = (n) => desc.slice(0, n);
   if (fSport === 'baseball') {
     if (pitcher) {
       const agg = (gs) => {
@@ -1138,17 +1168,18 @@ function hotCold(fSport, games, pitcher) {
         gs.forEach((g) => { er += numv(g.dict.earnedRuns ?? g.dict.ER); o += ipToOuts(g.dict.inningsPitched ?? g.dict.IP); bb += numv(g.dict.walks ?? g.dict.BB); h += numv(g.dict.hits ?? g.dict.H); k += numv(g.dict.strikeouts ?? g.dict.K); });
         return o ? { era: (er * 27) / o, whip: ((bb + h) * 3) / o, o, k, g: gs.length, ip: (o / 3).toFixed(1) } : null;
       };
-      const s = agg(games), w = agg(within(20));
+      const s = agg(games), w = agg(lastN(5));
       if (!s) return null;
       const e = (x) => (x ? x.era.toFixed(2) : '–'), wh = (x) => (x ? x.whip.toFixed(2) : '–');
       let tag = '';
-      if (w && w.o >= 12) { const eImp = s.era - w.era, whImp = s.whip - w.whip; tag = (eImp >= 0.75 || whImp >= 0.15) ? 'hot' : (eImp <= -0.75 || whImp <= -0.15) ? 'cold' : ''; }
+      if (w && w.o >= 9) { const eImp = s.era - w.era, whImp = s.whip - w.whip; tag = (eImp >= 0.75 || whImp >= 0.15) ? 'hot' : (eImp <= -0.75 || whImp <= -0.15) ? 'cold' : ''; }
       const detail = [
-        `Last 20d: ${e(w)} ERA · ${wh(w)} WHIP${w ? ` · ${w.k} K in ${w.ip} IP (${w.g}g)` : ''}`,
-        `Season: ${e(s)} ERA · ${wh(s)} WHIP`,
+        `Last 5 outings: ${e(w)} ERA · ${wh(w)} WHIP${w ? ` · ${w.k} K in ${w.ip} IP` : ''}`,
+        `Season: ${e(s)} ERA · ${wh(s)} WHIP · ${s.k} K in ${s.ip} IP`,
       ].join('<br>');
-      const lead = w ? `${e(w)} ERA / ${wh(w)} WHIP (20d)` : '';
-      return { tag, detail, lead };
+      const lead = w ? `${e(w)} ERA · ${wh(w)} WHIP (L5)` : '';
+      const season = `${e(s)} ERA · ${wh(s)} WHIP · ${s.k} K`;
+      return { tag, detail, lead, season };
     }
     // hitters by OPS
     const agg = (gs) => {
@@ -1170,10 +1201,11 @@ function hotCold(fSport, games, pitcher) {
     if (w && w.ab >= 20) { const diff = w.ops - s.ops; tag = diff >= 0.060 ? 'hot' : diff <= -0.060 ? 'cold' : ''; }
     const detail = [
       `Last 20d: ${o(w)} OPS · ${a(w)} AVG${w ? ` · ${w.hr} HR · ${w.rbi} RBI (${w.h}-${w.ab}, ${w.g}g)` : ''}`,
-      `Season: ${o(s)} OPS · ${a(s)} AVG`,
+      `Season: ${o(s)} OPS · ${a(s)} AVG · ${s.hr} HR · ${s.rbi} RBI`,
     ].join('<br>');
     const lead = w ? `${o(w)} OPS (20d)` : '';
-    return { tag, detail, lead };
+    const season = `${o(s)} OPS · ${a(s)} AVG · ${s.hr} HR · ${s.rbi} RBI`;
+    return { tag, detail, lead, season };
   }
   return null; // football trends added when the season has data
 }
@@ -1202,12 +1234,12 @@ async function fillSeasonStats(roster, fSport) {
     const leadEl = document.getElementById(`flead-${i}`);
     if (!seasEl) return;
     if (!p.team) { seasEl.textContent = 'set a team to load stats'; return; }
-    const season = seasonLine(fSport, p, (sMaps[p.team] || {})[nameKey(p.name)]);
-    seasEl.innerHTML = season ? `<b>Season:</b> ${season}` : 'season stats unavailable';
+    let season = seasonLine(fSport, p, (sMaps[p.team] || {})[nameKey(p.name)]);
     const aid = (idMaps[p.team] || {})[nameKey(p.name)];
     if (aid) {
       const hc = hotCold(fSport, await athleteGamelog(sport, aid).catch(() => null), isPitcher(p));
       if (hc) {
+        if (!season && hc.season) season = hc.season; // gamelog fallback for non-leaders
         if (trendEl) trendEl.innerHTML = `<div class="hc ${hc.tag}"><span class="hc-tag">${hc.tag === 'hot' ? '🔥 Hot' : hc.tag === 'cold' ? '🥶 Cold' : '📊 Steady'}</span><span class="hc-detail">${hc.detail}</span></div>`;
         if (arrowEl) { arrowEl.textContent = hc.tag === 'hot' ? '▲' : hc.tag === 'cold' ? '▼' : '▬'; arrowEl.className = `arrow ${hc.tag || 'flat'}`; }
         if (leadEl) leadEl.textContent = hc.lead || '';
@@ -1215,6 +1247,7 @@ async function fillSeasonStats(roster, fSport) {
         else if (hc.tag === 'cold' && p.status !== 'il') cold.push({ name: p.name, lead: hc.lead });
       }
     }
+    seasEl.innerHTML = season ? `<b>Season:</b> ${season}` : 'season stats unavailable';
   }));
 
   // snapshot cards
@@ -1327,19 +1360,21 @@ async function renderEagles() {
       (oldest ? card(`${oldest.age}`, `Oldest · ${oldest.displayName}`) : '')
     : card('–', 'Roster loading');
 
-  // news
+  // news — tap a headline for an in-app summary instead of leaving the app
   const articles = newsR.status === 'fulfilled' ? (newsR.value.articles || []) : [];
   const newsEl = $('#eagles-news');
-  newsEl.innerHTML = !articles.length
-    ? '<div class="empty">No recent Eagles news right now — check back as camp opens.</div>'
-    : articles.slice(0, 10).map((a) => {
-        const href = a.links?.web?.href || a.links?.mobile?.href || '#';
-        const img = a.images?.[0]?.url;
-        const when = a.published ? new Date(a.published).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
-        return `<a class="news-item" href="${href}" target="_blank" rel="noopener">
-          ${img ? `<img src="${img}" alt="" onerror="this.style.display='none'">` : ''}
-          <div><div class="nh">${a.headline || ''}</div><div class="nd">${a.description || ''}</div><div class="nt">${when}</div></div></a>`;
-      }).join('');
+  if (!articles.length) {
+    newsEl.innerHTML = '<div class="empty">No recent Eagles news right now — check back as camp opens.</div>';
+  } else {
+    newsEl.innerHTML = articles.slice(0, 12).map((a, idx) => {
+      const img = a.images?.[0]?.url;
+      const when = a.published ? new Date(a.published).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+      return `<div class="news-item" data-news="${idx}">
+        ${img ? `<img src="${img}" alt="" onerror="this.style.display='none'">` : ''}
+        <div><div class="nh">${a.headline || ''}</div><div class="nd">${a.description || ''}</div><div class="nt">${when} · tap for summary</div></div></div>`;
+    }).join('');
+    newsEl.querySelectorAll('.news-item').forEach((it) => { it.onclick = () => openNewsSummary(articles[+it.dataset.news]); });
+  }
 
   // quick-jump nav widgets
   const navItems = [['sec-stats', 'Stats'], ['sec-leaders', 'Leaders'], ['sec-nextopp', 'Next Opp'], ['sec-schedule', 'Schedule'], ['sec-depth', 'Depth'], ['sec-news', 'News'], ['sec-staff', 'Staff']];
