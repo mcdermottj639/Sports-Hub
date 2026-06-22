@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v38';
+const APP_VERSION = 'v39';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -110,25 +110,32 @@ function getStat(stats, names) {
 }
 function normStandings(json) {
   const rows = [];
-  const children = json.children || (json.standings ? [json] : []);
-  children.forEach((child) => {
-    const groupName = child.name || child.abbreviation || 'Standings';
-    const entries = child.standings?.entries || child.entries || [];
-    entries.forEach((e, i) => {
-      const t = e.team || {};
-      const stats = e.stats || [];
-      rows.push({
-        group: groupName,
-        rank: getStat(stats, ['rank', 'playoffSeed']) ?? i + 1,
-        team: t.displayName || t.name,
-        logo: t.logos?.[0]?.href || t.logo || null,
-        wins: getStat(stats, ['wins']),
-        losses: getStat(stats, ['losses']),
-        points: getStat(stats, ['points']),
-        gp: getStat(stats, ['gamesPlayed']),
-      });
-    });
-  });
+  const buildRow = (e, i, league, division) => {
+    const t = e.team || {};
+    const stats = e.stats || [];
+    return {
+      league: league || '', division: division || 'Standings', group: division || league || 'Standings',
+      rank: getStat(stats, ['rank', 'playoffSeed']) ?? i + 1,
+      team: t.displayName || t.name,
+      logo: t.logos?.[0]?.href || t.logo || null,
+      wins: Number(getStat(stats, ['wins'])) || 0,
+      losses: Number(getStat(stats, ['losses'])) || 0,
+      points: getStat(stats, ['points']),
+      gp: getStat(stats, ['gamesPlayed']),
+    };
+  };
+  const visit = (node, ancestors) => {
+    const path = [...ancestors, node];
+    const entries = node.standings?.entries || node.entries;
+    if (entries && entries.length) {
+      const league = (path[0] && (path[0].name || path[0].displayName)) || '';
+      const division = node.name || node.displayName || node.abbreviation || league || 'Standings';
+      entries.forEach((e, i) => rows.push(buildRow(e, i, league, division)));
+    }
+    (node.children || []).forEach((ch) => visit(ch, path));
+  };
+  (json.children || []).forEach((c) => visit(c, []));
+  if (!rows.length && json.standings?.entries) json.standings.entries.forEach((e, i) => rows.push(buildRow(e, i, '', 'Standings')));
   return rows.filter((r) => r.team);
 }
 
@@ -529,34 +536,68 @@ async function renderGolfLeaderboard(container) {
 }
 
 // --- STANDINGS ------------------------------------------------------------
+const winPct = (r) => { const g = (r.wins || 0) + (r.losses || 0); return g ? r.wins / g : 0; };
+const gamesBack = (lead, r) => (((lead.wins || 0) - (r.wins || 0)) + ((r.losses || 0) - (lead.losses || 0))) / 2;
+
 async function renderStandings() {
-  buildChips($('#standings-filter'), state.standingsSport, (s) => { state.standingsSport = s; renderStandings(); }, sortedSports({ teamOnly: true }));
+  const sport = state.standingsSport;
+  buildChips($('#standings-filter'), sport, (s) => { state.standingsSport = s; renderStandings(); }, sortedSports({ teamOnly: true }));
   const content = $('#standings-content');
   content.innerHTML = '<div class="empty">Loading…</div>';
   let rows = [];
-  try { rows = await getStandings(state.standingsSport); } catch (_) {}
+  try { rows = await getStandings(sport); } catch (_) {}
   if (!rows.length) { content.innerHTML = '<div class="empty">Standings unavailable right now.</div>'; return; }
 
-  const soccer = state.standingsSport === 'soccer';
-  const groups = {};
-  rows.forEach((r) => (groups[r.group || 'Standings'] = groups[r.group || 'Standings'] || []).push(r));
-  content.innerHTML = '';
-  const favs = favSet(state.standingsSport);
-  for (const [name, grows] of Object.entries(groups)) {
-    content.appendChild(el('div', 'standings-group', name));
-    const table = el('table');
-    table.innerHTML = `<thead><tr><th>#</th><th>Team</th><th class="num">W</th><th class="num">L</th><th class="num">${soccer ? 'Pts' : 'GP'}</th></tr></thead>`;
+  const soccer = sport === 'soccer';
+  const favs = favSet(sport);
+  const logoFor = (r) => (r.logo ? `<img class="tlogo" src="${r.logo}" onerror="this.style.display='none'"/>` : '');
+
+  // build a table for a set of rows
+  const table = (teams, lastCol, lastVal) => {
+    const t = el('table');
+    t.innerHTML = `<thead><tr><th>#</th><th>Team</th><th class="num">W</th><th class="num">L</th><th class="num">${lastCol}</th></tr></thead>`;
     const tbody = el('tbody');
-    grows.forEach((r) => {
+    teams.forEach((r, i) => {
       const tr = el('tr', favs.includes((r.team || '').toLowerCase()) ? 'fav' : '');
-      const last = soccer ? (r.points ?? '–') : (r.gp ?? '–');
-      const logo = r.logo ? `<img class="tlogo" src="${r.logo}" onerror="this.style.display='none'"/>` : '';
-      tr.innerHTML = `<td>${r.rank}</td><td>${logo}${r.team}</td><td class="num">${r.wins ?? '–'}</td><td class="num">${r.losses ?? '–'}</td><td class="num">${last}</td>`;
+      tr.innerHTML = `<td>${r._rank ?? r.rank ?? i + 1}</td><td>${logoFor(r)}${r.team}</td><td class="num">${r.wins ?? '–'}</td><td class="num">${r.losses ?? '–'}</td><td class="num">${lastVal(r)}</td>`;
       tbody.appendChild(tr);
     });
-    table.appendChild(tbody);
-    content.appendChild(table);
-  }
+    t.appendChild(tbody);
+    return t;
+  };
+
+  content.innerHTML = '';
+
+  // group by league -> division
+  const byLeague = {};
+  rows.forEach((r) => { const lg = r.league || 'Standings'; (byLeague[lg] = byLeague[lg] || {}); (byLeague[lg][r.division] = byLeague[lg][r.division] || []).push(r); });
+  const wildcardSport = sport === 'mlb' || sport === 'nfl';
+  const wcSpots = sport === 'nfl' ? 3 : 3;
+
+  Object.entries(byLeague).forEach(([league, divs]) => {
+    // division tables
+    Object.entries(divs).forEach(([divName, teams]) => {
+      teams.sort((a, b) => winPct(b) - winPct(a) || (b.wins || 0) - (a.wins || 0));
+      teams.forEach((r, i) => (r._rank = i + 1));
+      content.appendChild(el('div', 'standings-group', divName));
+      content.appendChild(table(teams, soccer ? 'Pts' : 'GB', (r) => soccer ? (r.points ?? '–') : (r._rank === 1 ? '—' : gamesBack(teams[0], r).toFixed(1))));
+    });
+
+    // wildcard table (non-division-leaders ranked by win %)
+    if (wildcardSport && Object.keys(divs).length >= 2) {
+      const pool = [];
+      Object.values(divs).forEach((teams) => teams.slice(1).forEach((r) => pool.push(r)));
+      pool.sort((a, b) => winPct(b) - winPct(a) || (b.wins || 0) - (a.wins || 0));
+      pool.forEach((r, i) => (r._rank = i + 1));
+      if (pool.length) {
+        content.appendChild(el('div', 'standings-group wc', `${league} Wild Card`));
+        const cutoff = pool[wcSpots - 1] || pool[pool.length - 1];
+        const t = table(pool, 'GB', (r) => r._rank <= wcSpots ? (r._rank === wcSpots ? '—' : `+${(-gamesBack(cutoff, r)).toFixed(1)}`) : gamesBack(cutoff, r).toFixed(1));
+        t.querySelectorAll('tbody tr').forEach((tr, i) => { if (i === wcSpots) tr.classList.add('wc-cut'); });
+        content.appendChild(t);
+      }
+    }
+  });
 }
 
 // --- AI PICKS (multi-factor model) ---------------------------------------
