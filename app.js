@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v40';
+const APP_VERSION = 'v41';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -382,7 +382,46 @@ function renderGames(container, bySport) {
     container.appendChild(el('div', 'empty', 'No games for this selection.'));
     return;
   }
-  all.forEach(({ sport, g }) => container.appendChild(gameCard(sport, g)));
+  const entries = [];
+  all.forEach(({ sport, g }) => { const c = gameCard(sport, g); entries.push({ sport, g, card: c }); container.appendChild(c); });
+  tagEdges(entries); // progressively flag games where the model disagrees with the line
+}
+
+// Does the model disagree with the betting favorite? If so there's a value
+// "edge" worth surfacing before you tap in. Pre-game only — odds come right
+// off the scoreboard event, so no extra request just to know the favorite.
+async function gameEdge(sport, g) {
+  if (gameState(g) !== 'scheduled') return null;
+  if (!g.home?.id || !g.away?.id) return null;
+  const info = normOdds(g.odds, g.home.name, g.away.name);
+  if (!info || !info.favName) return null;
+  let pred = null;
+  try { pred = await predictGame(sport, g); } catch (_) { return null; }
+  if (!pred || pred.thin) return null;
+  if (pred.winner.name === info.favName) return null; // model agrees with the line
+  const side = pred.winner.name === g.home.name ? g.home : g.away;
+  return { abbr: side.abbr || (side.name || '').split(' ').pop(), name: side.name, conf: pred.conf, fav: info.favName };
+}
+
+// Run gameEdge across a list of {sport, g, card} with light concurrency and
+// stamp an edge badge onto any card where the model bucks the favorite.
+async function tagEdges(entries) {
+  let i = 0;
+  const worker = async () => {
+    while (i < entries.length) {
+      const { sport, g, card } = entries[i++];
+      let edge = null;
+      try { edge = await gameEdge(sport, g); } catch (_) {}
+      if (edge && card.isConnected) {
+        const b = el('div', 'edge-badge', `⚡ Model edge: ${edge.abbr} <span class="edge-conf">${edge.conf}%</span>`);
+        b.title = `Model likes ${edge.name} (${edge.conf}%) — market favors ${edge.fav}`;
+        const meta = card.querySelector('.game-meta');
+        if (meta) meta.insertAdjacentElement('afterend', b); else card.appendChild(b);
+        card.classList.add('has-edge');
+      }
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
 }
 
 // --- demo fallback (only if the network is unavailable) -------------------
