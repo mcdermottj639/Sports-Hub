@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v25';
+const APP_VERSION = 'v26';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -958,23 +958,32 @@ async function renderFantasy() {
       const pg = playerGame(p);
       const gl = gameLabel(pg);
       const ln = lineFor(p);
-      const lineHTML = ln ? ` <b style="color:var(--accent)">— ${ln.text}</b>` : '';
-      const row = el('div', 'fan-row');
+      const teamAbbr = MLB_ABBR[p.team] || (p.team ? p.team.split(' ').slice(-1)[0].slice(0, 3).toUpperCase() : '');
+      const item = el('div', 'fan-item');
       const teamSel = `<select data-i="${i}" data-f="team"><option value="">— set team —</option>${teamOpts.map((t) => `<option ${t === p.team ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
       const statSel = `<select data-i="${i}" data-f="status">${['active','bench','il'].map((s) => `<option value="${s}" ${s === p.status ? 'selected' : ''}>${s === 'active' ? 'Starter' : s === 'bench' ? 'Bench' : 'IL'}</option>`).join('')}</select>`;
-      row.innerHTML = `
-        <div><div class="pname">${p.name}</div><div class="ppos">${p.slot} · ${p.pos || ''}</div>
-          <div class="seas" id="fseas-${i}">${p.team ? 'season stats…' : ''}</div>
-          <div class="pgame ${gl.cls}">${gl.text}${lineHTML}</div></div>
-        <div>${teamSel}</div>
-        <div>${statSel}</div>
-        <button class="rm" data-i="${i}" title="Remove">×</button>`;
-      container.appendChild(row);
+      item.innerHTML = `
+        <div class="fan-head">
+          <span class="arrow" id="farrow-${i}"></span>
+          <span class="fh-name">${p.name}</span>
+          <span class="fh-meta">${p.slot}${teamAbbr ? ' · ' + teamAbbr : ''}</span>
+          <span class="fh-lead" id="flead-${i}"></span>
+          <span class="chev">▸</span>
+        </div>
+        <div class="fan-body">
+          <div class="pgame ${gl.cls}">${gl.text}${ln ? ` <b style="color:var(--accent)">— ${ln.text}</b>` : ''}</div>
+          <div class="seas" id="fseas-${i}">${p.team ? 'loading season stats…' : 'set a team to load stats'}</div>
+          <div id="ftrend-${i}"></div>
+          <div class="fan-edit"><label>Team ${teamSel}</label><label>Role ${statSel}</label><button class="rm" data-i="${i}">Remove</button></div>
+        </div>`;
+      item.querySelector('.fan-head').onclick = () => item.classList.toggle('open');
+      container.appendChild(item);
     });
   });
 
-  // wire row controls
+  // wire row controls (stop clicks from toggling the row)
   container.querySelectorAll('select').forEach((sel) => {
+    sel.onclick = (e) => e.stopPropagation();
     sel.onchange = () => {
       const r = loadRoster(fanState.sport);
       r[+sel.dataset.i][sel.dataset.f] = sel.value;
@@ -983,7 +992,8 @@ async function renderFantasy() {
     };
   });
   container.querySelectorAll('.rm').forEach((btn) => {
-    btn.onclick = () => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
       const r = loadRoster(fanState.sport);
       r.splice(+btn.dataset.i, 1);
       saveRoster(fanState.sport, r);
@@ -1184,22 +1194,25 @@ async function fillSeasonStats(roster, fSport) {
 
   const hot = [], cold = [];
   await Promise.all(roster.map(async (p, i) => {
-    const elx = document.getElementById(`fseas-${i}`);
-    if (!elx) return;
-    if (!p.team) { elx.textContent = ''; return; }
+    const seasEl = document.getElementById(`fseas-${i}`);
+    const trendEl = document.getElementById(`ftrend-${i}`);
+    const arrowEl = document.getElementById(`farrow-${i}`);
+    const leadEl = document.getElementById(`flead-${i}`);
+    if (!seasEl) return;
+    if (!p.team) { seasEl.textContent = 'set a team to load stats'; return; }
     const season = seasonLine(fSport, p, (sMaps[p.team] || {})[nameKey(p.name)]);
-    let hcHTML = '';
+    seasEl.innerHTML = season ? `<b>Season:</b> ${season}` : 'season stats unavailable';
     const aid = (idMaps[p.team] || {})[nameKey(p.name)];
     if (aid) {
       const hc = hotCold(fSport, await athleteGamelog(sport, aid).catch(() => null), isPitcher(p));
       if (hc) {
-        const icon = hc.tag === 'hot' ? '🔥 Hot' : hc.tag === 'cold' ? '🥶 Cold' : '📊 Trend';
-        hcHTML = `<div class="hc ${hc.tag}"><span class="hc-tag">${icon}</span><span class="hc-detail">${hc.detail}</span></div>`;
+        if (trendEl) trendEl.innerHTML = `<div class="hc ${hc.tag}"><span class="hc-tag">${hc.tag === 'hot' ? '🔥 Hot' : hc.tag === 'cold' ? '🥶 Cold' : '📊 Steady'}</span><span class="hc-detail">${hc.detail}</span></div>`;
+        if (arrowEl) { arrowEl.textContent = hc.tag === 'hot' ? '▲' : hc.tag === 'cold' ? '▼' : '▬'; arrowEl.className = `arrow ${hc.tag || 'flat'}`; }
+        if (leadEl) leadEl.textContent = hc.lead || '';
         if (hc.tag === 'hot') hot.push({ name: p.name, lead: hc.lead });
         else if (hc.tag === 'cold' && p.status !== 'il') cold.push({ name: p.name, lead: hc.lead });
       }
     }
-    elx.innerHTML = (season ? `<div>${season}</div>` : '') + hcHTML;
   }));
 
   // snapshot cards
