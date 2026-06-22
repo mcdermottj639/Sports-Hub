@@ -142,15 +142,12 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ai-result { font-size: 12px; font-weight: 700; margin-top: 6px; }
 .ai-result.win { color: var(--accent); }
 .ai-result.loss { color: var(--live); }
-.jump-nav { display: flex; gap: 6px; overflow-x: auto; padding: 10px 0 4px; -webkit-overflow-scrolling: touch; position: sticky; top: 0; background: rgba(14,20,22,.96); backdrop-filter: blur(8px); z-index: 4; }
+.jump-nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 0 6px; }
 .jump-nav .chip { flex: 0 0 auto; }
 .section-title { scroll-margin-top: 64px; }
-/* App-wide rule: collapsed section headers are compact tappable bars, so a
-   page's sections are all visible at once and you tap one to expand it. */
-.acc-h { cursor: pointer; display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; padding: 10px 13px; margin: 6px 0 !important; font-size: 13px; }
-.acc-h.open { background: var(--card-2); border-color: rgba(58,210,159,.25); }
-.acc-h .sec-chev { float: none; margin-left: auto; font-size: 12px; color: var(--muted); transition: transform .15s ease; }
-.acc-h.open .sec-chev { transform: rotate(90deg); }
+.acc-h { cursor: pointer; }
+.acc-h .sec-chev { float: right; font-size: 12px; color: var(--muted); transition: transform .15s ease; }
+.acc-h.open .sec-chev { transform: rotate(90deg); display: inline-block; }
 .pick-btns { display: flex; gap: 8px; margin-top: 10px; }
 .pick-btns button {
   flex: 1; background: var(--card-2); color: var(--text); border: 1px solid rgba(255,255,255,.1);
@@ -169,7 +166,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .setup-card a { color: var(--accent); }
 
 /* Eagles tab */
-.eagles-nav { display: flex; gap: 6px; overflow-x: auto; padding: 12px 0 4px; -webkit-overflow-scrolling: touch; position: sticky; top: 0; background: rgba(14,20,22,.96); backdrop-filter: blur(8px); z-index: 4; }
+.eagles-nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0 6px; }
 .eagles-nav .chip { flex: 0 0 auto; }
 #eagles .section-title { scroll-margin-top: 60px; }
 .depth-tabs { margin-bottom: 12px; }
