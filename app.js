@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v29';
+const APP_VERSION = 'v30';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -514,6 +514,8 @@ async function renderStandings() {
     table.appendChild(tbody);
     content.appendChild(table);
   }
+  // collapse divisions into tappable bars (first one open)
+  if (Object.keys(groups).length > 1) makeAccordion(content, '.standings-group', 1);
 }
 
 // --- AI PICKS (multi-factor model) ---------------------------------------
@@ -1394,15 +1396,9 @@ async function renderEagles() {
     newsEl.querySelectorAll('.news-item').forEach((it) => { it.onclick = () => openNewsSummary(articles[+it.dataset.news]); });
   }
 
-  // quick-jump nav widgets
-  const navItems = [['sec-stats', 'Stats'], ['sec-leaders', 'Leaders'], ['sec-nextopp', 'Next Opp'], ['sec-schedule', 'Schedule'], ['sec-depth', 'Depth'], ['sec-news', 'News'], ['sec-staff', 'Staff']];
-  const navEl = $('#eagles-nav');
-  navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
-  navEl.querySelectorAll('button').forEach((b) =>
-    (b.onclick = () => { const t = document.getElementById(b.dataset.target); if (t?._accSet) t._accSet(true); t?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
-
-  // collapsible sections (scannable; tap a header to expand)
-  makeAccordion(document.getElementById('eagles'), '.section-title', 2);
+  // collapsible sections — all collapsed so every section is visible at once
+  $('#eagles-nav').innerHTML = '';
+  makeAccordion(document.getElementById('eagles'), '.section-title', 0);
 
   // fire off the heavier analytics in parallel; each renders independently
   renderEaglesDepth(idMap, groups);
