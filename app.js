@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v37';
+const APP_VERSION = 'v38';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -439,12 +439,24 @@ function renderHomeByLeague(container, games) {
     container.appendChild(grid);
   };
 
-  const sportsWithGames = sortedSports({ teamOnly: true }).filter((s) => (games[s] || []).length);
+  const teamSports = sortedSports({ teamOnly: true });
+  const favFirst = (s) => (a, b) => (isFav(s, b) ? 1 : 0) - (isFav(s, a) ? 1 : 0);
+
+  // live games across all leagues, pulled to the top
+  const live = [];
+  teamSports.forEach((s) => (games[s] || []).forEach((g) => { if (gameState(g) === 'live') live.push({ s, g }); }));
+  if (live.length) {
+    live.sort((a, b) => (isFav(b.s, b.g) ? 1 : 0) - (isFav(a.s, a.g) ? 1 : 0));
+    addSection('home-live', '🔴 Live', live.map(({ s, g }) => gameCard(s, g)));
+  }
+
+  // the rest, grouped by league (in-season first)
+  const sportsWithGames = teamSports.filter((s) => (games[s] || []).some((g) => gameState(g) !== 'live'));
   sportsWithGames.forEach((s) => {
-    const cards = [...(games[s] || [])].sort((a, b) => (isFav(s, b) ? 1 : 0) - (isFav(s, a) ? 1 : 0)).map((g) => gameCard(s, g));
+    const cards = [...(games[s] || [])].filter((g) => gameState(g) !== 'live').sort(favFirst(s)).map((g) => gameCard(s, g));
     addSection(`home-${s}`, `${LEAGUES[s].emoji} ${LEAGUES[s].label}`, cards);
   });
-  if (!sportsWithGames.length) container.appendChild(el('div', 'empty', 'No games today for your sports.'));
+  if (!live.length && !sportsWithGames.length) container.appendChild(el('div', 'empty', 'No games today for your sports.'));
 
   // golf as its own section (it's a leaderboard, not team games)
   if (SEASON_MONTHS.golf.includes(new Date().getMonth())) addGolfHomeSection(addSection);
