@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v47';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -77,6 +77,13 @@ const timeAgo = (date) => {
   if (m < 60) return `${m}m ago`;
   const h = Math.round(m / 60); if (h < 24) return `${h}h ago`;
   const days = Math.round(h / 24); return days === 1 ? 'yesterday' : `${days}d ago`;
+};
+// Pre-game label: ESPN sometimes returns a generic "Scheduled"/"TBD" string
+// instead of a kickoff time (common for soccer), so fall back to the time.
+const scheduledLabel = (g) => {
+  const t = (g.statusText || '').trim();
+  if (t && !/scheduled|tbd|pre[- ]?game/i.test(t)) return t;
+  return fmtTime(g.date) || t || 'Scheduled';
 };
 
 // --- ESPN normalizers -----------------------------------------------------
@@ -196,7 +203,7 @@ function gameCard(sport, g) {
   const cfg = LEAGUES[sport];
   const win = winnerName(g);
   const card = el('div', 'game-card' + (isFav(sport, g) ? ' fav' : ''));
-  const label = st === 'live' ? (g.statusText || 'LIVE') : st === 'final' ? 'FINAL' : g.statusText || fmtTime(g.date) || 'Scheduled';
+  const label = st === 'live' ? (g.statusText || 'LIVE') : st === 'final' ? 'FINAL' : scheduledLabel(g);
   const cls = st === 'live' ? 'status live' : st === 'final' ? 'status final' : 'status';
   const row = (team) => {
     const w = win && win !== 'TIE' && win === team.name;
@@ -479,7 +486,7 @@ async function renderHome() {
   html += '<div class="featured-line">';
   if (fg) {
     const s = gameState(fg);
-    const lbl = s === 'live' ? (fg.statusText || 'LIVE') : s === 'final' ? 'Final' : fg.statusText || fmtTime(fg.date);
+    const lbl = s === 'live' ? (fg.statusText || 'LIVE') : s === 'final' ? 'Final' : scheduledLabel(fg);
     html += `<div class="featured-game"><div><strong>${fg.away.name}</strong> ${fg.away.score ?? ''} @ <strong>${fg.home.name}</strong> ${fg.home.score ?? ''}</div>
       <span class="status ${s === 'live' ? 'live' : s === 'final' ? 'final' : ''}">${lbl}</span></div>`;
   } else {
