@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v42';
+const APP_VERSION = 'v43';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -70,6 +70,13 @@ const ymd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0'
 const fmtTime = (date) => {
   const d = new Date(date);
   return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+};
+const timeAgo = (date) => {
+  const d = new Date(date); if (isNaN(d)) return '';
+  const m = Math.max(0, Math.round((Date.now() - d) / 60000));
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60); if (h < 24) return `${h}h ago`;
+  const days = Math.round(h / 24); return days === 1 ? 'yesterday' : `${days}d ago`;
 };
 
 // --- ESPN normalizers -----------------------------------------------------
@@ -474,6 +481,45 @@ async function renderHome() {
   html += '</div>';
   $('#featured').innerHTML = html;
   renderHomeByLeague($('#home-games'), games);
+  renderHomeHeadline();
+}
+
+// One big sports headline up top. ESPN orders each league's news with its
+// lead story first, so we grab those across the in-season leagues and show
+// the single newest — i.e. the biggest headline going right now.
+async function renderHomeHeadline() {
+  const box = $('#home-headline');
+  if (!box) return;
+  const sports = sortedSports({ teamOnly: true });
+  const results = await Promise.allSettled(
+    sports.map((s) => fetchJSON(`${SITE}/${LEAGUES[s].espnPath}/news`, 10 * 60000))
+  );
+  const leads = [];
+  results.forEach((r, i) => {
+    if (r.status !== 'fulfilled') return;
+    const arts = (r.value.articles || []).filter((a) => a.type !== 'Media' && (a.headline || a.description));
+    if (arts[0]) leads.push({ sport: sports[i], a: arts[0] });
+  });
+  if (!leads.length) { box.innerHTML = ''; return; }
+  // newest lead story wins; ignore anything older than ~3 days so it stays current
+  leads.sort((x, y) => new Date(y.a.published || 0) - new Date(x.a.published || 0));
+  const top = leads.find((l) => Date.now() - new Date(l.a.published || 0) < 3 * 86400000) || leads[0];
+  const { sport, a } = top;
+  const cfg = LEAGUES[sport];
+  const img = a.images?.[0]?.url;
+  const when = a.published ? timeAgo(a.published) : '';
+  const card = el('div', 'headline-card');
+  card.innerHTML = `
+    ${img ? `<div class="headline-img" style="background-image:url('${img}')"></div>` : ''}
+    <div class="headline-body">
+      <div class="headline-eyebrow">📰 Top Story · ${cfg.emoji} ${cfg.label}${when ? ` · ${when}` : ''}</div>
+      <div class="headline-title">${a.headline || ''}</div>
+      ${a.description ? `<div class="headline-desc">${a.description}</div>` : ''}
+      <div class="tap-hint" style="text-align:left;margin-top:8px">tap to read →</div>
+    </div>`;
+  card.onclick = () => openNewsSummary(a);
+  box.innerHTML = '';
+  box.appendChild(card);
 }
 
 // Today's games grouped by league, with a jump-nav to each league section.
