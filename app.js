@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v32';
+const APP_VERSION = 'v33';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -171,9 +171,10 @@ function gameCard(sport, g) {
   const cls = st === 'live' ? 'status live' : st === 'final' ? 'status final' : 'status';
   const row = (team) => {
     const w = win && win !== 'TIE' && win === team.name;
+    const score = st === 'scheduled' ? '–' : (team.score != null ? team.score : '–');
     return `<div class="team-row ${w ? 'winner' : ''}">
       <span class="team">${logoHTML(team)}${team.name || 'TBD'}</span>
-      <span class="score">${team.score != null ? team.score : '–'}</span></div>`;
+      <span class="score">${score}</span></div>`;
   };
   card.innerHTML = `
     <div class="game-meta">
