@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v44';
+const APP_VERSION = 'v45';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -177,6 +177,10 @@ function winnerName(g) {
   if (g.home.score === g.away.score) return 'TIE';
   return g.home.score > g.away.score ? g.home.name : g.away.name;
 }
+// 2026 World Cup hosts — the only soccer sides with a true home field; every
+// other World Cup game is on a neutral pitch, so home/away carries no edge.
+const WC_HOSTS = ['usa', 'united states', 'united states of america', 'mexico', 'canada'];
+const isWorldCupHost = (name) => WC_HOSTS.includes((name || '').trim().toLowerCase());
 const favSet = (sport) => (LEAGUES[sport].fav || []).map((t) => t.toLowerCase());
 const isFav = (sport, g) =>
   favSet(sport).includes((g.home.name || '').toLowerCase()) || favSet(sport).includes((g.away.name || '').toLowerCase());
@@ -312,7 +316,10 @@ function renderGameDetail(sport, data, pred, extra, g) {
   };
   const st = comp.status?.type || {};
   const live = st.state === 'in';
-  let html = `<div class="md-head">${teamCell(away)}<div style="color:var(--muted);font-weight:700">@</div>${teamCell(home)}</div>
+  // neutral-site World Cup games read "vs" rather than away @ home
+  const neutral = sport === 'soccer' && !isWorldCupHost(home.team?.displayName || home.team?.name);
+  const sep = neutral ? 'vs' : '@';
+  let html = `<div class="md-head">${teamCell(away)}<div style="color:var(--muted);font-weight:700">${sep}</div>${teamCell(home)}</div>
     <div class="md-status ${live ? 'live' : ''}">${st.detail || st.shortDetail || ''}</div>`;
 
   // AI pick headline first (open), then collapsible detail sections
@@ -897,7 +904,12 @@ async function predictGame(sport, g) {
     add('Record', 1.1 * (hf.winPct - af.winPct), `${(hf.winPct * 100).toFixed(0)}% vs ${(af.winPct * 100).toFixed(0)}% win`);
     add('Scoring margin', 0.9 * clamp((hf.pdpg - af.pdpg) / scale, -3, 3), `${hf.pdpg >= 0 ? '+' : ''}${hf.pdpg.toFixed(1)} vs ${af.pdpg >= 0 ? '+' : ''}${af.pdpg.toFixed(1)} per game`);
     add('Recent form', 0.4 * clamp((hf.form - af.form) / scale, -3, 3), `last 5: ${hf.form >= 0 ? '+' : ''}${hf.form.toFixed(1)} vs ${af.form >= 0 ? '+' : ''}${af.form.toFixed(1)}`);
-    if (hf.homeWP != null && af.roadWP != null) {
+    if (sport === 'soccer') {
+      // World Cup is played on neutral fields, so there's no real home edge —
+      // except the host nations (USA, Mexico, Canada in 2026) actually playing
+      // at home. Everyone else: no home/road advantage either way.
+      if (isWorldCupHost(g.home.name)) add('Host nation', 0.30, `${g.home.name} at home`);
+    } else if (hf.homeWP != null && af.roadWP != null) {
       add('Home/road split', 1.0 * (hf.homeWP - af.roadWP), `home ${(hf.homeWP * 100).toFixed(0)}% vs road ${(af.roadWP * 100).toFixed(0)}%`);
     } else { add('Home field', 0.28, 'standard home edge'); }
     const day = 86400000;
