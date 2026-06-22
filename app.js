@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v47';
+const APP_VERSION = 'v48';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -110,6 +110,7 @@ function normEvent(ev) {
     date: ev.date,
     state: st.state, // 'pre' | 'in' | 'post'
     statusText: st.shortDetail || st.detail || st.description,
+    situation: comp.situation || null,
     home: teamObj(home),
     away: teamObj(away),
     odds: comp.odds?.[0] || null,
@@ -309,6 +310,44 @@ function oddsSectionHTML(info, awayAbbr, homeAbbr, pred) {
     <div class="ai-why" style="opacity:.7;margin-top:2px">Odds for reference only — not betting advice.</div>`;
 }
 
+// Live game situation panel — baseball gets a bases diamond with count/outs;
+// other sports show the last play. Pulls from the summary feed (freshest),
+// falling back to the scoreboard situation carried on the game object.
+function liveSituationHTML(sport, data, comp, g) {
+  const sit = data.situation || comp.situation || g?.situation;
+  if (!sit) return '';
+  if (sport === 'mlb') {
+    const on1 = !!sit.onFirst, on2 = !!sit.onSecond, on3 = !!sit.onThird;
+    const b = sit.balls ?? 0, s = sit.strikes ?? 0, o = sit.outs ?? 0;
+    const batter = sit.batter?.athlete?.shortName || sit.batter?.athlete?.displayName;
+    const pitcher = sit.pitcher?.athlete?.shortName || sit.pitcher?.athlete?.displayName;
+    const last = sit.lastPlay?.text;
+    const dots = [0, 1, 2].map((i) => `<span class="out-dot ${i < o ? 'on' : ''}"></span>`).join('');
+    return `<div class="md-section-title acc-open">🔴 Live Situation</div>
+      <div class="sit-wrap">
+        <div class="diamond">
+          <span class="base second ${on2 ? 'on' : ''}"></span>
+          <span class="base third ${on3 ? 'on' : ''}"></span>
+          <span class="base first ${on1 ? 'on' : ''}"></span>
+        </div>
+        <div class="sit-counts">
+          <div class="sit-bs"><span>B</span> <b>${b}</b> &nbsp; <span>S</span> <b>${s}</b></div>
+          <div class="sit-outs">${dots}<span class="sit-outl">${o} out${o === 1 ? '' : 's'}</span></div>
+        </div>
+      </div>
+      ${(batter || pitcher) ? `<div class="sit-mu">${pitcher ? `Pitching: <b>${pitcher}</b>` : ''}${pitcher && batter ? ' · ' : ''}${batter ? `At bat: <b>${batter}</b>` : ''}</div>` : ''}
+      ${last ? `<div class="sit-last">Last play: ${last}</div>` : ''}`;
+  }
+  // football: down & distance + possession; everyone else: last play text
+  const dd = sit.shortDownDistanceText || sit.downDistanceText;
+  const poss = sit.possessionText || sit.lastPlay?.team?.abbreviation;
+  const last = sit.lastPlay?.text;
+  if (!dd && !last) return '';
+  return `<div class="md-section-title acc-open">🔴 Live Situation</div>
+    ${dd ? `<div class="sit-mu">${dd}${poss ? ` · ${poss} ball` : ''}</div>` : ''}
+    ${last ? `<div class="sit-last">Last play: ${last}</div>` : ''}`;
+}
+
 function renderGameDetail(sport, data, pred, extra, g) {
   const comp = data.header?.competitions?.[0] || data.competitions?.[0] || {};
   const cs = comp.competitors || [];
@@ -328,6 +367,9 @@ function renderGameDetail(sport, data, pred, extra, g) {
   const sep = neutral ? 'vs' : '@';
   let html = `<div class="md-head">${teamCell(away)}<div style="color:var(--muted);font-weight:700">${sep}</div>${teamCell(home)}</div>
     <div class="md-status ${live ? 'live' : ''}">${st.detail || st.shortDetail || ''}</div>`;
+
+  // live situation (bases/count for baseball, last play otherwise)
+  if (live) html += liveSituationHTML(sport, data, comp, g);
 
   // AI pick headline first (open), then collapsible detail sections
   html += aiPickHead(pred);

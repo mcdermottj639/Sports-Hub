@@ -294,6 +294,25 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .md-team .sc { font-size: 34px; font-weight: 800; }
 .md-status { text-align: center; color: var(--muted); font-size: 13px; margin-bottom: 16px; }
 .md-status.live { color: var(--live); font-weight: 700; }
+/* live situation: baseball diamond + count/outs */
+.sit-wrap { display: flex; align-items: center; justify-content: center; gap: 22px; padding: 6px 0 2px; }
+.diamond { position: relative; width: 78px; height: 78px; }
+.diamond .base { position: absolute; width: 22px; height: 22px; background: var(--card-2); border: 1.5px solid rgba(255,255,255,.25); transform: rotate(45deg); }
+.diamond .base.on { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 8px rgba(255,209,102,.6); }
+.diamond .base.second { top: 0; left: 50%; margin-left: -11px; }
+.diamond .base.first { right: 0; top: 50%; margin-top: -11px; }
+.diamond .base.third { left: 0; top: 50%; margin-top: -11px; }
+.sit-counts { display: flex; flex-direction: column; gap: 8px; }
+.sit-bs { font-size: 18px; }
+.sit-bs span { color: var(--muted); font-size: 13px; font-weight: 700; }
+.sit-bs b { color: var(--text); }
+.sit-outs { display: flex; align-items: center; gap: 6px; }
+.out-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--card-2); border: 1.5px solid rgba(255,255,255,.25); display: inline-block; }
+.out-dot.on { background: var(--live); border-color: var(--live); }
+.sit-outl { color: var(--muted); font-size: 12px; margin-left: 4px; }
+.sit-mu { text-align: center; font-size: 13px; color: var(--silver); margin-top: 8px; }
+.sit-mu b { color: var(--text); }
+.sit-last { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 6px; font-style: italic; }
 .md-section-title { font-size: 12px; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; margin: 18px 0 8px; }
 .md-line { width: 100%; border-collapse: collapse; }
 .md-line th, .md-line td { padding: 6px 8px; text-align: center; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,.06); }
