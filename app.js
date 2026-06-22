@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v48';
+const APP_VERSION = 'v49';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -338,14 +338,70 @@ function liveSituationHTML(sport, data, comp, g) {
       ${(batter || pitcher) ? `<div class="sit-mu">${pitcher ? `Pitching: <b>${pitcher}</b>` : ''}${pitcher && batter ? ' · ' : ''}${batter ? `At bat: <b>${batter}</b>` : ''}</div>` : ''}
       ${last ? `<div class="sit-last">Last play: ${last}</div>` : ''}`;
   }
-  // football: down & distance + possession; everyone else: last play text
-  const dd = sit.shortDownDistanceText || sit.downDistanceText;
-  const poss = sit.possessionText || sit.lastPlay?.team?.abbreviation;
+  if (sport === 'nfl') return footballSituation(sit, comp);
+  if (sport === 'soccer') return soccerSituation(sit, data, comp);
+  // basketball & anything else: last play text (no positional widget exists)
   const last = sit.lastPlay?.text;
-  if (!dd && !last) return '';
+  if (!last) return '';
   return `<div class="md-section-title acc-open">🔴 Live Situation</div>
-    ${dd ? `<div class="sit-mu">${dd}${poss ? ` · ${poss} ball` : ''}</div>` : ''}
+    <div class="sit-last">Last play: ${last}</div>`;
+}
+
+// Football: a field-position bar with the ball spot, possession + down/distance.
+function footballSituation(sit, comp) {
+  const dd = sit.shortDownDistanceText || sit.downDistanceText;
+  const last = sit.lastPlay?.text;
+  const cs = comp.competitors || [];
+  const possId = sit.possession;
+  const possTeam = cs.find((c) => String(c.id) === String(possId) || String(c.team?.id) === String(possId));
+  const possAbbr = (sit.possessionText || '').split(' ')[0] || possTeam?.team?.abbreviation || '';
+  const yl = Number(sit.yardLine);
+  const rz = !!sit.isRedZone;
+  if (!dd && isNaN(yl) && !last) return '';
+  const field = !isNaN(yl) ? `<div class="field ${rz ? 'rz' : ''}">
+      <div class="ez">EZ</div>
+      <div class="grass"><span class="fifty"></span><span class="ball" style="left:${clamp(yl, 1, 99)}%">🏈</span></div>
+      <div class="ez">EZ</div>
+    </div>` : '';
+  return `<div class="md-section-title acc-open">🔴 Live Situation</div>
+    ${dd ? `<div class="sit-mu">${possAbbr ? `<b>${possAbbr}</b> ball · ` : ''}${dd}${rz ? ` · <span class="rz-tag">RED ZONE</span>` : ''}</div>` : ''}
+    ${field}
     ${last ? `<div class="sit-last">Last play: ${last}</div>` : ''}`;
+}
+
+// Soccer: possession split bar + shots, falling back to the last play.
+function soccerSituation(sit, data, comp) {
+  const teams = data.boxscore?.teams || [];
+  const cs = comp.competitors || [];
+  const last = sit?.lastPlay?.text;
+  const findStat = (t, keys) => {
+    for (const s of (t?.statistics || [])) {
+      const n = `${s.name || ''} ${s.abbreviation || ''} ${s.label || ''}`.toLowerCase();
+      if (keys.some((k) => n.includes(k))) return s.displayValue ?? s.value;
+    }
+    return null;
+  };
+  const aT = teams.find((t) => (t.homeAway || '') === 'away') || teams[0];
+  const hT = teams.find((t) => (t.homeAway || '') === 'home') || teams[1];
+  const aAbbr = cs.find((c) => c.homeAway === 'away')?.team?.abbreviation || 'Away';
+  const hAbbr = cs.find((c) => c.homeAway === 'home')?.team?.abbreviation || 'Home';
+  const aPos = parseFloat(findStat(aT, ['possession']));
+  const hPos = parseFloat(findStat(hT, ['possession']));
+  const aShots = findStat(aT, ['totalshots', 'shots']);
+  const hShots = findStat(hT, ['totalshots', 'shots']);
+  const aOn = findStat(aT, ['shotson', 'ontarget']);
+  const hOn = findStat(hT, ['shotson', 'ontarget']);
+  let html = '';
+  if (!isNaN(aPos) && !isNaN(hPos)) {
+    html += `<div class="poss-head"><span>${aAbbr} ${aPos.toFixed(0)}%</span><span>Possession</span><span>${hPos.toFixed(0)}% ${hAbbr}</span></div>
+      <div class="poss-bar"><span class="poss-a" style="width:${clamp(aPos, 0, 100)}%"></span></div>`;
+  }
+  if (aShots != null && hShots != null) {
+    html += `<div class="sit-mu">Shots: <b>${aShots}</b>${aOn != null ? ` (${aOn} on)` : ''} — <b>${hShots}</b>${hOn != null ? ` (${hOn} on)` : ''}</div>`;
+  }
+  if (!html && !last) return '';
+  return `<div class="md-section-title acc-open">🔴 Live Situation</div>
+    ${html}${last ? `<div class="sit-last">Last play: ${last}</div>` : ''}`;
 }
 
 function renderGameDetail(sport, data, pred, extra, g) {
