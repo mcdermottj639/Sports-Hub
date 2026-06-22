@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v24';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -991,8 +991,12 @@ async function renderFantasy() {
     };
   });
 
-  // fill season stats asynchronously per row (so the list shows instantly)
-  fillSeasonStats(roster, fanState.sport);
+  // auto-detect any missing MLB teams, then fill stats
+  if (fanState.sport === 'baseball' && roster.some((p) => !p.team)) {
+    autoResolveTeams(roster).then((changed) => { if (changed && fanState.sport === 'baseball') renderFantasy(); else fillSeasonStats(roster, fanState.sport); });
+  } else {
+    fillSeasonStats(roster, fanState.sport);
+  }
 }
 
 // --- fantasy season stats -------------------------------------------------
@@ -1006,6 +1010,41 @@ async function leagueTeamIds(sport) {
   const teams = data?.sports?.[0]?.leagues?.[0]?.teams || [];
   teams.forEach((t) => { const tm = t.team || t; if (tm.displayName) map[tm.displayName.toLowerCase()] = tm.id; });
   return map;
+}
+
+// Auto-detect each player's MLB team by scanning all 30 rosters (by stable
+// abbreviation, so it doesn't depend on the teams endpoint). Cached a day.
+const MLB_ABBR = {
+  'Arizona Diamondbacks': 'ARI', 'Athletics': 'OAK', 'Atlanta Braves': 'ATL', 'Baltimore Orioles': 'BAL',
+  'Boston Red Sox': 'BOS', 'Chicago Cubs': 'CHC', 'Chicago White Sox': 'CHW', 'Cincinnati Reds': 'CIN',
+  'Cleveland Guardians': 'CLE', 'Colorado Rockies': 'COL', 'Detroit Tigers': 'DET', 'Houston Astros': 'HOU',
+  'Kansas City Royals': 'KC', 'Los Angeles Angels': 'LAA', 'Los Angeles Dodgers': 'LAD', 'Miami Marlins': 'MIA',
+  'Milwaukee Brewers': 'MIL', 'Minnesota Twins': 'MIN', 'New York Mets': 'NYM', 'New York Yankees': 'NYY',
+  'Philadelphia Phillies': 'PHI', 'Pittsburgh Pirates': 'PIT', 'San Diego Padres': 'SD', 'San Francisco Giants': 'SF',
+  'Seattle Mariners': 'SEA', 'St. Louis Cardinals': 'STL', 'Tampa Bay Rays': 'TB', 'Texas Rangers': 'TEX',
+  'Toronto Blue Jays': 'TOR', 'Washington Nationals': 'WSH',
+};
+let MLB_INDEX = null;
+async function baseballPlayerIndex() {
+  if (MLB_INDEX) return MLB_INDEX;
+  try { const c = JSON.parse(localStorage.getItem('sportshub:mlbidx') || 'null'); if (c && Date.now() - c.t < 86400000 && c.m) { MLB_INDEX = c.m; return MLB_INDEX; } } catch (_) {}
+  const idx = {};
+  await Promise.all(Object.entries(MLB_ABBR).map(async ([name, abbr]) => {
+    const data = await fetchJSON(`${SITE}/baseball/mlb/teams/${abbr}/roster`, 24 * 3600000).catch(() => null);
+    (data?.athletes || []).forEach((grp) => (grp.items || grp.athletes || [grp]).forEach((a) => {
+      const nm = a?.displayName || a?.fullName; if (nm) { const k = nameKey(nm); if (!idx[k]) idx[k] = name; }
+    }));
+  }));
+  MLB_INDEX = idx;
+  try { localStorage.setItem('sportshub:mlbidx', JSON.stringify({ t: Date.now(), m: idx })); } catch (_) {}
+  return idx;
+}
+async function autoResolveTeams(roster) {
+  const idx = await baseballPlayerIndex();
+  let changed = false;
+  roster.forEach((p) => { if (!p.team) { const t = idx[nameKey(p.name)]; if (t) { p.team = t; changed = true; } } });
+  if (changed) saveRoster('baseball', roster);
+  return changed;
 }
 // Season stats from the team-leaders feed (the proven path that already
 // powers Top Hitters) -> nameKey -> { ABBR: value }. Covers players who
