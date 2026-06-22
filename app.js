@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v31';
+const APP_VERSION = 'v32';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -1395,7 +1395,7 @@ async function renderEagles() {
   }
 
   // quick-jump nav widgets (all visible — they wrap to multiple rows)
-  const navItems = [['sec-staff', 'Staff'], ['sec-numbers', 'Numbers'], ['sec-stats', 'Stats'], ['sec-leaders', 'Leaders'], ['sec-nextopp', 'Next Opp'], ['sec-schedule', 'Schedule'], ['sec-depth', 'Depth'], ['sec-news', 'News']];
+  const navItems = [['sec-nextopp', 'Next Opp'], ['sec-news', 'News'], ['sec-stats', 'Stats'], ['sec-schedule', 'Schedule'], ['sec-depth', 'Depth'], ['sec-leaders', 'Leaders'], ['sec-numbers', 'Numbers'], ['sec-staff', 'Staff']];
   const navEl = $('#eagles-nav');
   navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
   navEl.querySelectorAll('button').forEach((b) =>
