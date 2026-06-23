@@ -13,7 +13,9 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin) return; // let ESPN/X/etc. hit the network directly
 
   e.respondWith(
-    fetch(req)
+    // `no-store` bypasses GitHub's 10-min HTTP cache so we always get the
+    // newest deploy when online; the Cache API copy is the offline fallback.
+    fetch(req, { cache: 'no-store' })
       .then((res) => {
         if (res && res.status === 200 && res.type === 'basic') {
           const copy = res.clone();
