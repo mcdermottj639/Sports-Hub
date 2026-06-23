@@ -314,12 +314,13 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .sit-mu b { color: var(--text); }
 .sit-last { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 6px; font-style: italic; }
 /* football field-position bar */
-.field { display: flex; align-items: stretch; height: 40px; border-radius: 8px; overflow: hidden; margin: 4px 0 2px; border: 1px solid rgba(255,255,255,.12); }
-.field .ez { flex: 0 0 26px; background: var(--eagles-green); color: rgba(255,255,255,.6); font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; letter-spacing: .5px; }
-.field .grass { position: relative; flex: 1; background: repeating-linear-gradient(90deg, #1c3a22 0 10%, #20422680 10% 20%); }
-.field.rz .grass { background: repeating-linear-gradient(90deg, #4a1c1c 0 10%, #5a222280 10% 20%); }
-.field .fifty { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,.35); }
-.field .ball { position: absolute; top: 50%; transform: translate(-50%, -50%); font-size: 18px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+/* football field-position bar (live situation) */
+.ff-field { display: flex; align-items: stretch; height: 40px; border-radius: 8px; overflow: hidden; margin: 4px 0 2px; border: 1px solid rgba(255,255,255,.12); }
+.ff-field .ez { flex: 0 0 26px; background: var(--eagles-green); color: rgba(255,255,255,.6); font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; letter-spacing: .5px; }
+.ff-field .grass { position: relative; flex: 1; background: repeating-linear-gradient(90deg, #1c3a22 0 10%, #20422680 10% 20%); }
+.ff-field.rz .grass { background: repeating-linear-gradient(90deg, #4a1c1c 0 10%, #5a222280 10% 20%); }
+.ff-field .fifty { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,.35); }
+.ff-field .ball { position: absolute; top: 50%; transform: translate(-50%, -50%); font-size: 18px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
 .rz-tag { color: var(--live); font-weight: 800; }
 /* soccer possession bar */
 .poss-head { display: flex; justify-content: space-between; font-size: 12px; color: var(--silver); margin: 4px 0 4px; }

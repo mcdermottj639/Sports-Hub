@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v50';
+const APP_VERSION = 'v51';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -360,7 +360,7 @@ function footballSituation(sit, comp) {
   const yl = Number(sit.yardLine);
   const rz = !!sit.isRedZone;
   if (!dd && isNaN(yl) && !last) return '';
-  const field = !isNaN(yl) ? `<div class="field ${rz ? 'rz' : ''}">
+  const field = !isNaN(yl) ? `<div class="ff-field ${rz ? 'rz' : ''}">
       <div class="ez">EZ</div>
       <div class="grass"><span class="fifty"></span><span class="ball" style="left:${clamp(yl, 1, 99)}%">🏈</span></div>
       <div class="ez">EZ</div>
