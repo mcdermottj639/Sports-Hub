@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v57';
+const APP_VERSION = 'v58';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -112,8 +112,20 @@ function redditThumb(d) {
   return null;
 }
 async function fetchReddit(sub, limit = 12) {
-  const json = await fetchJSON(`https://www.reddit.com/r/${sub}/hot.json?limit=${limit}&raw_json=1`, 5 * 60000);
-  return (json?.data?.children || []).map((c) => c.data)
+  // Reddit doesn't send CORS headers, so a browser can't read it directly —
+  // route through free CORS proxies (with the direct URL as a last resort).
+  const target = `https://www.reddit.com/r/${sub}/hot.json?limit=${limit}&raw_json=1`;
+  const routes = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(target)}`,
+    target,
+  ];
+  let json = null;
+  for (const url of routes) {
+    try { json = await fetchJSON(url, 5 * 60000); if (json?.data?.children) break; } catch (_) {}
+  }
+  if (!json?.data?.children) throw new Error('reddit unavailable');
+  return json.data.children.map((c) => c.data)
     .filter((d) => d && d.title && !d.stickied && !d.over_18)
     .map((d) => ({
       title: d.title, score: d.score, comments: d.num_comments,
