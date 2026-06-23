@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v56';
+const APP_VERSION = 'v57';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -93,6 +93,67 @@ const scheduledLabel = (g) => {
   if (t && !/scheduled|tbd|pre[- ]?game/i.test(t)) return t;
   return fmtTime(g.date) || t || 'Scheduled';
 };
+
+// --- Reddit "Buzz" --------------------------------------------------------
+// Free, no-key, client-side: fetch a subreddit's hot posts as JSON and render
+// them as native cards (no third-party iframe). Falls back to a link if Reddit
+// rate-limits the request.
+const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtK = (n) => (Number(n) >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace('.0', '') + 'k' : String(n ?? 0));
+// Home buzz communities: [key, label, subreddit]
+const BUZZ_SUBS = [
+  ['nfl', 'NFL', 'nfl'], ['mlb', 'MLB', 'baseball'], ['nba', 'NBA', 'nba'],
+  ['ncaaf', 'NCAAF', 'CFB'], ['golf', 'Golf', 'golf'], ['book', 'Sportsbook', 'sportsbook'],
+];
+function redditThumb(d) {
+  const p = d.preview?.images?.[0]?.source?.url;
+  if (p && /^https?:/.test(p)) return p;
+  if (d.thumbnail && /^https?:/.test(d.thumbnail)) return d.thumbnail;
+  return null;
+}
+async function fetchReddit(sub, limit = 12) {
+  const json = await fetchJSON(`https://www.reddit.com/r/${sub}/hot.json?limit=${limit}&raw_json=1`, 5 * 60000);
+  return (json?.data?.children || []).map((c) => c.data)
+    .filter((d) => d && d.title && !d.stickied && !d.over_18)
+    .map((d) => ({
+      title: d.title, score: d.score, comments: d.num_comments,
+      permalink: 'https://www.reddit.com' + d.permalink, sub: d.subreddit,
+      flair: d.link_flair_text || '', created: d.created_utc ? d.created_utc * 1000 : null,
+      thumb: redditThumb(d),
+    }));
+}
+function buzzCardsHTML(posts) {
+  return '<div class="buzz-list">' + posts.map((p) => `
+    <a class="buzz-item" href="${p.permalink}" target="_blank" rel="noopener">
+      ${p.thumb ? `<div class="buzz-thumb" style="background-image:url('${p.thumb.replace(/'/g, '%27')}')"></div>` : ''}
+      <div class="buzz-body">
+        <div class="buzz-title">${esc(p.title)}</div>
+        <div class="buzz-meta">r/${p.sub}${p.flair ? ` · ${esc(p.flair)}` : ''} · ▲ ${fmtK(p.score)} · 💬 ${fmtK(p.comments)}${p.created ? ` · ${timeAgo(p.created)}` : ''}</div>
+      </div>
+    </a>`).join('') + '</div>';
+}
+async function renderBuzz(container, sub) {
+  if (!container) return;
+  container.innerHTML = '<div class="empty">Loading buzz…</div>';
+  let posts = [];
+  try { posts = await fetchReddit(sub); } catch (_) {}
+  const link = `https://www.reddit.com/r/${sub}`;
+  if (!posts.length) {
+    container.innerHTML = `<div class="buzz-fallback">Couldn’t load r/${sub} right now (Reddit may be rate-limiting). <a href="${link}" target="_blank" rel="noopener">Open r/${sub} ↗</a></div>`;
+    return;
+  }
+  container.innerHTML = buzzCardsHTML(posts.slice(0, 10));
+}
+// Lazily load a single-subreddit feed when it scrolls into view.
+function mountBuzz(container, sub) {
+  if (!container) return;
+  let done = false;
+  const go = () => { if (done) return; done = true; renderBuzz(container, sub); };
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((ents) => ents.forEach((e) => { if (e.isIntersecting) { io.disconnect(); go(); } }));
+    io.observe(container);
+  } else { go(); }
+}
 
 // --- ESPN normalizers -----------------------------------------------------
 function teamObj(c) {
@@ -607,6 +668,30 @@ async function renderHome() {
   $('#featured').innerHTML = html;
   renderHomeByLeague($('#home-games'), games);
   renderHomeHeadline();
+  renderHomeBuzz();
+}
+
+// Sports Buzz on Home — Reddit hot posts with a community chip selector.
+function renderHomeBuzz() {
+  const box = $('#home-buzz');
+  if (!box) return;
+  if (!box.dataset.init) {
+    box.dataset.init = '1';
+    box.innerHTML = `<div class="section-title" style="margin:18px 0 8px">💬 Sports Buzz</div><div id="buzz-chips" class="chips"></div><div id="buzz-feed"></div>`;
+  }
+  state.buzzKey = state.buzzKey || BUZZ_SUBS[0][0];
+  const chips = $('#buzz-chips');
+  const draw = () => {
+    chips.innerHTML = '';
+    BUZZ_SUBS.forEach(([key, label]) => {
+      const c = el('button', 'chip' + (key === state.buzzKey ? ' active' : ''), label);
+      c.onclick = () => { state.buzzKey = key; draw(); };
+      chips.appendChild(c);
+    });
+    const sub = (BUZZ_SUBS.find((s) => s[0] === state.buzzKey) || BUZZ_SUBS[0])[2];
+    renderBuzz($('#buzz-feed'), sub);
+  };
+  draw();
 }
 
 // Top 3 sports headlines up top, numbered 1-2-3 so they scan left to right.
@@ -1889,8 +1974,11 @@ async function renderEagles() {
     newsEl.querySelectorAll('.news-item').forEach((it) => { it.onclick = () => openNewsSummary(articles[+it.dataset.news]); });
   }
 
+  // Eagles buzz (r/eagles) — lazy-loads when the section is opened
+  mountBuzz($('#eagles-buzz'), 'eagles');
+
   // quick-jump nav widgets (all visible — they wrap to multiple rows)
-  const navItems = [['sec-nextopp', 'Next Opp'], ['sec-news', 'News'], ['sec-stats', 'Stats'], ['sec-schedule', 'Schedule'], ['sec-depth', 'Depth'], ['sec-leaders', 'Leaders'], ['sec-numbers', 'Numbers'], ['sec-staff', 'Staff']];
+  const navItems = [['sec-nextopp', 'Next Opp'], ['sec-news', 'News'], ['sec-buzz', 'Buzz'], ['sec-stats', 'Stats'], ['sec-schedule', 'Schedule'], ['sec-depth', 'Depth'], ['sec-leaders', 'Leaders'], ['sec-numbers', 'Numbers'], ['sec-staff', 'Staff']];
   const navEl = $('#eagles-nav');
   navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
   navEl.querySelectorAll('button').forEach((b) =>
