@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v53';
+const APP_VERSION = 'v54';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -2217,3 +2217,15 @@ showTab('home');
 
 // fold any finished picks from earlier days into the running model record
 gradePending();
+
+// Auto-update: register the network-first service worker so new versions load
+// on their own (including the home-screen app) — no manual cache-busting.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      reg.update();
+      setInterval(() => reg.update(), 30 * 60 * 1000); // re-check every 30 min
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update(); });
+    }).catch(() => {});
+  });
+}
