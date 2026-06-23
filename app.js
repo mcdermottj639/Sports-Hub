@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v54';
+const APP_VERSION = 'v55';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -112,27 +112,36 @@ function loadTwitter() {
   });
   return _twPromise;
 }
-const xFallback = (link) => `<div class="x-fallback">X feed couldn’t load here.${link ? ` <a href="${link}" target="_blank" rel="noopener">Open on X ↗</a>` : ''}</div>`;
-const xProfile = (screen) => ({ sourceType: 'profile', screenName: screen });
+const xFallback = (url) => `<div class="x-fallback">Couldn’t load the live X feed here.<br><a href="${url}" target="_blank" rel="noopener">Open ${url.replace(/^https?:\/\/(twitter|x)\.com\//, '@').replace(/\/.*/, '')} on X ↗</a></div>`;
 const xSearchLink = (q) => `https://twitter.com/search?q=${encodeURIComponent(q)}&f=live`;
-async function renderXTimeline(container, source, link, height = 540) {
+// Render a profile timeline via the documented anchor + widgets.load (more
+// reliable than createTimeline), with a timeout fallback to a plain link.
+async function renderXTimeline(container, url, height = 540) {
   container.innerHTML = '<div class="x-loading">Loading X…</div>';
   const twttr = await loadTwitter();
-  if (!twttr?.widgets?.createTimeline) { container.innerHTML = xFallback(link); return; }
-  try {
-    const w = await twttr.widgets.createTimeline(source, container, {
-      theme: 'dark', height, chrome: 'noheader nofooter noborders transparent', dnt: true,
-    });
-    if (!w) { container.innerHTML = xFallback(link); return; }
-    const ld = container.querySelector('.x-loading'); if (ld) ld.remove();
-  } catch (_) { container.innerHTML = xFallback(link); }
+  if (!twttr?.widgets?.load) { container.innerHTML = xFallback(url); return; }
+  const a = document.createElement('a');
+  a.className = 'twitter-timeline';
+  a.setAttribute('data-theme', 'dark');
+  a.setAttribute('data-chrome', 'noheader nofooter noborders transparent');
+  a.setAttribute('data-height', String(height));
+  a.setAttribute('data-dnt', 'true');
+  a.href = url;
+  a.textContent = 'Tweets';
+  container.appendChild(a);
+  try { twttr.widgets.load(container); } catch (_) {}
+  // X swaps the anchor for an iframe when it renders; if it never does, fall back.
+  setTimeout(() => {
+    if (container.querySelector('iframe')) { const ld = container.querySelector('.x-loading'); if (ld) ld.remove(); }
+    else container.innerHTML = xFallback(url);
+  }, 8000);
 }
 // Mount an X feed lazily — only fetch X's script when the feed scrolls into
 // view (also fires when an accordion section is opened).
-function mountXFeed(container, source, link, height) {
+function mountXFeed(container, url, height) {
   if (!container) return;
   let done = false;
-  const go = () => { if (done) return; done = true; renderXTimeline(container, source, link, height); };
+  const go = () => { if (done) return; done = true; renderXTimeline(container, url, height); };
   if ('IntersectionObserver' in window) {
     const io = new IntersectionObserver((ents) => ents.forEach((e) => { if (e.isIntersecting) { io.disconnect(); go(); } }));
     io.observe(container);
@@ -666,7 +675,7 @@ function renderHomeBuzz() {
   if (!box || box.dataset.mounted) return;
   box.dataset.mounted = '1';
   box.innerHTML = '<div class="section-title" style="margin:16px 0 8px">💬 Sports Buzz</div><div id="home-buzz-feed"></div>';
-  mountXFeed($('#home-buzz-feed'), xProfile('ESPN'), 'https://twitter.com/ESPN', 500);
+  mountXFeed($('#home-buzz-feed'), 'https://twitter.com/ESPN', 500);
 }
 
 // Top 3 sports headlines up top, numbered 1-2-3 so they scan left to right.
@@ -1950,7 +1959,7 @@ async function renderEagles() {
   }
 
   // Eagles buzz on X (lazy — loads when the section is opened)
-  mountXFeed($('#eagles-buzz'), xProfile('Eagles'), 'https://twitter.com/Eagles', 600);
+  mountXFeed($('#eagles-buzz'), 'https://twitter.com/Eagles', 600);
 
   // quick-jump nav widgets (all visible — they wrap to multiple rows)
   const navItems = [['sec-nextopp', 'Next Opp'], ['sec-news', 'News'], ['sec-buzz', 'Buzz'], ['sec-stats', 'Stats'], ['sec-schedule', 'Schedule'], ['sec-depth', 'Depth'], ['sec-leaders', 'Leaders'], ['sec-numbers', 'Numbers'], ['sec-staff', 'Staff']];
