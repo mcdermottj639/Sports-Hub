@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v55';
+const APP_VERSION = 'v56';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -93,60 +93,6 @@ const scheduledLabel = (g) => {
   if (t && !/scheduled|tbd|pre[- ]?game/i.test(t)) return t;
   return fmtTime(g.date) || t || 'Scheduled';
 };
-
-// --- X (Twitter) embeds ---------------------------------------------------
-// Free, no-key, client-side feeds via X's widgets.js. Loaded lazily (only
-// when a feed scrolls into view) and rendered in the dark theme. Falls back
-// to a plain "Open on X" link if the embed can't render.
-let _twPromise = null;
-function loadTwitter() {
-  if (window.twttr?.widgets) return Promise.resolve(window.twttr);
-  if (_twPromise) return _twPromise;
-  _twPromise = new Promise((resolve) => {
-    const s = document.createElement('script');
-    s.src = 'https://platform.twitter.com/widgets.js';
-    s.async = true; s.charset = 'utf-8';
-    s.onload = () => resolve(window.twttr);
-    s.onerror = () => resolve(null);
-    document.head.appendChild(s);
-  });
-  return _twPromise;
-}
-const xFallback = (url) => `<div class="x-fallback">Couldn’t load the live X feed here.<br><a href="${url}" target="_blank" rel="noopener">Open ${url.replace(/^https?:\/\/(twitter|x)\.com\//, '@').replace(/\/.*/, '')} on X ↗</a></div>`;
-const xSearchLink = (q) => `https://twitter.com/search?q=${encodeURIComponent(q)}&f=live`;
-// Render a profile timeline via the documented anchor + widgets.load (more
-// reliable than createTimeline), with a timeout fallback to a plain link.
-async function renderXTimeline(container, url, height = 540) {
-  container.innerHTML = '<div class="x-loading">Loading X…</div>';
-  const twttr = await loadTwitter();
-  if (!twttr?.widgets?.load) { container.innerHTML = xFallback(url); return; }
-  const a = document.createElement('a');
-  a.className = 'twitter-timeline';
-  a.setAttribute('data-theme', 'dark');
-  a.setAttribute('data-chrome', 'noheader nofooter noborders transparent');
-  a.setAttribute('data-height', String(height));
-  a.setAttribute('data-dnt', 'true');
-  a.href = url;
-  a.textContent = 'Tweets';
-  container.appendChild(a);
-  try { twttr.widgets.load(container); } catch (_) {}
-  // X swaps the anchor for an iframe when it renders; if it never does, fall back.
-  setTimeout(() => {
-    if (container.querySelector('iframe')) { const ld = container.querySelector('.x-loading'); if (ld) ld.remove(); }
-    else container.innerHTML = xFallback(url);
-  }, 8000);
-}
-// Mount an X feed lazily — only fetch X's script when the feed scrolls into
-// view (also fires when an accordion section is opened).
-function mountXFeed(container, url, height) {
-  if (!container) return;
-  let done = false;
-  const go = () => { if (done) return; done = true; renderXTimeline(container, url, height); };
-  if ('IntersectionObserver' in window) {
-    const io = new IntersectionObserver((ents) => ents.forEach((e) => { if (e.isIntersecting) { io.disconnect(); go(); } }));
-    io.observe(container);
-  } else { go(); }
-}
 
 // --- ESPN normalizers -----------------------------------------------------
 function teamObj(c) {
@@ -494,11 +440,6 @@ function renderGameDetail(sport, data, pred, extra, g) {
   // live situation (bases/count for baseball, last play otherwise)
   if (live) html += liveSituationHTML(sport, data, comp, g);
 
-  // join the conversation on X (search the matchup — embeds need a key, links don't)
-  const aName = away.team?.shortDisplayName || away.team?.displayName || away.team?.name || '';
-  const hName = home.team?.shortDisplayName || home.team?.displayName || home.team?.name || '';
-  if (aName && hName) html += `<a class="x-talk" href="${xSearchLink(`${aName} ${hName}`)}" target="_blank" rel="noopener">💬 Talk about this game on X ↗</a>`;
-
   // AI pick headline first (open), then collapsible detail sections
   html += aiPickHead(pred);
   html += aiFactors(pred);
@@ -666,16 +607,6 @@ async function renderHome() {
   $('#featured').innerHTML = html;
   renderHomeByLeague($('#home-games'), games);
   renderHomeHeadline();
-  renderHomeBuzz();
-}
-
-// General sports-buzz feed (X) near the top of Home.
-function renderHomeBuzz() {
-  const box = $('#home-buzz');
-  if (!box || box.dataset.mounted) return;
-  box.dataset.mounted = '1';
-  box.innerHTML = '<div class="section-title" style="margin:16px 0 8px">💬 Sports Buzz</div><div id="home-buzz-feed"></div>';
-  mountXFeed($('#home-buzz-feed'), 'https://twitter.com/ESPN', 500);
 }
 
 // Top 3 sports headlines up top, numbered 1-2-3 so they scan left to right.
@@ -1958,11 +1889,8 @@ async function renderEagles() {
     newsEl.querySelectorAll('.news-item').forEach((it) => { it.onclick = () => openNewsSummary(articles[+it.dataset.news]); });
   }
 
-  // Eagles buzz on X (lazy — loads when the section is opened)
-  mountXFeed($('#eagles-buzz'), 'https://twitter.com/Eagles', 600);
-
   // quick-jump nav widgets (all visible — they wrap to multiple rows)
-  const navItems = [['sec-nextopp', 'Next Opp'], ['sec-news', 'News'], ['sec-buzz', 'Buzz'], ['sec-stats', 'Stats'], ['sec-schedule', 'Schedule'], ['sec-depth', 'Depth'], ['sec-leaders', 'Leaders'], ['sec-numbers', 'Numbers'], ['sec-staff', 'Staff']];
+  const navItems = [['sec-nextopp', 'Next Opp'], ['sec-news', 'News'], ['sec-stats', 'Stats'], ['sec-schedule', 'Schedule'], ['sec-depth', 'Depth'], ['sec-leaders', 'Leaders'], ['sec-numbers', 'Numbers'], ['sec-staff', 'Staff']];
   const navEl = $('#eagles-nav');
   navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
   navEl.querySelectorAll('button').forEach((b) =>
