@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v51';
+const APP_VERSION = 'v52';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -67,6 +67,14 @@ async function fetchJSON(url, ttl = 60000) {
   }
 }
 const ymd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+const ymdDash = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// The sports "day" doesn't roll over to tomorrow until 4 AM ET, so late games
+// (and the slate) stay on the current day while they're still live overnight.
+const sportsDate = () => {
+  const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  et.setHours(et.getHours() - 4);
+  return et;
+};
 const fmtTime = (date) => {
   const d = new Date(date);
   return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -567,7 +575,7 @@ const DEMO = {
 // --- HOME -----------------------------------------------------------------
 async function renderHome() {
   const sports = sortedSports({ teamOnly: true }); // in-season first
-  const results = await Promise.allSettled(sports.map((s) => getGames(s, ymd(new Date()))));
+  const results = await Promise.allSettled(sports.map((s) => getGames(s, ymd(sportsDate()))));
   const games = {};
   let anyOK = false;
   results.forEach((r, i) => {
@@ -720,7 +728,7 @@ async function renderScores() {
   const dateInput = $('#scores-date');
   const isGolf = LEAGUES[state.scoresSport].type === 'golf';
   dateInput.style.display = isGolf ? 'none' : '';
-  if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+  if (!dateInput.value) dateInput.value = ymdDash(sportsDate());
   buildChips($('#sport-filter'), state.scoresSport, (s) => { state.scoresSport = s; renderScores(); });
   const container = $('#scores-games');
   container.innerHTML = '<div class="empty">Loading…</div>';
@@ -1086,13 +1094,57 @@ function tallyStats() {
   return { w, l: n - w, n, eh, el: en - eh, en };
 }
 
+// Pending picks: every prediction is stashed so the running record keeps
+// building even if you're not on the AI Picks tab when a game ends. On load
+// we look up each pending game's final result and fold it into the tally.
+const PENDING_KEY = 'sportshub:pending';
+const getPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || '{}'); } catch (_) { return {}; } };
+const setPending = (p) => { try { localStorage.setItem(PENDING_KEY, JSON.stringify(p)); } catch (_) {} };
+function recordPick(id, sport, date, pick, fav) {
+  if (!id || !pick) return;
+  if (getTally()[id]) return; // already graded
+  const p = getPending();
+  if (p[id]) return;
+  p[id] = { sport, date, pick, fav: fav || null };
+  setPending(p);
+}
+async function gradePending() {
+  const p = getPending();
+  const tally = getTally();
+  const groups = {};
+  let changed = false;
+  const cutoff = Number(ymd(new Date(Date.now() - 14 * 86400000))); // purge stale (>14d)
+  Object.keys(p).forEach((id) => {
+    if (tally[id]) { delete p[id]; changed = true; return; }            // already graded
+    const { sport, date } = p[id];
+    if (Number(date) < cutoff) { delete p[id]; changed = true; return; } // too old to chase
+    (groups[`${sport}|${date}`] = groups[`${sport}|${date}`] || []).push(id);
+  });
+  await Promise.all(Object.entries(groups).map(async ([key, ids]) => {
+    const [sport, date] = key.split('|');
+    let games = [];
+    try { games = await getGames(sport, date); } catch (_) { return; }
+    const byId = {}; games.forEach((g) => (byId[g.id] = g));
+    ids.forEach((id) => {
+      const g = byId[id]; if (!g || gameState(g) !== 'final') return;
+      const actual = winnerName(g);
+      if (!actual || actual === 'TIE') { delete p[id]; changed = true; return; }
+      const { pick, fav } = p[id];
+      const hit = actual === pick;
+      recordResult(id, hit, fav && pick !== fav ? (hit ? 'h' : 'm') : null);
+      delete p[id]; changed = true;
+    });
+  }));
+  if (changed) setPending(p);
+}
+
 async function renderPredictions() {
   const sport = state.aiSport || FEATURED.sport;
   buildChips($('#ai-sport'), sport, (s) => { state.aiSport = s; renderPredictions(); }, sortedSports({ teamOnly: true }));
   const container = $('#ai-picks');
   container.innerHTML = '<div class="empty">Crunching the numbers…</div>';
 
-  const games = await getGames(sport, ymd(new Date())).catch(() => []);
+  const games = await getGames(sport, ymd(sportsDate())).catch(() => []);
   const playable = games.filter((g) => g.id);
   const renderTally = (todayTxt) => {
     const ts = tallyStats();
@@ -1117,6 +1169,7 @@ async function renderPredictions() {
   };
   if (!playable.length) { container.innerHTML = ''; container.appendChild(statBar(0)); container.appendChild(el('div', 'empty', 'No games today for this sport.')); renderTally(''); return; }
 
+  const dateStr = ymd(sportsDate());
   const preds = await Promise.all(playable.map((g) => predictGame(sport, g).catch(() => null)));
   container.innerHTML = '';
   let right = 0, graded = 0;
@@ -1135,6 +1188,9 @@ async function renderPredictions() {
         recordResult(g.id, hit, edge);
         resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
       }
+    } else if (p) {
+      // stash the pick so it gets graded later even if the tab isn't open
+      recordPick(g.id, sport, dateStr, p.winner.name, info?.favName);
     }
     return { g, p, info, isEdge, resultTag };
   });
@@ -1388,7 +1444,7 @@ async function renderFantasy() {
 
   const leagueKey = fanState.sport === 'baseball' ? 'mlb' : 'nfl';
   let games = [];
-  try { games = await getGames(leagueKey, ymd(new Date())); } catch (_) {}
+  try { games = await getGames(leagueKey, ymd(sportsDate())); } catch (_) {}
   fanState.gamesByTeam = buildGameIndex(games);
 
   const roster = loadRoster(fanState.sport);
@@ -2095,3 +2151,6 @@ if (toTop) {
 }
 
 showTab('home');
+
+// fold any finished picks from earlier days into the running model record
+gradePending();
