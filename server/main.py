@@ -352,29 +352,70 @@ def debug(sport: str):
     return out
 
 
+def _team_form(team):
+    """Chronological W/L/T list from a team's completed matchups."""
+    out = []
+    for mu in getattr(team, "schedule", []):
+        winner = (getattr(mu, "winner", "") or "").upper()
+        if winner in ("", "UNDECIDED", "NONE"):
+            continue
+        home = getattr(mu, "home_team", None)
+        home_id = getattr(home, "team_id", home)
+        is_home = str(home_id) == str(team.team_id)
+        if winner == "TIE":
+            out.append("T")
+        elif (winner == "HOME") == is_home:
+            out.append("W")
+        else:
+            out.append("L")
+    return out
+
+
+def _streak(form):
+    """Trailing streak as e.g. 'W3' from a chronological form list."""
+    if not form:
+        return ""
+    last = form[-1]
+    n = 0
+    for r in reversed(form):
+        if r == last:
+            n += 1
+        else:
+            break
+    return f"{last}{n}"
+
+
 @app.get("/api/fantasy/{sport}/standings")
 def standings(sport: str):
-    """League standings — every team, ranked."""
+    """League standings + computed power rankings (record + recent form)."""
     league = get_league(sport)
-    teams = sorted(
-        league.teams,
-        key=lambda t: (getattr(t, "wins", 0), getattr(t, "points_for", 0)),
-        reverse=True,
-    )
-    return {
-        "sport": sport,
-        "teams": [
-            {
-                "teamId": getattr(t, "team_id", None),
-                "team": getattr(t, "team_name", ""),
-                "wins": getattr(t, "wins", None),
-                "losses": getattr(t, "losses", None),
-                "ties": getattr(t, "ties", None),
-                "pointsFor": getattr(t, "points_for", None),
-            }
-            for t in teams
-        ],
-    }
+    my_id = str(SPORTS[sport]["team_id"] or "")
+    rows = []
+    for t in league.teams:
+        wins = getattr(t, "wins", 0) or 0
+        losses = getattr(t, "losses", 0) or 0
+        ties = getattr(t, "ties", 0) or 0
+        games = wins + losses + ties
+        win_pct = (wins + 0.5 * ties) / games if games else 0.0
+        form = _team_form(t)
+        recent = form[-5:]
+        rec_pct = (sum(1 if r == "W" else 0.5 if r == "T" else 0 for r in recent) / len(recent)
+                   if recent else win_pct)
+        power = round(100 * (0.6 * win_pct + 0.4 * rec_pct), 1)
+        rows.append({
+            "teamId": getattr(t, "team_id", None),
+            "team": getattr(t, "team_name", ""),
+            "abbrev": getattr(t, "team_abbrev", ""),
+            "wins": wins, "losses": losses, "ties": ties,
+            "standing": getattr(t, "standing", None),
+            "last5": "".join(form[-5:]),
+            "streak": _streak(form),
+            "winPct": round(win_pct, 3),
+            "powerScore": power,
+            "isMe": str(getattr(t, "team_id", "")) == my_id,
+        })
+    rows.sort(key=lambda r: (r["standing"] if r["standing"] else 99))
+    return {"sport": sport, "teams": rows}
 
 
 @app.get("/api/refresh")
