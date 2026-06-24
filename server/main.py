@@ -273,6 +273,44 @@ def opponent(sport: str):
     }
 
 
+@app.get("/api/fantasy/{sport}/debug")
+def debug(sport: str):
+    """Diagnostic: what does ESPN actually return for matchups this week?"""
+    league = get_league(sport)
+    team = my_team(league, SPORTS[sport]["team_id"])
+    out = {
+        "sport": sport,
+        "myTeamId": _tid(team),
+        "myTeam": getattr(team, "team_name", None),
+        "currentMatchupPeriod": getattr(league, "currentMatchupPeriod", None),
+        "current_week": getattr(league, "current_week", None),
+        "scoringPeriodId": getattr(league, "scoringPeriodId", None),
+        "year": getattr(league, "year", None),
+    }
+    try:
+        boxes = league.box_scores()
+        out["boxCount"] = len(boxes)
+        out["boxPairs"] = [
+            {"home": _tid(getattr(b, "home_team", None)),
+             "away": _tid(getattr(b, "away_team", None)),
+             "homeStatsKeys": list((getattr(b, "home_stats", None) or {}).keys())[:6]}
+            for b in boxes[:8]
+        ]
+    except Exception as e:
+        out["boxError"] = f"{type(e).__name__}: {e}"
+    try:
+        sb = league.scoreboard()
+        out["scoreboardCount"] = len(sb)
+        out["scoreboardPairs"] = [
+            {"home": _tid(getattr(m, "home_team", None)),
+             "away": _tid(getattr(m, "away_team", None))}
+            for m in sb[:8]
+        ]
+    except Exception as e:
+        out["scoreboardError"] = f"{type(e).__name__}: {e}"
+    return out
+
+
 @app.get("/api/fantasy/{sport}/standings")
 def standings(sport: str):
     """League standings — every team, ranked."""
