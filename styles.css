@@ -457,8 +457,12 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .wv-name { font-weight: 700; }
 .wv-meta { color: var(--muted); font-size: 12px; margin-left: 6px; }
 .wv-hot { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
-.wv-hot .hc-tag { color: var(--accent); font-weight: 800; font-size: 12.5px; }
+.wv-hot .hc-tag { font-weight: 800; font-size: 12.5px; color: var(--accent); }
+.wv-hot .hc-tag.flat { color: var(--silver); font-weight: 600; }
+.wv-hot .hc-tag.cold { color: var(--gold); }
 .wv-hot .hc-detail { color: var(--muted); font-size: 11.5px; }
+.wv-item.hot { border-color: rgba(58,210,159,.4); }
+.wv-item.cold { border-color: rgba(255,209,102,.3); }
 
 /* Fantasy: start/sit + opponent scouting two-column lists */
 #fantasy-startsit:empty, #fantasy-opponent:empty { display: none; }

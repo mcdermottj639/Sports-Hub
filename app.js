@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v65';
+const APP_VERSION = 'v66';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1730,17 +1730,26 @@ async function computeRosterForm(players, fSport) {
   const out = [];
   await Promise.all(players.map(async (p) => {
     const aid = p._team ? (idMaps[p._team] || {})[nameKey(p.name)] : null;
-    if (!aid) return;
-    const hc = hotCold(fSport, await athleteGamelog(sport, aid).catch(() => null), p.isPitcher);
-    if (hc) out.push({ ...p, team: p._team, hc });
+    const hc = aid ? hotCold(fSport, await athleteGamelog(sport, aid).catch(() => null), p.isPitcher) : null;
+    out.push({ ...p, team: p._team, hc });
   }));
   return out;
 }
 
-// Free agents trending HOT, most-owned (most relevant) first.
-async function hotFreeAgents(players, fSport) {
-  const form = await computeRosterForm(players, fSport);
-  return form.filter((p) => p.hc.tag === 'hot').sort((a, b) => (b.owned ?? 0) - (a.owned ?? 0));
+// Sort key: hot first, then steady, then cold.
+const formRank = (p) => (p.hc && p.hc.tag === 'hot') ? 0 : (p.hc && p.hc.tag === 'cold') ? 2 : 1;
+
+// One row: name (+ hot/cold icon), position·team·meta, recent-form line.
+function playerFormRow(p, meta) {
+  const tag = p.hc && p.hc.tag;
+  const icon = tag === 'hot' ? '🔥 ' : tag === 'cold' ? '🥶 ' : '';
+  const abbr = MLB_ABBR[p.team] || '';
+  const line = p.hc ? (p.hc.lead || p.hc.detail || '') : '';
+  return `<div class="wv-item ${tag || ''}">
+      <div class="wv-main"><span class="wv-name">${icon}${p.name}</span>
+        <span class="wv-meta">${p.pos}${abbr ? ' · ' + abbr : ''}${meta ? ' · ' + meta : ''}</span></div>
+      <div class="wv-hot">${line ? `<span class="hc-tag ${tag || 'flat'}">${line}</span>` : '<span class="hc-detail">recent form n/a</span>'}</div>
+    </div>`;
 }
 
 async function renderWaivers(sport) {
@@ -1748,25 +1757,18 @@ async function renderWaivers(sport) {
   if (!box) return;
   const fa = ((fanState.league || {})[sport] || {}).freeAgents;
   if (sport !== 'baseball' || !fa || !fa.players || !fa.players.length) { box.innerHTML = ''; return; }
-  box.innerHTML = '<h2 class="section-title">Waiver Wire — Hot Pickups</h2><div class="none">Scanning available players for hot streaks…</div>';
-  const hot = await hotFreeAgents(fa.players.slice(0, 35), sport);
+  box.innerHTML = '<h2 class="section-title">Waiver Wire — Top Available</h2><div class="none">Scanning available players for recent form…</div>';
+  const form = await computeRosterForm(fa.players.slice(0, 30), sport);
   if (fanState.sport !== sport) return; // user switched away while scanning
-  if (!hot.length) {
-    box.innerHTML = '<h2 class="section-title">Waiver Wire — Hot Pickups</h2><div class="none">No available players are trending hot right now. Check back after the next slate.</div>';
-    return;
-  }
-  const rows = hot.slice(0, 12).map((p) => {
-    const abbr = MLB_ABBR[p.team] || '';
+  // Hot pickups first, then by ownership (most-rostered = most relevant).
+  form.sort((a, b) => formRank(a) - formRank(b) || (b.owned ?? 0) - (a.owned ?? 0));
+  const hotCount = form.filter((p) => p.hc && p.hc.tag === 'hot').length;
+  const rows = form.slice(0, 12).map((p) => {
     const owned = p.owned != null && p.owned >= 0 ? `${Math.round(p.owned)}% owned` : '';
-    return `<div class="wv-item">
-        <div class="wv-main"><span class="wv-name">${p.name}</span>
-          <span class="wv-meta">${p.pos}${abbr ? ' · ' + abbr : ''}${owned ? ' · ' + owned : ''}</span></div>
-        <div class="wv-hot"><span class="hc-tag">🔥 ${p.hc.lead || 'Hot'}</span>
-          <span class="hc-detail">${p.hc.detail || ''}</span></div>
-      </div>`;
+    return playerFormRow(p, owned);
   }).join('');
-  box.innerHTML = `<h2 class="section-title">Waiver Wire — Hot Pickups</h2>
-    <div class="none" style="margin-bottom:8px">Available players in your league trending up over recent games — best add targets first.</div>
+  box.innerHTML = `<h2 class="section-title">Waiver Wire — Top Available</h2>
+    <div class="none" style="margin-bottom:8px">Best available players in your league${hotCount ? ` — <span style="color:var(--accent)">🔥 ${hotCount} trending hot</span>` : ''}. Hot streaks listed first.</div>
     <div class="wv-list">${rows}</div>`;
 }
 
@@ -1796,19 +1798,15 @@ async function renderOpponent(sport) {
   if (sport !== 'baseball' || !O || !O.roster || !O.roster.length) { box.innerHTML = ''; return; }
   box.innerHTML = `<h2 class="section-title">Opponent — ${O.opponent}</h2><div class="none">Scouting their lineup…</div>`;
   const active = O.roster.filter((p) => p.status === 'active');
-  const form = await computeRosterForm(active, sport);
+  const form = await computeRosterForm(active.slice(0, 16), sport);
   if (fanState.sport !== sport) return;
-  const hot = form.filter((p) => p.hc.tag === 'hot');
-  const cold = form.filter((p) => p.hc.tag === 'cold');
-  const li = (arr) => arr.length
-    ? arr.map((p) => `<li><b>${p.name}</b>${p.hc.lead ? ` <span class="lead">${p.hc.lead}</span>` : ''}</li>`).join('')
-    : '<li class="none">None</li>';
+  form.sort((a, b) => formRank(a) - formRank(b));
+  const hot = form.filter((p) => p.hc && p.hc.tag === 'hot').length;
+  const cold = form.filter((p) => p.hc && p.hc.tag === 'cold').length;
+  const rows = form.map((p) => playerFormRow(p)).join('');
   box.innerHTML = `<h2 class="section-title">Opponent — ${O.opponent}</h2>
-    <div class="none" style="margin-bottom:8px">Who you're up against this week (their active lineup).</div>
-    <div class="ss-cols">
-      <div><div class="ss-h sit">🔥 Their threats</div><ul>${li(hot)}</ul></div>
-      <div><div class="ss-h start">🥶 Slumping — go at them</div><ul>${li(cold)}</ul></div>
-    </div>`;
+    <div class="none" style="margin-bottom:8px">Their active lineup this week${hot ? ` · <span style="color:var(--accent)">🔥 ${hot} hot</span>` : ''}${cold ? ` · <span style="color:var(--gold)">🥶 ${cold} cold</span>` : ''}. Hot threats first.</div>
+    <div class="wv-list">${rows}</div>`;
 }
 
 let MLB_INDEX = null;
