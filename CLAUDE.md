@@ -2,6 +2,13 @@
 
 Guidance for Claude (and humans) working on this repo. Read this first.
 
+> ## ⚠️ Standing rule: keep this file current
+> Whenever you change the architecture, build/deploy pipeline, data model, or
+> add/remove a feature, **update the relevant section of this file in the SAME
+> change** (same commit). Future sessions rely on this file being accurate —
+> don't wait to be asked. When you bump `APP_VERSION`, also update the
+> "Current version" line below if it's drifted.
+
 ## What this is
 
 **Sports-Hub** is a personal, multi-sport web app for the owner (a Philadelphia
@@ -80,6 +87,10 @@ Current version as of this writing: **v60**.
 - UX rules the owner cares about: scannable views with **tap-to-expand**
   accordions (`makeAccordion`); jump-nav chip rows that **wrap** (all visible, no
   horizontal scroll); compact rows; `–` for not-yet-played scores.
+- **Live/Demo mode badge** — the header badge (`#mode-badge`, set by `setMode`)
+  reads **LIVE** when ESPN fetches succeed and **DEMO** when they all fail, in
+  which case the app renders the hardcoded `DEMO` fixtures so it never looks
+  broken offline. `setMode(true)` is called from `renderHome` once any feed loads.
 
 ## Features built (high level)
 
@@ -127,7 +138,8 @@ Current version as of this writing: **v60**.
 - `sportshub:aitally` — graded pick results (all-time + vs-line record).
 - `sportshub:pending` — ungraded picks awaiting results.
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
-- (fantasy roster key) — the saved roster.
+- `sportshub:fantasy:{sport}` — the saved fantasy roster, one per sport
+  (`fanKey(sport)`, e.g. `sportshub:fantasy:baseball`).
 - Note: localStorage is **per browser/device** — the home-screen PWA and Safari
   keep separate tallies/rosters.
 
