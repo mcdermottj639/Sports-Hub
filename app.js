@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v66';
+const APP_VERSION = 'v67';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1721,7 +1721,14 @@ async function computeRosterForm(players, fSport) {
   const idx = await baseballPlayerIndex().catch(() => ({}));
   players.forEach((p) => { p._team = p.team || idx[nameKey(p.name)] || ''; });
   const teams = [...new Set(players.map((p) => p._team).filter(Boolean))];
+  // Resolve team IDs the same way fillSeasonStats does: start from the /teams
+  // endpoint, then overlay today's live scoreboard IDs (the source proven to
+  // work in-browser). Without the scoreboard overlay, resolution often fails.
   const ids = await leagueTeamIds(sport).catch(() => ({}));
+  Object.entries(fanState.gamesByTeam || {}).forEach(([name, pg]) => {
+    const id = pg.side === 'home' ? pg.g.home.id : pg.g.away.id;
+    if (id) ids[name.toLowerCase()] = id;
+  });
   const idMaps = {};
   await Promise.all(teams.map(async (t) => {
     const id = ids[t.toLowerCase()]; if (!id) return;
