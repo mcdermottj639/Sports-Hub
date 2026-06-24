@@ -19,6 +19,16 @@ Pages** and runs entirely in the user's browser.
 
 Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
+> ### 🚧 In-progress: optional backend (`server/`)
+> The owner has decided to evolve past pure-static for ONE capability: syncing
+> their **real ESPN fantasy leagues** (football + baseball), which is impossible
+> client-side (private-league endpoints are CORS- and cookie-gated). `server/` is
+> a small **Python FastAPI** service wrapping the `cwendt94/espn-api` library,
+> intended for **Railway** free-tier hosting. The static frontend is unchanged and
+> still deploys to GitHub Pages; it will *optionally* call this API once it's live.
+> Not yet deployed/wired — see `server/README.md`. The constraints below still
+> govern the **frontend**; the backend is the deliberate, scoped exception.
+
 ## Hard constraints (do not break these)
 
 - **No backend, no API keys, no build step.** Everything must run client-side
