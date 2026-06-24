@@ -407,7 +407,26 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .lg-name { font-weight: 800; font-size: 17px; }
 .lg-rec { font-weight: 700; color: var(--muted); font-size: 14px; }
 .lg-live { margin-left: auto; font-size: 10.5px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .4px; }
-.lg-matchup { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 14px; }
-.lg-matchup b { font-size: 18px; color: var(--accent); }
-.lg-vs { color: var(--muted); font-size: 12px; }
 .lg-card .fan-btn { margin-top: 10px; }
+
+/* Fantasy: live category-by-category matchup scoreboard */
+#fantasy-matchup:empty { display: none; }
+.mu-card { background: var(--card); border: 1px solid rgba(255,255,255,.08); border-radius: var(--radius); padding: 12px 14px; margin: 4px 0 8px; }
+.mu-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.mu-team { font-weight: 700; font-size: 13px; color: var(--muted); flex: 1; }
+.mu-team.you { color: var(--text); }
+.mu-team:last-child { text-align: right; }
+.mu-score { font-size: 20px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mu-score b.lead { color: var(--accent); }
+.mu-score small { font-size: 11px; color: var(--muted); font-weight: 600; }
+.mu-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; }
+.cat { border-radius: 10px; padding: 6px 4px; text-align: center; background: var(--card-2); border: 1px solid transparent; }
+.cat.win { border-color: rgba(58,210,159,.5); background: rgba(58,210,159,.10); }
+.cat.loss { border-color: rgba(255,77,77,.35); background: rgba(255,77,77,.08); }
+.cat-name { font-size: 10.5px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; }
+.cat-vals { margin-top: 2px; font-size: 13px; }
+.cat-vals b { font-variant-numeric: tabular-nums; }
+.cat-vals span { color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.cat.win .cat-vals b { color: var(--accent); }
+.mu-legend { margin-top: 8px; font-size: 11px; color: var(--muted); }
+.mu-legend .win { color: var(--accent); }

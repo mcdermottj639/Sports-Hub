@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v61';
+const APP_VERSION = 'v62';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1463,6 +1463,7 @@ async function renderFantasy() {
     fanState.synced[fanState.sport] = true;
   }
   renderLeagueHeader(fanState.sport);
+  renderMatchup(fanState.sport);
 
   const roster = loadRoster(fanState.sport);
 
@@ -1628,18 +1629,46 @@ function renderLeagueHeader(sport) {
   const r = L.record || {};
   const rec = [r.wins, r.losses, r.ties].every((x) => x == null) ? ''
     : `${r.wins ?? 0}-${r.losses ?? 0}${r.ties ? '-' + r.ties : ''}`;
-  let mu = '';
-  const m = L.matchup;
-  if (m && m.me && m.opponent) {
-    mu = `<div class="lg-matchup"><span>${m.me.team}</span><b>${m.me.score ?? '–'}</b><span class="lg-vs">vs</span><b>${m.opponent.score ?? '–'}</b><span>${m.opponent.team}</span></div>`;
-  }
   box.innerHTML = `<div class="lg-card">
       <div class="lg-top"><span class="lg-name">${L.team || 'My Team'}</span>${rec ? `<span class="lg-rec">${rec}</span>` : ''}<span class="lg-live">● synced from ESPN</span></div>
-      ${mu}
       <button id="lg-resync" class="fan-btn ghost">↻ Resync</button>
     </div>`;
   const btn = $('#lg-resync');
   if (btn) btn.onclick = async () => { btn.textContent = '↻ Syncing…'; fanState.synced[sport] = false; await renderFantasy(); };
+}
+
+// Format a category value (ERA/WHIP → 2dp, rate stats → .XXX, counting → int).
+function fmtCat(cat, v) {
+  if (v == null || v === '') return '–';
+  const n = Number(v);
+  if (Number.isNaN(n)) return String(v);
+  const c = (cat || '').toUpperCase();
+  if (/ERA|WHIP/.test(c)) return n.toFixed(2);
+  if (/AVG|OBP|SLG|OPS|PCT/.test(c)) return n.toFixed(3).replace(/^0(?=\.)/, '');
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+// Live category-by-category matchup scoreboard (H2H categories leagues).
+function renderMatchup(sport) {
+  const box = $('#fantasy-matchup');
+  if (!box) return;
+  const m = ((fanState.league || {})[sport] || {}).matchup;
+  if (!m || !m.me || !m.categories || !m.categories.length) { box.innerHTML = ''; return; }
+  const won = m.me.catsWon ?? 0, lost = m.opponent.catsWon ?? 0, tied = m.tied ?? 0;
+  const cats = m.categories.map((c) => {
+    const cls = c.result === 'WIN' ? 'win' : c.result === 'LOSS' ? 'loss' : 'tie';
+    return `<div class="cat ${cls}"><div class="cat-name">${c.cat}</div>
+      <div class="cat-vals"><b>${fmtCat(c.cat, c.me)}</b><span>${fmtCat(c.cat, c.opp)}</span></div></div>`;
+  }).join('');
+  box.innerHTML = `<div class="mu-card">
+      <div class="mu-top">
+        <span class="mu-team you">${m.me.team}</span>
+        <span class="mu-score"><b class="${won > lost ? 'lead' : ''}">${won}</b> – <b class="${lost > won ? 'lead' : ''}">${lost}</b>${tied ? ` <small>(${tied} tied)</small>` : ''}</span>
+        <span class="mu-team">${m.opponent.team}</span>
+      </div>
+      <div class="mu-cats">${cats}</div>
+      <div class="mu-legend">This week · your value vs opponent · <span class="win">green = winning the category</span></div>
+    </div>`;
 }
 
 let MLB_INDEX = null;
