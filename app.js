@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v64';
+const APP_VERSION = 'v65';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1466,6 +1466,7 @@ async function renderFantasy() {
   renderMatchup(fanState.sport);
   renderFantasyStandings(fanState.sport);
   renderWaivers(fanState.sport);
+  renderOpponent(fanState.sport);
 
   const roster = loadRoster(fanState.sport);
 
@@ -1614,12 +1615,13 @@ async function syncFromLeague(sport) {
     }));
     if (!roster.length) return false;
     saveRoster(sport, roster);
-    let matchup = null, standings = null, freeAgents = null;
+    let matchup = null, standings = null, freeAgents = null, opponent = null;
     try { matchup = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/matchup`, 60000); } catch (_) {}
     try { standings = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/standings`, 60000); } catch (_) {}
     try { freeAgents = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/freeagents?size=40`, 300000); } catch (_) {}
+    try { opponent = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/opponent`, 60000); } catch (_) {}
     fanState.league = fanState.league || {};
-    fanState.league[sport] = { team: data.team, record: data.record, matchup, standings, freeAgents };
+    fanState.league[sport] = { team: data.team, record: data.record, matchup, standings, freeAgents, opponent };
     return true;
   } catch (_) { return false; }
 }
@@ -1711,13 +1713,13 @@ function renderFantasyStandings(sport) {
   });
 }
 
-// Run free agents through the same recent-form engine the roster uses, and
-// return the ones trending HOT (baseball only).
-async function hotFreeAgents(players, fSport) {
+// Run any player list through the same recent-form engine the roster uses;
+// returns each player annotated with its hot/cold tag (baseball only).
+async function computeRosterForm(players, fSport) {
   if (fSport !== 'baseball') return [];
   const sport = 'mlb';
   const idx = await baseballPlayerIndex().catch(() => ({}));
-  players.forEach((p) => { p._team = idx[nameKey(p.name)] || ''; });
+  players.forEach((p) => { p._team = p.team || idx[nameKey(p.name)] || ''; });
   const teams = [...new Set(players.map((p) => p._team).filter(Boolean))];
   const ids = await leagueTeamIds(sport).catch(() => ({}));
   const idMaps = {};
@@ -1730,11 +1732,15 @@ async function hotFreeAgents(players, fSport) {
     const aid = p._team ? (idMaps[p._team] || {})[nameKey(p.name)] : null;
     if (!aid) return;
     const hc = hotCold(fSport, await athleteGamelog(sport, aid).catch(() => null), p.isPitcher);
-    if (hc && hc.tag === 'hot') out.push({ ...p, team: p._team, hc });
+    if (hc) out.push({ ...p, team: p._team, hc });
   }));
-  // Most-owned (most relevant) hot pickups first.
-  out.sort((a, b) => (b.owned ?? 0) - (a.owned ?? 0));
   return out;
+}
+
+// Free agents trending HOT, most-owned (most relevant) first.
+async function hotFreeAgents(players, fSport) {
+  const form = await computeRosterForm(players, fSport);
+  return form.filter((p) => p.hc.tag === 'hot').sort((a, b) => (b.owned ?? 0) - (a.owned ?? 0));
 }
 
 async function renderWaivers(sport) {
@@ -1762,6 +1768,47 @@ async function renderWaivers(sport) {
   box.innerHTML = `<h2 class="section-title">Waiver Wire — Hot Pickups</h2>
     <div class="none" style="margin-bottom:8px">Available players in your league trending up over recent games — best add targets first.</div>
     <div class="wv-list">${rows}</div>`;
+}
+
+// Start/Sit suggestions from the roster's own hot/cold tags (called by
+// fillSeasonStats once it has computed everyone's recent form).
+function renderStartSit(entries) {
+  const box = $('#fantasy-startsit');
+  if (!box) return;
+  const start = entries.filter((e) => e.status === 'bench' && e.tag === 'hot');
+  const sit = entries.filter((e) => e.status === 'active' && e.tag === 'cold');
+  if (!start.length && !sit.length) { box.innerHTML = ''; return; }
+  const li = (arr) => arr.length
+    ? arr.map((e) => `<li><b>${e.name}</b>${e.lead ? ` <span class="lead">${e.lead}</span>` : ''}</li>`).join('')
+    : '<li class="none">None</li>';
+  box.innerHTML = `<h2 class="section-title">Start / Sit</h2>
+    <div class="ss-cols">
+      <div><div class="ss-h start">⬆ Start — hot on your bench</div><ul>${li(start)}</ul></div>
+      <div><div class="ss-h sit">⬇ Sit — cold in your lineup</div><ul>${li(sit)}</ul></div>
+    </div>`;
+}
+
+// Opponent scouting: this week's opponent's active lineup, hot threats vs slumps.
+async function renderOpponent(sport) {
+  const box = $('#fantasy-opponent');
+  if (!box) return;
+  const O = ((fanState.league || {})[sport] || {}).opponent;
+  if (sport !== 'baseball' || !O || !O.roster || !O.roster.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `<h2 class="section-title">Opponent — ${O.opponent}</h2><div class="none">Scouting their lineup…</div>`;
+  const active = O.roster.filter((p) => p.status === 'active');
+  const form = await computeRosterForm(active, sport);
+  if (fanState.sport !== sport) return;
+  const hot = form.filter((p) => p.hc.tag === 'hot');
+  const cold = form.filter((p) => p.hc.tag === 'cold');
+  const li = (arr) => arr.length
+    ? arr.map((p) => `<li><b>${p.name}</b>${p.hc.lead ? ` <span class="lead">${p.hc.lead}</span>` : ''}</li>`).join('')
+    : '<li class="none">None</li>';
+  box.innerHTML = `<h2 class="section-title">Opponent — ${O.opponent}</h2>
+    <div class="none" style="margin-bottom:8px">Who you're up against this week (their active lineup).</div>
+    <div class="ss-cols">
+      <div><div class="ss-h sit">🔥 Their threats</div><ul>${li(hot)}</ul></div>
+      <div><div class="ss-h start">🥶 Slumping — go at them</div><ul>${li(cold)}</ul></div>
+    </div>`;
 }
 
 let MLB_INDEX = null;
@@ -1938,7 +1985,7 @@ async function fillSeasonStats(roster, fSport) {
     [sMaps[t], idMaps[t]] = await Promise.all([teamSeasonMap(sport, id).catch(() => ({})), rosterIdMap(sport, id).catch(() => ({}))]);
   }));
 
-  const hot = [], cold = [];
+  const hot = [], cold = [], ss = [];
   await Promise.all(roster.map(async (p, i) => {
     const seasEl = document.getElementById(`fseas-${i}`);
     const trendEl = document.getElementById(`ftrend-${i}`);
@@ -1957,6 +2004,7 @@ async function fillSeasonStats(roster, fSport) {
         if (leadEl) leadEl.textContent = hc.lead || '';
         if (hc.tag === 'hot') hot.push({ name: p.name, lead: hc.lead });
         else if (hc.tag === 'cold' && p.status !== 'il') cold.push({ name: p.name, lead: hc.lead });
+        ss.push({ name: p.name, status: p.status, tag: hc.tag, lead: hc.lead });
       }
     }
     seasEl.innerHTML = season ? `<b>Season:</b> ${season}` : 'season stats unavailable';
@@ -1980,6 +2028,8 @@ async function fillSeasonStats(roster, fSport) {
       <div><div class="hc-h cold">🥶 Cooling off — drop watch</div><ul>${li(cold)}</ul></div>
     </div>
     <div class="none" style="margin-top:6px">Trends compare the last 20 days to season; only players with enough recent games show a tag.</div>`;
+
+  renderStartSit(ss);
 }
 
 $('#fan-add').addEventListener('click', () => {

@@ -459,3 +459,17 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .wv-hot { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
 .wv-hot .hc-tag { color: var(--accent); font-weight: 800; font-size: 12.5px; }
 .wv-hot .hc-detail { color: var(--muted); font-size: 11.5px; }
+
+/* Fantasy: start/sit + opponent scouting two-column lists */
+#fantasy-startsit:empty, #fantasy-opponent:empty { display: none; }
+.ss-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 520px) { .ss-cols { grid-template-columns: 1fr; } }
+.ss-cols > div { background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: 12px; padding: 10px 12px; }
+.ss-h { font-size: 12.5px; font-weight: 800; margin-bottom: 6px; }
+.ss-h.start { color: var(--accent); }
+.ss-h.sit { color: var(--gold); }
+.ss-cols ul { list-style: none; margin: 0; padding: 0; }
+.ss-cols li { padding: 4px 0; font-size: 13.5px; border-top: 1px solid rgba(255,255,255,.05); }
+.ss-cols li:first-child { border-top: none; }
+.ss-cols li .lead { color: var(--muted); font-size: 12px; }
+.ss-cols li.none { color: var(--muted); font-style: italic; }
