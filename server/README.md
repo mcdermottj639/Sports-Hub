@@ -68,6 +68,11 @@ uvicorn main:app --reload
 
 `{sport}` is `football` or `baseball`.
 
+League data is cached in memory for `LEAGUE_TTL_SECONDS` (default 300s / 5 min)
+so repeated calls don't hammer ESPN; the cache also auto-expires when that window
+passes, and `/api/refresh` clears it immediately. Set `LEAGUE_TTL_SECONDS=0` to
+disable caching.
+
 ## Security notes
 
 - Cookies/league IDs live **only** in the host's environment variables — never

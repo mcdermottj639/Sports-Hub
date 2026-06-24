@@ -32,8 +32,15 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > **Baseball is live** (league `42353353`, team "Duran Duran" id `2`); football is
 > coded but not yet configured (no league id set). The Fantasy tab calls the API
 > once per session (`syncFromLeague`), overwrites the saved roster with the real
-> one, shows a team/record/matchup header (`#fantasy-league`, `renderLeagueHeader`),
-> then runs the existing stat pipeline. If the backend is unreachable it falls back
+> one, shows a team/record/matchup header (`#fantasy-league`, `renderLeagueHeader`)
+> with a **🔄 Refresh from ESPN** button + "synced Xm ago" timestamp,
+> then runs the existing stat pipeline. **Freshness/caching:** it is NOT real-time —
+> two cache layers sit in front of ESPN. (a) The backend caches each League object
+> for `LEAGUE_TTL_SECONDS` (default 300s, env-tunable; `_build_league` time-bucketed
+> `lru_cache`) and auto-expires after that, plus `/api/refresh` clears it on demand.
+> (b) The frontend syncs once per session; the Refresh button sets `fanState.forceSync`,
+> which calls `/api/refresh` and cache-busts `fetchJSON` to force a true re-pull.
+> If the backend is unreachable it falls back
 > to the locally-saved/manual roster, so the app never looks broken. The constraints
 > below still govern the **frontend**; the backend is the deliberate, scoped
 > exception. Cookies expire periodically — if the league stops loading, re-grab
@@ -76,7 +83,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v68**.
+Current version as of this writing: **v69**.
 
 ## Testing reality
 

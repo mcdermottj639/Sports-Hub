@@ -11,6 +11,7 @@ Nothing sensitive is committed to the repo. See .env.example.
 """
 
 import os
+import time
 from functools import lru_cache
 from typing import Optional
 
@@ -61,9 +62,18 @@ SPORTS = {
 }
 
 
-@lru_cache(maxsize=8)
-def get_league(sport: str):
-    """Build (and cache) an espn-api League for a sport. Cleared by /refresh."""
+# How long a pulled League snapshot is reused before we re-fetch from ESPN.
+# Without this the cache lived forever (only /api/refresh cleared it), so the
+# Fantasy tab looked frozen. A small TTL keeps it fresh without hammering ESPN.
+# Override with the LEAGUE_TTL_SECONDS env var (set 0 to disable caching).
+LEAGUE_TTL_SECONDS = int(os.getenv("LEAGUE_TTL_SECONDS", "300"))
+
+
+@lru_cache(maxsize=32)
+def _build_league(sport: str, _bucket: int):
+    """Build an espn-api League. `_bucket` is a time bucket so the cache key
+    rolls over every LEAGUE_TTL_SECONDS — a new bucket is a cache miss and
+    forces a fresh ESPN pull. Don't call directly; go through get_league()."""
     cfg = SPORTS.get(sport)
     if not cfg:
         raise HTTPException(404, f"Unknown sport '{sport}'. Try football or baseball.")
@@ -82,6 +92,13 @@ def get_league(sport: str):
         )
     except Exception as e:  # espn-api raises plain Exceptions on auth/404
         raise HTTPException(502, f"Could not load {sport} league from ESPN: {e}")
+
+
+def get_league(sport: str):
+    """Cached League for a sport. Auto-refreshes every LEAGUE_TTL_SECONDS and
+    on demand via /api/refresh."""
+    bucket = int(time.time() // LEAGUE_TTL_SECONDS) if LEAGUE_TTL_SECONDS > 0 else int(time.time())
+    return _build_league(sport, bucket)
 
 
 def my_team(league, team_id: Optional[str]):
@@ -433,5 +450,5 @@ def standings(sport: str):
 @app.get("/api/refresh")
 def refresh():
     """Drop the cached League objects so the next call re-pulls from ESPN."""
-    get_league.cache_clear()
+    _build_league.cache_clear()
     return {"ok": True, "cleared": True}

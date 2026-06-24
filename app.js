@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v68';
+const APP_VERSION = 'v69';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1463,9 +1463,10 @@ async function renderFantasy() {
   // unreachable or this sport's league isn't configured.
   fanState.synced = fanState.synced || {};
   const cfg = await leagueConfig();
-  if (cfg[fanState.sport] && !fanState.synced[fanState.sport]) {
-    await syncFromLeague(fanState.sport);
+  if (cfg[fanState.sport] && (!fanState.synced[fanState.sport] || fanState.forceSync)) {
+    await syncFromLeague(fanState.sport, !!fanState.forceSync);
     fanState.synced[fanState.sport] = true;
+    fanState.forceSync = false;
   }
   renderLeagueHeader(fanState.sport);
   renderMatchup(fanState.sport);
@@ -1608,9 +1609,18 @@ async function leagueConfig() {
 // Pull the real roster (+ this week's matchup) and overwrite the saved roster.
 // Returns true if a real roster was loaded. Teams left blank fall through to
 // the existing name-based autoResolveTeams backfill.
-async function syncFromLeague(sport) {
+async function syncFromLeague(sport, force = false) {
   try {
-    const data = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/roster`, 60000);
+    // On a forced refresh, clear the backend's in-memory league cache first,
+    // then cache-bust our own fetchJSON cache so we truly re-pull from ESPN
+    // instead of getting a stale snapshot from either layer.
+    let bust = '';
+    if (force) {
+      try { await fetch(`${FANTASY_API}/api/refresh`, { cache: 'no-store' }); } catch (_) {}
+      bust = `_=${Date.now()}`;
+    }
+    const q = (extra) => { const p = [bust, extra].filter(Boolean); return p.length ? `?${p.join('&')}` : ''; };
+    const data = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/roster${q()}`, 60000);
     const roster = (data.roster || []).map((p) => ({
       name: p.name,
       slot: p.lineupSlot || p.pos || 'BE',
@@ -1621,12 +1631,12 @@ async function syncFromLeague(sport) {
     if (!roster.length) return false;
     saveRoster(sport, roster);
     let matchup = null, standings = null, freeAgents = null, opponent = null;
-    try { matchup = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/matchup`, 60000); } catch (_) {}
-    try { standings = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/standings`, 60000); } catch (_) {}
-    try { freeAgents = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/freeagents?size=40`, 300000); } catch (_) {}
-    try { opponent = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/opponent`, 60000); } catch (_) {}
+    try { matchup = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/matchup${q()}`, 60000); } catch (_) {}
+    try { standings = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/standings${q()}`, 60000); } catch (_) {}
+    try { freeAgents = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/freeagents${q('size=40')}`, 300000); } catch (_) {}
+    try { opponent = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/opponent${q()}`, 60000); } catch (_) {}
     fanState.league = fanState.league || {};
-    fanState.league[sport] = { team: data.team, record: data.record, matchup, standings, freeAgents, opponent };
+    fanState.league[sport] = { team: data.team, record: data.record, matchup, standings, freeAgents, opponent, syncedAt: Date.now() };
     return true;
   } catch (_) { return false; }
 }
@@ -1640,12 +1650,15 @@ function renderLeagueHeader(sport) {
   const r = L.record || {};
   const rec = [r.wins, r.losses, r.ties].every((x) => x == null) ? ''
     : `${r.wins ?? 0}-${r.losses ?? 0}${r.ties ? '-' + r.ties : ''}`;
+  const syncedTxt = L.syncedAt
+    ? (Date.now() - L.syncedAt < 60000 ? 'synced just now' : `synced ${timeAgo(L.syncedAt)}`)
+    : 'synced from ESPN';
   box.innerHTML = `<div class="lg-card">
-      <div class="lg-top"><span class="lg-name">${L.team || 'My Team'}</span>${rec ? `<span class="lg-rec">${rec}</span>` : ''}<span class="lg-live">● synced from ESPN</span></div>
-      <button id="lg-resync" class="fan-btn ghost">↻ Resync</button>
+      <div class="lg-top"><span class="lg-name">${L.team || 'My Team'}</span>${rec ? `<span class="lg-rec">${rec}</span>` : ''}<span class="lg-live">● ${syncedTxt}</span></div>
+      <button id="lg-resync" class="fan-btn ghost">🔄 Refresh from ESPN</button>
     </div>`;
   const btn = $('#lg-resync');
-  if (btn) btn.onclick = async () => { btn.textContent = '↻ Syncing…'; fanState.synced[sport] = false; await renderFantasy(); };
+  if (btn) btn.onclick = async () => { btn.textContent = '🔄 Refreshing…'; fanState.forceSync = true; await renderFantasy(); };
 }
 
 // Format a category value (ERA/WHIP → 2dp, rate stats → .XXX, counting → int).
