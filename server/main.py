@@ -186,17 +186,31 @@ def _mscore(m, side):
     return None
 
 
-def _find_box(league, my_id):
-    """Find the box score (rich, per-category stats) containing my team."""
+def _find_box(league, my_id, sport):
+    """Find the box score (rich, per-category stats) containing my team.
+
+    espn-api only auto-selects a box-score parser when scoringType is exactly
+    H2H_CATEGORY or H2H_POINTS; other categories formats (e.g.
+    H2H_MOST_CATEGORIES) fall back to the abstract base class and raise. For
+    baseball we retry with the categories parser, which reads the same
+    cumulativeScore.scoreByStat payload regardless of the exact scoring type.
+    """
+    def _attempt():
+        for b in league.box_scores():
+            if my_id in (_tid(getattr(b, "home_team", None)), _tid(getattr(b, "away_team", None))):
+                return b
+        return None
     try:
-        boxes = league.box_scores()
+        return _attempt()
     except Exception:
-        boxes = []
-    for b in boxes:
-        home, away = getattr(b, "home_team", None), getattr(b, "away_team", None)
-        if my_id in (_tid(home), _tid(away)):
-            return b
-    return None
+        if sport == "baseball":
+            try:
+                from espn_api.baseball.box_score import H2HCategoryBoxScore
+                league._box_score_class = H2HCategoryBoxScore
+                return _attempt()
+            except Exception:
+                return None
+        return None
 
 
 @app.get("/api/fantasy/{sport}/matchup")
@@ -209,7 +223,7 @@ def matchup(sport: str):
         raise HTTPException(404, "No teams found in that league.")
     my_id = _tid(team)
 
-    b = _find_box(league, my_id)
+    b = _find_box(league, my_id, sport)
     if b is not None:
         mine_home = _tid(getattr(b, "home_team", None)) == my_id
         me_t = b.home_team if mine_home else b.away_team
@@ -268,7 +282,7 @@ def opponent(sport: str):
     if not team:
         raise HTTPException(404, "No teams found in that league.")
     my_id = _tid(team)
-    b = _find_box(league, my_id)
+    b = _find_box(league, my_id, sport)
     if b is None:
         return {"sport": sport, "opponent": None, "note": "No matchup this week."}
     mine_home = _tid(getattr(b, "home_team", None)) == my_id
@@ -287,10 +301,12 @@ def debug(sport: str):
     """Diagnostic: what does ESPN actually return for matchups this week?"""
     league = get_league(sport)
     team = my_team(league, SPORTS[sport]["team_id"])
+    my_id = _tid(team)
     out = {
         "sport": sport,
-        "myTeamId": _tid(team),
+        "myTeamId": my_id,
         "myTeam": getattr(team, "team_name", None),
+        "scoringType": getattr(league, "scoring_type", None),
         "currentMatchupPeriod": getattr(league, "currentMatchupPeriod", None),
         "current_week": getattr(league, "current_week", None),
         "scoringPeriodId": getattr(league, "scoringPeriodId", None),
