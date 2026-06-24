@@ -173,29 +173,104 @@ def roster(sport: str):
     }
 
 
+def _tid(t):
+    return str(getattr(t, "team_id", "") or "")
+
+
+def _find_box(league, my_id):
+    """Find the box score (rich, per-category stats) containing my team."""
+    try:
+        boxes = league.box_scores()
+    except Exception:
+        boxes = []
+    for b in boxes:
+        home, away = getattr(b, "home_team", None), getattr(b, "away_team", None)
+        if my_id in (_tid(home), _tid(away)):
+            return b
+    return None
+
+
 @app.get("/api/fantasy/{sport}/matchup")
 def matchup(sport: str):
-    """This week's head-to-head: your score vs opponent's, live if in progress."""
+    """This week's head-to-head. For categories leagues, returns the
+    category-by-category breakdown (who's winning R, HR, ERA, WHIP, ...)."""
     league = get_league(sport)
     team = my_team(league, SPORTS[sport]["team_id"])
     if not team:
         raise HTTPException(404, "No teams found in that league.")
+    my_id = _tid(team)
+
+    b = _find_box(league, my_id)
+    if b is not None:
+        mine_home = _tid(getattr(b, "home_team", None)) == my_id
+        me_t = b.home_team if mine_home else b.away_team
+        opp_t = b.away_team if mine_home else b.home_team
+        me_stats = getattr(b, "home_stats" if mine_home else "away_stats", None) or {}
+        opp_stats = getattr(b, "away_stats" if mine_home else "home_stats", None) or {}
+        me_score = getattr(b, "home_score" if mine_home else "away_score", None)
+        opp_score = getattr(b, "away_score" if mine_home else "home_score", None)
+
+        cats, won, lost, tied = [], 0, 0, 0
+        for name, mv in me_stats.items():
+            ov = opp_stats.get(name, {})
+            mval = mv.get("value") if isinstance(mv, dict) else mv
+            oval = ov.get("value") if isinstance(ov, dict) else ov
+            res = ((mv.get("result") if isinstance(mv, dict) else "") or "").upper()
+            if res == "WIN":
+                won += 1
+            elif res == "LOSS":
+                lost += 1
+            elif res == "TIE":
+                tied += 1
+            cats.append({"cat": name, "me": mval, "opp": oval, "result": res})
+        return {
+            "sport": sport,
+            "me": {"team": getattr(me_t, "team_name", "Me"), "catsWon": won, "score": me_score},
+            "opponent": {"team": getattr(opp_t, "team_name", "Opp"), "catsWon": lost, "score": opp_score},
+            "tied": tied,
+            "categories": cats,
+        }
+
+    # Fallback: scoreboard (points leagues, or when box scores are unavailable).
     try:
-        scores = league.scoreboard()
-    except Exception as e:
-        raise HTTPException(502, f"Could not load scoreboard: {e}")
-    for m in scores:
-        home, away = m.home_team, m.away_team
-        if home is team or away is team:
-            mine, opp = (home, away) if home is team else (away, home)
-            my_score = m.home_score if home is team else m.away_score
-            opp_score = m.away_score if home is team else m.home_score
+        for m in league.scoreboard():
+            home, away = getattr(m, "home_team", None), getattr(m, "away_team", None)
+            if my_id not in (_tid(home), _tid(away)):
+                continue
+            mine_home = _tid(home) == my_id
             return {
                 "sport": sport,
-                "me": {"team": getattr(mine, "team_name", "Me"), "score": my_score},
-                "opponent": {"team": getattr(opp, "team_name", "Opp"), "score": opp_score},
+                "me": {"team": getattr(home if mine_home else away, "team_name", "Me"),
+                       "score": m.home_score if mine_home else m.away_score},
+                "opponent": {"team": getattr(away if mine_home else home, "team_name", "Opp"),
+                             "score": m.away_score if mine_home else m.home_score},
+                "categories": [],
             }
+    except Exception:
+        pass
     return {"sport": sport, "me": None, "opponent": None, "note": "No matchup this week."}
+
+
+@app.get("/api/fantasy/{sport}/opponent")
+def opponent(sport: str):
+    """This week's opponent and their full roster (for start/sit scouting)."""
+    league = get_league(sport)
+    team = my_team(league, SPORTS[sport]["team_id"])
+    if not team:
+        raise HTTPException(404, "No teams found in that league.")
+    my_id = _tid(team)
+    b = _find_box(league, my_id)
+    if b is None:
+        return {"sport": sport, "opponent": None, "note": "No matchup this week."}
+    mine_home = _tid(getattr(b, "home_team", None)) == my_id
+    opp_t = b.away_team if mine_home else b.home_team
+    opp_lineup = getattr(b, "away_lineup" if mine_home else "home_lineup", None)
+    players = opp_lineup if opp_lineup else getattr(opp_t, "roster", [])
+    return {
+        "sport": sport,
+        "opponent": getattr(opp_t, "team_name", "Opponent"),
+        "roster": [player_dict(p) for p in (players or [])],
+    }
 
 
 @app.get("/api/fantasy/{sport}/standings")
