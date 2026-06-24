@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v63';
+const APP_VERSION = 'v64';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1465,6 +1465,7 @@ async function renderFantasy() {
   renderLeagueHeader(fanState.sport);
   renderMatchup(fanState.sport);
   renderFantasyStandings(fanState.sport);
+  renderWaivers(fanState.sport);
 
   const roster = loadRoster(fanState.sport);
 
@@ -1613,11 +1614,12 @@ async function syncFromLeague(sport) {
     }));
     if (!roster.length) return false;
     saveRoster(sport, roster);
-    let matchup = null, standings = null;
+    let matchup = null, standings = null, freeAgents = null;
     try { matchup = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/matchup`, 60000); } catch (_) {}
     try { standings = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/standings`, 60000); } catch (_) {}
+    try { freeAgents = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/freeagents?size=40`, 300000); } catch (_) {}
     fanState.league = fanState.league || {};
-    fanState.league[sport] = { team: data.team, record: data.record, matchup, standings };
+    fanState.league[sport] = { team: data.team, record: data.record, matchup, standings, freeAgents };
     return true;
   } catch (_) { return false; }
 }
@@ -1707,6 +1709,59 @@ function renderFantasyStandings(sport) {
   box.querySelectorAll('.st-toggle .chip').forEach((b) => {
     b.onclick = () => { fanState.standSort = b.dataset.s; renderFantasyStandings(sport); };
   });
+}
+
+// Run free agents through the same recent-form engine the roster uses, and
+// return the ones trending HOT (baseball only).
+async function hotFreeAgents(players, fSport) {
+  if (fSport !== 'baseball') return [];
+  const sport = 'mlb';
+  const idx = await baseballPlayerIndex().catch(() => ({}));
+  players.forEach((p) => { p._team = idx[nameKey(p.name)] || ''; });
+  const teams = [...new Set(players.map((p) => p._team).filter(Boolean))];
+  const ids = await leagueTeamIds(sport).catch(() => ({}));
+  const idMaps = {};
+  await Promise.all(teams.map(async (t) => {
+    const id = ids[t.toLowerCase()]; if (!id) return;
+    idMaps[t] = await rosterIdMap(sport, id).catch(() => ({}));
+  }));
+  const out = [];
+  await Promise.all(players.map(async (p) => {
+    const aid = p._team ? (idMaps[p._team] || {})[nameKey(p.name)] : null;
+    if (!aid) return;
+    const hc = hotCold(fSport, await athleteGamelog(sport, aid).catch(() => null), p.isPitcher);
+    if (hc && hc.tag === 'hot') out.push({ ...p, team: p._team, hc });
+  }));
+  // Most-owned (most relevant) hot pickups first.
+  out.sort((a, b) => (b.owned ?? 0) - (a.owned ?? 0));
+  return out;
+}
+
+async function renderWaivers(sport) {
+  const box = $('#fantasy-waivers');
+  if (!box) return;
+  const fa = ((fanState.league || {})[sport] || {}).freeAgents;
+  if (sport !== 'baseball' || !fa || !fa.players || !fa.players.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '<h2 class="section-title">Waiver Wire — Hot Pickups</h2><div class="none">Scanning available players for hot streaks…</div>';
+  const hot = await hotFreeAgents(fa.players.slice(0, 35), sport);
+  if (fanState.sport !== sport) return; // user switched away while scanning
+  if (!hot.length) {
+    box.innerHTML = '<h2 class="section-title">Waiver Wire — Hot Pickups</h2><div class="none">No available players are trending hot right now. Check back after the next slate.</div>';
+    return;
+  }
+  const rows = hot.slice(0, 12).map((p) => {
+    const abbr = MLB_ABBR[p.team] || '';
+    const owned = p.owned != null && p.owned >= 0 ? `${Math.round(p.owned)}% owned` : '';
+    return `<div class="wv-item">
+        <div class="wv-main"><span class="wv-name">${p.name}</span>
+          <span class="wv-meta">${p.pos}${abbr ? ' · ' + abbr : ''}${owned ? ' · ' + owned : ''}</span></div>
+        <div class="wv-hot"><span class="hc-tag">🔥 ${p.hc.lead || 'Hot'}</span>
+          <span class="hc-detail">${p.hc.detail || ''}</span></div>
+      </div>`;
+  }).join('');
+  box.innerHTML = `<h2 class="section-title">Waiver Wire — Hot Pickups</h2>
+    <div class="none" style="margin-bottom:8px">Available players in your league trending up over recent games — best add targets first.</div>
+    <div class="wv-list">${rows}</div>`;
 }
 
 let MLB_INDEX = null;

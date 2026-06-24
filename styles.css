@@ -449,3 +449,13 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .st-pow { position: relative; min-width: 70px; }
 .pow-bar { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); height: 16px; background: rgba(58,210,159,.22); border-radius: 4px; z-index: 0; }
 .pow-num { position: relative; z-index: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Fantasy: waiver-wire hot pickups */
+#fantasy-waivers:empty { display: none; }
+.wv-list { display: flex; flex-direction: column; gap: 8px; }
+.wv-item { background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: 12px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wv-name { font-weight: 700; }
+.wv-meta { color: var(--muted); font-size: 12px; margin-left: 6px; }
+.wv-hot { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.wv-hot .hc-tag { color: var(--accent); font-weight: 800; font-size: 12.5px; }
+.wv-hot .hc-detail { color: var(--muted); font-size: 11.5px; }
