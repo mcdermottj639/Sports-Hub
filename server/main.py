@@ -177,6 +177,15 @@ def _tid(t):
     return str(getattr(t, "team_id", "") or "")
 
 
+def _mscore(m, side):
+    """Read a matchup's per-side score across espn-api's attribute names."""
+    for attr in (f"{side}_score", f"{side}_final_score", f"{side}_team_live_score"):
+        v = getattr(m, attr, None)
+        if v is not None:
+            return v
+    return None
+
+
 def _find_box(league, my_id):
     """Find the box score (rich, per-category stats) containing my team."""
     try:
@@ -233,21 +242,21 @@ def matchup(sport: str):
 
     # Fallback: scoreboard (points leagues, or when box scores are unavailable).
     try:
-        for m in league.scoreboard():
-            home, away = getattr(m, "home_team", None), getattr(m, "away_team", None)
-            if my_id not in (_tid(home), _tid(away)):
-                continue
-            mine_home = _tid(home) == my_id
-            return {
-                "sport": sport,
-                "me": {"team": getattr(home if mine_home else away, "team_name", "Me"),
-                       "score": m.home_score if mine_home else m.away_score},
-                "opponent": {"team": getattr(away if mine_home else home, "team_name", "Opp"),
-                             "score": m.away_score if mine_home else m.home_score},
-                "categories": [],
-            }
+        sb = league.scoreboard()
     except Exception:
-        pass
+        sb = []
+    for m in sb:
+        home, away = getattr(m, "home_team", None), getattr(m, "away_team", None)
+        if my_id not in (_tid(home), _tid(away)):
+            continue
+        mine_home = _tid(home) == my_id
+        me_t, opp_t = (home, away) if mine_home else (away, home)
+        return {
+            "sport": sport,
+            "me": {"team": getattr(me_t, "team_name", "Me"), "score": _mscore(m, "home" if mine_home else "away")},
+            "opponent": {"team": getattr(opp_t, "team_name", "Opp"), "score": _mscore(m, "away" if mine_home else "home")},
+            "categories": [],
+        }
     return {"sport": sport, "me": None, "opponent": None, "note": "No matchup this week."}
 
 
@@ -301,11 +310,23 @@ def debug(sport: str):
     try:
         sb = league.scoreboard()
         out["scoreboardCount"] = len(sb)
-        out["scoreboardPairs"] = [
-            {"home": _tid(getattr(m, "home_team", None)),
-             "away": _tid(getattr(m, "away_team", None))}
-            for m in sb[:8]
-        ]
+        pairs = []
+        for m in sb:
+            ht, at = _tid(getattr(m, "home_team", None)), _tid(getattr(m, "away_team", None))
+            pairs.append({"home": ht, "away": at})
+            if my_id in (ht, at):  # dump the simple attributes of my own matchup
+                attrs = {}
+                for k in dir(m):
+                    if k.startswith("_"):
+                        continue
+                    try:
+                        v = getattr(m, k)
+                    except Exception:
+                        continue
+                    if isinstance(v, (int, float, str, bool)) or v is None:
+                        attrs[k] = v
+                out["myMatchupAttrs"] = attrs
+        out["scoreboardPairs"] = pairs[:8]
     except Exception as e:
         out["scoreboardError"] = f"{type(e).__name__}: {e}"
     return out
