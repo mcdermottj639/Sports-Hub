@@ -135,6 +135,7 @@ def player_dict(p) -> dict:
         "eligibleSlots": [s for s in eligible if s not in ("BE", "IL")],
         "proTeam": getattr(p, "proTeam", "") or "",
         "injuryStatus": getattr(p, "injuryStatus", "") or "",
+        "owned": getattr(p, "percent_owned", None),
         "points": getattr(p, "points", None),            # actual fantasy pts (points leagues)
         "projected": getattr(p, "projected_points", None),
         "total": getattr(p, "total_points", None),       # season total (football)
@@ -298,6 +299,17 @@ def opponent(sport: str):
         "opponent": getattr(opp_t, "team_name", "Opponent"),
         "roster": [player_dict(p) for p in (players or [])],
     }
+
+
+@app.get("/api/fantasy/{sport}/freeagents")
+def free_agents(sport: str, size: int = 40):
+    """Top available players (free agents/waivers), most-owned first."""
+    league = get_league(sport)
+    try:
+        fas = league.free_agents(size=min(size, 100))
+    except Exception as e:
+        raise HTTPException(502, f"Could not load free agents: {e}")
+    return {"sport": sport, "players": [player_dict(p) for p in fas]}
 
 
 @app.get("/api/fantasy/{sport}/debug")
