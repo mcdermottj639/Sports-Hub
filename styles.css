@@ -430,3 +430,22 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .cat.win .cat-vals b { color: var(--accent); }
 .mu-legend { margin-top: 8px; font-size: 11px; color: var(--muted); }
 .mu-legend .win { color: var(--accent); }
+
+/* Fantasy: league standings / power rankings */
+#fantasy-standings:empty { display: none; }
+.st-toggle .chip { padding: 4px 11px; font-size: 12px; }
+.st-table { width: 100%; border-collapse: collapse; }
+.st-table th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.1); }
+.st-table td { padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,.05); font-size: 13.5px; vertical-align: middle; }
+.st-table tr.me td { background: rgba(58,210,159,.10); }
+.st-rank { color: var(--muted); font-weight: 700; width: 22px; text-align: center; }
+.st-team { font-weight: 600; }
+.st-you { font-size: 10px; font-weight: 800; color: var(--accent); border: 1px solid rgba(58,210,159,.5); border-radius: 999px; padding: 1px 6px; margin-left: 4px; }
+.st-rec { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--silver); }
+.st-l5 { white-space: nowrap; letter-spacing: 1px; font-weight: 800; font-size: 12px; }
+.st-l5 .f-w { color: var(--accent); }
+.st-l5 .f-l { color: var(--live); }
+.st-l5 .f-t { color: var(--muted); }
+.st-pow { position: relative; min-width: 70px; }
+.pow-bar { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); height: 16px; background: rgba(58,210,159,.22); border-radius: 4px; z-index: 0; }
+.pow-num { position: relative; z-index: 1; font-weight: 700; font-variant-numeric: tabular-nums; }

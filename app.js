@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v62';
+const APP_VERSION = 'v63';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1464,6 +1464,7 @@ async function renderFantasy() {
   }
   renderLeagueHeader(fanState.sport);
   renderMatchup(fanState.sport);
+  renderFantasyStandings(fanState.sport);
 
   const roster = loadRoster(fanState.sport);
 
@@ -1612,10 +1613,11 @@ async function syncFromLeague(sport) {
     }));
     if (!roster.length) return false;
     saveRoster(sport, roster);
-    let matchup = null;
+    let matchup = null, standings = null;
     try { matchup = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/matchup`, 60000); } catch (_) {}
+    try { standings = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/standings`, 60000); } catch (_) {}
     fanState.league = fanState.league || {};
-    fanState.league[sport] = { team: data.team, record: data.record, matchup };
+    fanState.league[sport] = { team: data.team, record: data.record, matchup, standings };
     return true;
   } catch (_) { return false; }
 }
@@ -1669,6 +1671,42 @@ function renderMatchup(sport) {
       <div class="mu-cats">${cats}</div>
       <div class="mu-legend">This week · your value vs opponent · <span class="win">green = winning the category</span></div>
     </div>`;
+}
+
+// League standings / power rankings table (toggle between the two sorts).
+function renderFantasyStandings(sport) {
+  const box = $('#fantasy-standings');
+  if (!box) return;
+  const S = ((fanState.league || {})[sport] || {}).standings;
+  if (!S || !S.teams || !S.teams.length) { box.innerHTML = ''; return; }
+  const sortBy = fanState.standSort || 'standing';
+  const teams = [...S.teams].sort((a, b) => sortBy === 'power'
+    ? (b.powerScore || 0) - (a.powerScore || 0)
+    : (a.standing || 99) - (b.standing || 99));
+  const maxPow = Math.max(...teams.map((t) => t.powerScore || 0), 1);
+  const rows = teams.map((t, i) => {
+    const rec = `${t.wins ?? 0}-${t.losses ?? 0}${t.ties ? '-' + t.ties : ''}`;
+    const l5 = (t.last5 || '').split('').map((c) => `<span class="f-${c.toLowerCase()}">${c}</span>`).join('');
+    const barW = Math.round(100 * (t.powerScore || 0) / maxPow);
+    return `<tr class="${t.isMe ? 'me' : ''}">
+        <td class="st-rank">${i + 1}</td>
+        <td class="st-team">${t.team}${t.isMe ? ' <span class="st-you">you</span>' : ''}</td>
+        <td class="st-rec">${rec}</td>
+        <td class="st-l5">${l5 || '—'}</td>
+        <td class="st-pow"><span class="pow-bar" style="width:${barW}%"></span><span class="pow-num">${t.powerScore ?? '–'}</span></td>
+      </tr>`;
+  }).join('');
+  box.innerHTML = `
+    <h2 class="section-title" style="display:flex;align-items:center;gap:10px">League
+      <span class="chips st-toggle" style="margin:0">
+        <button class="chip ${sortBy === 'standing' ? 'active' : ''}" data-s="standing">Standings</button>
+        <button class="chip ${sortBy === 'power' ? 'active' : ''}" data-s="power">Power</button>
+      </span></h2>
+    <table class="st-table"><thead><tr><th></th><th>Team</th><th>Rec</th><th>L5</th><th>Power</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  box.querySelectorAll('.st-toggle .chip').forEach((b) => {
+    b.onclick = () => { fanState.standSort = b.dataset.s; renderFantasyStandings(sport); };
+  });
 }
 
 let MLB_INDEX = null;
