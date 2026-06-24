@@ -19,15 +19,25 @@ Pages** and runs entirely in the user's browser.
 
 Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
-> ### 🚧 In-progress: optional backend (`server/`)
-> The owner has decided to evolve past pure-static for ONE capability: syncing
-> their **real ESPN fantasy leagues** (football + baseball), which is impossible
-> client-side (private-league endpoints are CORS- and cookie-gated). `server/` is
-> a small **Python FastAPI** service wrapping the `cwendt94/espn-api` library,
-> intended for **Railway** free-tier hosting. The static frontend is unchanged and
-> still deploys to GitHub Pages; it will *optionally* call this API once it's live.
-> Not yet deployed/wired — see `server/README.md`. The constraints below still
-> govern the **frontend**; the backend is the deliberate, scoped exception.
+> ### Optional backend (`server/`) — LIVE, powers the Fantasy tab
+> The owner evolved past pure-static for ONE capability: syncing their **real
+> ESPN fantasy leagues**, which is impossible client-side (private-league
+> endpoints are CORS- and cookie-gated). `server/` is a small **Python FastAPI**
+> service wrapping the `cwendt94/espn-api` library, deployed on **Railway** free
+> tier at **`https://sports-hub-production.up.railway.app`** (set in `app.js` as
+> `FANTASY_API`). Config (league IDs, ESPN `espn_s2`/`SWID` cookies, team id) lives
+> ONLY in Railway env vars — never in the repo; see `server/.env.example` +
+> `server/README.md`. Endpoints: `/api/health`, `/api/fantasy/{sport}/roster`,
+> `/api/fantasy/{sport}/matchup`, `/api/fantasy/{sport}/standings`, `/api/refresh`.
+> **Baseball is live** (league `42353353`, team "Duran Duran" id `2`); football is
+> coded but not yet configured (no league id set). The Fantasy tab calls the API
+> once per session (`syncFromLeague`), overwrites the saved roster with the real
+> one, shows a team/record/matchup header (`#fantasy-league`, `renderLeagueHeader`),
+> then runs the existing stat pipeline. If the backend is unreachable it falls back
+> to the locally-saved/manual roster, so the app never looks broken. The constraints
+> below still govern the **frontend**; the backend is the deliberate, scoped
+> exception. Cookies expire periodically — if the league stops loading, re-grab
+> `espn_s2`/`SWID` and update the Railway vars.
 
 ## Hard constraints (do not break these)
 
@@ -66,7 +76,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v60**.
+Current version as of this writing: **v61**.
 
 ## Testing reality
 

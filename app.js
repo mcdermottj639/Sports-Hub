@@ -1,7 +1,13 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v60';
+const APP_VERSION = 'v61';
+
+// Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
+// app can't read private-league endpoints itself — CORS + cookie gated). When
+// reachable, the Fantasy tab loads the real roster/matchup from here; when not,
+// it falls back to the locally-saved/manual roster. See server/ in the repo.
+const FANTASY_API = 'https://sports-hub-production.up.railway.app';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -1447,6 +1453,17 @@ async function renderFantasy() {
   try { games = await getGames(leagueKey, ymd(sportsDate())); } catch (_) {}
   fanState.gamesByTeam = buildGameIndex(games);
 
+  // Pull the real ESPN league once per session (overwrites the saved roster).
+  // Falls back silently to the locally-saved/manual roster if the backend is
+  // unreachable or this sport's league isn't configured.
+  fanState.synced = fanState.synced || {};
+  const cfg = await leagueConfig();
+  if (cfg[fanState.sport] && !fanState.synced[fanState.sport]) {
+    await syncFromLeague(fanState.sport);
+    fanState.synced[fanState.sport] = true;
+  }
+  renderLeagueHeader(fanState.sport);
+
   const roster = loadRoster(fanState.sport);
 
   // live per-player stat lines (baseball only) + team totals
@@ -1564,6 +1581,67 @@ const MLB_ABBR = {
   'Seattle Mariners': 'SEA', 'St. Louis Cardinals': 'STL', 'Tampa Bay Rays': 'TB', 'Texas Rangers': 'TEX',
   'Toronto Blue Jays': 'TOR', 'Washington Nationals': 'WSH',
 };
+
+// --- live league sync (real ESPN fantasy league via the Sports-Hub backend) ---
+// Invert MLB_ABBR so the backend's proTeam codes (e.g. "LAD") map to the full
+// team names the stat pipeline expects (e.g. "Los Angeles Dodgers").
+const MLB_ABBR2FULL = Object.fromEntries(Object.entries(MLB_ABBR).map(([full, ab]) => [ab.toUpperCase(), full]));
+const proTeamToFull = (ab) => MLB_ABBR2FULL[(ab || '').toUpperCase()] || '';
+
+// Which sports have a real league wired up on the backend (from /api/health).
+async function leagueConfig() {
+  if (fanState.cfg) return fanState.cfg;
+  try { fanState.cfg = (await fetchJSON(`${FANTASY_API}/api/health`, 300000)).configured || {}; }
+  catch (_) { fanState.cfg = {}; }
+  return fanState.cfg;
+}
+
+// Pull the real roster (+ this week's matchup) and overwrite the saved roster.
+// Returns true if a real roster was loaded. Teams left blank fall through to
+// the existing name-based autoResolveTeams backfill.
+async function syncFromLeague(sport) {
+  try {
+    const data = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/roster`, 60000);
+    const roster = (data.roster || []).map((p) => ({
+      name: p.name,
+      slot: p.lineupSlot || p.pos || 'BE',
+      pos: p.pos || '',
+      status: p.status || 'active',
+      team: sport === 'baseball' ? proTeamToFull(p.proTeam) : '',
+    }));
+    if (!roster.length) return false;
+    saveRoster(sport, roster);
+    let matchup = null;
+    try { matchup = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/matchup`, 60000); } catch (_) {}
+    fanState.league = fanState.league || {};
+    fanState.league[sport] = { team: data.team, record: data.record, matchup };
+    return true;
+  } catch (_) { return false; }
+}
+
+// Header card above the roster: team name, record, live matchup, resync button.
+function renderLeagueHeader(sport) {
+  const box = $('#fantasy-league');
+  if (!box) return;
+  const L = (fanState.league || {})[sport];
+  if (!L) { box.innerHTML = ''; return; }
+  const r = L.record || {};
+  const rec = [r.wins, r.losses, r.ties].every((x) => x == null) ? ''
+    : `${r.wins ?? 0}-${r.losses ?? 0}${r.ties ? '-' + r.ties : ''}`;
+  let mu = '';
+  const m = L.matchup;
+  if (m && m.me && m.opponent) {
+    mu = `<div class="lg-matchup"><span>${m.me.team}</span><b>${m.me.score ?? '–'}</b><span class="lg-vs">vs</span><b>${m.opponent.score ?? '–'}</b><span>${m.opponent.team}</span></div>`;
+  }
+  box.innerHTML = `<div class="lg-card">
+      <div class="lg-top"><span class="lg-name">${L.team || 'My Team'}</span>${rec ? `<span class="lg-rec">${rec}</span>` : ''}<span class="lg-live">● synced from ESPN</span></div>
+      ${mu}
+      <button id="lg-resync" class="fan-btn ghost">↻ Resync</button>
+    </div>`;
+  const btn = $('#lg-resync');
+  if (btn) btn.onclick = async () => { btn.textContent = '↻ Syncing…'; fanState.synced[sport] = false; await renderFantasy(); };
+}
+
 let MLB_INDEX = null;
 async function baseballPlayerIndex() {
   if (MLB_INDEX) return MLB_INDEX;
