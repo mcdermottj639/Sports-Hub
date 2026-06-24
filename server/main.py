@@ -93,19 +93,49 @@ def my_team(league, team_id: Optional[str]):
     return league.teams[0] if league.teams else None
 
 
+# Slot codes that mean "pitcher" vs "hitter". ESPN's per-player `position`
+# attribute is unreliable for baseball (it mislabels pitchers), so we derive
+# everything from the player's eligible slots instead.
+_PITCH_SLOTS = {"SP", "RP", "P"}
+_BAT_SLOTS = {"C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "OF", "DH",
+              "1B/3B", "2B/SS", "OF/UTIL"}
+# Preference order when choosing a single display position for a hitter.
+_BAT_ORDER = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "OF", "DH"]
+
+
+def _derive(eligible, lineup_slot):
+    """From eligible slots + current lineup slot, work out (isPitcher, pos, status)."""
+    elig = set(eligible or [])
+    is_pitcher = bool(elig & _PITCH_SLOTS) and not bool(elig & _BAT_SLOTS)
+    if is_pitcher:
+        pos = "SP" if "SP" in elig else "RP" if "RP" in elig else "P"
+    else:
+        pos = next((s for s in _BAT_ORDER if s in elig), "UTIL")
+    slot = (lineup_slot or "").upper()
+    status = "il" if slot == "IL" else "bench" if slot in ("BE", "BENCH") else "active"
+    return is_pitcher, pos, status
+
+
 def player_dict(p) -> dict:
-    """Reshape an espn-api Player into the shape the frontend wants.
+    """Reshape an espn-api Player into the frontend-ready shape.
 
     Football and baseball players don't share every attribute, so we read
-    defensively with getattr.
+    defensively with getattr and derive role/position from eligible slots
+    (ESPN's raw `position` is unreliable for baseball).
     """
+    eligible = getattr(p, "eligibleSlots", []) or []
+    lineup_slot = getattr(p, "lineupSlot", "") or ""
+    is_pitcher, pos, status = _derive(eligible, lineup_slot)
     return {
         "name": getattr(p, "name", ""),
-        "position": getattr(p, "position", "") or "",
-        "lineupSlot": getattr(p, "lineupSlot", "") or "",
+        "pos": pos,                                      # derived display position
+        "isPitcher": is_pitcher,
+        "lineupSlot": lineup_slot,
+        "status": status,                                # active | bench | il
+        "eligibleSlots": [s for s in eligible if s not in ("BE", "IL")],
         "proTeam": getattr(p, "proTeam", "") or "",
         "injuryStatus": getattr(p, "injuryStatus", "") or "",
-        "points": getattr(p, "points", None),            # actual fantasy pts
+        "points": getattr(p, "points", None),            # actual fantasy pts (points leagues)
         "projected": getattr(p, "projected_points", None),
         "total": getattr(p, "total_points", None),       # season total (football)
     }
