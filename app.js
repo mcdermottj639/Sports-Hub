@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v67';
+const APP_VERSION = 'v68';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -194,6 +194,12 @@ async function getStandings(sport) {
 
 // --- game helpers ---------------------------------------------------------
 const gameState = (g) => (g.state === 'in' ? 'live' : g.state === 'post' ? 'final' : 'scheduled');
+// Scan order within a league: live first, then finished, then not-yet-started.
+const STATE_ORDER = { live: 0, final: 1, scheduled: 2 };
+const byStatus = (s) => (a, b) => {
+  const d = STATE_ORDER[gameState(a)] - STATE_ORDER[gameState(b)];
+  return d || ((isFav(s, b) ? 1 : 0) - (isFav(s, a) ? 1 : 0));
+};
 function winnerName(g) {
   if (gameState(g) !== 'final' || g.home.score == null || g.away.score == null) return null;
   if (g.home.score === g.away.score) return 'TIE';
@@ -515,7 +521,10 @@ function renderGames(container, bySport) {
   container.innerHTML = '';
   const all = [];
   for (const [sport, games] of Object.entries(bySport)) (games || []).forEach((g) => all.push({ sport, g }));
-  all.sort((a, b) => (isFav(b.sport, b.g) ? 1 : 0) - (isFav(a.sport, a.g) ? 1 : 0));
+  all.sort((a, b) => {
+    const d = STATE_ORDER[gameState(a.g)] - STATE_ORDER[gameState(b.g)];
+    return d || ((isFav(b.sport, b.g) ? 1 : 0) - (isFav(a.sport, a.g) ? 1 : 0));
+  });
   if (!all.length) {
     container.appendChild(el('div', 'empty', 'No games for this selection.'));
     return;
@@ -668,14 +677,15 @@ function renderHomeByLeague(container, games) {
   container.innerHTML = '';
   const nav = el('div', 'jump-nav');
   container.appendChild(nav);
-  const addChip = (id, label) => {
-    const b = el('button', 'chip', label);
+  const addChip = (id, label, live) => {
+    const b = el('button', 'chip' + (live ? ' chip-live' : ''), (live ? '🔴 ' : '') + label);
     b.onclick = () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     nav.appendChild(b);
   };
-  const addSection = (id, label, cards) => {
-    addChip(id, label);
-    const head = el('h3', 'games-league-head'); head.id = id; head.innerHTML = label;
+  const addSection = (id, label, cards, live) => {
+    addChip(id, label, live);
+    const head = el('h3', 'games-league-head'); head.id = id;
+    head.innerHTML = (live ? '<span class="live-dot"></span>' : '') + label;
     container.appendChild(head);
     const grid = el('div', 'games-grid');
     cards.forEach((c) => grid.appendChild(c));
@@ -683,23 +693,18 @@ function renderHomeByLeague(container, games) {
   };
 
   const teamSports = sortedSports({ teamOnly: true });
-  const favFirst = (s) => (a, b) => (isFav(s, b) ? 1 : 0) - (isFav(s, a) ? 1 : 0);
 
-  // live games across all leagues, pulled to the top
-  const live = [];
-  teamSports.forEach((s) => (games[s] || []).forEach((g) => { if (gameState(g) === 'live') live.push({ s, g }); }));
-  if (live.length) {
-    live.sort((a, b) => (isFav(b.s, b.g) ? 1 : 0) - (isFav(a.s, a.g) ? 1 : 0));
-    addSection('home-live', '🔴 Live', live.map(({ s, g }) => gameCard(s, g)));
-  }
-
-  // the rest, grouped by league (in-season first)
-  const sportsWithGames = teamSports.filter((s) => (games[s] || []).some((g) => gameState(g) !== 'live'));
+  // Grouped by league (in-season first). Within each league the slate is sorted
+  // live → finished → unstarted, so tapping a league chip lands you on the live
+  // games up top. Leagues with a live game get a 🔴 flag on their chip/heading.
+  const sportsWithGames = teamSports.filter((s) => (games[s] || []).length);
   sportsWithGames.forEach((s) => {
-    const cards = [...(games[s] || [])].filter((g) => gameState(g) !== 'live').sort(favFirst(s)).map((g) => gameCard(s, g));
-    addSection(`home-${s}`, `${LEAGUES[s].emoji} ${LEAGUES[s].label}`, cards);
+    const list = [...(games[s] || [])].sort(byStatus(s));
+    const hasLive = list.some((g) => gameState(g) === 'live');
+    const cards = list.map((g) => gameCard(s, g));
+    addSection(`home-${s}`, `${LEAGUES[s].emoji} ${LEAGUES[s].label}`, cards, hasLive);
   });
-  if (!live.length && !sportsWithGames.length) container.appendChild(el('div', 'empty', 'No games today for your sports.'));
+  if (!sportsWithGames.length) container.appendChild(el('div', 'empty', 'No games today for your sports.'));
 
   // golf as its own section (it's a leaderboard, not team games)
   if (SEASON_MONTHS.golf.includes(new Date().getMonth())) addGolfHomeSection(addSection);

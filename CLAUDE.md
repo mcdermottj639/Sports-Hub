@@ -76,7 +76,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v67**.
+Current version as of this writing: **v68**.
 
 ## Testing reality
 
@@ -116,7 +116,9 @@ Current version as of this writing: **v67**.
 
 - **Home** — Top Headlines (numbered 1-2-3 story strip from in-season leagues'
   lead stories, tap → in-app summary popup), My Teams featured card, Today's Games
-  grouped by league with a 🔴 Live section pinned on top.
+  grouped by league (jump-nav chips), each league's slate sorted live → finished →
+  unstarted; leagues with a live game get a 🔴 flag on their chip/heading. (The old
+  cross-league "Live" section was removed in v68 in favor of in-league sorting.)
 - **Eagles tab** — hero, Next Opponent, Latest News (tap → summary), Team Stats &
   rankings, Schedule (2026-27), Depth Chart (Offense/Defense/ST, **Field formation
   view** + List), Player Leaders, By the Numbers, Coaching Staff. Section order and
