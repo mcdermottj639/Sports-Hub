@@ -181,6 +181,7 @@ def standings(sport: str):
         "sport": sport,
         "teams": [
             {
+                "teamId": getattr(t, "team_id", None),
                 "team": getattr(t, "team_name", ""),
                 "wins": getattr(t, "wins", None),
                 "losses": getattr(t, "losses", None),
