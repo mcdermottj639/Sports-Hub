@@ -239,12 +239,16 @@ def matchup(sport: str):
             mval = mv.get("value") if isinstance(mv, dict) else mv
             oval = ov.get("value") if isinstance(ov, dict) else ov
             res = ((mv.get("result") if isinstance(mv, dict) else "") or "").upper()
+            # Only the actual scoring categories carry a WIN/LOSS/TIE result;
+            # the rest (AB, H, OUTS, 2B...) are component stats — skip them.
             if res == "WIN":
                 won += 1
             elif res == "LOSS":
                 lost += 1
             elif res == "TIE":
                 tied += 1
+            else:
+                continue
             cats.append({"cat": name, "me": mval, "opp": oval, "result": res})
         return {
             "sport": sport,
