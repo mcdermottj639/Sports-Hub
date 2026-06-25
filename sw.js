@@ -1,10 +1,17 @@
 // Sports-Hub service worker — network-first so you always get the newest
 // version when online, with a cached copy as an offline fallback. Only the
 // app's own files pass through here; ESPN/X requests go straight to the network.
-const CACHE = 'sportshub-cache';
+// CACHE is versioned (bump it with APP_VERSION) so each deploy starts clean and
+// the activate handler can purge stale caches instead of letting them pile up.
+const CACHE = 'sportshub-v70';
 
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (e) => e.waitUntil(
+  // Drop any older sportshub-* caches, then take control of open pages.
+  caches.keys()
+    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    .then(() => self.clients.claim())
+));
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
@@ -19,7 +26,7 @@ self.addEventListener('fetch', (e) => {
       .then((res) => {
         if (res && res.status === 200 && res.type === 'basic') {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch((err) => console.warn('[sw] cache put failed', err));
         }
         return res;
       })

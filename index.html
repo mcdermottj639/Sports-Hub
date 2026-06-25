@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=69" />
+  <link rel="stylesheet" href="styles.css?v=70" />
 </head>
 <body>
   <header class="topbar">
@@ -25,18 +25,18 @@
     </div>
   </header>
 
-  <nav class="tabs" id="tabs">
-    <button data-tab="home" class="active">Home</button>
-    <button data-tab="eagles">🦅 Eagles</button>
-    <button data-tab="scores">Scores</button>
-    <button data-tab="standings">Standings</button>
-    <button data-tab="predictions">🤖 AI Picks</button>
-    <button data-tab="fantasy">Fantasy</button>
-    <button data-tab="about">About</button>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
+    <button id="tab-home" data-tab="home" class="active" role="tab" aria-selected="true" aria-controls="home">Home</button>
+    <button id="tab-eagles" data-tab="eagles" role="tab" aria-selected="false" aria-controls="eagles">🦅 Eagles</button>
+    <button id="tab-scores" data-tab="scores" role="tab" aria-selected="false" aria-controls="scores">Scores</button>
+    <button id="tab-standings" data-tab="standings" role="tab" aria-selected="false" aria-controls="standings">Standings</button>
+    <button id="tab-predictions" data-tab="predictions" role="tab" aria-selected="false" aria-controls="predictions">🤖 AI Picks</button>
+    <button id="tab-fantasy" data-tab="fantasy" role="tab" aria-selected="false" aria-controls="fantasy">Fantasy</button>
+    <button id="tab-about" data-tab="about" role="tab" aria-selected="false" aria-controls="about">About</button>
   </nav>
 
   <main>
-    <section id="home" class="tab-panel active">
+    <section id="home" class="tab-panel active" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
       <div id="home-headline"></div>
       <h2 class="section-title" style="margin-top:6px">My Teams</h2>
       <div id="featured" class="featured-card">Loading your teams…</div>
@@ -44,7 +44,7 @@
       <div id="home-games" class="games-grid"></div>
     </section>
 
-    <section id="eagles" class="tab-panel">
+    <section id="eagles" class="tab-panel" role="tabpanel" aria-labelledby="tab-eagles" tabindex="0">
       <div id="eagles-hero" class="featured-card">Loading Eagles…</div>
       <div id="eagles-nav" class="eagles-nav"></div>
       <h2 class="section-title" id="sec-nextopp">Next Opponent</h2>
@@ -65,7 +65,7 @@
       <div id="eagles-staff" class="fan-cards"></div>
     </section>
 
-    <section id="scores" class="tab-panel">
+    <section id="scores" class="tab-panel" role="tabpanel" aria-labelledby="tab-scores" tabindex="0">
       <div class="controls">
         <div id="sport-filter" class="chips"></div>
         <input type="date" id="scores-date" />
@@ -73,12 +73,12 @@
       <div id="scores-games" class="games-grid"></div>
     </section>
 
-    <section id="standings" class="tab-panel">
+    <section id="standings" class="tab-panel" role="tabpanel" aria-labelledby="tab-standings" tabindex="0">
       <div id="standings-filter" class="chips"></div>
       <div id="standings-content"></div>
     </section>
 
-    <section id="predictions" class="tab-panel">
+    <section id="predictions" class="tab-panel" role="tabpanel" aria-labelledby="tab-predictions" tabindex="0">
       <div class="controls"><div id="ai-sport" class="chips"></div></div>
       <div class="pred-header">
         <h2 class="section-title" style="margin-top:0">🤖 AI Picks — Today</h2>
@@ -88,7 +88,7 @@
       <div id="ai-picks" class="games-grid"></div>
     </section>
 
-    <section id="fantasy" class="tab-panel">
+    <section id="fantasy" class="tab-panel" role="tabpanel" aria-labelledby="tab-fantasy" tabindex="0">
       <div class="fantasy-head">
         <h2 class="section-title" style="margin-top:0">Fantasy Tracker</h2>
         <div id="fantasy-sport" class="chips"></div>
@@ -111,7 +111,7 @@
       <div id="fantasy-waivers"></div>
     </section>
 
-    <section id="about" class="tab-panel">
+    <section id="about" class="tab-panel" role="tabpanel" aria-labelledby="tab-about" tabindex="0">
       <div class="setup-card">
         <h2>About Sports-Hub</h2>
         <p>A personal hub for <strong>NFL 🦅, NBA, MLB and Soccer</strong> — live scores, standings, and a prediction game, all in your browser.</p>
@@ -137,6 +137,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=69"></script>
+  <script src="app.js?v=70" defer></script>
 </body>
 </html>

@@ -83,7 +83,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v69**.
+Current version as of this writing: **v70**.
 
 ## Testing reality
 
@@ -161,6 +161,15 @@ Current version as of this writing: **v69**.
   files with `cache:'no-store'`, so launches pull the newest deploy (with an
   offline cache fallback). Registered at the end of `app.js`. This replaced the
   manual `?v=` cache-busting dance. ESPN requests bypass the worker (cross-origin).
+  The offline cache is **versioned** (`CACHE = 'sportshub-vN'`) and the `activate`
+  handler purges any older `sportshub-*` caches — bump it alongside `APP_VERSION`.
+- **HTML escaping** — names/headlines/descriptions from ESPN or the fantasy league
+  are run through `esc()` before being interpolated into `innerHTML`, so a stray
+  `&`/`<`/`'` in a name can't break markup or inject HTML. Use `esc()` for any new
+  external-data interpolation.
+- **Accessibility** — the tab bar is a real ARIA tablist (`role="tablist"`/`tab`/
+  `tabpanel`, `aria-selected` toggled in `showTab`); interactive controls meet the
+  44px touch-target floor; keyboard focus shows a `:focus-visible` ring.
 
 ## localStorage keys
 

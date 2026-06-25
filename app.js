@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v69';
+const APP_VERSION = 'v70';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -56,6 +56,11 @@ const el = (tag, cls, html) => {
   if (html !== undefined) e.innerHTML = html;
   return e;
 };
+// Escape text before interpolating it into innerHTML. Names, headlines and
+// descriptions come from ESPN/your fantasy league and can contain &, <, ", '
+// (e.g. "A&M", "Ke'Bryan Hayes") — keep them from breaking the markup.
+const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC_MAP[c]);
 const cache = new Map();
 async function fetchJSON(url, ttl = 60000) {
   const hit = cache.get(url);
@@ -214,9 +219,9 @@ const isFav = (sport, g) =>
   favSet(sport).includes((g.home.name || '').toLowerCase()) || favSet(sport).includes((g.away.name || '').toLowerCase());
 
 function logoHTML(team) {
-  if (team.logo) return `<img class="logo" src="${team.logo}" alt="" onerror="this.style.display='none'"/>`;
+  if (team.logo) return `<img class="logo" src="${esc(team.logo)}" alt="" onerror="this.style.display='none'"/>`;
   const initials = (team.abbr || (team.name || '?').split(' ').pop()).slice(0, 3).toUpperCase();
-  return `<span class="logo placeholder">${initials}</span>`;
+  return `<span class="logo placeholder">${esc(initials)}</span>`;
 }
 
 function gameCard(sport, g) {
@@ -230,7 +235,7 @@ function gameCard(sport, g) {
     const w = win && win !== 'TIE' && win === team.name;
     const score = st === 'scheduled' ? '–' : (team.score != null ? team.score : '–');
     return `<div class="team-row ${w ? 'winner' : ''}">
-      <span class="team">${logoHTML(team)}${team.name || 'TBD'}</span>
+      <span class="team">${logoHTML(team)}${esc(team.name || 'TBD')}</span>
       <span class="score">${score}</span></div>`;
   };
   card.innerHTML = `
@@ -260,12 +265,12 @@ async function openNewsSummary(a) {
   const when = a.published ? new Date(a.published).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' }) : '';
   const by = a.byline || '';
   const href = a.links?.web?.href || a.links?.mobile?.href || '#';
-  $('#modal-body').innerHTML = `${img ? `<img class="news-hero" src="${img}" onerror="this.style.display='none'">` : ''}
-    <h2 class="news-title">${a.headline || ''}</h2>
-    <div class="news-by">${[by, when].filter(Boolean).join(' · ')}</div>
+  $('#modal-body').innerHTML = `${img ? `<img class="news-hero" src="${esc(img)}" onerror="this.style.display='none'">` : ''}
+    <h2 class="news-title">${esc(a.headline || '')}</h2>
+    <div class="news-by">${esc([by, when].filter(Boolean).join(' · '))}</div>
     <div class="md-section-title">Summary</div>
-    <div class="news-summary" id="news-sum">${a.description || 'Summarizing…'}</div>
-    <a class="fan-btn" href="${href}" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;text-decoration:none">Read full article ↗</a>
+    <div class="news-summary" id="news-sum">${esc(a.description || 'Summarizing…')}</div>
+    <a class="fan-btn" href="${esc(href)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;text-decoration:none">Read full article ↗</a>
     <div class="ai-why" style="margin-top:8px;opacity:.7">Auto-condensed from the article text.</div>`;
   const apiHref = a.links?.api?.self?.href || a.links?.api?.news?.href;
   if (apiHref) {
@@ -358,7 +363,7 @@ function liveSituationHTML(sport, data, comp, g) {
           <div class="sit-outs">${dots}<span class="sit-outl">${o} out${o === 1 ? '' : 's'}</span></div>
         </div>
       </div>
-      ${(batter || pitcher) ? `<div class="sit-mu">${pitcher ? `Pitching: <b>${pitcher}</b>` : ''}${pitcher && batter ? ' · ' : ''}${batter ? `At bat: <b>${batter}</b>` : ''}</div>` : ''}
+      ${(batter || pitcher) ? `<div class="sit-mu">${pitcher ? `Pitching: <b>${esc(pitcher)}</b>` : ''}${pitcher && batter ? ' · ' : ''}${batter ? `At bat: <b>${esc(batter)}</b>` : ''}</div>` : ''}
       ${last ? `<div class="sit-last">Last play: ${last}</div>` : ''}`;
   }
   if (sport === 'nfl') return footballSituation(sit, comp);
@@ -437,8 +442,8 @@ function renderGameDetail(sport, data, pred, extra, g) {
   const teamCell = (c) => {
     const t = c.team || {};
     const logo = t.logos?.[0]?.href || t.logo;
-    return `<div class="md-team">${logo ? `<img src="${logo}" alt=""/>` : ''}
-      <div class="nm">${t.shortDisplayName || t.displayName || t.abbreviation || 'TBD'}</div>
+    return `<div class="md-team">${logo ? `<img src="${esc(logo)}" alt=""/>` : ''}
+      <div class="nm">${esc(t.shortDisplayName || t.displayName || t.abbreviation || 'TBD')}</div>
       <div class="sc">${c.score ?? '–'}</div></div>`;
   };
   const st = comp.status?.type || {};
@@ -467,7 +472,7 @@ function renderGameDetail(sport, data, pred, extra, g) {
     const n = Math.max(aLine.length, hLine.length);
     const cols = Array.from({ length: n }, (_, i) => `<th>${i + 1}</th>`).join('');
     const cell = (arr, i) => `<td>${arr[i]?.displayValue ?? arr[i]?.value ?? ''}</td>`;
-    const rowFor = (c, arr) => `<tr><td>${c.team?.abbreviation || c.team?.shortDisplayName || ''}</td>${Array.from({ length: n }, (_, i) => cell(arr, i)).join('')}<td><b>${c.score ?? ''}</b></td></tr>`;
+    const rowFor = (c, arr) => `<tr><td>${esc(c.team?.abbreviation || c.team?.shortDisplayName || '')}</td>${Array.from({ length: n }, (_, i) => cell(arr, i)).join('')}<td><b>${c.score ?? ''}</b></td></tr>`;
     html += `<div class="md-section-title">${sport === 'mlb' ? 'By Inning' : 'By Period'}</div>
       <table class="md-line"><thead><tr><th></th>${cols}<th>T</th></tr></thead>
       <tbody>${rowFor(away, aLine)}${rowFor(home, hLine)}</tbody></table>`;
@@ -613,7 +618,7 @@ async function renderHome() {
   if (fg) {
     const s = gameState(fg);
     const lbl = s === 'live' ? (fg.statusText || 'LIVE') : s === 'final' ? 'Final' : scheduledLabel(fg);
-    html += `<div class="featured-game"><div><strong>${fg.away.name}</strong> ${fg.away.score ?? ''} @ <strong>${fg.home.name}</strong> ${fg.home.score ?? ''}</div>
+    html += `<div class="featured-game"><div><strong>${esc(fg.away.name)}</strong> ${fg.away.score ?? ''} @ <strong>${esc(fg.home.name)}</strong> ${fg.home.score ?? ''}</div>
       <span class="status ${s === 'live' ? 'live' : s === 'final' ? 'final' : ''}">${lbl}</span></div>`;
   } else {
     html += `<div class="muted">No game today. Check the Scores tab for the full slate.</div>`;
@@ -659,10 +664,10 @@ async function renderHomeHeadline() {
     const when = a.published ? timeAgo(a.published) : '';
     const card = el('div', 'hl-card');
     card.innerHTML = `
-      <div class="hl-img" style="${img ? `background-image:url('${img}')` : ''}"><span class="hl-num">${idx + 1}</span></div>
+      <div class="hl-img" style="${img ? `background-image:url('${esc(img)}')` : ''}"><span class="hl-num">${idx + 1}</span></div>
       <div class="hl-body">
         <div class="hl-eyebrow">${cfg.emoji} ${cfg.label}${when ? ` · ${when}` : ''}</div>
-        <div class="hl-title">${a.headline || ''}</div>
+        <div class="hl-title">${esc(a.headline || '')}</div>
       </div>`;
     card.onclick = () => openNewsSummary(a);
     row.appendChild(card);
@@ -770,7 +775,7 @@ async function renderGolfLeaderboard(container) {
     const toPar = c.score?.displayValue ?? c.score ?? '';
     const thru = c.status?.thru != null ? (c.status.thru === 18 ? 'F' : `thru ${c.status.thru}`) : (c.status?.teeTime ? fmtTime(c.status.teeTime) : '');
     const fav = (LEAGUES.golf.fav || []).some((f) => f.toLowerCase() === name.toLowerCase());
-    return `<tr class="${fav ? 'fav' : ''}"><td>${pos}</td><td>${name}</td><td class="num">${toPar}</td><td class="num">${thru}</td></tr>`;
+    return `<tr class="${fav ? 'fav' : ''}"><td>${esc(pos)}</td><td>${esc(name)}</td><td class="num">${esc(toPar)}</td><td class="num">${esc(thru)}</td></tr>`;
   }).join('');
   container.innerHTML = `<div class="golf-head"><div class="golf-name">⛳ ${ev.name || 'PGA Tour'}</div><div class="muted">${statusTxt}</div></div>
     <table class="md-line golf-board"><thead><tr><th>Pos</th><th>Player</th><th class="num">Score</th><th class="num">Thru</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -791,7 +796,7 @@ async function renderStandings() {
 
   const soccer = sport === 'soccer';
   const favs = favSet(sport);
-  const logoFor = (r) => (r.logo ? `<img class="tlogo" src="${r.logo}" onerror="this.style.display='none'"/>` : '');
+  const logoFor = (r) => (r.logo ? `<img class="tlogo" src="${esc(r.logo)}" onerror="this.style.display='none'"/>` : '');
 
   // build a table for a set of rows
   const table = (teams, lastCol, lastVal) => {
@@ -800,7 +805,7 @@ async function renderStandings() {
     const tbody = el('tbody');
     teams.forEach((r, i) => {
       const tr = el('tr', favs.includes((r.team || '').toLowerCase()) ? 'fav' : '');
-      tr.innerHTML = `<td>${r._rank ?? r.rank ?? i + 1}</td><td>${logoFor(r)}${r.team}</td><td class="num">${r.wins ?? '–'}</td><td class="num">${r.losses ?? '–'}</td><td class="num">${lastVal(r)}</td>`;
+      tr.innerHTML = `<td>${r._rank ?? r.rank ?? i + 1}</td><td>${logoFor(r)}${esc(r.team)}</td><td class="num">${r.wins ?? '–'}</td><td class="num">${r.losses ?? '–'}</td><td class="num">${lastVal(r)}</td>`;
       tbody.appendChild(tr);
     });
     t.appendChild(tbody);
@@ -955,7 +960,7 @@ async function topHitters(teamId, n = 3) {
 function hittersHTML(g, ht, at) {
   const line = (p) => {
     const extra = [p.avg != null ? `${ops3n(p.avg)} AVG` : '', p.hr != null ? `${p.hr} HR` : '', p.rbi != null ? `${p.rbi} RBI` : ''].filter(Boolean).join(' · ');
-    return `<div class="hit-row"><span class="hit-n">${p.name}</span><span class="hit-s">${ops3n(p.ops)} OPS${extra ? ' · ' + extra : ''}</span></div>`;
+    return `<div class="hit-row"><span class="hit-n">${esc(p.name)}</span><span class="hit-s">${ops3n(p.ops)} OPS${extra ? ' · ' + esc(extra) : ''}</span></div>`;
   };
   const block = (label, arr) => `<div class="hit-team">${label}</div>${arr.length ? arr.map(line).join('') : '<div class="ai-why">Not available</div>'}`;
   return `<div class="md-section-title">Top 3 Hitters (OPS · healthy)</div>${block(g.away.abbr || 'Away', at)}${block(g.home.abbr || 'Home', ht)}`;
@@ -971,7 +976,7 @@ function nflKeyHTML(g) {
     .map(([pos, re]) => { const p = pick(lead, re); return p ? { pos, ...p } : null; }).filter(Boolean);
   const h = side(g.home.leaders), a = side(g.away.leaders);
   if (!h.length && !a.length) return '<div class="md-section-title">Key Players</div><div class="ai-why">Season stats appear once the season starts.</div>';
-  const rows = (arr) => arr.length ? arr.map((p) => `<div class="hit-row"><span class="hit-n">${p.pos} · ${p.name}</span><span class="hit-s">${p.val}</span></div>`).join('') : '<div class="ai-why">Not available</div>';
+  const rows = (arr) => arr.length ? arr.map((p) => `<div class="hit-row"><span class="hit-n">${esc(p.pos)} · ${esc(p.name)}</span><span class="hit-s">${esc(p.val)}</span></div>`).join('') : '<div class="ai-why">Not available</div>';
   return `<div class="md-section-title">Key Players</div><div class="hit-team">${g.away.abbr || 'Away'}</div>${rows(a)}<div class="hit-team">${g.home.abbr || 'Home'}</div>${rows(h)}`;
 }
 // Projected starting pitchers with their key stats (from the scoreboard feed).
@@ -989,7 +994,7 @@ function startersHTML(g) {
   };
   const h = sp(g.home), a = sp(g.away);
   if (!h && !a) return '<div class="md-section-title">Projected Starters</div><div class="ai-why">Not announced yet.</div>';
-  const row = (label, p) => p ? `<div class="hit-row"><span class="hit-n">${label} · ${p.name}</span><span class="hit-s">${p.bits}</span></div>` : '';
+  const row = (label, p) => p ? `<div class="hit-row"><span class="hit-n">${label} · ${esc(p.name)}</span><span class="hit-s">${esc(p.bits)}</span></div>` : '';
   return `<div class="md-section-title">Projected Starters</div>${row(g.away.abbr || 'Away', a)}${row(g.home.abbr || 'Home', h)}`;
 }
 
@@ -1078,7 +1083,7 @@ async function predictGame(sport, g) {
 function aiPickHead(pred) {
   if (!pred) return '';
   return `<div class="md-section-title acc-open">🤖 AI Pick</div>
-    <div class="ai-pick">Pick: <b>${pred.winner.name}</b> <span class="ai-conf">${pred.conf}%</span></div>
+    <div class="ai-pick">Pick: <b>${esc(pred.winner.name)}</b> <span class="ai-conf">${pred.conf}%</span></div>
     <div class="conf-bar"><span style="width:${pred.conf}%"></span></div>
     ${pred.thin ? '<div class="ai-why">Not enough games played yet for full analysis.</div>' : ''}`;
 }
@@ -1225,7 +1230,7 @@ async function renderPredictions() {
       const oddsLine = info ? `<div class="card-odds">📊 ${info.details ?? 'line n/a'}${info.ou != null ? ` · O/U ${info.ou}` : ''}</div>` : '';
       const block = el('div', 'ai-block');
       block.innerHTML = `
-        <div class="ai-pick">🤖 Pick: <b>${p.winner.name}</b> <span class="ai-conf">${p.conf}%</span></div>
+        <div class="ai-pick">🤖 Pick: <b>${esc(p.winner.name)}</b> <span class="ai-conf">${p.conf}%</span></div>
         <div class="conf-bar"><span style="width:${p.conf}%"></span></div>
         ${cmp ? `<div class="market-cmp small">${cmp}</div>` : ''}
         ${oddsLine}
@@ -1291,8 +1296,8 @@ async function renderAiTrends(container, sport, games, rows) {
       if (era != null) pitchers.push({ nm, era, whip });
     }));
     pitchers.sort((a, b) => a.era - b.era);
-    pitchers.slice(0, 2).forEach((p) => propRows.push(`🎯 <b>${p.nm}</b> on the mound — ${p.era} ERA${p.whip != null ? `, ${p.whip} WHIP` : ''} (Ks / unders watch)`));
-    pitchers.slice(-1).forEach((p) => { if (p.era >= 4.8) propRows.push(`⚠️ <b>${p.nm}</b> starting — ${p.era} ERA${p.whip != null ? `, ${p.whip} WHIP` : ''} (hitter / overs spot)`); });
+    pitchers.slice(0, 2).forEach((p) => propRows.push(`🎯 <b>${esc(p.nm)}</b> on the mound — ${p.era} ERA${p.whip != null ? `, ${p.whip} WHIP` : ''} (Ks / unders watch)`));
+    pitchers.slice(-1).forEach((p) => { if (p.era >= 4.8) propRows.push(`⚠️ <b>${esc(p.nm)}</b> starting — ${p.era} ERA${p.whip != null ? `, ${p.whip} WHIP` : ''} (hitter / overs spot)`); });
 
     // hot hitters from the teams in the edge games (bounded), else top form teams
     let hitterTeams = rows.filter((r) => r.isEdge).flatMap((r) => [r.g.home, r.g.away]);
@@ -1300,7 +1305,7 @@ async function renderAiTrends(container, sport, games, rows) {
     const uniqH = []; const seenH = new Set();
     hitterTeams.forEach((t) => { if (t.id && !seenH.has(t.id)) { seenH.add(t.id); uniqH.push(t); } });
     const hh = await Promise.all(uniqH.slice(0, 6).map((t) => topHitters(t.id, 1).catch(() => [])));
-    hh.forEach((arr, i) => { const p = arr[0]; if (p && parseFloat(p.ops) >= 0.800) propRows.push(`🔥 <b>${p.name}</b> (${uniqH[i].abbr || uniqH[i].name}) — ${ops3n(p.ops)} OPS${p.hr ? `, ${p.hr} HR` : ''} (hits / TB props)`); });
+    hh.forEach((arr, i) => { const p = arr[0]; if (p && parseFloat(p.ops) >= 0.800) propRows.push(`🔥 <b>${esc(p.name)}</b> (${esc(uniqH[i].abbr || uniqH[i].name)}) — ${ops3n(p.ops)} OPS${p.hr ? `, ${p.hr} HR` : ''} (hits / TB props)`); });
   }
 
   // ---- render ----
@@ -1517,13 +1522,13 @@ async function renderFantasy() {
       const ln = lineFor(p);
       const teamAbbr = MLB_ABBR[p.team] || (p.team ? p.team.split(' ').slice(-1)[0].slice(0, 3).toUpperCase() : '');
       const item = el('div', 'fan-item');
-      const teamSel = `<select data-i="${i}" data-f="team"><option value="">— set team —</option>${teamOpts.map((t) => `<option ${t === p.team ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+      const teamSel = `<select data-i="${i}" data-f="team"><option value="">— set team —</option>${teamOpts.map((t) => `<option ${t === p.team ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
       const statSel = `<select data-i="${i}" data-f="status">${['active','bench','il'].map((s) => `<option value="${s}" ${s === p.status ? 'selected' : ''}>${s === 'active' ? 'Starter' : s === 'bench' ? 'Bench' : 'IL'}</option>`).join('')}</select>`;
       item.innerHTML = `
         <div class="fan-head">
           <span class="arrow" id="farrow-${i}"></span>
-          <span class="fh-name">${p.name}</span>
-          <span class="fh-meta">${p.slot}${teamAbbr ? ' · ' + teamAbbr : ''}</span>
+          <span class="fh-name">${esc(p.name)}</span>
+          <span class="fh-meta">${esc(p.slot)}${teamAbbr ? ' · ' + esc(teamAbbr) : ''}</span>
           <span class="fh-lead" id="flead-${i}"></span>
           <span class="chev">▸</span>
         </div>
@@ -1654,7 +1659,7 @@ function renderLeagueHeader(sport) {
     ? (Date.now() - L.syncedAt < 60000 ? 'synced just now' : `synced ${timeAgo(L.syncedAt)}`)
     : 'synced from ESPN';
   box.innerHTML = `<div class="lg-card">
-      <div class="lg-top"><span class="lg-name">${L.team || 'My Team'}</span>${rec ? `<span class="lg-rec">${rec}</span>` : ''}<span class="lg-live">● ${syncedTxt}</span></div>
+      <div class="lg-top"><span class="lg-name">${esc(L.team || 'My Team')}</span>${rec ? `<span class="lg-rec">${rec}</span>` : ''}<span class="lg-live">● ${syncedTxt}</span></div>
       <button id="lg-resync" class="fan-btn ghost">🔄 Refresh from ESPN</button>
     </div>`;
   const btn = $('#lg-resync');
@@ -1681,14 +1686,14 @@ function renderMatchup(sport) {
   const won = m.me.catsWon ?? 0, lost = m.opponent.catsWon ?? 0, tied = m.tied ?? 0;
   const cats = m.categories.map((c) => {
     const cls = c.result === 'WIN' ? 'win' : c.result === 'LOSS' ? 'loss' : 'tie';
-    return `<div class="cat ${cls}"><div class="cat-name">${c.cat}</div>
+    return `<div class="cat ${cls}"><div class="cat-name">${esc(c.cat)}</div>
       <div class="cat-vals"><b>${fmtCat(c.cat, c.me)}</b><span>${fmtCat(c.cat, c.opp)}</span></div></div>`;
   }).join('');
   box.innerHTML = `<div class="mu-card">
       <div class="mu-top">
-        <span class="mu-team you">${m.me.team}</span>
+        <span class="mu-team you">${esc(m.me.team)}</span>
         <span class="mu-score"><b class="${won > lost ? 'lead' : ''}">${won}</b> – <b class="${lost > won ? 'lead' : ''}">${lost}</b>${tied ? ` <small>(${tied} tied)</small>` : ''}</span>
-        <span class="mu-team">${m.opponent.team}</span>
+        <span class="mu-team">${esc(m.opponent.team)}</span>
       </div>
       <div class="mu-cats">${cats}</div>
       <div class="mu-legend">This week · your value vs opponent · <span class="win">green = winning the category</span></div>
@@ -1712,7 +1717,7 @@ function renderFantasyStandings(sport) {
     const barW = Math.round(100 * (t.powerScore || 0) / maxPow);
     return `<tr class="${t.isMe ? 'me' : ''}">
         <td class="st-rank">${i + 1}</td>
-        <td class="st-team">${t.team}${t.isMe ? ' <span class="st-you">you</span>' : ''}</td>
+        <td class="st-team">${esc(t.team)}${t.isMe ? ' <span class="st-you">you</span>' : ''}</td>
         <td class="st-rec">${rec}</td>
         <td class="st-l5">${l5 || '—'}</td>
         <td class="st-pow"><span class="pow-bar" style="width:${barW}%"></span><span class="pow-num">${t.powerScore ?? '–'}</span></td>
@@ -1771,8 +1776,8 @@ function playerFormRow(p, meta) {
   const abbr = MLB_ABBR[p.team] || '';
   const line = p.hc ? (p.hc.lead || p.hc.detail || '') : '';
   return `<div class="wv-item ${tag || ''}">
-      <div class="wv-main"><span class="wv-name">${icon}${p.name}</span>
-        <span class="wv-meta">${p.pos}${abbr ? ' · ' + abbr : ''}${meta ? ' · ' + meta : ''}</span></div>
+      <div class="wv-main"><span class="wv-name">${icon}${esc(p.name)}</span>
+        <span class="wv-meta">${esc(p.pos)}${abbr ? ' · ' + esc(abbr) : ''}${meta ? ' · ' + esc(meta) : ''}</span></div>
       <div class="wv-hot">${line ? `<span class="hc-tag ${tag || 'flat'}">${line}</span>` : '<span class="hc-detail">recent form n/a</span>'}</div>
     </div>`;
 }
@@ -1806,7 +1811,7 @@ function renderStartSit(entries) {
   const sit = entries.filter((e) => e.status === 'active' && e.tag === 'cold');
   if (!start.length && !sit.length) { box.innerHTML = ''; return; }
   const li = (arr) => arr.length
-    ? arr.map((e) => `<li><b>${e.name}</b>${e.lead ? ` <span class="lead">${e.lead}</span>` : ''}</li>`).join('')
+    ? arr.map((e) => `<li><b>${esc(e.name)}</b>${e.lead ? ` <span class="lead">${esc(e.lead)}</span>` : ''}</li>`).join('')
     : '<li class="none">None</li>';
   box.innerHTML = `<h2 class="section-title">Start / Sit</h2>
     <div class="ss-cols">
@@ -1821,7 +1826,7 @@ async function renderOpponent(sport) {
   if (!box) return;
   const O = ((fanState.league || {})[sport] || {}).opponent;
   if (sport !== 'baseball' || !O || !O.roster || !O.roster.length) { box.innerHTML = ''; return; }
-  box.innerHTML = `<h2 class="section-title">Opponent — ${O.opponent}</h2><div class="none">Scouting their lineup…</div>`;
+  box.innerHTML = `<h2 class="section-title">Opponent — ${esc(O.opponent)}</h2><div class="none">Scouting their lineup…</div>`;
   const active = O.roster.filter((p) => p.status === 'active');
   const form = await computeRosterForm(active.slice(0, 16), sport);
   if (fanState.sport !== sport) return;
@@ -1829,7 +1834,7 @@ async function renderOpponent(sport) {
   const hot = form.filter((p) => p.hc && p.hc.tag === 'hot').length;
   const cold = form.filter((p) => p.hc && p.hc.tag === 'cold').length;
   const rows = form.map((p) => playerFormRow(p)).join('');
-  box.innerHTML = `<h2 class="section-title">Opponent — ${O.opponent}</h2>
+  box.innerHTML = `<h2 class="section-title">Opponent — ${esc(O.opponent)}</h2>
     <div class="none" style="margin-bottom:8px">Their active lineup this week${hot ? ` · <span style="color:var(--accent)">🔥 ${hot} hot</span>` : ''}${cold ? ` · <span style="color:var(--gold)">🥶 ${cold} cold</span>` : ''}. Hot threats first.</div>
     <div class="wv-list">${rows}</div>`;
 }
@@ -2044,7 +2049,7 @@ async function fillSeasonStats(roster, fSport) {
     (needTeam ? card(needTeam, 'Need team set', 'warn') : '');
 
   // hot & cold lists (drop watch)
-  const li = (arr) => arr.length ? arr.map((x) => `<li><b>${x.name}</b>${x.lead ? ` <span class="lead">${x.lead}</span>` : ''}</li>`).join('') : '<li class="none">None</li>';
+  const li = (arr) => arr.length ? arr.map((x) => `<li><b>${esc(x.name)}</b>${x.lead ? ` <span class="lead">${esc(x.lead)}</span>` : ''}</li>`).join('') : '<li class="none">None</li>';
   $('#fantasy-recs').innerHTML = `<h3>Hot & Cold (last 20 days)</h3>
     <div class="hc-cols">
       <div><div class="hc-h hot">🔥 Heating up</div><ul>${li(hot)}</ul></div>
@@ -2142,8 +2147,8 @@ async function renderEagles() {
   const oldest = allPlayers.filter((a) => a.age).sort((a, b) => b.age - a.age)[0];
   $('#eagles-analytics').innerHTML = allPlayers.length
     ? card(allPlayers.length, 'Players on roster') + card(avgAge, 'Average age') +
-      (youngest ? card(`${youngest.age}`, `Youngest · ${youngest.displayName}`) : '') +
-      (oldest ? card(`${oldest.age}`, `Oldest · ${oldest.displayName}`) : '')
+      (youngest ? card(`${youngest.age}`, `Youngest · ${esc(youngest.displayName)}`) : '') +
+      (oldest ? card(`${oldest.age}`, `Oldest · ${esc(oldest.displayName)}`) : '')
     : card('–', 'Roster loading');
 
   // news — tap a headline for an in-app summary instead of leaving the app
@@ -2156,8 +2161,8 @@ async function renderEagles() {
       const img = a.images?.[0]?.url;
       const when = a.published ? new Date(a.published).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
       return `<div class="news-item" data-news="${idx}">
-        ${img ? `<img src="${img}" alt="" onerror="this.style.display='none'">` : ''}
-        <div><div class="nh">${a.headline || ''}</div><div class="nd">${a.description || ''}</div><div class="nt">${when} · tap for summary</div></div></div>`;
+        ${img ? `<img src="${esc(img)}" alt="" onerror="this.style.display='none'">` : ''}
+        <div><div class="nh">${esc(a.headline || '')}</div><div class="nd">${esc(a.description || '')}</div><div class="nt">${when} · tap for summary</div></div></div>`;
     }).join('');
     newsEl.querySelectorAll('.news-item').forEach((it) => { it.onclick = () => openNewsSummary(articles[+it.dataset.news]); });
   }
@@ -2273,7 +2278,7 @@ async function renderEaglesDepth(idMap, groups) {
       const list = entries.filter((e) => e.unit === current);
       content.innerHTML = toggle + '<div class="depth-group">' + list.map((e) =>
         `<div class="depth-pos"><div class="pos-label">${e.label}</div>${e.players.map((p, i) =>
-          `<span class="depth-player"><span class="jersey">${e.ordered ? (i === 0 ? '★' : i + 1) : (p.jersey ? '#' + p.jersey : '')}</span> ${p.name}${e.ordered && p.jersey ? ` #${p.jersey}` : ''}</span>`).join('')}</div>`).join('') + '</div>';
+          `<span class="depth-player"><span class="jersey">${e.ordered ? (i === 0 ? '★' : i + 1) : (p.jersey ? '#' + p.jersey : '')}</span> ${esc(p.name)}${e.ordered && p.jersey ? ` #${p.jersey}` : ''}</span>`).join('')}</div>`).join('') + '</div>';
     }
     content.querySelectorAll('.depth-toggle button').forEach((b) => (b.onclick = () => { view = b.dataset.v; draw(); }));
   };
@@ -2343,7 +2348,7 @@ async function renderEaglesSchedule() {
       const os = opp?.score?.displayValue ?? opp?.score?.value ?? '';
       res = `<span class="res ${win ? 'w' : 'l'}">${win ? 'W' : 'L'} ${ms}-${os}</span>`;
     }
-    return `<div class="sched-row"><span class="wk">${wk}</span><span class="opp">${home ? 'vs' : '@'} ${oppName}</span>${res}</div>`;
+    return `<div class="sched-row"><span class="wk">${wk}</span><span class="opp">${home ? 'vs' : '@'} ${esc(oppName)}</span>${res}</div>`;
   }).join('');
   const trendHTML = trend.length
     ? `<div class="trend"><span class="rec">${wins}-${losses}</span>${trend.map((r) => `<span class="pill ${r}">${r.toUpperCase()}</span>`).join('')}</div>`
@@ -2365,10 +2370,10 @@ async function renderEaglesNextOpp(team) {
   const standing = ot?.standingSummary;
   const logo = ot?.logos?.[0]?.href || opp.team.logo;
   const when = next.date ? new Date(next.date).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }) : '';
-  elx.innerHTML = `<div class="opp-card">${logo ? `<img src="${logo}" alt="">` : ''}
-    <div><div class="on">${ot?.displayName || opp.team.displayName}</div>
+  elx.innerHTML = `<div class="opp-card">${logo ? `<img src="${esc(logo)}" alt="">` : ''}
+    <div><div class="on">${esc(ot?.displayName || opp.team.displayName)}</div>
     <div class="od">${[rec ? `Record ${rec}` : '', standing].filter(Boolean).join(' • ') || 'Season not started'}</div>
-    <div class="od">${next.name || ''}${when ? ' · ' + when : ''}</div></div></div>`;
+    <div class="od">${esc(next.name || '')}${when ? ' · ' + when : ''}</div></div></div>`;
 }
 
 // --- mode badge + tabs + boot --------------------------------------------
@@ -2400,7 +2405,11 @@ function injectJumpNav(name) {
 const renderers = { home: renderHome, eagles: renderEagles, scores: renderScores, standings: renderStandings, predictions: renderPredictions, fantasy: renderFantasy, about: () => {} };
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
-  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('#tabs button').forEach((b) => {
+    const on = b.dataset.tab === name;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
   Promise.resolve(renderers[name]()).then(() => injectJumpNav(name)).catch((e) => console.error(e));
 }
 $('#tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
