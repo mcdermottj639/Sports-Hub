@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v74';
+const APP_VERSION = 'v75';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2188,6 +2188,26 @@ async function fillSeasonStats(roster, fSport) {
       if (isPitcher(p)) pitStats.push({ ERA: num(sraw.ERA), WHIP: num(sraw.WHIP), K: num(sraw.K), W: num(sraw.W) });
       else hitStats.push({ HR: num(sraw.HR), RBI: num(sraw.RBI), OPS: num(sraw.OPS), AVG: num(sraw.AVG) });
     }
+    // Season value — so Suggested Moves NEVER tells you to drop a real contributor.
+    // `essential` = a genuine producer (a good rate stat or real counting totals);
+    // `weakKey` ranks the rest weakest-first. Rate stats (OPS/ERA/WHIP) are the safe
+    // signal. A player with no season stats stays OUT of the drop pool entirely, so
+    // we never recommend cutting someone we simply couldn't match/value.
+    let essential = false, weakKey = null, weakHint = '';
+    if (fSport === 'baseball' && sraw) {
+      const num = (v) => { const n = parseFloat(v); return Number.isNaN(n) ? null : n; };
+      if (isPitcher(p)) {
+        const era = num(sraw.ERA), whip = num(sraw.WHIP), k = num(sraw.K), w = num(sraw.W);
+        essential = (era != null && era <= 3.90) || (whip != null && whip <= 1.25) || (k != null && k >= 100) || (w != null && w >= 8);
+        weakKey = era != null ? -era : -99;          // higher ERA → weaker → sorted first
+        if (era != null) weakHint = `${era.toFixed(2)} ERA`;
+      } else {
+        const ops = num(sraw.OPS), hr = num(sraw.HR), rbi = num(sraw.RBI);
+        essential = (ops != null && ops >= 0.760) || (hr != null && hr >= 16) || (rbi != null && rbi >= 50);
+        weakKey = ops != null ? ops : -1;            // lower OPS → weaker → sorted first
+        if (ops != null) weakHint = `${ops.toFixed(3)} OPS`;
+      }
+    }
     let tag = '', lead = '';
     const aid = (idMaps[p.team] || {})[nameKey(p.name)];
     if (aid) {
@@ -2200,16 +2220,17 @@ async function fillSeasonStats(roster, fSport) {
         if (leadEl) leadEl.textContent = hc.lead || '';
         if (hc.tag === 'hot') hot.push({ name: p.name, lead: hc.lead });
         else if (hc.tag === 'cold' && p.status !== 'il') {
-          cold.push({ name: p.name, lead: hc.lead });
-          drops.push({ name: p.name, lead: hc.lead, isPitcher: isPitcher(p) });
+          cold.push({ name: p.name, lead: hc.lead });                 // drop-watch display (still accurate)
+          if (!essential) drops.push({ name: p.name, lead: hc.lead, isPitcher: isPitcher(p) }); // but never SUGGEST dropping a star
         }
       }
     }
     // Broader droppable pool (not just cold) so Suggested Moves can still pair a
-    // hot pickup with a weak roster spot when nobody is icy-cold. Excludes IL and
-    // hot players; weakest-first ordering is applied after the loop.
-    if (p.status !== 'il' && tag !== 'hot') {
-      dropPool.push({ name: p.name, isPitcher: isPitcher(p), tag, status: p.status, lead });
+    // hot pickup with a weak roster spot when nobody is icy-cold. Excludes IL, hot,
+    // essential (real contributors), and players we couldn't value; weakest-first
+    // ordering is applied after the loop.
+    if (p.status !== 'il' && tag !== 'hot' && !essential && weakKey != null) {
+      dropPool.push({ name: p.name, isPitcher: isPitcher(p), tag, status: p.status, lead: lead || weakHint, weakKey });
     }
     const pg = playerGame(p);
     ss.push({ name: p.name, status: p.status, tag, lead, today: !!pg && gameState(pg.g) !== 'final' });
@@ -2240,9 +2261,10 @@ async function fillSeasonStats(roster, fSport) {
   // Fill the cold half of the add/drop pairing, then (re)render it — the hot
   // half (faHot) was set by renderWaivers; whichever finished last completes it.
   fanState.dropCandidates = drops;
-  // Weakest-first: cold/drop-watch, then bench, then steady/everyone else.
+  // Weakest-first: cold/drop-watch, then bench, then steady; within a tier, the
+  // worst season value (lowest OPS / highest ERA) is the first to go.
   const dropRank = (x) => x.tag === 'cold' ? 0 : x.status === 'bench' ? 1 : 2;
-  fanState.dropPool = dropPool.sort((a, b) => dropRank(a) - dropRank(b));
+  fanState.dropPool = dropPool.sort((a, b) => dropRank(a) - dropRank(b) || (a.weakKey - b.weakKey));
   renderAddDrop(fSport);
 }
 

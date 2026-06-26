@@ -97,7 +97,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v74**.
+Current version as of this writing: **v75**.
 
 ## Testing reality
 
@@ -178,7 +178,14 @@ Current version as of this writing: **v74**.
     free agents (`fanState.faHot`, set in `renderWaivers`) and pairs each with a
     same-type roster player to drop: a cold/drop-watch player (`fanState.dropCandidates`)
     first, else the weakest droppable spot from the broader pool (`fanState.dropPool`,
-    both set in `fillSeasonStats`, weakest-first). **Category-aware (v73):** pickups
+    both set in `fillSeasonStats`, weakest-first). **Never drops a real contributor
+    (v75):** each player gets a season-value read — `essential` (a good rate stat
+    OPS≥.760 / ERA≤3.90 / WHIP≤1.25, or real counting totals) is excluded from ALL
+    drop suggestions (even if cold — a cold star stays on the drop-WATCH display but
+    is never suggested), and players with no season stats are excluded too (never cut
+    someone we couldn't value). The rest rank weakest-first by `weakKey` (lowest OPS /
+    highest ERA), so the worst bat/arm goes first; the drop line shows the weak stat
+    (e.g. ".705 OPS"). If everyone left is a keeper, the pickup shows "🆓 OPEN". **Category-aware (v73):** pickups
     that fill a THIN scoring category sort first and get a "🎯 fills HR/RBI need" tag.
     Needs come from `fanState.catNeeds` (`{hitters:[], pitchers:[]}`, set in
     `renderCatStrength` from the same THIN/SOLID/STRONG gauges) — matched at
