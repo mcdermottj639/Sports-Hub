@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v72';
+const APP_VERSION = 'v73';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1486,7 +1486,7 @@ async function renderFantasy() {
   renderFantasyStandings(fanState.sport);
   // Reset cross-render state that the add/drop pairing + category strengths
   // build up asynchronously, so stale data from another sport can't leak in.
-  fanState.faHot = null; fanState.dropCandidates = null; fanState.dropPool = null;
+  fanState.faHot = null; fanState.dropCandidates = null; fanState.dropPool = null; fanState.catNeeds = null;
   const adBox = $('#fantasy-adddrop'); if (adBox) adBox.innerHTML = '';
   const csBox = $('#fantasy-strength'); if (csBox) csBox.innerHTML = '';
   renderWaivers(fanState.sport);
@@ -1908,30 +1908,45 @@ function renderAddDrop(sport) {
   const box = $('#fantasy-adddrop');
   if (!box) return;
   if (sport !== 'baseball' || fanState.sport !== sport) { box.innerHTML = ''; return; }
-  const adds = fanState.faHot || [];
-  // No hot pickups available → genuinely nothing to suggest, so hide the section.
-  if (!adds.length) { box.innerHTML = ''; return; }
-  // Prefer cold/drop-watch players, then fall back to the broader droppable pool
-  // (both are pre-sorted weakest-first in fillSeasonStats).
-  const cold = fanState.dropCandidates || [], pool = fanState.dropPool || [];
-  const used = new Set();
-  const pickDrop = (a) => {
-    let d = cold.find((x) => x.isPitcher === a.isPitcher && !used.has(x.name));
-    if (!d) d = pool.find((x) => x.isPitcher === a.isPitcher && !used.has(x.name));
-    if (d) used.add(d.name);
-    return d || null;
-  };
-  const moves = adds.slice(0, 3).map((a) => ({ a, drop: pickDrop(a) }));
-  const dropLine = (drop) => drop
-    ? `<div class="ad-line drop"><span class="ad-tag drop">－ DROP</span> ${esc(drop.name)}${drop.lead ? ` <span class="ad-lead">${esc(drop.lead)}</span>` : ''}</div>`
-    : '<div class="ad-line drop"><span class="ad-tag open">🆓 OPEN</span> open a roster spot to add</div>';
-  const rows = moves.map(({ a, drop }) => `<div class="ad-row">
-      <div class="ad-line add"><span class="ad-tag add">＋ ADD</span> <b>${esc(a.name)}</b>${a.lead ? ` <span class="ad-lead">${esc(a.lead)}</span>` : ''}</div>
+  const head = '<h2 class="section-title">Suggested Moves</h2>';
+  const note = (msg) => { box.innerHTML = `${head}<div class="none" style="margin-bottom:4px">${msg}</div>`; };
+  try {
+    const adds = (fanState.faHot || []).slice();
+    // No hot pickups loaded yet → say so plainly rather than leave a blank gap.
+    if (!adds.length) { note('No hot free agents to suggest right now — check the Waiver Wire below.'); return; }
+    const cold = fanState.dropCandidates || [], pool = fanState.dropPool || [];
+    const needs = fanState.catNeeds || { hitters: [], pitchers: [] };
+    const needLabel = (a) => (a.isPitcher ? needs.pitchers : needs.hitters).join('/');
+    const helpsNeed = (a) => !!needLabel(a);
+    // Pickups that fill a THIN category (from Category Strengths) sort first.
+    adds.sort((a, b) => (helpsNeed(b) ? 1 : 0) - (helpsNeed(a) ? 1 : 0));
+    const used = new Set();
+    const pickDrop = (a) => {
+      let d = cold.find((x) => x.isPitcher === a.isPitcher && !used.has(x.name));
+      if (!d) d = pool.find((x) => x.isPitcher === a.isPitcher && !used.has(x.name));
+      if (d) used.add(d.name);
+      return d || null;
+    };
+    const moves = adds.slice(0, 3).map((a) => ({ a, drop: pickDrop(a) }));
+    const dropLine = (drop) => drop
+      ? `<div class="ad-line drop"><span class="ad-tag drop">－ DROP</span> ${esc(drop.name)}${drop.lead ? ` <span class="ad-lead">${esc(drop.lead)}</span>` : ''}</div>`
+      : '<div class="ad-line drop"><span class="ad-tag open">🆓 OPEN</span> open a roster spot to add</div>';
+    const rows = moves.map(({ a, drop }) => {
+      const need = helpsNeed(a) ? ` <span class="ad-need">🎯 fills ${esc(needLabel(a))} need</span>` : '';
+      return `<div class="ad-row">
+      <div class="ad-line add"><span class="ad-tag add">＋ ADD</span> <b>${esc(a.name)}</b>${a.lead ? ` <span class="ad-lead">${esc(a.lead)}</span>` : ''}${need}</div>
       ${dropLine(drop)}
-    </div>`).join('');
-  box.innerHTML = `<h2 class="section-title">Suggested Moves</h2>
-    <div class="none" style="margin-bottom:8px">Hot free agents worth adding, paired with a cold or weak same-position player to drop where you have one. Adds clear ${esc(nextWaiverRunLabel().replace('Next waiver run: ', '') || 'on waiver night')}.</div>
+    </div>`;
+    }).join('');
+    const needLine = (needs.hitters.length || needs.pitchers.length)
+      ? `Prioritizing your thin categories (${esc([...needs.hitters, ...needs.pitchers].join(', '))}). `
+      : '';
+    box.innerHTML = `${head}
+    <div class="none" style="margin-bottom:8px">${needLine}Hot free agents worth adding, paired with a cold or weak same-position player to drop where you have one. Adds clear ${esc(nextWaiverRunLabel().replace('Next waiver run: ', '') || 'on waiver night')}. <span style="opacity:.6">(${adds.length} screened)</span></div>
     <div class="ad-list">${rows}</div>`;
+  } catch (e) {
+    note(`Couldn’t build suggestions: ${esc(String((e && e.message) || e))}`);
+  }
 }
 
 // Start/Sit suggestions from the roster's own hot/cold tags (called by
@@ -2244,6 +2259,16 @@ function renderCatStrength(fSport, hitStats, pitStats) {
     { cat: 'Strikeouts', n: atLeast(pitStats, 'K', 110) },
     { cat: 'Wins', n: atLeast(pitStats, 'W', 8) },
   ];
+  // Surface the THIN categories as roster "needs", split hitter vs pitcher, so
+  // Suggested Moves can prioritize pickups of the type that addresses a gap.
+  const HIT_CATS = ['Power (HR)', 'RBI', 'Avg / OPS'];
+  const shortCat = { 'Power (HR)': 'HR', 'RBI': 'RBI', 'Avg / OPS': 'OPS', 'ERA': 'ERA', 'WHIP': 'WHIP', 'Strikeouts': 'K', 'Wins': 'W' };
+  const thin = gauges.filter((g) => rate(g.n) === 'thin');
+  fanState.catNeeds = {
+    hitters: thin.filter((g) => HIT_CATS.includes(g.cat)).map((g) => shortCat[g.cat]),
+    pitchers: thin.filter((g) => !HIT_CATS.includes(g.cat)).map((g) => shortCat[g.cat]),
+  };
+  renderAddDrop(fSport); // re-rank suggestions now that needs are known
   const rows = gauges.map((g) => {
     const r = rate(g.n);
     const icon = r === 'strong' ? '🟢' : r === 'solid' ? '🟡' : '🔴';

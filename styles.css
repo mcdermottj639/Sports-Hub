@@ -523,4 +523,5 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ad-tag.drop { color: var(--gold); background: rgba(255,209,102,.12); }
 .ad-tag.open { color: var(--silver); background: rgba(255,255,255,.08); }
 .ad-line.drop { color: var(--muted); }
+.ad-need { color: var(--accent); font-size: 11.5px; font-weight: 700; }
 .ad-lead { color: var(--silver); font-size: 12px; }
