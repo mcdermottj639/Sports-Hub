@@ -53,6 +53,14 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 - **Deploys from the `main` branch** via GitHub Pages (root). The owner has
   explicitly authorized pushing to `main`. Also keep the feature branch
   `claude/sports-app-ideas-130q0f` in sync (fast-forward it to main and push both).
+- **⚠️ Standing rule — SHIP TO LIVE BY DEFAULT.** When a change is complete and
+  syntax-checks pass, push it straight to `main` so it goes live on the app — do
+  NOT stop at a feature branch and do NOT ask first. The owner wants to see every
+  finished change on their phone without having to request a deploy. If you did
+  your work on a session/feature branch, fast-forward `main` to it and push `main`
+  (and sync `claude/sports-app-ideas-130q0f`) as the final step of the task. Only
+  hold back from `main` if the owner explicitly says not to ship, or the change is
+  knowingly broken/incomplete.
 - **Data source = ESPN's free public feeds only.** ESPN endpoints send permissive
   CORS headers, so the browser can read them directly. Most other sources
   (API-Sports, X/Twitter, Reddit) **block browser CORS** and are NOT usable here —
