@@ -68,6 +68,12 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 - `styles.css` — all styling. Dark theme; CSS vars at top (`--accent` #3ad29f green, `--gold`, `--eagles-green` #004C54, etc.).
 - `sw.js` — service worker (network-first auto-update; see below).
 - `manifest.webmanifest` — PWA manifest. Icons are real eagle emoji extracted from NotoColorEmoji (one-off via `/tmp/make-icon.js`, not in repo).
+- `scriptable/` — optional iOS Home Screen widgets ([Scriptable](https://scriptable.app), JS).
+  **Companion scripts, NOT part of the web app** — they don't deploy with Pages and
+  don't affect `APP_VERSION`. `SportsHubFantasy.js` renders the fantasy matchup
+  (verdict + category scores) by calling the Railway backend directly (native HTTP,
+  so no CORS limit; no secrets on the phone). See `scriptable/README.md`. Editing
+  these does NOT require the versioning ritual below.
 
 ## Release / versioning ritual (do this on EVERY change)
 
