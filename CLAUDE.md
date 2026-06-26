@@ -89,7 +89,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v71**.
+Current version as of this writing: **v72**.
 
 ## Testing reality
 
@@ -166,10 +166,14 @@ Current version as of this writing: **v71**.
   - **Category Strengths** (`renderCatStrength`, `#fantasy-strength`) — a roster
     profile counting strong contributors per scoring category (HR/RBI/OPS/ERA/
     WHIP/K/W). Heuristic, NOT league-relative (labeled as such).
-  - **Suggested Moves** (`renderAddDrop`, `#fantasy-adddrop`) — pairs the hottest
-    free agents (`fanState.faHot`, set in `renderWaivers`) with the coldest
-    droppable roster players (`fanState.dropCandidates`, set in `fillSeasonStats`),
-    same position type. Whichever finishes last renders the pairing.
+  - **Suggested Moves** (`renderAddDrop`, `#fantasy-adddrop`) — surfaces the hottest
+    free agents (`fanState.faHot`, set in `renderWaivers`) and pairs each with a
+    same-type roster player to drop: a cold/drop-watch player (`fanState.dropCandidates`)
+    first, else the weakest droppable spot from the broader pool (`fanState.dropPool`,
+    both set in `fillSeasonStats`, weakest-first). If there are hot pickups but no
+    clearly droppable player, the add still shows with a "🆓 OPEN — open a roster spot"
+    note instead of a bare/empty heading. The section hides only when there are no hot
+    pickups at all. Whichever async half finishes last renders the suggestions.
   - **Waiver-run timing** — waivers process **Wed & Sun 11 PM ET**
     (`nextWaiverRun`/`nextWaiverRunLabel`); shown on the waiver wire + add/drop
     notes so pickups are framed to when they'd actually clear (no daily streaming).

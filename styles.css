@@ -521,5 +521,6 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ad-tag { font-size: 11px; font-weight: 800; letter-spacing: .3px; padding: 1px 6px; border-radius: 6px; margin-right: 4px; }
 .ad-tag.add { color: var(--accent); background: rgba(58,210,159,.12); }
 .ad-tag.drop { color: var(--gold); background: rgba(255,209,102,.12); }
+.ad-tag.open { color: var(--silver); background: rgba(255,255,255,.08); }
 .ad-line.drop { color: var(--muted); }
 .ad-lead { color: var(--silver); font-size: 12px; }

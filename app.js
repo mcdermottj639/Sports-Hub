@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v71';
+const APP_VERSION = 'v72';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1486,7 +1486,7 @@ async function renderFantasy() {
   renderFantasyStandings(fanState.sport);
   // Reset cross-render state that the add/drop pairing + category strengths
   // build up asynchronously, so stale data from another sport can't leak in.
-  fanState.faHot = null; fanState.dropCandidates = null;
+  fanState.faHot = null; fanState.dropCandidates = null; fanState.dropPool = null;
   const adBox = $('#fantasy-adddrop'); if (adBox) adBox.innerHTML = '';
   const csBox = $('#fantasy-strength'); if (csBox) csBox.innerHTML = '';
   renderWaivers(fanState.sport);
@@ -1897,29 +1897,40 @@ function nextWaiverRunLabel() {
   return `Next waiver run: ${sameDay ? 'tonight' : day} 11 PM ET`;
 }
 
-// Pair the hottest available players with the coldest droppable roster players
-// (same type — hitter↔hitter, pitcher↔pitcher) into concrete add/drop moves.
-// Needs both halves: faHot (renderWaivers) + dropCandidates (fillSeasonStats).
+// Turn the hottest available free agents into concrete suggestions. Each hot
+// pickup is paired with a same-type roster player to drop (hitter↔hitter,
+// pitcher↔pitcher): a cold/drop-watch player first, else the weakest droppable
+// roster spot. If you have hot pickups but no clearly droppable player, we still
+// surface the add with an "open a roster spot" note rather than show a bare,
+// empty heading. Needs faHot (renderWaivers); dropPool/dropCandidates come from
+// fillSeasonStats — whichever finishes last renders the suggestions.
 function renderAddDrop(sport) {
   const box = $('#fantasy-adddrop');
   if (!box) return;
   if (sport !== 'baseball' || fanState.sport !== sport) { box.innerHTML = ''; return; }
-  const adds = fanState.faHot || [], drops = fanState.dropCandidates || [];
-  if (!adds.length || !drops.length) { box.innerHTML = ''; return; }
-  const used = new Set(), moves = [];
-  adds.slice(0, 6).forEach((a) => {
-    const drop = drops.find((d) => d.isPitcher === a.isPitcher && !used.has(d.name));
-    if (!drop) return;
-    used.add(drop.name);
-    moves.push({ a, drop });
-  });
-  if (!moves.length) { box.innerHTML = ''; return; }
+  const adds = fanState.faHot || [];
+  // No hot pickups available → genuinely nothing to suggest, so hide the section.
+  if (!adds.length) { box.innerHTML = ''; return; }
+  // Prefer cold/drop-watch players, then fall back to the broader droppable pool
+  // (both are pre-sorted weakest-first in fillSeasonStats).
+  const cold = fanState.dropCandidates || [], pool = fanState.dropPool || [];
+  const used = new Set();
+  const pickDrop = (a) => {
+    let d = cold.find((x) => x.isPitcher === a.isPitcher && !used.has(x.name));
+    if (!d) d = pool.find((x) => x.isPitcher === a.isPitcher && !used.has(x.name));
+    if (d) used.add(d.name);
+    return d || null;
+  };
+  const moves = adds.slice(0, 3).map((a) => ({ a, drop: pickDrop(a) }));
+  const dropLine = (drop) => drop
+    ? `<div class="ad-line drop"><span class="ad-tag drop">－ DROP</span> ${esc(drop.name)}${drop.lead ? ` <span class="ad-lead">${esc(drop.lead)}</span>` : ''}</div>`
+    : '<div class="ad-line drop"><span class="ad-tag open">🆓 OPEN</span> open a roster spot to add</div>';
   const rows = moves.map(({ a, drop }) => `<div class="ad-row">
       <div class="ad-line add"><span class="ad-tag add">＋ ADD</span> <b>${esc(a.name)}</b>${a.lead ? ` <span class="ad-lead">${esc(a.lead)}</span>` : ''}</div>
-      <div class="ad-line drop"><span class="ad-tag drop">－ DROP</span> ${esc(drop.name)}${drop.lead ? ` <span class="ad-lead">${esc(drop.lead)}</span>` : ''}</div>
+      ${dropLine(drop)}
     </div>`).join('');
   box.innerHTML = `<h2 class="section-title">Suggested Moves</h2>
-    <div class="none" style="margin-bottom:8px">Hot pickups paired with your coldest droppable players, same position type. Adds clear ${esc(nextWaiverRunLabel().replace('Next waiver run: ', '') || 'on waiver night')}.</div>
+    <div class="none" style="margin-bottom:8px">Hot free agents worth adding, paired with a cold or weak same-position player to drop where you have one. Adds clear ${esc(nextWaiverRunLabel().replace('Next waiver run: ', '') || 'on waiver night')}.</div>
     <div class="ad-list">${rows}</div>`;
 }
 
@@ -2140,7 +2151,7 @@ async function fillSeasonStats(roster, fSport) {
     [sMaps[t], idMaps[t]] = await Promise.all([teamSeasonMap(sport, id).catch(() => ({})), rosterIdMap(sport, id).catch(() => ({}))]);
   }));
 
-  const hot = [], cold = [], ss = [], drops = [], hitStats = [], pitStats = [];
+  const hot = [], cold = [], ss = [], drops = [], dropPool = [], hitStats = [], pitStats = [];
   await Promise.all(roster.map(async (p, i) => {
     const seasEl = document.getElementById(`fseas-${i}`);
     const trendEl = document.getElementById(`ftrend-${i}`);
@@ -2173,6 +2184,12 @@ async function fillSeasonStats(roster, fSport) {
         }
       }
     }
+    // Broader droppable pool (not just cold) so Suggested Moves can still pair a
+    // hot pickup with a weak roster spot when nobody is icy-cold. Excludes IL and
+    // hot players; weakest-first ordering is applied after the loop.
+    if (p.status !== 'il' && tag !== 'hot') {
+      dropPool.push({ name: p.name, isPitcher: isPitcher(p), tag, status: p.status, lead });
+    }
     const pg = playerGame(p);
     ss.push({ name: p.name, status: p.status, tag, lead, today: !!pg && gameState(pg.g) !== 'final' });
     seasEl.innerHTML = season ? `<b>Season:</b> ${season}` : 'season stats unavailable';
@@ -2202,6 +2219,9 @@ async function fillSeasonStats(roster, fSport) {
   // Fill the cold half of the add/drop pairing, then (re)render it — the hot
   // half (faHot) was set by renderWaivers; whichever finished last completes it.
   fanState.dropCandidates = drops;
+  // Weakest-first: cold/drop-watch, then bench, then steady/everyone else.
+  const dropRank = (x) => x.tag === 'cold' ? 0 : x.status === 'bench' ? 1 : 2;
+  fanState.dropPool = dropPool.sort((a, b) => dropRank(a) - dropRank(b));
   renderAddDrop(fSport);
 }
 
