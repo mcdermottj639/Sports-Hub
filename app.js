@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v70';
+const APP_VERSION = 'v71';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1449,10 +1449,18 @@ function playerLine(p, entries) {
 }
 
 async function renderFantasy() {
+  // Which sports have a real league wired up. Football only appears once its
+  // ESPN league is configured on the backend (i.e. in-season) — until then the
+  // chip is hidden so the tab never shows a hollow football view.
+  const cfg = await leagueConfig();
+  const sports = [['baseball', '⚾ Baseball']];
+  if (cfg.football) sports.push(['football', '🏈 Football']);
+  if (!sports.some(([s]) => s === fanState.sport)) fanState.sport = 'baseball';
+
   // sport chips
   const chips = $('#fantasy-sport');
   chips.innerHTML = '';
-  [['baseball', '⚾ Baseball'], ['football', '🏈 Football']].forEach(([s, label]) => {
+  sports.forEach(([s, label]) => {
     const c = el('button', 'chip' + (s === fanState.sport ? ' active' : ''), label);
     c.onclick = () => { fanState.sport = s; renderFantasy(); };
     chips.appendChild(c);
@@ -1467,7 +1475,6 @@ async function renderFantasy() {
   // Falls back silently to the locally-saved/manual roster if the backend is
   // unreachable or this sport's league isn't configured.
   fanState.synced = fanState.synced || {};
-  const cfg = await leagueConfig();
   if (cfg[fanState.sport] && (!fanState.synced[fanState.sport] || fanState.forceSync)) {
     await syncFromLeague(fanState.sport, !!fanState.forceSync);
     fanState.synced[fanState.sport] = true;
@@ -1475,7 +1482,13 @@ async function renderFantasy() {
   }
   renderLeagueHeader(fanState.sport);
   renderMatchup(fanState.sport);
+  renderProjection(fanState.sport);
   renderFantasyStandings(fanState.sport);
+  // Reset cross-render state that the add/drop pairing + category strengths
+  // build up asynchronously, so stale data from another sport can't leak in.
+  fanState.faHot = null; fanState.dropCandidates = null;
+  const adBox = $('#fantasy-adddrop'); if (adBox) adBox.innerHTML = '';
+  const csBox = $('#fantasy-strength'); if (csBox) csBox.innerHTML = '';
   renderWaivers(fanState.sport);
   renderOpponent(fanState.sport);
 
@@ -1569,6 +1582,25 @@ async function renderFantasy() {
   } else {
     fillSeasonStats(roster, fanState.sport);
   }
+
+  scheduleLiveRefresh();
+}
+
+// While any roster game is live AND the Fantasy tab is open, re-pull every 5
+// min so the matchup scoreboard + live stat lines stay current without the user
+// tapping 🔄. Cleared/re-armed on each render; stops once no game is live or the
+// user leaves the tab. 5-min cadence matches the backend's league cache TTL.
+function scheduleLiveRefresh() {
+  if (fanState.refreshTimer) { clearTimeout(fanState.refreshTimer); fanState.refreshTimer = null; }
+  const anyLive = Object.values(fanState.gamesByTeam || {}).some((pg) => gameState(pg.g) === 'live');
+  const onTab = document.getElementById('fantasy')?.classList.contains('active');
+  if (!anyLive || !onTab) return;
+  fanState.refreshTimer = setTimeout(() => {
+    if (document.getElementById('fantasy')?.classList.contains('active')) {
+      fanState.forceSync = true;
+      renderFantasy();
+    }
+  }, 300000);
 }
 
 // --- fantasy season stats -------------------------------------------------
@@ -1700,6 +1732,39 @@ function renderMatchup(sport) {
     </div>`;
 }
 
+// Project this week's category matchup: a quick verdict (leading/trailing/tied)
+// plus which CLOSE categories are still in play to target (flip) or defend.
+// Pure client-side read of the same weekly totals renderMatchup already shows —
+// no projection of remaining games, just "where the week is winnable right now".
+function renderProjection(sport) {
+  const box = $('#fantasy-projection');
+  if (!box) return;
+  const m = ((fanState.league || {})[sport] || {}).matchup;
+  if (!m || !m.me || !m.categories || !m.categories.length) { box.innerHTML = ''; return; }
+  const won = m.me.catsWon ?? 0, lost = m.opponent.catsWon ?? 0, tied = m.tied ?? 0;
+  const target = [], defend = [];
+  m.categories.forEach((c) => {
+    const me = Number(c.me), opp = Number(c.opp);
+    if (Number.isNaN(me) || Number.isNaN(opp)) return;
+    const rel = Math.abs(me - opp) / (Math.max(Math.abs(me), Math.abs(opp)) || 1);
+    const bothInt = Number.isInteger(me) && Number.isInteger(opp);
+    const close = rel <= 0.10 || (bothInt && Math.abs(me - opp) <= 2);
+    if (!close) return;
+    if (c.result === 'WIN') defend.push(c.cat);   // winning but within a hair
+    else target.push(c.cat);                       // losing/tied but reachable
+  });
+  const verdict = won > lost ? `Leading ${won}–${lost}` : won < lost ? `Trailing ${won}–${lost}` : `Tied ${won}–${lost}`;
+  const vcls = won > lost ? 'win' : won < lost ? 'loss' : 'tie';
+  const chips = (arr) => arr.map((c) => `<span class="pj-chip">${esc(c)}</span>`).join('');
+  const hasSwing = target.length || defend.length;
+  box.innerHTML = `<div class="pj-card">
+      <div class="pj-top"><span class="pj-verdict ${vcls}">${verdict}</span>${tied ? `<span class="pj-tied">${tied} tied</span>` : ''}</div>
+      ${target.length ? `<div class="pj-row"><span class="pj-lbl">🎯 Target</span><span class="pj-chips">${chips(target)}</span></div>` : ''}
+      ${defend.length ? `<div class="pj-row"><span class="pj-lbl">🛡 Defend</span><span class="pj-chips">${chips(defend)}</span></div>` : ''}
+      <div class="pj-note">${hasSwing ? 'Close categories still in play — focus adds & start/sit here.' : 'No close categories — this week looks decided.'}</div>
+    </div>`;
+}
+
 // League standings / power rankings table (toggle between the two sorts).
 function renderFantasyStandings(sport) {
   const box = $('#fantasy-standings');
@@ -1797,9 +1862,65 @@ async function renderWaivers(sport) {
     const owned = p.owned != null && p.owned >= 0 ? `${Math.round(p.owned)}% owned` : '';
     return playerFormRow(p, owned);
   }).join('');
+  const runLbl = nextWaiverRunLabel();
   box.innerHTML = `<h2 class="section-title">Waiver Wire — Top Available</h2>
-    <div class="none" style="margin-bottom:8px">Best available players in your league${hotCount ? ` — <span style="color:var(--accent)">🔥 ${hotCount} trending hot</span>` : ''}. Hot streaks listed first.</div>
+    <div class="none" style="margin-bottom:8px">Best available players in your league${hotCount ? ` — <span style="color:var(--accent)">🔥 ${hotCount} trending hot</span>` : ''}. Hot streaks listed first.${runLbl ? ` <span class="wv-run">⏰ ${runLbl}</span>` : ''}</div>
     <div class="wv-list">${rows}</div>`;
+
+  // Stash the hottest available players so renderAddDrop can pair them with the
+  // coldest droppable roster players (the other half comes from fillSeasonStats;
+  // whichever finishes last renders the pairing).
+  fanState.faHot = form.filter((p) => p.hc && p.hc.tag === 'hot')
+    .map((p) => ({ name: p.name, isPitcher: !!p.isPitcher, lead: (p.hc && p.hc.lead) || '', owned: p.owned }));
+  renderAddDrop(sport);
+}
+
+// Waivers in the owner's league process Wed & Sun at 11 PM ET. Surface the next
+// run so pickups are framed around when they'd actually go through (you can't
+// stream a player for "today" — adds clear only on those two nights).
+function nextWaiverRun() {
+  const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  for (let add = 0; add < 8; add++) {
+    const d = new Date(et);
+    d.setDate(et.getDate() + add);
+    d.setHours(23, 0, 0, 0);
+    if ((d.getDay() === 0 || d.getDay() === 3) && d > et) return d; // Sun=0, Wed=3
+  }
+  return null;
+}
+function nextWaiverRunLabel() {
+  const d = nextWaiverRun();
+  if (!d) return '';
+  const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const sameDay = d.toDateString() === et.toDateString();
+  const day = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()];
+  return `Next waiver run: ${sameDay ? 'tonight' : day} 11 PM ET`;
+}
+
+// Pair the hottest available players with the coldest droppable roster players
+// (same type — hitter↔hitter, pitcher↔pitcher) into concrete add/drop moves.
+// Needs both halves: faHot (renderWaivers) + dropCandidates (fillSeasonStats).
+function renderAddDrop(sport) {
+  const box = $('#fantasy-adddrop');
+  if (!box) return;
+  if (sport !== 'baseball' || fanState.sport !== sport) { box.innerHTML = ''; return; }
+  const adds = fanState.faHot || [], drops = fanState.dropCandidates || [];
+  if (!adds.length || !drops.length) { box.innerHTML = ''; return; }
+  const used = new Set(), moves = [];
+  adds.slice(0, 6).forEach((a) => {
+    const drop = drops.find((d) => d.isPitcher === a.isPitcher && !used.has(d.name));
+    if (!drop) return;
+    used.add(drop.name);
+    moves.push({ a, drop });
+  });
+  if (!moves.length) { box.innerHTML = ''; return; }
+  const rows = moves.map(({ a, drop }) => `<div class="ad-row">
+      <div class="ad-line add"><span class="ad-tag add">＋ ADD</span> <b>${esc(a.name)}</b>${a.lead ? ` <span class="ad-lead">${esc(a.lead)}</span>` : ''}</div>
+      <div class="ad-line drop"><span class="ad-tag drop">－ DROP</span> ${esc(drop.name)}${drop.lead ? ` <span class="ad-lead">${esc(drop.lead)}</span>` : ''}</div>
+    </div>`).join('');
+  box.innerHTML = `<h2 class="section-title">Suggested Moves</h2>
+    <div class="none" style="margin-bottom:8px">Hot pickups paired with your coldest droppable players, same position type. Adds clear ${esc(nextWaiverRunLabel().replace('Next waiver run: ', '') || 'on waiver night')}.</div>
+    <div class="ad-list">${rows}</div>`;
 }
 
 // Start/Sit suggestions from the roster's own hot/cold tags (called by
@@ -1807,16 +1928,22 @@ async function renderWaivers(sport) {
 function renderStartSit(entries) {
   const box = $('#fantasy-startsit');
   if (!box) return;
-  const start = entries.filter((e) => e.status === 'bench' && e.tag === 'hot');
-  const sit = entries.filter((e) => e.status === 'active' && e.tag === 'cold');
+  // Start: hot players on the bench who actually have a game today.
+  const start = entries.filter((e) => e.status === 'bench' && e.tag === 'hot' && e.today);
+  // Sit: cold players in the active lineup, or active players with no game today
+  // (but never tell them to sit a hot bat just because today's game data is thin).
+  const sit = entries.filter((e) => e.status === 'active' && (e.tag === 'cold' || (!e.today && e.tag !== 'hot')));
   if (!start.length && !sit.length) { box.innerHTML = ''; return; }
-  const li = (arr) => arr.length
-    ? arr.map((e) => `<li><b>${esc(e.name)}</b>${e.lead ? ` <span class="lead">${esc(e.lead)}</span>` : ''}</li>`).join('')
+  const why = (e, kind) => kind === 'start'
+    ? '🔥 hot · plays today'
+    : e.tag === 'cold' ? (e.today ? '🥶 cold' : '🥶 cold · no game today') : '🪑 no game today';
+  const li = (arr, kind) => arr.length
+    ? arr.map((e) => `<li><b>${esc(e.name)}</b> <span class="ss-why">${why(e, kind)}</span>${e.lead ? ` <span class="lead">${esc(e.lead)}</span>` : ''}</li>`).join('')
     : '<li class="none">None</li>';
-  box.innerHTML = `<h2 class="section-title">Start / Sit</h2>
+  box.innerHTML = `<h2 class="section-title">Today’s Lineup Check</h2>
     <div class="ss-cols">
-      <div><div class="ss-h start">⬆ Start — hot on your bench</div><ul>${li(start)}</ul></div>
-      <div><div class="ss-h sit">⬇ Sit — cold in your lineup</div><ul>${li(sit)}</ul></div>
+      <div><div class="ss-h start">⬆ Start — hot &amp; playing today</div><ul>${li(start, 'start')}</ul></div>
+      <div><div class="ss-h sit">⬇ Sit — cold or idle today</div><ul>${li(sit, 'sit')}</ul></div>
     </div>`;
 }
 
@@ -2013,7 +2140,7 @@ async function fillSeasonStats(roster, fSport) {
     [sMaps[t], idMaps[t]] = await Promise.all([teamSeasonMap(sport, id).catch(() => ({})), rosterIdMap(sport, id).catch(() => ({}))]);
   }));
 
-  const hot = [], cold = [], ss = [];
+  const hot = [], cold = [], ss = [], drops = [], hitStats = [], pitStats = [];
   await Promise.all(roster.map(async (p, i) => {
     const seasEl = document.getElementById(`fseas-${i}`);
     const trendEl = document.getElementById(`ftrend-${i}`);
@@ -2021,20 +2148,33 @@ async function fillSeasonStats(roster, fSport) {
     const leadEl = document.getElementById(`flead-${i}`);
     if (!seasEl) return;
     if (!p.team) { seasEl.textContent = 'set a team to load stats'; return; }
-    let season = seasonLine(fSport, p, (sMaps[p.team] || {})[nameKey(p.name)]);
+    const sraw = (sMaps[p.team] || {})[nameKey(p.name)];
+    let season = seasonLine(fSport, p, sraw);
+    // Roster category profile (baseball): collect each player's season stats.
+    if (fSport === 'baseball' && sraw) {
+      const num = (v) => { const n = parseFloat(v); return Number.isNaN(n) ? null : n; };
+      if (isPitcher(p)) pitStats.push({ ERA: num(sraw.ERA), WHIP: num(sraw.WHIP), K: num(sraw.K), W: num(sraw.W) });
+      else hitStats.push({ HR: num(sraw.HR), RBI: num(sraw.RBI), OPS: num(sraw.OPS), AVG: num(sraw.AVG) });
+    }
+    let tag = '', lead = '';
     const aid = (idMaps[p.team] || {})[nameKey(p.name)];
     if (aid) {
       const hc = hotCold(fSport, await athleteGamelog(sport, aid).catch(() => null), isPitcher(p));
       if (hc) {
         if (!season && hc.season) season = hc.season; // gamelog fallback for non-leaders
+        tag = hc.tag; lead = hc.lead || '';
         if (trendEl) trendEl.innerHTML = `<div class="hc ${hc.tag}"><span class="hc-tag">${hc.tag === 'hot' ? '🔥 Hot' : hc.tag === 'cold' ? '🥶 Cold' : '📊 Steady'}</span><span class="hc-detail">${hc.detail}</span></div>`;
         if (arrowEl) { arrowEl.textContent = hc.tag === 'hot' ? '▲' : hc.tag === 'cold' ? '▼' : '▬'; arrowEl.className = `arrow ${hc.tag || 'flat'}`; }
         if (leadEl) leadEl.textContent = hc.lead || '';
         if (hc.tag === 'hot') hot.push({ name: p.name, lead: hc.lead });
-        else if (hc.tag === 'cold' && p.status !== 'il') cold.push({ name: p.name, lead: hc.lead });
-        ss.push({ name: p.name, status: p.status, tag: hc.tag, lead: hc.lead });
+        else if (hc.tag === 'cold' && p.status !== 'il') {
+          cold.push({ name: p.name, lead: hc.lead });
+          drops.push({ name: p.name, lead: hc.lead, isPitcher: isPitcher(p) });
+        }
       }
     }
+    const pg = playerGame(p);
+    ss.push({ name: p.name, status: p.status, tag, lead, today: !!pg && gameState(pg.g) !== 'final' });
     seasEl.innerHTML = season ? `<b>Season:</b> ${season}` : 'season stats unavailable';
   }));
 
@@ -2058,6 +2198,40 @@ async function fillSeasonStats(roster, fSport) {
     <div class="none" style="margin-top:6px">Trends compare the last 20 days to season; only players with enough recent games show a tag.</div>`;
 
   renderStartSit(ss);
+  renderCatStrength(fSport, hitStats, pitStats);
+  // Fill the cold half of the add/drop pairing, then (re)render it — the hot
+  // half (faHot) was set by renderWaivers; whichever finished last completes it.
+  fanState.dropCandidates = drops;
+  renderAddDrop(fSport);
+}
+
+// Roster category profile (baseball): where your roster is built to score, from
+// each player's season stats. This is a roster profile (NOT league-relative) —
+// it counts how many players are strong contributors in each scoring category.
+function renderCatStrength(fSport, hitStats, pitStats) {
+  const box = $('#fantasy-strength');
+  if (!box) return;
+  if (fSport !== 'baseball' || (!hitStats.length && !pitStats.length)) { box.innerHTML = ''; return; }
+  const atLeast = (arr, key, thr) => arr.filter((s) => s[key] != null && s[key] >= thr).length;
+  const atMost = (arr, key, thr) => arr.filter((s) => s[key] != null && s[key] <= thr).length;
+  const rate = (n) => (n >= 4 ? 'strong' : n >= 2 ? 'solid' : 'thin');
+  const gauges = [
+    { cat: 'Power (HR)', n: atLeast(hitStats, 'HR', 18) },
+    { cat: 'RBI', n: atLeast(hitStats, 'RBI', 55) },
+    { cat: 'Avg / OPS', n: atLeast(hitStats, 'OPS', 0.780) },
+    { cat: 'ERA', n: atMost(pitStats, 'ERA', 3.80) },
+    { cat: 'WHIP', n: atMost(pitStats, 'WHIP', 1.20) },
+    { cat: 'Strikeouts', n: atLeast(pitStats, 'K', 110) },
+    { cat: 'Wins', n: atLeast(pitStats, 'W', 8) },
+  ];
+  const rows = gauges.map((g) => {
+    const r = rate(g.n);
+    const icon = r === 'strong' ? '🟢' : r === 'solid' ? '🟡' : '🔴';
+    return `<div class="cs-row"><span class="cs-cat">${g.cat}</span><span class="cs-rate ${r}">${icon} ${r}</span><span class="cs-n">${g.n} contributor${g.n === 1 ? '' : 's'}</span></div>`;
+  }).join('');
+  box.innerHTML = `<h2 class="section-title">Category Strengths</h2>
+    <div class="none" style="margin-bottom:8px">From your players’ season stats — where your roster is built to score. Counts strong contributors per category (a guide, not league-relative).</div>
+    <div class="cs-list">${rows}</div>`;
 }
 
 $('#fan-add').addEventListener('click', () => {

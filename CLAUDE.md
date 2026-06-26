@@ -83,7 +83,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v70**.
+Current version as of this writing: **v71**.
 
 ## Testing reality
 
@@ -150,6 +150,29 @@ Current version as of this writing: **v70**.
   trends (hitters by OPS over last ~20 days; pitchers by ERA/WHIP over last 5
   outings), grouped Hitters/Pitchers, top-3 hitters, projected starters. MLB teams
   auto-detected across all 30 rosters (`autoResolveTeams`, cached in localStorage).
+  Live ESPN-league sections (baseball; see optional backend above): league header,
+  category matchup scoreboard, standings/power table, opponent scouting. Added v71:
+  - **Weekly category projection** (`renderProjection`, `#fantasy-projection`) —
+    verdict (Leading/Trailing/Tied) + the CLOSE categories still in play to
+    🎯 Target (flip) or 🛡 Defend, derived client-side from the matchup totals.
+  - **Today's Lineup Check** (`renderStartSit`) — start/sit now factors whether a
+    player actually has a game today (`ss[].today`), not just hot/cold.
+  - **Category Strengths** (`renderCatStrength`, `#fantasy-strength`) — a roster
+    profile counting strong contributors per scoring category (HR/RBI/OPS/ERA/
+    WHIP/K/W). Heuristic, NOT league-relative (labeled as such).
+  - **Suggested Moves** (`renderAddDrop`, `#fantasy-adddrop`) — pairs the hottest
+    free agents (`fanState.faHot`, set in `renderWaivers`) with the coldest
+    droppable roster players (`fanState.dropCandidates`, set in `fillSeasonStats`),
+    same position type. Whichever finishes last renders the pairing.
+  - **Waiver-run timing** — waivers process **Wed & Sun 11 PM ET**
+    (`nextWaiverRun`/`nextWaiverRunLabel`); shown on the waiver wire + add/drop
+    notes so pickups are framed to when they'd actually clear (no daily streaming).
+  - **Live-day auto-refresh** (`scheduleLiveRefresh`) — while any roster game is
+    live AND the Fantasy tab is open, force-resyncs every 5 min (matches backend
+    cache TTL); cleared/re-armed each render, stops when idle or tab inactive.
+  - **Football chip hidden until configured** — the 🏈 chip only renders when the
+    backend reports a football league (`cfg.football`), so the tab never shows a
+    hollow football view out of season.
 - **World Cup neutral sites** — soccer games get **no home-field edge** in the
   model except host nations (USA/Mexico/Canada via `isWorldCupHost`); neutral games
   read "vs" not "@" in the modal.
