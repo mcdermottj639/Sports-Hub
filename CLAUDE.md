@@ -97,7 +97,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v73**.
+Current version as of this writing: **v74**.
 
 ## Testing reality
 
@@ -188,7 +188,12 @@ Current version as of this writing: **v73**.
     wrapped so it NEVER leaves a bare heading: empty pickups → an explicit "no hot
     free agents" line; a thrown error → an inline message. Whichever async half
     finishes last renders the suggestions; `renderCatStrength` also re-invokes it once
-    needs are known. (A trailing "(N screened)" count is a deliberate diagnostic.)
+    needs are known. **v74:** the cards are rendered with INLINE styles (not the
+    `.ad-*` classes) — a class-based version rendered invisibly on the owner's device
+    even though the cards were in the DOM and the CSS was valid (structurally identical
+    `.cs-row` rendered fine; root cause never identified). Inlining the essential
+    styles guarantees visibility regardless of the stylesheet. The `.ad-*` CSS rules
+    are now vestigial.
   - **Waiver-run timing** — waivers process **Wed & Sun 11 PM ET**
     (`nextWaiverRun`/`nextWaiverRunLabel`); shown on the waiver wire + add/drop
     notes so pickups are framed to when they'd actually clear (no daily streaming).

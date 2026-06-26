@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v73';
+const APP_VERSION = 'v74';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1928,22 +1928,28 @@ function renderAddDrop(sport) {
       return d || null;
     };
     const moves = adds.slice(0, 3).map((a) => ({ a, drop: pickDrop(a) }));
+    // NOTE: rendered with INLINE styles (no class dependency). An identical
+    // class-based version rendered invisibly on the owner's device despite the
+    // cards being present in the DOM and the CSS being valid — cause unknown, so
+    // we inline the essentials to guarantee they show regardless of stylesheet.
+    const chip = (color, bg, label) => `<span style="display:inline-block;color:${color};background:${bg};font-weight:800;font-size:11px;padding:1px 6px;border-radius:6px;margin-right:5px">${label}</span>`;
+    const lineCss = 'font-size:13.5px;color:#e8efed;line-height:1.45';
+    const leadCss = 'color:#a5acaf;font-size:12px';
     const dropLine = (drop) => drop
-      ? `<div class="ad-line drop"><span class="ad-tag drop">－ DROP</span> ${esc(drop.name)}${drop.lead ? ` <span class="ad-lead">${esc(drop.lead)}</span>` : ''}</div>`
-      : '<div class="ad-line drop"><span class="ad-tag open">🆓 OPEN</span> open a roster spot to add</div>';
+      ? `<div style="${lineCss}">${chip('#ffd166', 'rgba(255,209,102,.16)', '－ DROP')}${esc(drop.name)}${drop.lead ? ` <span style="${leadCss}">${esc(drop.lead)}</span>` : ''}</div>`
+      : `<div style="${lineCss};color:#a5acaf">${chip('#a5acaf', 'rgba(255,255,255,.1)', '🆓 OPEN')}open a roster spot to add</div>`;
     const rows = moves.map(({ a, drop }) => {
-      const need = helpsNeed(a) ? ` <span class="ad-need">🎯 fills ${esc(needLabel(a))} need</span>` : '';
-      return `<div class="ad-row">
-      <div class="ad-line add"><span class="ad-tag add">＋ ADD</span> <b>${esc(a.name)}</b>${a.lead ? ` <span class="ad-lead">${esc(a.lead)}</span>` : ''}${need}</div>
-      ${dropLine(drop)}
-    </div>`;
+      const need = helpsNeed(a) ? ` <span style="color:#3ad29f;font-size:11.5px;font-weight:700">🎯 fills ${esc(needLabel(a))} need</span>` : '';
+      return `<div style="background:#16211f;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 12px;margin-bottom:8px">`
+        + `<div style="${lineCss};margin-bottom:4px">${chip('#3ad29f', 'rgba(58,210,159,.16)', '＋ ADD')}<b>${esc(a.name)}</b>${a.lead ? ` <span style="${leadCss}">${esc(a.lead)}</span>` : ''}${need}</div>`
+        + `${dropLine(drop)}</div>`;
     }).join('');
     const needLine = (needs.hitters.length || needs.pitchers.length)
       ? `Prioritizing your thin categories (${esc([...needs.hitters, ...needs.pitchers].join(', '))}). `
       : '';
     box.innerHTML = `${head}
-    <div class="none" style="margin-bottom:8px">${needLine}Hot free agents worth adding, paired with a cold or weak same-position player to drop where you have one. Adds clear ${esc(nextWaiverRunLabel().replace('Next waiver run: ', '') || 'on waiver night')}. <span style="opacity:.6">(${adds.length} screened)</span></div>
-    <div class="ad-list">${rows}</div>`;
+    <div class="none" style="margin-bottom:8px">${needLine}Hot free agents worth adding, paired with a cold or weak same-position player to drop where you have one. Adds clear ${esc(nextWaiverRunLabel().replace('Next waiver run: ', '') || 'on waiver night')}.</div>
+    <div>${rows}</div>`;
   } catch (e) {
     note(`Couldn’t build suggestions: ${esc(String((e && e.message) || e))}`);
   }
