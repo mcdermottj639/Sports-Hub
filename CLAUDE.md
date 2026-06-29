@@ -25,7 +25,14 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > endpoints are CORS- and cookie-gated). `server/` is a small **Python FastAPI**
 > service wrapping the `cwendt94/espn-api` library, deployed on **Railway** free
 > tier at **`https://sports-hub-production.up.railway.app`** (set in `app.js` as
-> `FANTASY_API`). Config (league IDs, ESPN `espn_s2`/`SWID` cookies, team id) lives
+> `FANTASY_API`). ⚠️ **Railway deploy gotcha:** Railway auto-deploys the
+> **"Branch connected to production"** set in the service's Settings → Source —
+> this MUST be **`main`** (root directory `server`). It was once mis-set to an old
+> `claude/*` feature branch, so pushes to `main` silently never deployed and new
+> endpoints 404'd while old ones kept serving. After any backend change, confirm
+> the live build via `GET /api/health` → `version` (`SERVER_VERSION` in
+> `main.py`, bump it on backend changes). Config (league IDs, ESPN
+> `espn_s2`/`SWID` cookies, team id) lives
 > ONLY in Railway env vars — never in the repo; see `server/.env.example` +
 > `server/README.md`. Endpoints: `/api/health`, `/api/fantasy/{sport}/roster`,
 > `/api/fantasy/{sport}/matchup`, `/api/fantasy/{sport}/standings`,
