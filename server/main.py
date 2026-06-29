@@ -462,7 +462,10 @@ def _season_cats(league):
     counted and their direction). Stat ids -> abbreviations via STATS_MAP.
     """
     from espn_api.baseball.constant import STATS_MAP
-    raw = league.espn_request.league_get(params={"view": ["mTeam", "mSettings"]})
+    # mStandings is included alongside mTeam because some ESPN league responses
+    # only attach each team's cumulative season `valuesByStat` under the
+    # standings view; mSettings carries the scored-category config.
+    raw = league.espn_request.league_get(params={"view": ["mTeam", "mStandings", "mSettings"]})
     scoring = (((raw.get("settings") or {}).get("scoringSettings") or {}).get("scoringItems")) or []
     cats, seen = [], set()
     for it in scoring:
