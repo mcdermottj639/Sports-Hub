@@ -67,6 +67,7 @@ uvicorn main:app --reload
 | `GET /api/fantasy/{sport}/opponent` | This week's opponent + their roster |
 | `GET /api/fantasy/{sport}/freeagents` | Top available players (waivers/FA) |
 | `GET /api/fantasy/{sport}/catranks` | Per-team season category totals + league rank (powers the opponent comparison) |
+| `GET /api/fantasy/{sport}/playoffs` | Monte-Carlo playoff odds (`?slots=6&sims=10000`) from season category strength |
 | `GET /api/refresh` | Clear the cache, re-pull from ESPN |
 
 `{sport}` is `football` or `baseball`.

@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v76';
+const APP_VERSION = 'v77';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1484,6 +1484,7 @@ async function renderFantasy() {
   renderMatchup(fanState.sport);
   renderProjection(fanState.sport);
   renderFantasyStandings(fanState.sport);
+  renderPlayoffs(fanState.sport);
   // Reset cross-render state that the add/drop pairing + category strengths
   // build up asynchronously, so stale data from another sport can't leak in.
   fanState.faHot = null; fanState.dropCandidates = null; fanState.dropPool = null; fanState.catNeeds = null;
@@ -1666,14 +1667,15 @@ async function syncFromLeague(sport, force = false) {
     }));
     if (!roster.length) return false;
     saveRoster(sport, roster);
-    let matchup = null, standings = null, freeAgents = null, opponent = null, catranks = null;
+    let matchup = null, standings = null, freeAgents = null, opponent = null, catranks = null, playoffs = null;
     try { matchup = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/matchup${q()}`, 60000); } catch (_) {}
     try { standings = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/standings${q()}`, 60000); } catch (_) {}
     try { freeAgents = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/freeagents${q('size=40')}`, 300000); } catch (_) {}
     try { opponent = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/opponent${q()}`, 60000); } catch (_) {}
     try { catranks = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/catranks${q()}`, 60000); } catch (_) {}
+    try { playoffs = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/playoffs${q('slots=6')}`, 60000); } catch (_) {}
     fanState.league = fanState.league || {};
-    fanState.league[sport] = { team: data.team, record: data.record, matchup, standings, freeAgents, opponent, catranks, syncedAt: Date.now() };
+    fanState.league[sport] = { team: data.team, record: data.record, matchup, standings, freeAgents, opponent, catranks, playoffs, syncedAt: Date.now() };
     return true;
   } catch (_) { return false; }
 }
@@ -1771,34 +1773,102 @@ function renderFantasyStandings(sport) {
   if (!box) return;
   const S = ((fanState.league || {})[sport] || {}).standings;
   if (!S || !S.teams || !S.teams.length) { box.innerHTML = ''; return; }
-  const sortBy = fanState.standSort || 'standing';
-  const teams = [...S.teams].sort((a, b) => sortBy === 'power'
-    ? (b.powerScore || 0) - (a.powerScore || 0)
-    : (a.standing || 99) - (b.standing || 99));
+
+  // Category power (from /catranks): how much a team's SEASON category totals
+  // dominate the league — sum of (teams beaten + 1) across every scored cat, so
+  // a #1 finish is worth the most. A roster-strength read that record alone
+  // misses early in the year. Keyed by teamId.
+  const C = ((fanState.league || {})[sport] || {}).catranks;
+  const catPow = {};
+  if (C && Array.isArray(C.teams)) {
+    C.teams.forEach((t) => {
+      let p = 0;
+      Object.values(t.cats || {}).forEach((c) => { if (c && c.rank && c.of) p += (c.of - c.rank + 1); });
+      catPow[String(t.teamId)] = p;
+    });
+  }
+  const haveCats = Object.keys(catPow).length > 0;
+
+  let sortBy = fanState.standSort || 'standing';
+  if (sortBy === 'cats' && !haveCats) sortBy = 'standing';
+  const teams = [...S.teams].sort((a, b) => {
+    if (sortBy === 'power') return (b.powerScore || 0) - (a.powerScore || 0);
+    if (sortBy === 'cats') return (catPow[String(b.teamId)] || 0) - (catPow[String(a.teamId)] || 0);
+    return (a.standing || 99) - (b.standing || 99);
+  });
+
+  // Last column is dynamic: Power score, or Category power when that sort is on.
+  const lastHead = sortBy === 'cats' ? 'CatPwr' : 'Power';
   const maxPow = Math.max(...teams.map((t) => t.powerScore || 0), 1);
+  const maxCat = Math.max(...Object.values(catPow), 1);
   const rows = teams.map((t, i) => {
     const rec = `${t.wins ?? 0}-${t.losses ?? 0}${t.ties ? '-' + t.ties : ''}`;
     const l5 = (t.last5 || '').split('').map((c) => `<span class="f-${c.toLowerCase()}">${c}</span>`).join('');
-    const barW = Math.round(100 * (t.powerScore || 0) / maxPow);
+    const useCat = sortBy === 'cats';
+    const val = useCat ? (catPow[String(t.teamId)] ?? null) : (t.powerScore ?? null);
+    const barW = Math.round(100 * ((useCat ? (catPow[String(t.teamId)] || 0) / maxCat : (t.powerScore || 0) / maxPow)));
     return `<tr class="${t.isMe ? 'me' : ''}">
         <td class="st-rank">${i + 1}</td>
         <td class="st-team">${esc(t.team)}${t.isMe ? ' <span class="st-you">you</span>' : ''}</td>
         <td class="st-rec">${rec}</td>
         <td class="st-l5">${l5 || '—'}</td>
-        <td class="st-pow"><span class="pow-bar" style="width:${barW}%"></span><span class="pow-num">${t.powerScore ?? '–'}</span></td>
+        <td class="st-pow"><span class="pow-bar" style="width:${barW}%"></span><span class="pow-num">${val ?? '–'}</span></td>
       </tr>`;
   }).join('');
   box.innerHTML = `
-    <h2 class="section-title" style="display:flex;align-items:center;gap:10px">League
+    <h2 class="section-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">League Analyzer
       <span class="chips st-toggle" style="margin:0">
         <button class="chip ${sortBy === 'standing' ? 'active' : ''}" data-s="standing">Standings</button>
         <button class="chip ${sortBy === 'power' ? 'active' : ''}" data-s="power">Power</button>
+        ${haveCats ? `<button class="chip ${sortBy === 'cats' ? 'active' : ''}" data-s="cats">Category</button>` : ''}
       </span></h2>
-    <table class="st-table"><thead><tr><th></th><th>Team</th><th>Rec</th><th>L5</th><th>Power</th></tr></thead>
-      <tbody>${rows}</tbody></table>`;
+    <table class="st-table"><thead><tr><th></th><th>Team</th><th>Rec</th><th>L5</th><th>${lastHead}</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    <div class="none" style="margin-top:6px">${sortBy === 'cats'
+      ? 'Category power = how much each team’s season totals dominate the league across all scored cats (higher = stronger roster).'
+      : sortBy === 'power' ? 'Power = 60% record + 40% recent form.' : 'Sorted by league standing.'}</div>`;
   box.querySelectorAll('.st-toggle .chip').forEach((b) => {
     b.onclick = () => { fanState.standSort = b.dataset.s; renderFantasyStandings(sport); };
   });
+}
+
+// Playoff Predictor: Monte-Carlo odds from the backend /playoffs sim (each
+// remaining matchup decided by season category strength). Rows are pre-sorted
+// by odds; a dashed line marks the playoff cut (top `slots`). Inline styles
+// (per the v74 visibility lesson) so it renders regardless of stylesheet.
+function renderPlayoffs(sport) {
+  const box = $('#fantasy-playoffs');
+  if (!box) return;
+  const P = ((fanState.league || {})[sport] || {}).playoffs;
+  if (sport !== 'baseball' || !P || !Array.isArray(P.teams) || !P.teams.length) { box.innerHTML = ''; return; }
+  const slots = P.slots || 6;
+  const wkLeft = P.gamesLeft || 0;
+  const me = P.teams.find((t) => t.isMe);
+  const oddColor = (o) => o >= 85 ? '#3ad29f' : o >= 50 ? '#ffd166' : o >= 15 ? '#e0a458' : '#8a93a3';
+  const tag = (t) => t.clinched ? ' 🔒' : t.eliminated ? ' ❌' : '';
+  const rows = P.teams.map((t, i) => {
+    const rec = `${t.wins ?? 0}-${t.losses ?? 0}${t.ties ? '-' + t.ties : ''}`;
+    const o = t.playoffOdds;
+    const col = oddColor(o);
+    const cut = i === slots ? 'border-top:2px dashed rgba(255,209,102,.55);' : '';
+    const bg = t.isMe ? 'background:rgba(58,210,159,.10);' : '';
+    return `<div style="${cut}${bg}display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.06)">
+        <div style="opacity:.6;font-size:.85em;text-align:center">${i + 1}</div>
+        <div style="min-width:0">
+          <div style="font-weight:700;color:#e8efed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.team)}${t.isMe ? ' <span style="color:#3ad29f;font-size:.8em">you</span>' : ''}${tag(t)}</div>
+          <div style="height:5px;border-radius:3px;background:rgba(255,255,255,.08);margin-top:4px;overflow:hidden"><span style="display:block;height:100%;width:${Math.max(2, Math.round(o))}%;background:${col}"></span></div>
+        </div>
+        <div style="text-align:right;min-width:92px">
+          <div style="font-weight:800;color:${col}">${o}%</div>
+          <div style="opacity:.55;font-size:.78em">${rec} · proj ${t.projWins}</div>
+        </div>
+      </div>`;
+  }).join('');
+  const model = P.usedCategoryModel ? 'category-strength model' : 'record-based';
+  const verdict = me ? `You: <b style="color:${oddColor(me.playoffOdds)}">${me.playoffOdds}% to make it</b> (proj seed ${me.avgSeed}). ` : '';
+  box.innerHTML = `<h2 class="section-title">Playoff Predictor</h2>
+    <div class="none" style="margin-bottom:8px">${verdict}${slots}-team playoff · ${wkLeft} ${wkLeft === 1 ? 'week' : 'weeks'} to go · ${(P.sims || 0).toLocaleString()} sims · ${model}. Dashed line = playoff cut.</div>
+    <div style="border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden">${rows}</div>`;
 }
 
 // Run any player list through the same recent-form engine the roster uses;

@@ -31,7 +31,8 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > `/api/fantasy/{sport}/matchup`, `/api/fantasy/{sport}/standings`,
 > `/api/fantasy/{sport}/opponent`, `/api/fantasy/{sport}/freeagents`,
 > `/api/fantasy/{sport}/catranks` (per-team season category totals + league rank,
-> powers the opponent comparison), `/api/refresh`.
+> powers the opponent comparison), `/api/fantasy/{sport}/playoffs` (Monte-Carlo
+> playoff odds), `/api/refresh`.
 > **Baseball is live** (league `42353353`, team "Duran Duran" id `2`); football is
 > coded but not yet configured (no league id set). The Fantasy tab calls the API
 > once per session (`syncFromLeague`), overwrites the saved roster with the real
@@ -100,7 +101,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v76**.
+Current version as of this writing: **v77**.
 
 ## Testing reality
 
@@ -187,6 +188,31 @@ Current version as of this writing: **v76**.
     in Snapshot, so the lists were redundant. The hot/cold computation in
     `fillSeasonStats` is kept (it still feeds the roster arrows, Snapshot counts,
     and Suggested Moves drop pool).
+  - **Tab layout (v77)** — order is: this-week cluster (league header, matchup
+    scoreboard, projection, How You Stack Up), then Snapshot + Roster, then the
+    **roster-building tools grouped together** (Category Strengths → Suggested
+    Moves → Waiver Wire), then the **League Analyzer block at the bottom**
+    (standings/power table → Playoff Predictor). Sections are fixed `#fantasy-*`
+    divs in `index.html`; reordering = moving divs (renderers target ids, so JS
+    call order doesn't affect layout).
+  - **League Analyzer** (`renderFantasyStandings`, `#fantasy-standings`) — the
+    standings/power table (renamed from "League" in v77). Sort toggle now has a
+    third option **Category** (when `/catranks` is loaded): ranks teams by
+    *category power* = Σ over scored cats of `(teamCount − rank + 1)`, i.e. how
+    much a team's SEASON totals dominate the league — a roster-strength read that
+    record alone misses early. The last column + footnote switch with the sort.
+  - **Playoff Predictor** (`renderPlayoffs`, `#fantasy-playoffs`, backend
+    `/playoffs`) — Monte-Carlo playoff odds (default `slots=6`, `sims=10000`).
+    The backend plays out every remaining (undecided) matchup `sims` times,
+    deciding each by the two teams' **season category strength** (`_cat_win_prob`:
+    count direction-aware category edges → logistic), then counts how often each
+    team finishes in the top `slots`. Returns playoff odds, projected final wins,
+    and average seed per team; the frontend renders an odds-bar table with a
+    dashed **playoff cut line**, your team highlighted, 🔒 clinched / ❌ eliminated,
+    and a "you N% to make it" verdict. Reuses the same `_season_cats` helper as
+    `/catranks` (one ESPN `mTeam`+`mSettings` pull). Falls back to a record-based
+    model + blank section if category data is unavailable. NOTE: not real ESPN
+    tiebreakers — sim seeds by wins with a random tiebreak, which is fine for odds.
   - **Top-of-tab jump-nav** (`injectJumpNav`) — the Fantasy tab's section chip row.
     v76 fix: labels now strip nested controls (so the "League" heading's
     Standings/Power toggle no longer bleeds into the chip text), and the nav is

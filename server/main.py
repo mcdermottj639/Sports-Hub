@@ -10,7 +10,9 @@ Config comes entirely from environment variables (set as secrets on the host).
 Nothing sensitive is committed to the repo. See .env.example.
 """
 
+import math
 import os
+import random
 import time
 from functools import lru_cache
 from typing import Optional
@@ -447,16 +449,42 @@ def standings(sport: str):
     return {"sport": sport, "teams": rows}
 
 
+def _season_cats(league):
+    """Shared season-category data used by /catranks and /playoffs.
+
+    Returns (cats, totals):
+      cats   = [{statId, name, reverse}] for each SCORED category, in league
+               order (reverse = lower is better, e.g. ERA/WHIP).
+      totals = {teamId(str): {statId(int): seasonValue}}.
+
+    Both come from a single ESPN request: `mTeam` (cumulative season
+    `valuesByStat` per team) + `mSettings` (`scoringItems` = which stats are
+    counted and their direction). Stat ids -> abbreviations via STATS_MAP.
+    """
+    from espn_api.baseball.constant import STATS_MAP
+    raw = league.espn_request.league_get(params={"view": ["mTeam", "mSettings"]})
+    scoring = (((raw.get("settings") or {}).get("scoringSettings") or {}).get("scoringItems")) or []
+    cats, seen = [], set()
+    for it in scoring:
+        sid = it.get("statId")
+        if sid is None or sid in seen:
+            continue
+        seen.add(sid)
+        cats.append({"statId": int(sid), "name": STATS_MAP.get(int(sid), str(sid)),
+                     "reverse": bool(it.get("isReverseItem"))})
+    totals = {}
+    for t in raw.get("teams", []):
+        tid = str(t.get("id"))
+        vbs = t.get("valuesByStat") or {}
+        totals[tid] = {int(k): v for k, v in vbs.items() if v is not None}
+    return cats, totals
+
+
 @app.get("/api/fantasy/{sport}/catranks")
 def catranks(sport: str):
     """Each team's season total + league rank for every scoring category (the
     "counted stats"). Powers the slimmed opponent view: instead of dumping the
     opponent's roster, the frontend shows where they rank in HR/RBI/ERA/etc.
-
-    Season totals come straight from ESPN's `mTeam` view (`valuesByStat`, keyed
-    by stat id); the scored categories + their direction come from `mSettings`
-    (`scoringItems`, `isReverseItem` = lower is better, e.g. ERA/WHIP). Stat ids
-    map to abbreviations via espn-api's STATS_MAP.
     """
     if sport != "baseball":
         return {"sport": sport, "categories": [], "teams": [], "note": "Category ranks are baseball-only for now."}
@@ -474,34 +502,12 @@ def catranks(sport: str):
     except Exception:
         pass
 
-    # One raw request gets season totals (mTeam) + scoring config (mSettings).
     try:
-        raw = league.espn_request.league_get(params={"view": ["mTeam", "mSettings"]})
+        cats, totals = _season_cats(league)
     except Exception as e:
         raise HTTPException(502, f"Could not load team season stats: {e}")
 
-    from espn_api.baseball.constant import STATS_MAP
-
-    scoring = (((raw.get("settings") or {}).get("scoringSettings") or {}).get("scoringItems")) or []
-    cats, seen = [], set()
-    for it in scoring:
-        sid = it.get("statId")
-        if sid is None or sid in seen:
-            continue
-        seen.add(sid)
-        cats.append({
-            "statId": int(sid),
-            "name": STATS_MAP.get(int(sid), str(sid)),
-            "reverse": bool(it.get("isReverseItem")),
-        })
-
     name_by_id = {str(getattr(t, "team_id", "")): getattr(t, "team_name", "") for t in league.teams}
-    totals = {}  # teamId -> {statId(int): value}
-    for t in raw.get("teams", []):
-        tid = str(t.get("id"))
-        vbs = t.get("valuesByStat") or {}
-        totals[tid] = {int(k): v for k, v in vbs.items() if v is not None}
-
     out = {tid: {"teamId": tid, "team": name_by_id.get(tid, ""),
                  "isMe": tid == my_id, "isOpp": tid == opp_id, "cats": {}}
            for tid in totals}
@@ -524,6 +530,130 @@ def catranks(sport: str):
         "teamCount": len(totals),
         "categories": [c["name"] for c in cats],
         "teams": list(out.values()),
+    }
+
+
+def _cat_win_prob(a_id, b_id, cats, totals):
+    """Estimate P(team A beats team B) in a single H2H-category matchup from
+    their SEASON category rates. Count the categories A is favored in
+    (direction-aware), turn that fraction into a win probability with a logistic
+    so leading more categories means a higher — but not certain — chance."""
+    ta, tb = totals.get(a_id, {}), totals.get(b_id, {})
+    edge, n = 0.0, 0
+    for c in cats:
+        va, vb = ta.get(c["statId"]), tb.get(c["statId"])
+        if va is None or vb is None:
+            continue
+        n += 1
+        if va == vb:
+            edge += 0.5
+        else:
+            a_better = (va < vb) if c["reverse"] else (va > vb)
+            edge += 1.0 if a_better else 0.0
+    if n == 0:
+        return 0.5
+    frac = edge / n
+    return 1.0 / (1.0 + math.exp(-6.0 * (frac - 0.5)))
+
+
+@app.get("/api/fantasy/{sport}/playoffs")
+def playoffs(sport: str, slots: int = 6, sims: int = 10000):
+    """Monte-Carlo playoff odds. Plays out every remaining matchup `sims` times,
+    deciding each by the two teams' season category strength (`_cat_win_prob`),
+    then counts how often each team lands in the top `slots` of the final
+    standings. Returns playoff odds, projected final wins, and average seed.
+    """
+    if sport != "baseball":
+        return {"sport": sport, "teams": [], "note": "Playoff odds are baseball-only for now."}
+    league = get_league(sport)
+    my_id = str(SPORTS[sport]["team_id"] or "")
+    try:
+        cats, totals = _season_cats(league)
+    except Exception:
+        cats, totals = [], {}
+
+    teams = league.teams or []
+    info = {}
+    for t in teams:
+        tid = _tid(t)
+        w = getattr(t, "wins", 0) or 0
+        l = getattr(t, "losses", 0) or 0
+        ti = getattr(t, "ties", 0) or 0
+        info[tid] = {"team": getattr(t, "team_name", ""), "wins": w, "losses": l,
+                     "ties": ti, "base": w + 0.5 * ti, "standing": getattr(t, "standing", None)}
+
+    # Remaining (undecided) matchups, deduped across both teams' schedules.
+    remaining, seen = [], set()
+    max_left = 0
+    for t in teams:
+        left = 0
+        for idx, mu in enumerate(getattr(t, "schedule", []) or []):
+            winner = (getattr(mu, "winner", "") or "").upper()
+            if winner not in ("UNDECIDED", "NONE", ""):
+                continue
+            a, b = _tid(getattr(mu, "home_team", None)), _tid(getattr(mu, "away_team", None))
+            if not a or not b or a == b:
+                continue
+            left += 1
+            key = (idx, frozenset((a, b)))
+            if key in seen:
+                continue
+            seen.add(key)
+            remaining.append((a, b))
+        max_left = max(max_left, left)
+
+    ids = list(info.keys())
+    n_teams = len(ids)
+    slots = max(1, min(slots, n_teams))
+    # Pre-compute each remaining matchup's home win prob once.
+    probs = [(a, b, _cat_win_prob(a, b, cats, totals)) for (a, b) in remaining]
+
+    made = {tid: 0 for tid in ids}
+    seed_sum = {tid: 0 for tid in ids}
+    win_sum = {tid: 0.0 for tid in ids}
+    # Tiny stable per-team jitter base for tiebreaks (favor better current seed).
+    for _ in range(max(1, sims)):
+        wins = {tid: info[tid]["base"] for tid in ids}
+        for (a, b, p) in probs:
+            if random.random() < p:
+                wins[a] += 1
+            else:
+                wins[b] += 1
+        for tid in ids:
+            win_sum[tid] += wins[tid]
+        order = sorted(ids, key=lambda tid: (wins[tid], random.random()), reverse=True)
+        for seed, tid in enumerate(order, start=1):
+            seed_sum[tid] += seed
+            if seed <= slots:
+                made[tid] += 1
+
+    s = max(1, sims)
+    rows = []
+    for tid in ids:
+        odds = round(100.0 * made[tid] / s, 1)
+        rows.append({
+            "teamId": tid,
+            "team": info[tid]["team"],
+            "isMe": tid == my_id,
+            "wins": info[tid]["wins"],
+            "losses": info[tid]["losses"],
+            "ties": info[tid]["ties"],
+            "currentSeed": info[tid]["standing"],
+            "projWins": round(win_sum[tid] / s, 1),
+            "playoffOdds": odds,
+            "avgSeed": round(seed_sum[tid] / s, 1),
+            "clinched": odds >= 99.95,
+            "eliminated": odds <= 0.05,
+        })
+    rows.sort(key=lambda r: (-r["playoffOdds"], r["avgSeed"]))
+    return {
+        "sport": sport,
+        "slots": slots,
+        "teamCount": n_teams,
+        "gamesLeft": max_left,
+        "sims": s,
+        "usedCategoryModel": bool(cats and totals),
+        "teams": rows,
     }
 
 
