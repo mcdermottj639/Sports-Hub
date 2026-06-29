@@ -28,7 +28,10 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > `FANTASY_API`). Config (league IDs, ESPN `espn_s2`/`SWID` cookies, team id) lives
 > ONLY in Railway env vars — never in the repo; see `server/.env.example` +
 > `server/README.md`. Endpoints: `/api/health`, `/api/fantasy/{sport}/roster`,
-> `/api/fantasy/{sport}/matchup`, `/api/fantasy/{sport}/standings`, `/api/refresh`.
+> `/api/fantasy/{sport}/matchup`, `/api/fantasy/{sport}/standings`,
+> `/api/fantasy/{sport}/opponent`, `/api/fantasy/{sport}/freeagents`,
+> `/api/fantasy/{sport}/catranks` (per-team season category totals + league rank,
+> powers the opponent comparison), `/api/refresh`.
 > **Baseball is live** (league `42353353`, team "Duran Duran" id `2`); football is
 > coded but not yet configured (no league id set). The Fantasy tab calls the API
 > once per session (`syncFromLeague`), overwrites the saved roster with the real
@@ -97,7 +100,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v75**.
+Current version as of this writing: **v76**.
 
 ## Testing reality
 
@@ -165,12 +168,32 @@ Current version as of this writing: **v75**.
   outings), grouped Hitters/Pitchers, top-3 hitters, projected starters. MLB teams
   auto-detected across all 30 rosters (`autoResolveTeams`, cached in localStorage).
   Live ESPN-league sections (baseball; see optional backend above): league header,
-  category matchup scoreboard, standings/power table, opponent scouting. Added v71:
+  category matchup scoreboard, standings/power table, opponent comparison. Added v71:
   - **Weekly category projection** (`renderProjection`, `#fantasy-projection`) —
     verdict (Leading/Trailing/Tied) + the CLOSE categories still in play to
     🎯 Target (flip) or 🛡 Defend, derived client-side from the matchup totals.
-  - **Today's Lineup Check** (`renderStartSit`) — start/sit now factors whether a
-    player actually has a game today (`ss[].today`), not just hot/cold.
+  - **How You Stack Up** (`renderOpponent`, `#fantasy-opponent`) — v76 replaced the
+    old opponent-roster scouting list with a **head-to-head SEASON comparison**: my
+    team vs this week's opponent in every scored category, with each side's season
+    total + league rank (`#rank`) and a green highlight on the categories I'm
+    leading, plus a "you N–M" tally. Data comes from the backend `/catranks`
+    endpoint (ESPN `mTeam.valuesByStat` season totals + `mSettings.scoringItems`
+    for which stats are counted and their direction — reverse cats like ERA/WHIP
+    rank low-is-best server-side); fetched in `syncFromLeague` as
+    `fanState.league[sport].catranks`. Falls back to a blank section if the
+    endpoint is unreachable. **Removed in v76:** the standalone *Hot & Cold* list
+    (`#fantasy-recs`) and *Today's Lineup Check* (`renderStartSit`) — the per-player
+    ▲/▼ form arrows already live on each roster row and the hot/cold counts remain
+    in Snapshot, so the lists were redundant. The hot/cold computation in
+    `fillSeasonStats` is kept (it still feeds the roster arrows, Snapshot counts,
+    and Suggested Moves drop pool).
+  - **Top-of-tab jump-nav** (`injectJumpNav`) — the Fantasy tab's section chip row.
+    v76 fix: labels now strip nested controls (so the "League" heading's
+    Standings/Power toggle no longer bleeds into the chip text), and the nav is
+    **re-built after the async sections render** (Waiver Wire, Category Strengths,
+    Suggested Moves finish after the initial one-shot build) by re-invoking
+    `injectJumpNav('fantasy')` at the end of `renderAddDrop` — the terminal call in
+    every async fantasy flow. Without this, late sections had no working chip.
   - **Category Strengths** (`renderCatStrength`, `#fantasy-strength`) — a roster
     profile counting strong contributors per scoring category (HR/RBI/OPS/ERA/
     WHIP/K/W). Heuristic, NOT league-relative (labeled as such).

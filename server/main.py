@@ -447,6 +447,86 @@ def standings(sport: str):
     return {"sport": sport, "teams": rows}
 
 
+@app.get("/api/fantasy/{sport}/catranks")
+def catranks(sport: str):
+    """Each team's season total + league rank for every scoring category (the
+    "counted stats"). Powers the slimmed opponent view: instead of dumping the
+    opponent's roster, the frontend shows where they rank in HR/RBI/ERA/etc.
+
+    Season totals come straight from ESPN's `mTeam` view (`valuesByStat`, keyed
+    by stat id); the scored categories + their direction come from `mSettings`
+    (`scoringItems`, `isReverseItem` = lower is better, e.g. ERA/WHIP). Stat ids
+    map to abbreviations via espn-api's STATS_MAP.
+    """
+    if sport != "baseball":
+        return {"sport": sport, "categories": [], "teams": [], "note": "Category ranks are baseball-only for now."}
+    league = get_league(sport)
+    my_id = str(SPORTS[sport]["team_id"] or "")
+
+    # This week's opponent, so the frontend can pull just their row.
+    opp_id = None
+    try:
+        me_t = my_team(league, SPORTS[sport]["team_id"])
+        b = _find_box(league, _tid(me_t), sport)
+        if b is not None:
+            mine_home = _tid(getattr(b, "home_team", None)) == _tid(me_t)
+            opp_id = _tid(b.away_team if mine_home else b.home_team)
+    except Exception:
+        pass
+
+    # One raw request gets season totals (mTeam) + scoring config (mSettings).
+    try:
+        raw = league.espn_request.league_get(params={"view": ["mTeam", "mSettings"]})
+    except Exception as e:
+        raise HTTPException(502, f"Could not load team season stats: {e}")
+
+    from espn_api.baseball.constant import STATS_MAP
+
+    scoring = (((raw.get("settings") or {}).get("scoringSettings") or {}).get("scoringItems")) or []
+    cats, seen = [], set()
+    for it in scoring:
+        sid = it.get("statId")
+        if sid is None or sid in seen:
+            continue
+        seen.add(sid)
+        cats.append({
+            "statId": int(sid),
+            "name": STATS_MAP.get(int(sid), str(sid)),
+            "reverse": bool(it.get("isReverseItem")),
+        })
+
+    name_by_id = {str(getattr(t, "team_id", "")): getattr(t, "team_name", "") for t in league.teams}
+    totals = {}  # teamId -> {statId(int): value}
+    for t in raw.get("teams", []):
+        tid = str(t.get("id"))
+        vbs = t.get("valuesByStat") or {}
+        totals[tid] = {int(k): v for k, v in vbs.items() if v is not None}
+
+    out = {tid: {"teamId": tid, "team": name_by_id.get(tid, ""),
+                 "isMe": tid == my_id, "isOpp": tid == opp_id, "cats": {}}
+           for tid in totals}
+
+    # Rank each team per scored category (rank 1 = best; reverse = lower is best).
+    for c in cats:
+        sid = c["statId"]
+        vals = [(tid, tv[sid]) for tid, tv in totals.items() if sid in tv]
+        vals.sort(key=lambda x: x[1], reverse=not c["reverse"])
+        rank, prev = 0, object()
+        for i, (tid, v) in enumerate(vals):
+            if v != prev:
+                rank, prev = i + 1, v
+            out[tid]["cats"][c["name"]] = {"value": v, "rank": rank, "of": len(vals)}
+
+    return {
+        "sport": sport,
+        "myTeamId": my_id,
+        "oppTeamId": opp_id,
+        "teamCount": len(totals),
+        "categories": [c["name"] for c in cats],
+        "teams": list(out.values()),
+    }
+
+
 @app.get("/api/refresh")
 def refresh():
     """Drop the cached League objects so the next call re-pulls from ESPN."""

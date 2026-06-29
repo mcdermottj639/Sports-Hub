@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v75';
+const APP_VERSION = 'v76';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1513,7 +1513,6 @@ async function renderFantasy() {
 
   // snapshot + hot/cold are filled asynchronously (need recent-form data)
   $('#fantasy-analytics').innerHTML = '<div class="fan-card"><div class="big">…</div><div class="lbl">Analyzing recent form</div></div>';
-  $('#fantasy-recs').innerHTML = '<h3>Hot & Cold</h3><div class="none">Checking who’s heating up and who to drop…</div>';
 
   // roster grouped by Hitters / Pitchers
   const teamOpts = (fanState.sport === 'baseball' ? MLB_TEAMS : NFL_TEAMS);
@@ -1667,13 +1666,14 @@ async function syncFromLeague(sport, force = false) {
     }));
     if (!roster.length) return false;
     saveRoster(sport, roster);
-    let matchup = null, standings = null, freeAgents = null, opponent = null;
+    let matchup = null, standings = null, freeAgents = null, opponent = null, catranks = null;
     try { matchup = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/matchup${q()}`, 60000); } catch (_) {}
     try { standings = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/standings${q()}`, 60000); } catch (_) {}
     try { freeAgents = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/freeagents${q('size=40')}`, 300000); } catch (_) {}
     try { opponent = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/opponent${q()}`, 60000); } catch (_) {}
+    try { catranks = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/catranks${q()}`, 60000); } catch (_) {}
     fanState.league = fanState.league || {};
-    fanState.league[sport] = { team: data.team, record: data.record, matchup, standings, freeAgents, opponent, syncedAt: Date.now() };
+    fanState.league[sport] = { team: data.team, record: data.record, matchup, standings, freeAgents, opponent, catranks, syncedAt: Date.now() };
     return true;
   } catch (_) { return false; }
 }
@@ -1953,49 +1953,53 @@ function renderAddDrop(sport) {
   } catch (e) {
     note(`Couldn’t build suggestions: ${esc(String((e && e.message) || e))}`);
   }
+  // Async fantasy sections (Waiver Wire, Category Strengths, Suggested Moves)
+  // finish after the initial jump-nav is built, so refresh it now that their
+  // headings exist. This is the terminal call in each async flow.
+  injectJumpNav('fantasy');
 }
 
-// Start/Sit suggestions from the roster's own hot/cold tags (called by
-// fillSeasonStats once it has computed everyone's recent form).
-function renderStartSit(entries) {
-  const box = $('#fantasy-startsit');
-  if (!box) return;
-  // Start: hot players on the bench who actually have a game today.
-  const start = entries.filter((e) => e.status === 'bench' && e.tag === 'hot' && e.today);
-  // Sit: cold players in the active lineup, or active players with no game today
-  // (but never tell them to sit a hot bat just because today's game data is thin).
-  const sit = entries.filter((e) => e.status === 'active' && (e.tag === 'cold' || (!e.today && e.tag !== 'hot')));
-  if (!start.length && !sit.length) { box.innerHTML = ''; return; }
-  const why = (e, kind) => kind === 'start'
-    ? '🔥 hot · plays today'
-    : e.tag === 'cold' ? (e.today ? '🥶 cold' : '🥶 cold · no game today') : '🪑 no game today';
-  const li = (arr, kind) => arr.length
-    ? arr.map((e) => `<li><b>${esc(e.name)}</b> <span class="ss-why">${why(e, kind)}</span>${e.lead ? ` <span class="lead">${esc(e.lead)}</span>` : ''}</li>`).join('')
-    : '<li class="none">None</li>';
-  box.innerHTML = `<h2 class="section-title">Today’s Lineup Check</h2>
-    <div class="ss-cols">
-      <div><div class="ss-h start">⬆ Start — hot &amp; playing today</div><ul>${li(start, 'start')}</ul></div>
-      <div><div class="ss-h sit">⬇ Sit — cold or idle today</div><ul>${li(sit, 'sit')}</ul></div>
-    </div>`;
-}
-
-// Opponent scouting: this week's opponent's active lineup, hot threats vs slumps.
-async function renderOpponent(sport) {
+// Opponent overview: a head-to-head SEASON comparison — my team vs this week's
+// opponent in each scored category, so you can see at a glance where you stack
+// up. Totals + league rank come from the backend /catranks endpoint; lower rank
+// = better (reverse categories like ERA/WHIP are already handled server-side).
+function renderOpponent(sport) {
   const box = $('#fantasy-opponent');
   if (!box) return;
-  const O = ((fanState.league || {})[sport] || {}).opponent;
-  if (sport !== 'baseball' || !O || !O.roster || !O.roster.length) { box.innerHTML = ''; return; }
-  box.innerHTML = `<h2 class="section-title">Opponent — ${esc(O.opponent)}</h2><div class="none">Scouting their lineup…</div>`;
-  const active = O.roster.filter((p) => p.status === 'active');
-  const form = await computeRosterForm(active.slice(0, 16), sport);
-  if (fanState.sport !== sport) return;
-  form.sort((a, b) => formRank(a) - formRank(b));
-  const hot = form.filter((p) => p.hc && p.hc.tag === 'hot').length;
-  const cold = form.filter((p) => p.hc && p.hc.tag === 'cold').length;
-  const rows = form.map((p) => playerFormRow(p)).join('');
-  box.innerHTML = `<h2 class="section-title">Opponent — ${esc(O.opponent)}</h2>
-    <div class="none" style="margin-bottom:8px">Their active lineup this week${hot ? ` · <span style="color:var(--accent)">🔥 ${hot} hot</span>` : ''}${cold ? ` · <span style="color:var(--gold)">🥶 ${cold} cold</span>` : ''}. Hot threats first.</div>
-    <div class="wv-list">${rows}</div>`;
+  const C = ((fanState.league || {})[sport] || {}).catranks;
+  if (sport !== 'baseball' || !C || !C.categories || !C.categories.length || !Array.isArray(C.teams)) {
+    box.innerHTML = ''; return;
+  }
+  const me = C.teams.find((t) => t.isMe);
+  const opp = C.teams.find((t) => t.isOpp);
+  if (!me || !opp) { box.innerHTML = ''; return; }
+
+  let win = 0, lose = 0, tie = 0;
+  const rows = C.categories.map((cat) => {
+    const mc = (me.cats || {})[cat], oc = (opp.cats || {})[cat];
+    const mr = mc ? mc.rank : null, or_ = oc ? oc.rank : null;
+    // Lower rank wins. Missing data → no verdict for that row.
+    let meWins = null;
+    if (mr != null && or_ != null) { meWins = mr < or_ ? true : mr > or_ ? false : null; if (meWins === true) win++; else if (meWins === false) lose++; else tie++; }
+    const cell = (c, isWin) => {
+      const val = c ? fmtCat(cat, c.value) : '–';
+      const rk = c ? ` <span style="opacity:.6;font-size:.8em">#${c.rank}</span>` : '';
+      const col = isWin === true ? 'var(--accent)' : isWin === false ? 'var(--muted,#8a93a3)' : 'var(--text,#e6e9ef)';
+      return `<span style="font-weight:700;color:${col}">${val}${rk}</span>`;
+    };
+    return `<div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.06)">
+        <div style="text-align:right">${cell(mc, meWins === true)}</div>
+        <div style="text-align:center;font-size:.78em;letter-spacing:.04em;opacity:.7;min-width:46px">${esc(cat)}</div>
+        <div style="text-align:left">${cell(oc, meWins === false)}</div>
+      </div>`;
+  }).join('');
+
+  box.innerHTML = `<h2 class="section-title">How You Stack Up — vs ${esc(opp.team)}</h2>
+    <div class="none" style="margin-bottom:8px">Season category totals · <b>you ${win}</b> – ${lose} ${opp.team ? '' : ''}${tie ? `· ${tie} even ` : ''}vs ${esc(opp.team)} (across ${C.teamCount || '–'} teams; <span style="opacity:.6">#rank</span>). <span style="color:var(--accent)">Green = you're ahead.</span></div>
+    <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;padding:4px 10px;font-size:.74em;letter-spacing:.04em;opacity:.7">
+        <div style="text-align:right;font-weight:700">YOU</div><div style="text-align:center">CAT</div><div style="text-align:left;font-weight:700">${esc(opp.team).toUpperCase()}</div>
+      </div>
+    ${rows}`;
 }
 
 let MLB_INDEX = null;
@@ -2172,7 +2176,7 @@ async function fillSeasonStats(roster, fSport) {
     [sMaps[t], idMaps[t]] = await Promise.all([teamSeasonMap(sport, id).catch(() => ({})), rosterIdMap(sport, id).catch(() => ({}))]);
   }));
 
-  const hot = [], cold = [], ss = [], drops = [], dropPool = [], hitStats = [], pitStats = [];
+  const hot = [], cold = [], drops = [], dropPool = [], hitStats = [], pitStats = [];
   await Promise.all(roster.map(async (p, i) => {
     const seasEl = document.getElementById(`fseas-${i}`);
     const trendEl = document.getElementById(`ftrend-${i}`);
@@ -2232,8 +2236,6 @@ async function fillSeasonStats(roster, fSport) {
     if (p.status !== 'il' && tag !== 'hot' && !essential && weakKey != null) {
       dropPool.push({ name: p.name, isPitcher: isPitcher(p), tag, status: p.status, lead: lead || weakHint, weakKey });
     }
-    const pg = playerGame(p);
-    ss.push({ name: p.name, status: p.status, tag, lead, today: !!pg && gameState(pg.g) !== 'final' });
     seasEl.innerHTML = season ? `<b>Season:</b> ${season}` : 'season stats unavailable';
   }));
 
@@ -2247,16 +2249,8 @@ async function fillSeasonStats(roster, fSport) {
     card(ilCount, 'On IL') +
     (needTeam ? card(needTeam, 'Need team set', 'warn') : '');
 
-  // hot & cold lists (drop watch)
-  const li = (arr) => arr.length ? arr.map((x) => `<li><b>${esc(x.name)}</b>${x.lead ? ` <span class="lead">${esc(x.lead)}</span>` : ''}</li>`).join('') : '<li class="none">None</li>';
-  $('#fantasy-recs').innerHTML = `<h3>Hot & Cold (last 20 days)</h3>
-    <div class="hc-cols">
-      <div><div class="hc-h hot">🔥 Heating up</div><ul>${li(hot)}</ul></div>
-      <div><div class="hc-h cold">🥶 Cooling off — drop watch</div><ul>${li(cold)}</ul></div>
-    </div>
-    <div class="none" style="margin-top:6px">Trends compare the last 20 days to season; only players with enough recent games show a tag.</div>`;
-
-  renderStartSit(ss);
+  // (Hot & Cold list and Today's Lineup Check removed — the per-player ▲/▼ form
+  // arrows live on each roster row, and the hot/cold counts remain in Snapshot.)
   renderCatStrength(fSport, hitStats, pitStats);
   // Fill the cold half of the add/drop pairing, then (re)render it — the hot
   // half (faHot) was set by renderWaivers; whichever finished last completes it.
@@ -2636,10 +2630,19 @@ function setMode(live) {
 function injectJumpNav(name) {
   const panel = document.getElementById(name);
   if (!panel || name === 'eagles' || name === 'home') return;
+  // Derive each chip label from the heading text WITHOUT any nested controls
+  // (e.g. the Standings/Power toggle inside the "League" heading) so labels stay
+  // clean. Empty sections set their box to '' and emit no .section-title, so they
+  // never produce a dead chip. Many fantasy sections render asynchronously, so
+  // this runs again as they finish (see renderAddDrop) — it's idempotent and
+  // rebuilds the bar in place.
   const titles = [...panel.querySelectorAll('.section-title')];
   const items = titles.map((h, i) => {
     if (!h.id) h.id = `${name}-sec-${i}`;
-    return { id: h.id, label: h.textContent.trim().replace(/\s+/g, ' ').replace(/[🤖🦅]/g, '').trim() };
+    const clone = h.cloneNode(true);
+    clone.querySelectorAll('.chips, button').forEach((n) => n.remove());
+    const label = clone.textContent.trim().replace(/\s+/g, ' ').replace(/[🤖🦅]/g, '').trim();
+    return { id: h.id, label };
   }).filter((x) => x.label);
   let nav = panel.querySelector(':scope > .jump-nav');
   if (items.length < 2) { if (nav) nav.remove(); return; }

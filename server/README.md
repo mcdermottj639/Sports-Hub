@@ -64,6 +64,9 @@ uvicorn main:app --reload
 | `GET /api/fantasy/{sport}/roster` | Your team's real roster |
 | `GET /api/fantasy/{sport}/matchup` | This week's head-to-head score |
 | `GET /api/fantasy/{sport}/standings` | League standings |
+| `GET /api/fantasy/{sport}/opponent` | This week's opponent + their roster |
+| `GET /api/fantasy/{sport}/freeagents` | Top available players (waivers/FA) |
+| `GET /api/fantasy/{sport}/catranks` | Per-team season category totals + league rank (powers the opponent comparison) |
 | `GET /api/refresh` | Clear the cache, re-pull from ESPN |
 
 `{sport}` is `football` or `baseball`.
