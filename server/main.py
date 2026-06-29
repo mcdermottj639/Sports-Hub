@@ -23,6 +23,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from espn_api.football import League as FootballLeague
 from espn_api.baseball import League as BaseballLeague
 
+# Bump on backend changes so /api/health reveals which build Railway is running.
+# (Lets us confirm a deploy actually landed instead of guessing.)
+SERVER_VERSION = "b3-playoffs"
+
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
 # --- CORS: allow the static frontend to read us from the browser -------------
@@ -167,6 +171,7 @@ def health():
     """Cheap liveness + which sports are wired up."""
     return {
         "ok": True,
+        "version": SERVER_VERSION,
         "configured": {
             s: bool(cfg["league_id"]) for s, cfg in SPORTS.items()
         },
