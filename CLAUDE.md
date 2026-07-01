@@ -118,6 +118,18 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   it's standalone it does NOT participate in the `APP_VERSION`/`?v=` ritual, though
   it links `styles.css` for the base theme (uses `?v=80`; bump if you change shared
   CSS it depends on).
+- `trivia.html` / `trivia.css` / `trivia.js` — **🧠 Labs: Sports Trivia Lab**, a
+  standalone page (linked from the About tab's Labs card, alongside the draft sim).
+  Self-contained, no backend. NFL-first (NFL history, Super Bowl, Eagles) plus MLB,
+  NBA and College — **no NHL/Olympics** (owner's pick). ~90 hand-written MC questions
+  in `Q` (`{q, a, w:[3 wrong], c:category, ex?:fact}`). Centerpiece is a **Daily
+  Challenge**: a seeded (date-hash PRNG) set of 10 mixed questions, identical for a
+  given day. Also free-play by category (or Mixed). Scoring = 100/correct with streak
+  multipliers (1.5× at 3, 2× at 5); results screen has a miss-by-miss review.
+  Persists to `localStorage`: `trivialab:life` (lifetime played/accuracy/best run),
+  `trivialab:best` (per-category best score), `trivialab:daily` (per-date result →
+  day-streak). NFL-themed skin (`trivia.css`) over `styles.css` (`?v=81`). Standalone,
+  so NOT part of the `APP_VERSION`/`?v=` ritual. Add questions by editing `Q`.
 - `scriptable/` — optional iOS Home Screen widgets ([Scriptable](https://scriptable.app), JS).
   **Companion scripts, NOT part of the web app** — they don't deploy with Pages and
   don't affect `APP_VERSION`. `SportsHubFantasy.js` renders the fantasy matchup
@@ -139,7 +151,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v80**.
+Current version as of this writing: **v81**.
 
 ## Testing reality
 
