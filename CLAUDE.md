@@ -87,6 +87,20 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 - `styles.css` — all styling. Dark theme; CSS vars at top (`--accent` #3ad29f green, `--gold`, `--eagles-green` #004C54, etc.).
 - `sw.js` — service worker (network-first auto-update; see below).
 - `manifest.webmanifest` — PWA manifest. Icons are real eagle emoji extracted from NotoColorEmoji (one-off via `/tmp/make-icon.js`, not in repo).
+- `draft.html` / `draft.css` / `draft.js` — **🧪 Labs: NFL Mock Draft Simulator**,
+  a standalone page (linked from the About tab's Labs card). Self-contained, no
+  backend, no shared code with `app.js` (its own tiny `$`/`el`/`esc` helpers). It's
+  a **test ground** for features that may later move into the app. Setup screen
+  (pick your team, rounds, order = actual/random/custom) → **war room** (best-available
+  board with position filters + search, sim-1 / sim-to-my-pick, pick-for-pick trades
+  scored on the Jimmy Johnson value chart, your-picks / draft-log / team-needs side
+  panel). The prospect board is a **SAMPLE** big board (top ~70 hand-listed in
+  `TOP_PROSPECTS`, deeper rounds generated) — NOT real draft data; swap in a real
+  board by editing that array. CPU picks = best-available with a positional-needs
+  nudge (`TEAM_NEEDS`). State autosaves to `localStorage` (`draftsim:v1`). Because
+  it's standalone it does NOT participate in the `APP_VERSION`/`?v=` ritual, though
+  it links `styles.css` for the base theme (uses `?v=80`; bump if you change shared
+  CSS it depends on).
 - `scriptable/` — optional iOS Home Screen widgets ([Scriptable](https://scriptable.app), JS).
   **Companion scripts, NOT part of the web app** — they don't deploy with Pages and
   don't affect `APP_VERSION`. `SportsHubFantasy.js` renders the fantasy matchup
@@ -108,7 +122,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v79**.
+Current version as of this writing: **v80**.
 
 ## Testing reality
 
