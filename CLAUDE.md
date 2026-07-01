@@ -40,9 +40,10 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > `/api/fantasy/{sport}/catranks` (per-team season category totals + league rank,
 > powers the opponent comparison), `/api/fantasy/{sport}/playoffs` (Monte-Carlo
 > playoff odds), `/api/draft/prospects?year=&limit=` (real NFL draft class as a
-> ranked board for the Labs mock-draft sim — pulled from ESPN's core API
-> server-side since the browser can't read it, cached `DRAFT_TTL_SECONDS`/24h,
-> stdlib-only), `/api/refresh`.
+> ranked board **plus that year's real round-1 pick order** for the Labs
+> mock-draft sim — pulled from ESPN's core API server-side since the browser
+> can't read it; **defaults to `year=2026`**, the most recent draft; cached
+> `DRAFT_TTL_SECONDS`/24h, stdlib-only), `/api/refresh`.
 > **Baseball is live** (league `42353353`, team "Duran Duran" id `2`); football is
 > coded but not yet configured (no league id set). The Fantasy tab calls the API
 > once per session (`syncFromLeague`), overwrites the saved roster with the real
@@ -101,13 +102,17 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   (~264 prospects hand-listed in `TOP_PROSPECTS`; `buildBoard` only generates
   filler if that array is ever trimmed below the needed depth) with placeholder
   names — this is the **fallback**. On load it calls the backend
-  `/api/draft/prospects` and, if reachable, **replaces the board with the real
-  2025 draft class** (cached to `localStorage` `draftsim:board` for instant/offline
-  reuse; `boardSource` flips `sample`→`real` and the setup note says which is live).
-  Swap the bundled fallback by editing `TOP_PROSPECTS`. Draft
-  order: **`ACTUAL_2025_R1`** is the real 2025 NFL Draft round-1 pick order (trades
-  included — NYG & ATL pick twice, HOU & LAR absent from R1); rounds 2–7 (and the
-  random/custom modes) use `BASE_ORDER` (2025 reverse-standings, 32 distinct).
+  `/api/draft/prospects` (`DRAFT_YEAR`, default **2026**) and, if reachable,
+  **replaces the board with the real draft class AND uses that year's real round-1
+  order** (`REAL_ORDER`, from the endpoint's `order`) for "actual" mode. Cached to
+  `localStorage` `draftsim:board` (prospects + order) for instant/offline reuse;
+  `boardSource` flips `sample`→`real` and the setup note says which is live. Swap
+  the bundled fallback by editing `TOP_PROSPECTS`. Draft order: the setup default
+  "Actual draft order" uses `REAL_ORDER` when loaded, else the bundled
+  **`ACTUAL_2025_R1`** (real 2025 R1 — trades included, NYG & ATL twice, HOU & LAR
+  absent); rounds 2–7 (and random/custom modes) use `BASE_ORDER` (2025
+  reverse-standings, 32 distinct). Team abbrevs from ESPN are normalized via
+  `ABBR_ALIAS`.
   CPU picks = best-available with a positional-needs nudge (`TEAM_NEEDS`). State
   autosaves to `localStorage` (`draftsim:v1`). Because
   it's standalone it does NOT participate in the `APP_VERSION`/`?v=` ritual, though

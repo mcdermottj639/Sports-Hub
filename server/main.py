@@ -731,6 +731,7 @@ def _fetch_draft_board(year: int, limit: int):
     picks = []
     for rnd in rounds.get("items", []):
         rnd = _draft_resolve(rnd, cache)
+        rnum = rnd.get("number") or rnd.get("round")
         pref = rnd.get("picks")
         if isinstance(pref, dict) and pref.get("$ref"):
             base = pref["$ref"].replace("http://", "https://")
@@ -739,24 +740,30 @@ def _fetch_draft_board(year: int, limit: int):
                 sep = "&" if "?" in base else "?"
                 pj = _draft_get(f"{base}{sep}page={page}&limit=100")
                 for it in pj.get("items", []):
-                    picks.append(_draft_resolve(it, cache))
+                    it = _draft_resolve(it, cache)
+                    it["_round"] = rnum
+                    picks.append(it)
                 if page >= int(pj.get("pageCount", 1) or 1):
                     break
                 page += 1
         elif isinstance(pref, list):
             for it in pref:
-                picks.append(_draft_resolve(it, cache))
+                it = _draft_resolve(it, cache)
+                it["_round"] = rnum
+                picks.append(it)
 
-    # 2) resolve each pick's athlete (name / position / college) concurrently
+    # 2) resolve each pick's athlete (name / position / college) + team, concurrently
     def build(pk):
         overall = pk.get("overall") or pk.get("pickNumber") or pk.get("pick")
         ath = _draft_resolve(pk.get("athlete", {}), cache)
-        name = ath.get("displayName") or ath.get("fullName") or ""
         pos = _draft_resolve(ath.get("position", {}), cache)
         college = _draft_resolve(ath.get("college", {}), cache)
+        team = _draft_resolve(pk.get("team", {}), cache)
         return {
-            "overall": overall,
-            "name": name,
+            "overall": overall if isinstance(overall, (int, float)) else 9999,
+            "round": pk.get("_round") or pk.get("round"),
+            "team": (team.get("abbreviation") or "").upper(),
+            "name": ath.get("displayName") or ath.get("fullName") or "",
             "pos": _norm_pos(pos.get("abbreviation") or pos.get("name") or ""),
             "school": college.get("shortName") or college.get("name") or "",
         }
@@ -764,27 +771,31 @@ def _fetch_draft_board(year: int, limit: int):
     with ThreadPoolExecutor(max_workers=16) as ex:
         built = [b for b in ex.map(build, picks) if b["name"]]
 
-    built.sort(key=lambda b: (b["overall"] if isinstance(b["overall"], (int, float)) else 9999))
+    built.sort(key=lambda b: b["overall"])
+    # Real round-1 pick order (trades and all) = the sim's "actual order".
+    order = [b["team"] for b in sorted((x for x in built if x["round"] == 1), key=lambda b: b["overall"]) if b["team"]]
     for i, b in enumerate(built):
         b["rank"] = i + 1
-    return built[:limit]
+    prospects = [{"rank": b["rank"], "name": b["name"], "pos": b["pos"], "school": b["school"]} for b in built[:limit]]
+    return prospects, order
 
 
 @app.get("/api/draft/prospects")
-def draft_prospects(year: int = 2025, limit: int = 260):
-    """Real NFL draft class as a ranked prospect board for the mock-draft sim.
-    Falls back to the frontend's bundled board if this can't be reached."""
+def draft_prospects(year: int = 2026, limit: int = 260):
+    """Real NFL draft class (most recent by default) as a ranked prospect board
+    plus that year's real round-1 pick order, for the mock-draft sim. Falls back
+    to the frontend's bundled board if this can't be reached."""
     now = time.time()
     hit = _DRAFT_CACHE.get(year)
     if hit and now - hit["ts"] < DRAFT_TTL_SECONDS and hit["data"].get("prospects"):
         return hit["data"]
     try:
-        pros = _fetch_draft_board(year, limit)
+        pros, order = _fetch_draft_board(year, limit)
     except Exception as e:
         raise HTTPException(502, f"Draft fetch failed: {e}")
     if len(pros) < 32:
         raise HTTPException(502, "Draft fetch returned too few players.")
-    data = {"year": year, "count": len(pros), "source": "espn", "prospects": pros}
+    data = {"year": year, "count": len(pros), "source": "espn", "prospects": pros, "order": order}
     _DRAFT_CACHE[year] = {"ts": now, "data": data}
     return data
 

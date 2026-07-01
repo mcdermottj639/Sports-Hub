@@ -368,15 +368,21 @@ const POS_CYCLE = ['WR', 'CB', 'EDGE', 'OT', 'S', 'LB', 'IOL', 'RB', 'DT', 'TE',
 // The active board. Defaults to the bundled sample; replaced at runtime by the
 // real draft class when the backend (/api/draft/prospects) is reachable.
 const DRAFT_API = 'https://sports-hub-production.up.railway.app';
+const DRAFT_YEAR = 2026;           // most recent completed draft (pulled live)
 const BOARD_CACHE = 'draftsim:board';
 let BOARD_DATA = TOP_PROSPECTS;
-let boardSource = 'sample'; // 'sample' | 'real'
+let boardSource = 'sample';        // 'sample' | 'real'
 let boardFailed = false;
+let REAL_ORDER = null;             // real round-1 pick order for DRAFT_YEAR, if loaded
+
+// ESPN abbreviations mostly match ours; normalize the few that can differ.
+const ABBR_ALIAS = { WAS: 'WSH', JAC: 'JAX', LVR: 'LV', SD: 'LAC', SL: 'LAR', OAK: 'LV', LA: 'LAR' };
+const normAbbr = (a) => ABBR_ALIAS[(a || '').toUpperCase()] || (a || '').toUpperCase();
 
 function boardNoteHTML() {
-  if (boardSource === 'real') return `Board: <b style="color:var(--accent)">real 2025 NFL Draft class</b> (${BOARD_DATA.length} players, live from ESPN).`;
-  if (boardFailed) return `Board: full 7-round <b>sample</b> big board (${BOARD_DATA.length} placeholders) — couldn't reach the live draft service, so using the sample.`;
-  return `Board: full 7-round <b>sample</b> big board (${BOARD_DATA.length} placeholders). Trying to load the real 2025 class…`;
+  if (boardSource === 'real') return `Board: <b style="color:var(--accent)">real ${DRAFT_YEAR} NFL Draft class</b> (${BOARD_DATA.length} players, live from ESPN)${REAL_ORDER ? ' — "actual order" is the real ' + DRAFT_YEAR + ' first round' : ''}.`;
+  if (boardFailed) return `Board: full 7-round <b>sample</b> big board (${BOARD_DATA.length} placeholders) — couldn't reach the live draft service, so using the sample (with the 2025 order).`;
+  return `Board: full 7-round <b>sample</b> big board (${BOARD_DATA.length} placeholders). Trying to load the real ${DRAFT_YEAR} class…`;
 }
 
 function applyBoard(prospects, source) {
@@ -387,8 +393,15 @@ function applyBoard(prospects, source) {
   boardSource = source;
   return true;
 }
-// Instant: use a cached real board from a previous visit if we have one.
-try { const c = JSON.parse(localStorage.getItem(BOARD_CACHE)); if (c && c.prospects) applyBoard(c.prospects, 'real'); } catch (_) {}
+function applyOrder(order) {
+  if (Array.isArray(order) && order.length === 32) { REAL_ORDER = order.map(normAbbr); return true; }
+  return false;
+}
+// Instant: use a cached real board + order from a previous visit if we have one.
+try {
+  const c = JSON.parse(localStorage.getItem(BOARD_CACHE));
+  if (c && c.prospects) { applyBoard(c.prospects, 'real'); applyOrder(c.order); }
+} catch (_) {}
 
 // Pull the real class in the background; updates the cache + setup note. Only
 // affects drafts started AFTER it lands (an in-progress draft keeps its board).
@@ -396,11 +409,12 @@ function updateBoardNote() { const n = $('#board-note'); if (n) n.innerHTML = bo
 
 async function refreshRealBoard() {
   try {
-    const r = await fetch(`${DRAFT_API}/api/draft/prospects?year=2025`, { cache: 'no-store' });
+    const r = await fetch(`${DRAFT_API}/api/draft/prospects?year=${DRAFT_YEAR}`, { cache: 'no-store' });
     if (!r.ok) throw new Error('bad status');
     const j = await r.json();
     if (applyBoard(j.prospects, 'real')) {
-      try { localStorage.setItem(BOARD_CACHE, JSON.stringify({ ts: Date.now(), prospects: BOARD_DATA })); } catch (_) {}
+      applyOrder(j.order);
+      try { localStorage.setItem(BOARD_CACHE, JSON.stringify({ ts: Date.now(), prospects: BOARD_DATA, order: REAL_ORDER })); } catch (_) {}
       updateBoardNote(); // update the note in place (don't rebuild the form)
     } else { boardFailed = true; updateBoardNote(); }
   } catch (_) { boardFailed = true; updateBoardNote(); } // offline / down → keep bundled board
@@ -468,9 +482,10 @@ function startDraft(cfg) {
   const picks = [];
   let overall = 1;
   for (let r = 1; r <= cfg.rounds; r++) {
-    // "actual" mode: round 1 follows the real 2025 pick order; later rounds use
-    // the standard reverse-standings slotting. Other modes use one order throughout.
-    const ord = (cfg.mode === 'actual' && r === 1) ? ACTUAL_2025_R1 : cfg.order;
+    // "actual" mode: round 1 follows the real pick order (from ESPN if loaded,
+    // else the bundled 2025 R1); later rounds use reverse-standings slotting.
+    // Other modes use one order throughout.
+    const ord = (cfg.mode === 'actual' && r === 1) ? (REAL_ORDER || ACTUAL_2025_R1) : cfg.order;
     ord.forEach((abbr, i) => picks.push({ overall: overall++, round: r, slot: i + 1, owner: abbr, origin: abbr, player: null }));
   }
   S = { userTeam: cfg.userTeam, rounds: cfg.rounds, order: cfg.order, mode: cfg.mode, picks, board: buildBoard(cfg.rounds), curr: 0 };
@@ -560,11 +575,11 @@ function showSetup() {
     </div>
     <div class="fld"><span>Draft order</span>
       <div class="ds-radios" id="cfg-order">
-        <label><input type="radio" name="order" value="actual" checked> 2025 actual order</label>
+        <label><input type="radio" name="order" value="actual" checked> Actual draft order</label>
         <label><input type="radio" name="order" value="random"> Random order</label>
         <label><input type="radio" name="order" value="custom"> Custom order</label>
       </div>
-      <p class="ds-note" style="margin-top:8px">"2025 actual order" uses the real Round 1 pick order (trades and all — Giants &amp; Falcons pick twice; Texans &amp; Rams sit out R1). Rounds 2–7 follow reverse-standings order.</p>
+      <p class="ds-note" style="margin-top:8px">"Actual draft order" uses that year's real Round 1 pick order (trades and all — teams that traded up pick twice, teams that traded out sit R1 out). Rounds 2–7 follow reverse-standings order.</p>
     </div>
     <div id="custom-order" class="custom-order" hidden></div>
     <button id="start-btn" class="ds-btn primary">Enter the War Room →</button>
