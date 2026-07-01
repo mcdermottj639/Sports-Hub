@@ -28,7 +28,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b4-draft"
+SERVER_VERSION = "b5-draft-2026"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
