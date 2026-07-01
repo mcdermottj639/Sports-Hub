@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v78';
+const APP_VERSION = 'v79';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -118,6 +118,14 @@ function teamObj(c) {
     leaders: c?.leaders || null,     // NFL/NBA team leaders
   };
 }
+// TV listing off the scoreboard event — geoBroadcasts (national/local networks)
+// first, falling back to the older broadcasts[].names shape. De-duped, in order.
+function tvFor(comp) {
+  const names = [];
+  (comp.geoBroadcasts || []).forEach((b) => { const n = b.media?.shortName || b.media?.callLetters; if (n) names.push(n); });
+  if (!names.length) (comp.broadcasts || []).forEach((b) => (b.names || []).forEach((n) => n && names.push(n)));
+  return [...new Set(names)].join(', ');
+}
 function normEvent(ev) {
   const comp = ev.competitions?.[0] || {};
   const cs = comp.competitors || [];
@@ -132,6 +140,7 @@ function normEvent(ev) {
     situation: comp.situation || null,
     home: teamObj(home),
     away: teamObj(away),
+    tv: tvFor(comp),
     odds: comp.odds?.[0] || null,
   };
 }
@@ -224,11 +233,14 @@ function logoHTML(team) {
   return `<span class="logo placeholder">${esc(initials)}</span>`;
 }
 
-function gameCard(sport, g) {
+// interactive:false renders a view-only card (no tap-to-open) that shows the
+// TV channel instead of the "tap for live stats" hint — used on the Home slate.
+function gameCard(sport, g, opts = {}) {
+  const interactive = opts.interactive !== false;
   const st = gameState(g);
   const cfg = LEAGUES[sport];
   const win = winnerName(g);
-  const card = el('div', 'game-card' + (isFav(sport, g) ? ' fav' : ''));
+  const card = el('div', 'game-card' + (isFav(sport, g) ? ' fav' : '') + (interactive ? '' : ' no-tap'));
   const label = st === 'live' ? (g.statusText || 'LIVE') : st === 'final' ? 'FINAL' : scheduledLabel(g);
   const cls = st === 'live' ? 'status live' : st === 'final' ? 'status final' : 'status';
   const row = (team) => {
@@ -238,13 +250,14 @@ function gameCard(sport, g) {
       <span class="team">${logoHTML(team)}${esc(team.name || 'TBD')}</span>
       <span class="score">${score}</span></div>`;
   };
+  const tapHint = interactive ? '<div class="tap-hint">tap for live stats →</div>' : '';
   card.innerHTML = `
     <div class="game-meta">
       <span class="game-league">${cfg.emoji} ${cfg.label}</span>
       <span class="${cls}">${label}</span>
     </div>${row(g.away)}${row(g.home)}
-    <div class="tap-hint">tap for live stats →</div>`;
-  if (g.id) card.onclick = () => openGameDetail(sport, g.id, g);
+    ${g.tv ? `<div class="game-tv">📺 ${esc(g.tv)}</div>` : ''}${tapHint}`;
+  if (interactive && g.id) card.onclick = () => openGameDetail(sport, g.id, g);
   return card;
 }
 
@@ -522,43 +535,6 @@ function renderGameDetail(sport, data, pred, extra, g) {
   return html;
 }
 
-// Does the model disagree with the betting favorite? If so there's a value
-// "edge" worth surfacing before you tap in. Pre-game only — odds come right
-// off the scoreboard event, so no extra request just to know the favorite.
-async function gameEdge(sport, g) {
-  if (gameState(g) !== 'scheduled') return null;
-  if (!g.home?.id || !g.away?.id) return null;
-  const info = normOdds(g.odds, g.home.name, g.away.name);
-  if (!info || !info.favName) return null;
-  let pred = null;
-  try { pred = await predictGame(sport, g); } catch (_) { return null; }
-  if (!pred || pred.thin) return null;
-  if (pred.winner.name === info.favName) return null; // model agrees with the line
-  const side = pred.winner.name === g.home.name ? g.home : g.away;
-  return { abbr: side.abbr || (side.name || '').split(' ').pop(), name: side.name, conf: pred.conf, fav: info.favName };
-}
-
-// Run gameEdge across a list of {sport, g, card} with light concurrency and
-// stamp an edge badge onto any card where the model bucks the favorite.
-async function tagEdges(entries) {
-  let i = 0;
-  const worker = async () => {
-    while (i < entries.length) {
-      const { sport, g, card } = entries[i++];
-      let edge = null;
-      try { edge = await gameEdge(sport, g); } catch (_) {}
-      if (edge && card.isConnected) {
-        const b = el('div', 'edge-badge', `⚡ Model edge: ${edge.abbr} <span class="edge-conf">${edge.conf}%</span>`);
-        b.title = `Model likes ${edge.name} (${edge.conf}%) — market favors ${edge.fav}`;
-        const meta = card.querySelector('.game-meta');
-        if (meta) meta.insertAdjacentElement('afterend', b); else card.appendChild(b);
-        card.classList.add('has-edge');
-      }
-    }
-  };
-  await Promise.all([worker(), worker(), worker()]);
-}
-
 // --- demo fallback (only if the network is unavailable) -------------------
 const DEMO = {
   nfl: [{ id: 'd1', date: new Date().toISOString(), state: 'in', statusText: 'Q3 04:12',
@@ -686,17 +662,14 @@ function renderHomeByLeague(container, games) {
   // live → finished → unstarted, so tapping a league chip lands you on the live
   // games up top. Leagues with a live game get a 🔴 flag on their chip/heading.
   const sportsWithGames = teamSports.filter((s) => (games[s] || []).length);
-  const entries = [];
   sportsWithGames.forEach((s) => {
     const list = [...(games[s] || [])].sort(byStatus(s));
     const hasLive = list.some((g) => gameState(g) === 'live');
-    const cards = list.map((g) => { const c = gameCard(s, g); entries.push({ sport: s, g, card: c }); return c; });
+    // View-only cards — the Home slate is a quick scan of scores, times and TV.
+    const cards = list.map((g) => gameCard(s, g, { interactive: false }));
     addSection(`home-${s}`, `${LEAGUES[s].emoji} ${LEAGUES[s].label}`, cards, hasLive);
   });
   if (!sportsWithGames.length) container.appendChild(el('div', 'empty', 'No games today for your sports.'));
-
-  // Flag any game where the model disagrees with the betting line (was the Scores tab).
-  tagEdges(entries);
 
   // golf as its own section (it's a leaderboard, not team games)
   if (SEASON_MONTHS.golf.includes(new Date().getMonth())) addGolfHomeSection(addSection);
@@ -705,15 +678,20 @@ function renderHomeByLeague(container, games) {
 async function addGolfHomeSection(addSection) {
   const ev = await getGolfEvent();
   if (!ev) return;
-  const leader = (ev.competitions?.[0]?.competitors || [])[0];
-  const lname = leader?.athlete?.displayName || '';
-  const lscore = leader?.score?.displayValue ?? leader?.score ?? '';
-  const card = el('div', 'game-card');
-  card.innerHTML = `<div class="game-meta"><span class="game-league">⛳ Golf</span><span class="status">${ev.status?.type?.shortDetail || ''}</span></div>
-    <div style="font-weight:700;margin:4px 0">${ev.name || 'PGA Tour'}</div>
-    <div class="muted">Leader: <b style="color:var(--text)">${lname || 'TBD'}</b> ${lscore}</div>
-    <div class="tap-hint">tap for leaderboard →</div>`;
-  card.onclick = openGolfLeaderboard;
+  const players = ev.competitions?.[0]?.competitors || [];
+  const status = ev.status?.type?.shortDetail || '';
+  // View-only: a compact top-5 leaderboard right on the card, no tap.
+  const top = players.slice(0, 5).map((c) => {
+    const pos = c.status?.position?.displayName || c.order || '';
+    const name = c.athlete?.displayName || 'TBD';
+    const toPar = c.score?.displayValue ?? c.score ?? '';
+    const fav = (LEAGUES.golf.fav || []).some((f) => f.toLowerCase() === name.toLowerCase());
+    return `<div class="golf-line${fav ? ' fav' : ''}"><span>${esc(pos)} ${esc(name)}</span><span class="score">${esc(toPar)}</span></div>`;
+  }).join('');
+  const card = el('div', 'game-card no-tap');
+  card.innerHTML = `<div class="game-meta"><span class="game-league">⛳ Golf</span><span class="status">${esc(status)}</span></div>
+    <div style="font-weight:700;margin:4px 0">${esc(ev.name || 'PGA Tour')}</div>
+    ${top || '<div class="muted">Leaderboard unavailable.</div>'}`;
   addSection('home-golf', '⛳ Golf', [card]);
 }
 
@@ -733,31 +711,6 @@ async function getGolfEvent() {
   const events = data?.events || [];
   return events.find((e) => e.status?.type?.state === 'in') || events[0] || null;
 }
-// Home's golf card opens the full leaderboard in the shared modal.
-async function openGolfLeaderboard() {
-  modal().classList.remove('hidden');
-  const body = $('#modal-body');
-  body.innerHTML = '<div class="empty">Loading leaderboard…</div>';
-  await renderGolfLeaderboard(body);
-}
-async function renderGolfLeaderboard(container) {
-  const ev = await getGolfEvent();
-  if (!ev) { container.innerHTML = '<div class="empty">No PGA tournament data right now.</div>'; return; }
-  const comp = ev.competitions?.[0] || {};
-  const players = comp.competitors || [];
-  const statusTxt = ev.status?.type?.detail || ev.status?.type?.shortDetail || '';
-  const rows = players.slice(0, 30).map((c) => {
-    const pos = c.status?.position?.displayName || c.order || '';
-    const name = c.athlete?.displayName || '';
-    const toPar = c.score?.displayValue ?? c.score ?? '';
-    const thru = c.status?.thru != null ? (c.status.thru === 18 ? 'F' : `thru ${c.status.thru}`) : (c.status?.teeTime ? fmtTime(c.status.teeTime) : '');
-    const fav = (LEAGUES.golf.fav || []).some((f) => f.toLowerCase() === name.toLowerCase());
-    return `<tr class="${fav ? 'fav' : ''}"><td>${esc(pos)}</td><td>${esc(name)}</td><td class="num">${esc(toPar)}</td><td class="num">${esc(thru)}</td></tr>`;
-  }).join('');
-  container.innerHTML = `<div class="golf-head"><div class="golf-name">⛳ ${ev.name || 'PGA Tour'}</div><div class="muted">${statusTxt}</div></div>
-    <table class="md-line golf-board"><thead><tr><th>Pos</th><th>Player</th><th class="num">Score</th><th class="num">Thru</th></tr></thead><tbody>${rows}</tbody></table>`;
-}
-
 // --- AI PICKS (multi-factor model) ---------------------------------------
 // Each team's profile is built from its game-by-game schedule: scoring
 // margin, recent form, home/road splits and rest. Factors combine in

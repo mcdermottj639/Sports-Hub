@@ -108,7 +108,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v78**.
+Current version as of this writing: **v79**.
 
 ## Testing reality
 
@@ -134,7 +134,8 @@ Current version as of this writing: **v78**.
 - Tabs: Home, Eagles, AI Picks, Fantasy, About. `showTab()` +
   `renderers{}` map drive rendering. (**Scores** and **Standings** tabs were
   removed in v78 — the owner gets those better elsewhere; Home is now the daily
-  full-slate overview and absorbed the Scores tab's ⚡ Model-edge badges.)
+  full-slate overview. In v79 the Home slate was made **view-only** — cards
+  don't open the detail modal; they just show score/time + TV channel.)
 - **`sportsDate()`** — "today" doesn't roll to the next day until **4 AM ET**, so
   late/live games stay on the current slate overnight. Use this (not `new Date()`)
   for default game dates.
@@ -150,14 +151,18 @@ Current version as of this writing: **v78**.
 
 - **Home** — the app's front door and full daily overview. Top Headlines
   (numbered 1-2-3 story strip from in-season leagues' lead stories, tap → in-app
-  summary popup), My Teams featured card, then Today's Games grouped by league
-  (jump-nav chips), each league's slate sorted live → finished → unstarted;
-  leagues with a live game get a 🔴 flag on their chip/heading. Cards get a
-  **⚡ Model edge** badge when the model disagrees with the betting line
-  (`tagEdges`, absorbed from the removed Scores tab in v78); tap a card → game
-  detail modal; the golf card opens the PGA leaderboard in a modal
-  (`openGolfLeaderboard`). (The old cross-league "Live" section was removed in
-  v68 in favor of in-league sorting.)
+  summary popup — headlines stay tappable), My Teams featured card, then Today's
+  Games grouped by league (jump-nav chips), each league's slate sorted live →
+  finished → unstarted; leagues with a live game get a 🔴 flag on their
+  chip/heading. **The game cards are view-only (v79):** `gameCard(sport, g,
+  {interactive:false})` renders each with a `.no-tap` class — no click-to-modal,
+  no "tap for stats" hint — showing just the score/time and, when ESPN provides
+  one, the **📺 TV channel** (`tvFor()` reads `geoBroadcasts`/`broadcasts` in
+  `normEvent`, stored as `g.tv`). The golf card likewise shows a compact
+  **view-only top-5 leaderboard** inline (no modal). (The old cross-league "Live"
+  section was removed in v68; the Scores-tab ⚡ Model-edge badges that briefly
+  lived here in v78 were dropped in v79 to keep the slate a clean scan — edges
+  still live on the AI Picks tab.)
 - **Eagles tab** — hero, Next Opponent, Latest News (tap → summary), Team Stats &
   rankings, Schedule (2026-27), Depth Chart (Offense/Defense/ST, **Field formation
   view** + List), Player Leaders, By the Numbers, Coaching Staff. Section order and
