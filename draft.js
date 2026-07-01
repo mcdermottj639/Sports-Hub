@@ -51,10 +51,18 @@ const TEAMS = [
 const teamBy = Object.fromEntries(TEAMS.map((t) => [t.abbr, t]));
 const logoURL = (abbr) => `https://a.espncdn.com/i/teamlogos/nfl/500/${abbr.toLowerCase()}.png`;
 
-// Sample "this year's" order (worst → best). Editable — not verified live data.
-const DEFAULT_ORDER = ['TEN', 'CLE', 'NYG', 'NE', 'JAX', 'LV', 'NYJ', 'CAR', 'NO', 'CHI',
+// Base order = 2025 reverse-standings slotting (32 distinct teams). Used for
+// rounds 2–7, and for random/custom modes.
+const BASE_ORDER = ['TEN', 'CLE', 'NYG', 'NE', 'JAX', 'LV', 'NYJ', 'CAR', 'NO', 'CHI',
   'SF', 'DAL', 'MIA', 'IND', 'ATL', 'ARI', 'CIN', 'SEA', 'TB', 'DEN',
   'PIT', 'LAC', 'GB', 'MIN', 'HOU', 'LAR', 'BAL', 'DET', 'WSH', 'BUF', 'KC', 'PHI'];
+
+// Actual 2025 NFL Draft Round 1 pick order (trades included). Note: NYG and ATL
+// each picked twice (traded up); HOU and LAR traded out of round 1, so they're
+// absent here — that's real, and the sim handles a team with no R1 pick.
+const ACTUAL_2025_R1 = ['TEN', 'JAX', 'NYG', 'NE', 'CLE', 'LV', 'NYJ', 'CAR', 'NO', 'CHI',
+  'SF', 'DAL', 'MIA', 'IND', 'ATL', 'ARI', 'CIN', 'SEA', 'TB', 'DEN',
+  'PIT', 'LAC', 'GB', 'MIN', 'NYG', 'ATL', 'BAL', 'DET', 'WSH', 'BUF', 'KC', 'PHI'];
 
 // Positional needs drive CPU picks (flavor, not real scouting).
 const TEAM_NEEDS = {
@@ -143,6 +151,206 @@ const TOP_PROSPECTS = [
   { name: 'Chase Donnelly', pos: 'WR', school: 'SMU' },
   { name: 'Beckham Royce', pos: 'TE', school: 'Oregon State' },
   { name: 'Nasir Kamau', pos: 'S', school: 'Rutgers' },
+  // --- Round 3 range ---
+  { name: 'Rondell Pace', pos: 'WR', school: 'Marshall' },
+  { name: 'Trey Boykin', pos: 'CB', school: 'Toledo' },
+  { name: 'Gus Hartman', pos: 'IOL', school: 'Iowa' },
+  { name: 'Demario Fofana', pos: 'EDGE', school: 'UCF' },
+  { name: 'Kaleb Sorensen', pos: 'S', school: 'Montana' },
+  { name: 'Isaiah Muncy', pos: 'RB', school: 'Memphis' },
+  { name: 'Pierre Gaudreau', pos: 'DT', school: 'Louisiana' },
+  { name: 'Malik Trammell', pos: 'LB', school: 'Appalachian State' },
+  { name: 'Bo Kinsler', pos: 'OT', school: 'Air Force' },
+  { name: 'Reggie Vanterpool', pos: 'TE', school: 'Old Dominion' },
+  { name: 'Darrius Feld', pos: 'WR', school: 'Western Kentucky' },
+  { name: 'Amari Sowell', pos: 'CB', school: 'Tulane' },
+  { name: 'Cooper Vandergriff', pos: 'QB', school: 'Nevada' },
+  { name: 'Ola Ajayi', pos: 'EDGE', school: 'Coastal Carolina' },
+  { name: 'Nick Provenzano', pos: 'IOL', school: 'Rutgers' },
+  { name: 'Terrell Batiste', pos: 'S', school: 'Louisiana Tech' },
+  { name: 'Junior Okonkwo', pos: 'DT', school: 'Purdue' },
+  { name: 'Deshawn Ruffin', pos: 'WR', school: 'South Alabama' },
+  { name: 'Colby Reinhart', pos: 'LB', school: 'North Dakota State' },
+  { name: 'Emmanuel Diabate', pos: 'OT', school: 'Charlotte' },
+  { name: 'Marcus Threadgill', pos: 'RB', school: 'Troy' },
+  { name: 'Jaylin Cormier', pos: 'CB', school: 'Southern Miss' },
+  { name: 'Brody Ashworth', pos: 'TE', school: 'Kansas State' },
+  { name: 'Tavaris Bell', pos: 'WR', school: 'Georgia State' },
+  { name: 'Kingsley Obi', pos: 'EDGE', school: 'Bowling Green' },
+  { name: 'Roman Sczepanski', pos: 'DT', school: 'Buffalo' },
+  // --- Round 4 range ---
+  { name: 'Devonte Alvarez', pos: 'S', school: 'New Mexico State' },
+  { name: 'Hank Broussard', pos: 'IOL', school: 'Tulsa' },
+  { name: 'Silas Nyman', pos: 'LB', school: 'Ball State' },
+  { name: 'Rashawn Teel', pos: 'WR', school: 'East Carolina' },
+  { name: 'Marlon Pickett', pos: 'CB', school: 'UNLV' },
+  { name: 'Bishop Ferrell', pos: 'RB', school: 'Wake Forest' },
+  { name: 'Wyatt Slaughter', pos: 'OT', school: 'Wyoming' },
+  { name: 'Ephraim Adjei', pos: 'DT', school: 'Temple' },
+  { name: 'Cade Rennick', pos: 'EDGE', school: 'Utah State' },
+  { name: 'Trevon Sylvester', pos: 'WR', school: 'Middle Tennessee' },
+  { name: 'Nolan Prewitt', pos: 'S', school: 'Northwestern' },
+  { name: 'Beckett Haines', pos: 'TE', school: 'Cincinnati' },
+  { name: 'Idris Balogun', pos: 'IOL', school: 'Houston' },
+  { name: 'Dominique Farr', pos: 'CB', school: 'San Diego State' },
+  { name: 'Kade Lindstrom', pos: 'LB', school: 'South Dakota State' },
+  { name: 'Vince Carrell', pos: 'QB', school: 'Fresno State' },
+  { name: 'Marquel Bynum', pos: 'WR', school: 'Liberty' },
+  { name: 'Tyree Ogunbowale', pos: 'DT', school: 'Pittsburgh' },
+  { name: 'Grant Eisenhauer', pos: 'OT', school: 'Boston College' },
+  { name: 'Jaylen Rutledge', pos: 'RB', school: 'James Madison' },
+  { name: 'Cordell Yoon', pos: 'CB', school: 'Oregon State' },
+  { name: 'Amauri Sene', pos: 'EDGE', school: 'Florida Atlantic' },
+  { name: 'Brock Halverson', pos: 'S', school: 'Iowa State' },
+  { name: 'Deion Massaquoi', pos: 'WR', school: 'Rice' },
+  { name: 'Sam Petroski', pos: 'IOL', school: 'Michigan State' },
+  { name: 'Tavian Colston', pos: 'LB', school: 'Arkansas State' },
+  { name: 'Rory Kavanagh', pos: 'TE', school: 'Stanford' },
+  { name: 'Jamarcus Peele', pos: 'CB', school: 'Louisville' },
+  { name: 'Obi Nwachukwu', pos: 'DT', school: 'Kansas' },
+  { name: 'Kenyatta Blaylock', pos: 'WR', school: 'Colorado State' },
+  { name: 'Fitz Delorme', pos: 'S', school: 'Boise State' },
+  { name: 'Prentice Hobbs', pos: 'OT', school: 'Duke' },
+  // --- Round 5 range ---
+  { name: 'Tyrell Odum', pos: 'RB', school: 'Georgia Southern' },
+  { name: 'Marquis Fennell', pos: 'CB', school: 'Baylor' },
+  { name: 'Dante Rizzo', pos: 'EDGE', school: 'Syracuse' },
+  { name: 'Kavon Ellsworth', pos: 'WR', school: 'Washington State' },
+  { name: 'Bryce Tuiloma', pos: 'IOL', school: 'Oregon' },
+  { name: 'Nakobe Yancey', pos: 'S', school: 'Ole Miss' },
+  { name: 'Roman Dabrowski', pos: 'LB', school: 'Minnesota' },
+  { name: 'Ike Osunde', pos: 'DT', school: 'Missouri' },
+  { name: 'Cash Winterton', pos: 'OT', school: 'Utah' },
+  { name: 'Jelani Rideau', pos: 'WR', school: 'Louisiana' },
+  { name: 'Terrance Yaw', pos: 'CB', school: 'Hawaii' },
+  { name: 'Beau Litchfield', pos: 'TE', school: 'TCU' },
+  { name: 'Dax Comeaux', pos: 'QB', school: 'Tulane' },
+  { name: 'Malachi Ude', pos: 'RB', school: 'Illinois' },
+  { name: 'Kroy Fenimore', pos: 'EDGE', school: 'Vanderbilt' },
+  { name: 'Zaid Hamdan', pos: 'S', school: 'Toledo' },
+  { name: 'Ronaldo Cepeda', pos: 'WR', school: 'Florida International' },
+  { name: 'Grady Wohlfeil', pos: 'IOL', school: 'Nebraska' },
+  { name: 'Devin Achterberg', pos: 'CB', school: 'Wisconsin' },
+  { name: 'Sione Fifita', pos: 'LB', school: 'BYU' },
+  { name: 'Marcus Delphonse', pos: 'DT', school: 'Cincinnati' },
+  { name: 'Reid Hollenbeck', pos: 'OT', school: 'Kansas State' },
+  { name: 'Tywan Beauchamp', pos: 'WR', school: 'Coastal Carolina' },
+  { name: 'Kellan Dowdy', pos: 'S', school: 'Indiana' },
+  { name: 'Josiah Renfroe', pos: 'RB', school: 'Auburn' },
+  { name: 'Amir Zellner', pos: 'CB', school: 'Rutgers' },
+  { name: 'Ola Bamgbose', pos: 'EDGE', school: 'Charlotte' },
+  { name: 'Corbin Hutto', pos: 'TE', school: 'West Virginia' },
+  { name: 'Deangelo Prieto', pos: 'WR', school: 'UTSA' },
+  { name: 'Blaise Contreras', pos: 'IOL', school: 'Arizona' },
+  { name: 'Nash Ferrigno', pos: 'LB', school: 'Pittsburgh' },
+  { name: 'Kwesi Baffour', pos: 'DT', school: 'Duke' },
+  // --- Round 6 range ---
+  { name: 'Tyshon Kalu', pos: 'CB', school: 'Memphis' },
+  { name: 'Reef Callender', pos: 'S', school: 'Marshall' },
+  { name: 'Manny Okoro', pos: 'WR', school: 'Texas State' },
+  { name: 'Grant Sepulveda', pos: 'OT', school: 'San Jose State' },
+  { name: 'Deshaun Mabry', pos: 'RB', school: 'Old Dominion' },
+  { name: 'Kiante Rollins', pos: 'EDGE', school: 'North Texas' },
+  { name: 'Otis Vandenberg', pos: 'IOL', school: 'Iowa State' },
+  { name: 'Rashad Poirier', pos: 'LB', school: 'Louisiana Tech' },
+  { name: 'Tyree Mwangi', pos: 'DT', school: 'Wyoming' },
+  { name: 'Braxton Lemieux', pos: 'WR', school: 'Nevada' },
+  { name: 'Jaylon Okwuosa', pos: 'CB', school: 'Akron' },
+  { name: 'Cade Bittinger', pos: 'S', school: 'Ball State' },
+  { name: 'Truman Alvarado', pos: 'TE', school: 'Fresno State' },
+  { name: 'Rocco Santelli', pos: 'QB', school: 'UAB' },
+  { name: 'Marquell Toomey', pos: 'WR', school: 'Georgia State' },
+  { name: 'Ivan Krasniqi', pos: 'OT', school: 'Temple' },
+  { name: 'Demetrius Vo', pos: 'RB', school: 'Hawaii' },
+  { name: 'Kelton Broughton', pos: 'CB', school: 'Troy' },
+  { name: 'Zane Mikkelson', pos: 'EDGE', school: 'Montana State' },
+  { name: 'Parnell Adu', pos: 'IOL', school: 'UCF' },
+  { name: 'Devonta Skaggs', pos: 'S', school: 'Louisiana' },
+  { name: 'Tariq Benn', pos: 'LB', school: 'South Alabama' },
+  { name: 'Chidi Anagonye', pos: 'DT', school: 'Bowling Green' },
+  { name: 'Rashon Delacruz', pos: 'WR', school: 'UTEP' },
+  { name: 'Beau Villanueva', pos: 'CB', school: 'New Mexico' },
+  { name: 'Isaias Montano', pos: 'RB', school: 'Colorado State' },
+  { name: 'Kolby Trahan', pos: 'S', school: 'McNeese' },
+  { name: 'Tevin Ashford', pos: 'WR', school: 'Jacksonville State' },
+  { name: 'Gunnar Sandoval', pos: 'OT', school: 'Idaho' },
+  { name: 'Dashiell Mburu', pos: 'LB', school: 'Kent State' },
+  { name: 'Lawson Petrowski', pos: 'IOL', school: 'North Dakota State' },
+  { name: 'Case Vandermolen', pos: 'TE', school: 'South Dakota' },
+  // --- Round 7 range ---
+  { name: 'Jaylen Quist', pos: 'CB', school: 'Northern Iowa' },
+  { name: 'Terrico Landry', pos: 'WR', school: 'Southeastern Louisiana' },
+  { name: 'Nkosi Barrow', pos: 'S', school: 'Delaware' },
+  { name: 'Dontae Riggins', pos: 'RB', school: 'Villanova' },
+  { name: 'Elom Agbeko', pos: 'EDGE', school: 'Youngstown State' },
+  { name: 'Marcus Twombly', pos: 'DT', school: 'Montana' },
+  { name: 'Reid Kaczmarek', pos: 'LB', school: 'North Dakota' },
+  { name: 'Isaiah Pele', pos: 'IOL', school: 'Weber State' },
+  { name: 'Cortez Mally', pos: 'OT', school: 'Sam Houston' },
+  { name: 'Dequan Broadus', pos: 'WR', school: 'Alcorn State' },
+  { name: 'Malcolm Ferris', pos: 'CB', school: 'Chattanooga' },
+  { name: 'Brady Oleson', pos: 'S', school: 'Eastern Washington' },
+  { name: 'Kip Vandagriff', pos: 'TE', school: 'Furman' },
+  { name: 'Tanner Kessel', pos: 'QB', school: 'Southern Illinois' },
+  { name: 'Rahmir Choudhury', pos: 'RB', school: 'Towson' },
+  { name: 'Jaylen Ibe', pos: 'WR', school: 'Mercer' },
+  { name: 'Osaze Igbinedion', pos: 'EDGE', school: 'Elon' },
+  { name: 'Trayvon Mattison', pos: 'CB', school: 'Jackson State' },
+  { name: 'Grant Wolterman', pos: 'IOL', school: 'Northern Arizona' },
+  { name: 'Kwabena Sarfo', pos: 'DT', school: 'Holy Cross' },
+  { name: 'Deonte Fambrough', pos: 'S', school: 'Southern' },
+  { name: 'Ledger Mahaffey', pos: 'LB', school: 'Wofford' },
+  { name: 'Tyquan Bledsoe', pos: 'WR', school: 'Tennessee State' },
+  { name: 'Bjorn Kessler', pos: 'OT', school: 'Portland State' },
+  { name: 'Marquez Villalobos', pos: 'CB', school: 'Cal Poly' },
+  { name: 'Denzel Achiaa', pos: 'RB', school: 'Bryant' },
+  { name: 'Rashard Timmons', pos: 'WR', school: 'Prairie View A&M' },
+  { name: 'Kacey Wetzel', pos: 'S', school: 'Illinois State' },
+  { name: 'Femi Adenuga', pos: 'EDGE', school: 'Stony Brook' },
+  { name: 'Cole Vukovich', pos: 'IOL', school: 'Youngstown State' },
+  { name: 'Trell Mangum', pos: 'LB', school: 'Albany' },
+  { name: 'Ime Effiong', pos: 'DT', school: 'Maine' },
+  // --- Depth / priority-UDFA tier (keeps the board from running dry) ---
+  { name: 'Darnell Fritsch', pos: 'WR', school: 'Western Illinois' },
+  { name: 'Jaydon Sable', pos: 'CB', school: 'Southern Utah' },
+  { name: 'Kellen Marchetti', pos: 'S', school: 'UC Davis' },
+  { name: 'Rasul Ndiaye', pos: 'RB', school: 'Lehigh' },
+  { name: 'Bronson Kealoha', pos: 'LB', school: 'Idaho State' },
+  { name: 'Onyeka Umeh', pos: 'DT', school: 'Fordham' },
+  { name: 'Grady Sundberg', pos: 'IOL', school: 'Northern Colorado' },
+  { name: 'Wilton Ferreira', pos: 'OT', school: 'Florida A&M' },
+  { name: 'Kadeem Rolle', pos: 'EDGE', school: 'Norfolk State' },
+  { name: 'Trevonte Ashby', pos: 'WR', school: 'North Carolina A&T' },
+  { name: 'Jibril Toure', pos: 'CB', school: 'Sacramento State' },
+  { name: 'Beckham Lindqvist', pos: 'TE', school: 'Montana' },
+  { name: 'Deshon Cabral', pos: 'S', school: 'Rhode Island' },
+  { name: 'Chase Wozniak', pos: 'QB', school: 'North Dakota' },
+  { name: 'Rakeem Talley', pos: 'WR', school: 'Grambling' },
+  { name: 'Xavier Bui', pos: 'RB', school: 'Cal Poly' },
+  { name: 'Tremaine Osborne', pos: 'CB', school: 'Tennessee-Martin' },
+  { name: 'Kaeden Frost', pos: 'LB', school: 'Weber State' },
+  { name: 'Nnamdi Okorafor', pos: 'DT', school: 'Villanova' },
+  { name: 'Beauden Riggs', pos: 'IOL', school: 'South Dakota State' },
+  { name: 'Zaccheus Odom', pos: 'S', school: 'Samford' },
+  { name: 'Tavian Kellerman', pos: 'WR', school: 'Eastern Kentucky' },
+  { name: 'Griff Halstead', pos: 'OT', school: 'Yale' },
+  { name: 'Damarion Pou', pos: 'EDGE', school: 'San Diego State' },
+  { name: 'Isaias Renner', pos: 'CB', school: 'Drake' },
+  { name: 'Kesler Ndong', pos: 'RB', school: 'Duquesne' },
+  { name: 'Terrance Villagomez', pos: 'WR', school: 'Hawaii' },
+  { name: 'Boone Kittredge', pos: 'S', school: 'New Hampshire' },
+  { name: 'Malaki Ferber', pos: 'LB', school: 'Colgate' },
+  { name: 'Rocco Panetta', pos: 'IOL', school: 'Villanova' },
+  { name: 'Dovid Erlichman', pos: 'TE', school: 'Columbia' },
+  { name: 'Jaylen Sowah', pos: 'CB', school: 'Howard' },
+  { name: 'Rondel Fashaw', pos: 'WR', school: 'Bethune-Cookman' },
+  { name: 'Uche Anozie', pos: 'DT', school: 'Georgetown' },
+  { name: 'Kai Brumfield', pos: 'S', school: 'Maine' },
+  { name: 'Sterling Maddox', pos: 'OT', school: 'Princeton' },
+  { name: 'Deion Ferrante', pos: 'RB', school: 'Merrimack' },
+  { name: 'Obi Chikelu', pos: 'EDGE', school: 'Wagner' },
+  { name: 'Tyrell Wexler', pos: 'WR', school: 'Monmouth' },
+  { name: 'Jamarri Deveaux', pos: 'CB', school: 'Charleston Southern' },
 ];
 
 // Name / school pools used to generate believable Day-2/Day-3 depth.
@@ -157,7 +365,8 @@ const SCHOOLS = ['Georgia', 'Alabama', 'Ohio State', 'Michigan', 'Texas', 'LSU',
   'Ole Miss', 'Kansas State', 'TCU', 'Louisville', 'Pitt', 'Missouri', 'NC State', 'Arkansas', 'Minnesota'];
 const POS_CYCLE = ['WR', 'CB', 'EDGE', 'OT', 'S', 'LB', 'IOL', 'RB', 'DT', 'TE', 'QB', 'CB', 'WR', 'EDGE', 'S'];
 
-// Build a fresh board deep enough for the requested rounds (+buffer).
+// Build the board for the requested rounds. TOP_PROSPECTS already covers a full
+// 7-round class; generation here is only a safety net if it's ever trimmed.
 function buildBoard(rounds) {
   const target = rounds * 32 + 24;
   const board = TOP_PROSPECTS.map((p) => ({ ...p }));
@@ -195,7 +404,7 @@ let ui = { filter: 'All', q: '', sideTab: 'picks' };
 
 function serialize() {
   return {
-    userTeam: S.userTeam, rounds: S.rounds, order: S.order, curr: S.curr,
+    userTeam: S.userTeam, rounds: S.rounds, order: S.order, mode: S.mode, curr: S.curr,
     board: S.board,
     picks: S.picks.map((p) => ({ overall: p.overall, round: p.round, slot: p.slot, owner: p.owner, origin: p.origin, playerRank: p.player ? p.player.rank : null })),
   };
@@ -206,7 +415,7 @@ function load() {
   if (!raw || !raw.board || !raw.picks) return false;
   const byRank = Object.fromEntries(raw.board.map((p) => [p.rank, p]));
   S = {
-    userTeam: raw.userTeam, rounds: raw.rounds, order: raw.order, curr: raw.curr,
+    userTeam: raw.userTeam, rounds: raw.rounds, order: raw.order, mode: raw.mode, curr: raw.curr,
     board: raw.board,
     picks: raw.picks.map((p) => ({ ...p, player: p.playerRank ? byRank[p.playerRank] : null })),
   };
@@ -218,9 +427,12 @@ function startDraft(cfg) {
   const picks = [];
   let overall = 1;
   for (let r = 1; r <= cfg.rounds; r++) {
-    cfg.order.forEach((abbr, i) => picks.push({ overall: overall++, round: r, slot: i + 1, owner: abbr, origin: abbr, player: null }));
+    // "actual" mode: round 1 follows the real 2025 pick order; later rounds use
+    // the standard reverse-standings slotting. Other modes use one order throughout.
+    const ord = (cfg.mode === 'actual' && r === 1) ? ACTUAL_2025_R1 : cfg.order;
+    ord.forEach((abbr, i) => picks.push({ overall: overall++, round: r, slot: i + 1, owner: abbr, origin: abbr, player: null }));
   }
-  S = { userTeam: cfg.userTeam, rounds: cfg.rounds, order: cfg.order, picks, board: buildBoard(cfg.rounds), curr: 0 };
+  S = { userTeam: cfg.userTeam, rounds: cfg.rounds, order: cfg.order, mode: cfg.mode, picks, board: buildBoard(cfg.rounds), curr: 0 };
   save();
   showWarRoom();
 }
@@ -307,17 +519,18 @@ function showSetup() {
     </div>
     <div class="fld"><span>Draft order</span>
       <div class="ds-radios" id="cfg-order">
-        <label><input type="radio" name="order" value="actual" checked> This year's order</label>
+        <label><input type="radio" name="order" value="actual" checked> 2025 actual order</label>
         <label><input type="radio" name="order" value="random"> Random order</label>
         <label><input type="radio" name="order" value="custom"> Custom order</label>
       </div>
+      <p class="ds-note" style="margin-top:8px">"2025 actual order" uses the real Round 1 pick order (trades and all — Giants &amp; Falcons pick twice; Texans &amp; Rams sit out R1). Rounds 2–7 follow reverse-standings order.</p>
     </div>
     <div id="custom-order" class="custom-order" hidden></div>
     <button id="start-btn" class="ds-btn primary">Enter the War Room →</button>
-    <p class="ds-note">Sample big board — top prospects are hand-listed and deeper rounds are generated. Not real draft data; a sandbox to build on.</p>`;
+    <p class="ds-note">Full 7-round sample big board (${TOP_PROSPECTS.length} prospects). Names are placeholders, not real draft data — a sandbox to build on; swap in a real board anytime.</p>`;
 
   const customBox = $('#custom-order');
-  let customList = [...DEFAULT_ORDER];
+  let customList = [...BASE_ORDER];
   const drawCustom = () => {
     customBox.innerHTML = customList.map((abbr, i) => `
       <div class="co-row">
@@ -335,17 +548,17 @@ function showSetup() {
   $('#cfg-order').addEventListener('change', () => {
     const v = box.querySelector('input[name=order]:checked').value;
     customBox.hidden = v !== 'custom';
-    if (v === 'custom') { customList = [...DEFAULT_ORDER]; drawCustom(); }
+    if (v === 'custom') { customList = [...BASE_ORDER]; drawCustom(); }
   });
 
   $('#start-btn').onclick = () => {
     const userTeam = $('#cfg-team').value;
     const rounds = +$('#cfg-rounds').value;
     const mode = box.querySelector('input[name=order]:checked').value;
-    let order = [...DEFAULT_ORDER];
-    if (mode === 'random') order = shuffle(DEFAULT_ORDER);
+    let order = [...BASE_ORDER];
+    if (mode === 'random') order = shuffle(BASE_ORDER);
     else if (mode === 'custom') order = [...customList];
-    startDraft({ userTeam, rounds, order });
+    startDraft({ userTeam, rounds, order, mode });
   };
 }
 

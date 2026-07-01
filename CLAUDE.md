@@ -94,10 +94,15 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   (pick your team, rounds, order = actual/random/custom) → **war room** (best-available
   board with position filters + search, sim-1 / sim-to-my-pick, pick-for-pick trades
   scored on the Jimmy Johnson value chart, your-picks / draft-log / team-needs side
-  panel). The prospect board is a **SAMPLE** big board (top ~70 hand-listed in
-  `TOP_PROSPECTS`, deeper rounds generated) — NOT real draft data; swap in a real
-  board by editing that array. CPU picks = best-available with a positional-needs
-  nudge (`TEAM_NEEDS`). State autosaves to `localStorage` (`draftsim:v1`). Because
+  panel). The prospect board is a **SAMPLE** big board — a full 7-round class
+  (~264 prospects hand-listed in `TOP_PROSPECTS`; `buildBoard` only generates
+  filler if that array is ever trimmed below the needed depth) with placeholder
+  names, NOT real draft data; swap in a real board by editing that array. Draft
+  order: **`ACTUAL_2025_R1`** is the real 2025 NFL Draft round-1 pick order (trades
+  included — NYG & ATL pick twice, HOU & LAR absent from R1); rounds 2–7 (and the
+  random/custom modes) use `BASE_ORDER` (2025 reverse-standings, 32 distinct).
+  CPU picks = best-available with a positional-needs nudge (`TEAM_NEEDS`). State
+  autosaves to `localStorage` (`draftsim:v1`). Because
   it's standalone it does NOT participate in the `APP_VERSION`/`?v=` ritual, though
   it links `styles.css` for the base theme (uses `?v=80`; bump if you change shared
   CSS it depends on).
