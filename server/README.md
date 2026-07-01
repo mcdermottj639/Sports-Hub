@@ -68,6 +68,7 @@ uvicorn main:app --reload
 | `GET /api/fantasy/{sport}/freeagents` | Top available players (waivers/FA) |
 | `GET /api/fantasy/{sport}/catranks` | Per-team season category totals + league rank (powers the opponent comparison) |
 | `GET /api/fantasy/{sport}/playoffs` | Monte-Carlo playoff odds (`?slots=6&sims=10000`) from season category strength |
+| `GET /api/draft/prospects` | Real NFL draft class as a ranked prospect board (`?year=2025&limit=260`) for the Labs mock-draft sim. Pulled from ESPN's public core API server-side (the browser can't read it directly) and cached for `DRAFT_TTL_SECONDS` (default 24h). Uses only the Python stdlib — no extra dependency. |
 | `GET /api/refresh` | Clear the cache, re-pull from ESPN |
 
 `{sport}` is `football` or `baseball`.

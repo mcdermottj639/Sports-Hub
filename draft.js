@@ -365,11 +365,52 @@ const SCHOOLS = ['Georgia', 'Alabama', 'Ohio State', 'Michigan', 'Texas', 'LSU',
   'Ole Miss', 'Kansas State', 'TCU', 'Louisville', 'Pitt', 'Missouri', 'NC State', 'Arkansas', 'Minnesota'];
 const POS_CYCLE = ['WR', 'CB', 'EDGE', 'OT', 'S', 'LB', 'IOL', 'RB', 'DT', 'TE', 'QB', 'CB', 'WR', 'EDGE', 'S'];
 
-// Build the board for the requested rounds. TOP_PROSPECTS already covers a full
-// 7-round class; generation here is only a safety net if it's ever trimmed.
+// The active board. Defaults to the bundled sample; replaced at runtime by the
+// real draft class when the backend (/api/draft/prospects) is reachable.
+const DRAFT_API = 'https://sports-hub-production.up.railway.app';
+const BOARD_CACHE = 'draftsim:board';
+let BOARD_DATA = TOP_PROSPECTS;
+let boardSource = 'sample'; // 'sample' | 'real'
+let boardFailed = false;
+
+function boardNoteHTML() {
+  if (boardSource === 'real') return `Board: <b style="color:var(--accent)">real 2025 NFL Draft class</b> (${BOARD_DATA.length} players, live from ESPN).`;
+  if (boardFailed) return `Board: full 7-round <b>sample</b> big board (${BOARD_DATA.length} placeholders) — couldn't reach the live draft service, so using the sample.`;
+  return `Board: full 7-round <b>sample</b> big board (${BOARD_DATA.length} placeholders). Trying to load the real 2025 class…`;
+}
+
+function applyBoard(prospects, source) {
+  if (!Array.isArray(prospects)) return false;
+  const clean = prospects.filter((p) => p && p.name).map((p) => ({ name: p.name, pos: p.pos || 'ATH', school: p.school || '' }));
+  if (clean.length < 32) return false;
+  BOARD_DATA = clean;
+  boardSource = source;
+  return true;
+}
+// Instant: use a cached real board from a previous visit if we have one.
+try { const c = JSON.parse(localStorage.getItem(BOARD_CACHE)); if (c && c.prospects) applyBoard(c.prospects, 'real'); } catch (_) {}
+
+// Pull the real class in the background; updates the cache + setup note. Only
+// affects drafts started AFTER it lands (an in-progress draft keeps its board).
+function updateBoardNote() { const n = $('#board-note'); if (n) n.innerHTML = boardNoteHTML(); }
+
+async function refreshRealBoard() {
+  try {
+    const r = await fetch(`${DRAFT_API}/api/draft/prospects?year=2025`, { cache: 'no-store' });
+    if (!r.ok) throw new Error('bad status');
+    const j = await r.json();
+    if (applyBoard(j.prospects, 'real')) {
+      try { localStorage.setItem(BOARD_CACHE, JSON.stringify({ ts: Date.now(), prospects: BOARD_DATA })); } catch (_) {}
+      updateBoardNote(); // update the note in place (don't rebuild the form)
+    } else { boardFailed = true; updateBoardNote(); }
+  } catch (_) { boardFailed = true; updateBoardNote(); } // offline / down → keep bundled board
+}
+
+// Build the board for the requested rounds. BOARD_DATA already covers a full
+// 7-round class; generation here is only a safety net if it's ever short.
 function buildBoard(rounds) {
   const target = rounds * 32 + 24;
-  const board = TOP_PROSPECTS.map((p) => ({ ...p }));
+  const board = BOARD_DATA.map((p) => ({ ...p }));
   let ci = 0;
   const usedNames = new Set(board.map((p) => p.name));
   while (board.length < target) {
@@ -527,7 +568,7 @@ function showSetup() {
     </div>
     <div id="custom-order" class="custom-order" hidden></div>
     <button id="start-btn" class="ds-btn primary">Enter the War Room →</button>
-    <p class="ds-note">Full 7-round sample big board (${TOP_PROSPECTS.length} prospects). Names are placeholders, not real draft data — a sandbox to build on; swap in a real board anytime.</p>`;
+    <p class="ds-note" id="board-note">${boardNoteHTML()}</p>`;
 
   const customBox = $('#custom-order');
   let customList = [...BASE_ORDER];
@@ -768,3 +809,4 @@ function closeTrade() { $('#trade-modal').classList.add('hidden'); }
 $('#trade-modal').querySelector('.modal-backdrop').addEventListener('click', closeTrade);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTrade(); });
 if (load()) showWarRoom(); else showSetup();
+refreshRealBoard(); // fetch the real 2025 class in the background

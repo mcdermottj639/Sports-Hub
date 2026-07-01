@@ -10,10 +10,13 @@ Config comes entirely from environment variables (set as secrets on the host).
 Nothing sensitive is committed to the repo. See .env.example.
 """
 
+import json as _json
 import math
 import os
 import random
 import time
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from typing import Optional
 
@@ -25,7 +28,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b3-playoffs"
+SERVER_VERSION = "b4-draft"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -665,8 +668,130 @@ def playoffs(sport: str, slots: int = 6, sims: int = 10000):
     }
 
 
+# =============================================================================
+# NFL Draft prospect board (powers the Labs mock-draft simulator)
+# -----------------------------------------------------------------------------
+# The browser can't read ESPN's draft data directly (the draft pages aren't a
+# CORS-open JSON feed), so we pull it here server-side from ESPN's public core
+# API and hand the frontend a clean, ranked board. We fetch a *completed* draft
+# class (real players, positions, colleges) ordered by actual pick = board rank.
+# Heavy the first time (resolves each pick's athlete), so the assembled board is
+# cached in-process for a long TTL — the draft is static once it's happened.
+# =============================================================================
+CORE_NFL = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl"
+DRAFT_TTL_SECONDS = int(os.getenv("DRAFT_TTL_SECONDS", "86400"))  # 24h
+_DRAFT_CACHE: dict = {}  # {year: {"ts": float, "data": {...}}}
+
+# ESPN position abbreviations -> the sim's position buckets.
+_POS_MAP = {
+    "QB": "QB", "RB": "RB", "FB": "RB", "HB": "RB",
+    "WR": "WR", "TE": "TE",
+    "OT": "OT", "T": "OT", "LT": "OT", "RT": "OT",
+    "G": "IOL", "OG": "IOL", "LG": "IOL", "RG": "IOL", "C": "IOL", "OL": "IOL", "OC": "IOL",
+    "DE": "EDGE", "EDGE": "EDGE", "OLB": "EDGE",
+    "DT": "DT", "NT": "DT", "DL": "DT",
+    "LB": "LB", "ILB": "LB", "MLB": "LB",
+    "CB": "CB", "DB": "CB",
+    "S": "S", "FS": "S", "SS": "S", "SAF": "S",
+}
+
+
+def _norm_pos(abbr: str) -> str:
+    a = (abbr or "").upper().strip()
+    return _POS_MAP.get(a, a or "ATH")
+
+
+def _draft_get(url: str, timeout: int = 8):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 SportsHub"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return _json.loads(r.read().decode("utf-8"))
+
+
+def _draft_resolve(node, cache: dict):
+    """A node may be embedded already or just a {'$ref': url}. Return the dict,
+    fetching (and caching by URL) when it's a bare reference."""
+    if not isinstance(node, dict):
+        return {}
+    ref = node.get("$ref")
+    if ref and len(node) <= 2:  # essentially just a pointer
+        url = ref.replace("http://", "https://")
+        if url not in cache:
+            try:
+                cache[url] = _draft_get(url)
+            except Exception:
+                cache[url] = {}
+        return cache[url]
+    return node
+
+
+def _fetch_draft_board(year: int, limit: int):
+    cache: dict = {}
+    # 1) rounds -> picks (picks lists are paginated $refs)
+    rounds = _draft_get(f"{CORE_NFL}/seasons/{year}/draft/rounds?limit=10")
+    picks = []
+    for rnd in rounds.get("items", []):
+        rnd = _draft_resolve(rnd, cache)
+        pref = rnd.get("picks")
+        if isinstance(pref, dict) and pref.get("$ref"):
+            base = pref["$ref"].replace("http://", "https://")
+            page = 1
+            while True:
+                sep = "&" if "?" in base else "?"
+                pj = _draft_get(f"{base}{sep}page={page}&limit=100")
+                for it in pj.get("items", []):
+                    picks.append(_draft_resolve(it, cache))
+                if page >= int(pj.get("pageCount", 1) or 1):
+                    break
+                page += 1
+        elif isinstance(pref, list):
+            for it in pref:
+                picks.append(_draft_resolve(it, cache))
+
+    # 2) resolve each pick's athlete (name / position / college) concurrently
+    def build(pk):
+        overall = pk.get("overall") or pk.get("pickNumber") or pk.get("pick")
+        ath = _draft_resolve(pk.get("athlete", {}), cache)
+        name = ath.get("displayName") or ath.get("fullName") or ""
+        pos = _draft_resolve(ath.get("position", {}), cache)
+        college = _draft_resolve(ath.get("college", {}), cache)
+        return {
+            "overall": overall,
+            "name": name,
+            "pos": _norm_pos(pos.get("abbreviation") or pos.get("name") or ""),
+            "school": college.get("shortName") or college.get("name") or "",
+        }
+
+    with ThreadPoolExecutor(max_workers=16) as ex:
+        built = [b for b in ex.map(build, picks) if b["name"]]
+
+    built.sort(key=lambda b: (b["overall"] if isinstance(b["overall"], (int, float)) else 9999))
+    for i, b in enumerate(built):
+        b["rank"] = i + 1
+    return built[:limit]
+
+
+@app.get("/api/draft/prospects")
+def draft_prospects(year: int = 2025, limit: int = 260):
+    """Real NFL draft class as a ranked prospect board for the mock-draft sim.
+    Falls back to the frontend's bundled board if this can't be reached."""
+    now = time.time()
+    hit = _DRAFT_CACHE.get(year)
+    if hit and now - hit["ts"] < DRAFT_TTL_SECONDS and hit["data"].get("prospects"):
+        return hit["data"]
+    try:
+        pros = _fetch_draft_board(year, limit)
+    except Exception as e:
+        raise HTTPException(502, f"Draft fetch failed: {e}")
+    if len(pros) < 32:
+        raise HTTPException(502, "Draft fetch returned too few players.")
+    data = {"year": year, "count": len(pros), "source": "espn", "prospects": pros}
+    _DRAFT_CACHE[year] = {"ts": now, "data": data}
+    return data
+
+
 @app.get("/api/refresh")
 def refresh():
     """Drop the cached League objects so the next call re-pulls from ESPN."""
     _build_league.cache_clear()
+    _DRAFT_CACHE.clear()
     return {"ok": True, "cleared": True}
