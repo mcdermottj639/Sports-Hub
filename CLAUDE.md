@@ -108,7 +108,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v77**.
+Current version as of this writing: **v78**.
 
 ## Testing reality
 
@@ -131,8 +131,10 @@ Current version as of this writing: **v77**.
 - `fetchJSON(url, ttl)` — in-memory cache by URL with TTL; 9s abort. All data goes through it.
 - `LEAGUES` — per-sport config (label, emoji, espnPath, `fav` favorite teams, type).
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
-- Tabs: Home, Eagles, Scores, Standings, AI Picks, Fantasy, About. `showTab()` +
-  `renderers{}` map drive rendering.
+- Tabs: Home, Eagles, AI Picks, Fantasy, About. `showTab()` +
+  `renderers{}` map drive rendering. (**Scores** and **Standings** tabs were
+  removed in v78 — the owner gets those better elsewhere; Home is now the daily
+  full-slate overview and absorbed the Scores tab's ⚡ Model-edge badges.)
 - **`sportsDate()`** — "today" doesn't roll to the next day until **4 AM ET**, so
   late/live games stay on the current slate overnight. Use this (not `new Date()`)
   for default game dates.
@@ -146,24 +148,24 @@ Current version as of this writing: **v77**.
 
 ## Features built (high level)
 
-- **Home** — Top Headlines (numbered 1-2-3 story strip from in-season leagues'
-  lead stories, tap → in-app summary popup), My Teams featured card, Today's Games
-  grouped by league (jump-nav chips), each league's slate sorted live → finished →
-  unstarted; leagues with a live game get a 🔴 flag on their chip/heading. (The old
-  cross-league "Live" section was removed in v68 in favor of in-league sorting.)
+- **Home** — the app's front door and full daily overview. Top Headlines
+  (numbered 1-2-3 story strip from in-season leagues' lead stories, tap → in-app
+  summary popup), My Teams featured card, then Today's Games grouped by league
+  (jump-nav chips), each league's slate sorted live → finished → unstarted;
+  leagues with a live game get a 🔴 flag on their chip/heading. Cards get a
+  **⚡ Model edge** badge when the model disagrees with the betting line
+  (`tagEdges`, absorbed from the removed Scores tab in v78); tap a card → game
+  detail modal; the golf card opens the PGA leaderboard in a modal
+  (`openGolfLeaderboard`). (The old cross-league "Live" section was removed in
+  v68 in favor of in-league sorting.)
 - **Eagles tab** — hero, Next Opponent, Latest News (tap → summary), Team Stats &
   rankings, Schedule (2026-27), Depth Chart (Offense/Defense/ST, **Field formation
   view** + List), Player Leaders, By the Numbers, Coaching Staff. Section order and
   jump-nav defined in `renderEagles`.
-- **Scores** — per-sport slate; cards show kickoff time (`scheduledLabel` falls
-  back to game time when ESPN returns a generic "Scheduled"); tap → detail modal.
-  Cards get a **⚡ Model edge** badge when the model disagrees with the betting line.
-- **Standings** — grouped by league → division (`?level=3`), GB column, plus a
-  per-league **Wild Card** table (MLB/NFL) with a dashed playoff cutoff line.
 - **AI Picks** — a multi-factor logistic model (`predictGame`): record, scoring
   margin, recent form, home/road split, rest, plus matchup factors (MLB starter
   ERA/WHIP, team OPS). **Shows ONLY edge games** (model vs. line) since the full
-  slate is on Scores. Stat bar tracks **all-time model record** and **vs-the-line
+  slate is on Home. Stat bar tracks **all-time model record** and **vs-the-line
   record**; below the edges are **Team Trends** and **Player Prop trends**.
   Records persist + auto-grade: see "AI record" below.
 - **Game detail modal** (`renderGameDetail`) — score, **🔴 Live Situation** panel

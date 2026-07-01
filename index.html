@@ -7,11 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Sports-Hub" />
   <title>Sports-Hub</title>
-  <meta name="description" content="Personal multi-sport hub — NFL, NBA, MLB and Soccer live scores and standings." />
+  <meta name="description" content="Personal multi-sport hub — a daily overview of NFL, NBA, MLB and Soccer, plus AI picks." />
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=77" />
+  <link rel="stylesheet" href="styles.css?v=78" />
 </head>
 <body>
   <header class="topbar">
@@ -28,8 +28,6 @@
   <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
     <button id="tab-home" data-tab="home" class="active" role="tab" aria-selected="true" aria-controls="home">Home</button>
     <button id="tab-eagles" data-tab="eagles" role="tab" aria-selected="false" aria-controls="eagles">🦅 Eagles</button>
-    <button id="tab-scores" data-tab="scores" role="tab" aria-selected="false" aria-controls="scores">Scores</button>
-    <button id="tab-standings" data-tab="standings" role="tab" aria-selected="false" aria-controls="standings">Standings</button>
     <button id="tab-predictions" data-tab="predictions" role="tab" aria-selected="false" aria-controls="predictions">🤖 AI Picks</button>
     <button id="tab-fantasy" data-tab="fantasy" role="tab" aria-selected="false" aria-controls="fantasy">Fantasy</button>
     <button id="tab-about" data-tab="about" role="tab" aria-selected="false" aria-controls="about">About</button>
@@ -65,26 +63,13 @@
       <div id="eagles-staff" class="fan-cards"></div>
     </section>
 
-    <section id="scores" class="tab-panel" role="tabpanel" aria-labelledby="tab-scores" tabindex="0">
-      <div class="controls">
-        <div id="sport-filter" class="chips"></div>
-        <input type="date" id="scores-date" />
-      </div>
-      <div id="scores-games" class="games-grid"></div>
-    </section>
-
-    <section id="standings" class="tab-panel" role="tabpanel" aria-labelledby="tab-standings" tabindex="0">
-      <div id="standings-filter" class="chips"></div>
-      <div id="standings-content"></div>
-    </section>
-
     <section id="predictions" class="tab-panel" role="tabpanel" aria-labelledby="tab-predictions" tabindex="0">
       <div class="controls"><div id="ai-sport" class="chips"></div></div>
       <div class="pred-header">
         <h2 class="section-title" style="margin-top:0">🤖 AI Picks — Today</h2>
         <div id="ai-score" class="pred-score"></div>
       </div>
-      <p class="muted">Only games where the model disagrees with the betting favorite show here — the full slate is on the Scores tab. Below the edges: team and player-prop trends worth a look. For fun — not betting advice.</p>
+      <p class="muted">Only games where the model disagrees with the betting favorite show here — the full slate is on the Home tab. Below the edges: team and player-prop trends worth a look. For fun — not betting advice.</p>
       <div id="ai-picks" class="games-grid"></div>
     </section>
 
@@ -118,7 +103,7 @@
     <section id="about" class="tab-panel" role="tabpanel" aria-labelledby="tab-about" tabindex="0">
       <div class="setup-card">
         <h2>About Sports-Hub</h2>
-        <p>A personal hub for <strong>NFL 🦅, NBA, MLB and Soccer</strong> — live scores, standings, and a prediction game, all in your browser.</p>
+        <p>A personal hub for <strong>NFL 🦅, NBA, MLB and Soccer</strong> — a daily overview of every game, an Eagles deep-dive, an AI prediction game, and fantasy tracking, all in your browser.</p>
         <p class="muted">Live data comes from ESPN’s free public sports feed, fetched directly in your browser. No login, no API key, nothing to configure.</p>
         <h3>Make it yours</h3>
         <p>Soccer is set to the <strong>FIFA World Cup</strong>. Edit the <code>LEAGUES</code> block near the top of <code>app.js</code> to change favorite teams or the competition:</p>
@@ -141,6 +126,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=77" defer></script>
+  <script src="app.js?v=78" defer></script>
 </body>
 </html>

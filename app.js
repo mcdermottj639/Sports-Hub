@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v77';
+const APP_VERSION = 'v78';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -46,7 +46,7 @@ const EAGLES = {
 const SITE = 'https://site.api.espn.com/apis/site/v2/sports';
 const CORE = 'https://site.api.espn.com/apis/v2/sports';
 
-const state = { scoresSport: FEATURED.sport, standingsSport: FEATURED.sport, liveOK: true };
+const state = { golfSport: 'golf', liveOK: true };
 
 // --- tiny utils -----------------------------------------------------------
 const $ = (s) => document.querySelector(s);
@@ -522,23 +522,6 @@ function renderGameDetail(sport, data, pred, extra, g) {
   return html;
 }
 
-function renderGames(container, bySport) {
-  container.innerHTML = '';
-  const all = [];
-  for (const [sport, games] of Object.entries(bySport)) (games || []).forEach((g) => all.push({ sport, g }));
-  all.sort((a, b) => {
-    const d = STATE_ORDER[gameState(a.g)] - STATE_ORDER[gameState(b.g)];
-    return d || ((isFav(b.sport, b.g) ? 1 : 0) - (isFav(a.sport, a.g) ? 1 : 0));
-  });
-  if (!all.length) {
-    container.appendChild(el('div', 'empty', 'No games for this selection.'));
-    return;
-  }
-  const entries = [];
-  all.forEach(({ sport, g }) => { const c = gameCard(sport, g); entries.push({ sport, g, card: c }); container.appendChild(c); });
-  tagEdges(entries); // progressively flag games where the model disagrees with the line
-}
-
 // Does the model disagree with the betting favorite? If so there's a value
 // "edge" worth surfacing before you tap in. Pre-game only — odds come right
 // off the scoreboard event, so no extra request just to know the favorite.
@@ -621,7 +604,7 @@ async function renderHome() {
     html += `<div class="featured-game"><div><strong>${esc(fg.away.name)}</strong> ${fg.away.score ?? ''} @ <strong>${esc(fg.home.name)}</strong> ${fg.home.score ?? ''}</div>
       <span class="status ${s === 'live' ? 'live' : s === 'final' ? 'final' : ''}">${lbl}</span></div>`;
   } else {
-    html += `<div class="muted">No game today. Check the Scores tab for the full slate.</div>`;
+    html += `<div class="muted">No game today. See the full slate below.</div>`;
   }
   html += '</div>';
   $('#featured').innerHTML = html;
@@ -703,13 +686,17 @@ function renderHomeByLeague(container, games) {
   // live → finished → unstarted, so tapping a league chip lands you on the live
   // games up top. Leagues with a live game get a 🔴 flag on their chip/heading.
   const sportsWithGames = teamSports.filter((s) => (games[s] || []).length);
+  const entries = [];
   sportsWithGames.forEach((s) => {
     const list = [...(games[s] || [])].sort(byStatus(s));
     const hasLive = list.some((g) => gameState(g) === 'live');
-    const cards = list.map((g) => gameCard(s, g));
+    const cards = list.map((g) => { const c = gameCard(s, g); entries.push({ sport: s, g, card: c }); return c; });
     addSection(`home-${s}`, `${LEAGUES[s].emoji} ${LEAGUES[s].label}`, cards, hasLive);
   });
   if (!sportsWithGames.length) container.appendChild(el('div', 'empty', 'No games today for your sports.'));
+
+  // Flag any game where the model disagrees with the betting line (was the Scores tab).
+  tagEdges(entries);
 
   // golf as its own section (it's a leaderboard, not team games)
   if (SEASON_MONTHS.golf.includes(new Date().getMonth())) addGolfHomeSection(addSection);
@@ -726,7 +713,7 @@ async function addGolfHomeSection(addSection) {
     <div style="font-weight:700;margin:4px 0">${ev.name || 'PGA Tour'}</div>
     <div class="muted">Leader: <b style="color:var(--text)">${lname || 'TBD'}</b> ${lscore}</div>
     <div class="tap-hint">tap for leaderboard →</div>`;
-  card.onclick = () => { state.scoresSport = 'golf'; showTab('scores'); };
+  card.onclick = openGolfLeaderboard;
   addSection('home-golf', '⛳ Golf', [card]);
 }
 
@@ -740,28 +727,18 @@ function buildChips(container, current, onPick, sports) {
     container.appendChild(chip);
   });
 }
-async function renderScores() {
-  const dateInput = $('#scores-date');
-  const isGolf = LEAGUES[state.scoresSport].type === 'golf';
-  dateInput.style.display = isGolf ? 'none' : '';
-  if (!dateInput.value) dateInput.value = ymdDash(sportsDate());
-  buildChips($('#sport-filter'), state.scoresSport, (s) => { state.scoresSport = s; renderScores(); });
-  const container = $('#scores-games');
-  container.innerHTML = '<div class="empty">Loading…</div>';
-  if (isGolf) { renderGolfLeaderboard(container); return; }
-  try {
-    const games = await getGames(state.scoresSport, dateInput.value.replaceAll('-', ''));
-    renderGames(container, { [state.scoresSport]: games });
-  } catch (_) {
-    renderGames(container, { [state.scoresSport]: DEMO[state.scoresSport] });
-  }
-}
-
 // Golf: render the current/most-recent PGA tournament leaderboard.
 async function getGolfEvent() {
   const data = await fetchJSON(`${SITE}/golf/pga/scoreboard`, 5 * 60000).catch(() => null);
   const events = data?.events || [];
   return events.find((e) => e.status?.type?.state === 'in') || events[0] || null;
+}
+// Home's golf card opens the full leaderboard in the shared modal.
+async function openGolfLeaderboard() {
+  modal().classList.remove('hidden');
+  const body = $('#modal-body');
+  body.innerHTML = '<div class="empty">Loading leaderboard…</div>';
+  await renderGolfLeaderboard(body);
 }
 async function renderGolfLeaderboard(container) {
   const ev = await getGolfEvent();
@@ -779,77 +756,6 @@ async function renderGolfLeaderboard(container) {
   }).join('');
   container.innerHTML = `<div class="golf-head"><div class="golf-name">⛳ ${ev.name || 'PGA Tour'}</div><div class="muted">${statusTxt}</div></div>
     <table class="md-line golf-board"><thead><tr><th>Pos</th><th>Player</th><th class="num">Score</th><th class="num">Thru</th></tr></thead><tbody>${rows}</tbody></table>`;
-}
-
-// --- STANDINGS ------------------------------------------------------------
-const winPct = (r) => { const g = (r.wins || 0) + (r.losses || 0); return g ? r.wins / g : 0; };
-const gamesBack = (lead, r) => (((lead.wins || 0) - (r.wins || 0)) + ((r.losses || 0) - (lead.losses || 0))) / 2;
-
-async function renderStandings() {
-  const sport = state.standingsSport;
-  buildChips($('#standings-filter'), sport, (s) => { state.standingsSport = s; renderStandings(); }, sortedSports({ teamOnly: true }));
-  const content = $('#standings-content');
-  content.innerHTML = '<div class="empty">Loading…</div>';
-  let rows = [];
-  try { rows = await getStandings(sport); } catch (_) {}
-  if (!rows.length) { content.innerHTML = '<div class="empty">Standings unavailable right now.</div>'; return; }
-
-  const soccer = sport === 'soccer';
-  const favs = favSet(sport);
-  const logoFor = (r) => (r.logo ? `<img class="tlogo" src="${esc(r.logo)}" onerror="this.style.display='none'"/>` : '');
-
-  // build a table for a set of rows
-  const table = (teams, lastCol, lastVal) => {
-    const t = el('table');
-    t.innerHTML = `<thead><tr><th>#</th><th>Team</th><th class="num">W</th><th class="num">L</th><th class="num">${lastCol}</th></tr></thead>`;
-    const tbody = el('tbody');
-    teams.forEach((r, i) => {
-      const tr = el('tr', favs.includes((r.team || '').toLowerCase()) ? 'fav' : '');
-      tr.innerHTML = `<td>${r._rank ?? r.rank ?? i + 1}</td><td>${logoFor(r)}${esc(r.team)}</td><td class="num">${r.wins ?? '–'}</td><td class="num">${r.losses ?? '–'}</td><td class="num">${lastVal(r)}</td>`;
-      tbody.appendChild(tr);
-    });
-    t.appendChild(tbody);
-    return t;
-  };
-
-  content.innerHTML = '';
-
-  // group by league -> division
-  const byLeague = {};
-  rows.forEach((r) => { const lg = r.league || 'Standings'; (byLeague[lg] = byLeague[lg] || {}); (byLeague[lg][r.division] = byLeague[lg][r.division] || []).push(r); });
-  const wildcardSport = sport === 'mlb' || sport === 'nfl';
-  const wcSpots = sport === 'nfl' ? 3 : 3;
-
-  const multiLeague = Object.keys(byLeague).length > 1;
-  Object.entries(byLeague).forEach(([league, divs]) => {
-    const multiDiv = Object.keys(divs).length > 1;
-    // Show a league heading when it actually groups several divisions.
-    if (multiLeague || multiDiv) content.appendChild(el('div', 'standings-league', league));
-    // division tables
-    Object.entries(divs).forEach(([divName, teams]) => {
-      teams.sort((a, b) => winPct(b) - winPct(a) || (b.wins || 0) - (a.wins || 0));
-      teams.forEach((r, i) => (r._rank = i + 1));
-      // strip the league prefix so "American League East" reads as "East"
-      const shortDiv = (multiLeague || multiDiv) ? divName.replace(league, '').trim() || divName : divName;
-      content.appendChild(el('div', 'standings-group', shortDiv));
-      content.appendChild(table(teams, soccer ? 'Pts' : 'GB', (r) => soccer ? (r.points ?? '–') : (r._rank === 1 ? '—' : gamesBack(teams[0], r).toFixed(1))));
-    });
-
-    // wildcard table (non-division-leaders ranked by win %)
-    if (wildcardSport && Object.keys(divs).length >= 2) {
-      const pool = [];
-      Object.values(divs).forEach((teams) => teams.slice(1).forEach((r) => pool.push(r)));
-      pool.sort((a, b) => winPct(b) - winPct(a) || (b.wins || 0) - (a.wins || 0));
-      pool.forEach((r, i) => (r._rank = i + 1));
-      if (pool.length) {
-        content.appendChild(el('div', 'standings-group wc', `${league} Wild Card`));
-        const cutoff = pool[wcSpots - 1] || pool[pool.length - 1];
-        const t = table(pool, 'GB', (r) => r._rank <= wcSpots ? (r._rank === wcSpots ? '—' : `+${(-gamesBack(cutoff, r)).toFixed(1)}`) : gamesBack(cutoff, r).toFixed(1));
-        t.querySelectorAll('tbody tr').forEach((tr, i) => { if (i === wcSpots) tr.classList.add('wc-cut'); });
-        content.appendChild(t);
-      }
-    }
-  });
 }
 
 // --- AI PICKS (multi-factor model) ---------------------------------------
@@ -1242,7 +1148,7 @@ async function renderPredictions() {
   };
 
   // Only show games where the model disagrees with the book — the full slate
-  // already lives in the Scores tab. The rest of the space goes to trends.
+  // already lives on the Home tab. The rest of the space goes to trends.
   const edges = rows.filter((r) => r.isEdge).sort((a, b) => (b.p?.conf || 0) - (a.p?.conf || 0));
   if (edges.length) {
     container.appendChild(el('div', 'ai-section-head edge', `⚡ Model Edges — off the book (${edges.length})`));
@@ -2722,7 +2628,7 @@ function injectJumpNav(name) {
     (b.onclick = () => document.getElementById(b.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
 }
 
-const renderers = { home: renderHome, eagles: renderEagles, scores: renderScores, standings: renderStandings, predictions: renderPredictions, fantasy: renderFantasy, about: () => {} };
+const renderers = { home: renderHome, eagles: renderEagles, predictions: renderPredictions, fantasy: renderFantasy, about: () => {} };
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => {
@@ -2733,11 +2639,8 @@ function showTab(name) {
   Promise.resolve(renderers[name]()).then(() => injectJumpNav(name)).catch((e) => console.error(e));
 }
 $('#tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
-$('#scores-date').addEventListener('change', renderScores);
 
 // default the sport selectors to whatever's in season right now
-state.scoresSport = sortedSports()[0];
-state.standingsSport = sortedSports({ teamOnly: true })[0];
 state.aiSport = sortedSports({ teamOnly: true })[0];
 
 const verEl = $('#app-version');
