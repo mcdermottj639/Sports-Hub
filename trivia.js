@@ -18,6 +18,7 @@ const rrng = () => Math.random();
 // --- categories -----------------------------------------------------------
 const CATS = [
   { k: 'nfl', label: 'NFL History', emoji: '🏈' },
+  { k: 'draft', label: 'NFL Draft', emoji: '📋' },
   { k: 'sb', label: 'Super Bowl', emoji: '🏆' },
   { k: 'eagles', label: 'Eagles', emoji: '🦅' },
   { k: 'mlb', label: 'MLB', emoji: '⚾' },
@@ -26,109 +27,114 @@ const CATS = [
 ];
 const catLabel = (k) => (CATS.find((c) => c.k === k) || { label: k }).label;
 
-// --- question bank (q, a=correct, w=[3 wrong], c=category, ex=fun fact) ----
+// --- question bank --------------------------------------------------------
+// { q, a=correct, w=[3 wrong], c=category, d=difficulty (2 hard / 3 elite), ex=fact }
+// Deep-cut, gameshow-hard trivia — records, specific moments, and obscurities.
 const Q = [
   // ===== NFL history & records =====
-  { c: 'nfl', q: 'How many teams are in the NFL?', a: '32', w: ['30', '31', '34'] },
-  { c: 'nfl', q: 'Who is the NFL’s all-time leader in career passing yards?', a: 'Tom Brady', w: ['Drew Brees', 'Peyton Manning', 'Brett Favre'], ex: 'Brady finished with more than 89,000 career passing yards.' },
-  { c: 'nfl', q: 'Who holds the NFL career rushing yards record?', a: 'Emmitt Smith', w: ['Walter Payton', 'Barry Sanders', 'Frank Gore'], ex: 'Emmitt Smith ran for 18,355 yards.' },
-  { c: 'nfl', q: 'Who set the single-season record with 55 passing touchdowns (2013)?', a: 'Peyton Manning', w: ['Tom Brady', 'Patrick Mahomes', 'Aaron Rodgers'] },
-  { c: 'nfl', q: 'Which receiver holds the career records for receptions, yards, and TDs?', a: 'Jerry Rice', w: ['Randy Moss', 'Larry Fitzgerald', 'Terrell Owens'] },
-  { c: 'nfl', q: 'Who holds the official career sack record (200)?', a: 'Bruce Smith', w: ['Reggie White', 'Kevin Greene', 'Deacon Jones'], ex: 'Reggie White is second with 198.' },
-  { c: 'nfl', q: 'How many players from one team are on the field during a play?', a: '11', w: ['10', '12', '9'] },
-  { c: 'nfl', q: 'The “Frozen Tundra” is the nickname for which stadium?', a: 'Lambeau Field', w: ['Soldier Field', 'Arrowhead Stadium', 'Gillette Stadium'] },
-  { c: 'nfl', q: 'Which team completed a perfect season capped by a Super Bowl win?', a: '1972 Miami Dolphins', w: ['2007 New England Patriots', '1985 Chicago Bears', '1998 Denver Broncos'], ex: 'The ’72 Dolphins went 17–0 — still the only perfect season.' },
-  { c: 'nfl', q: 'Which team is nicknamed “America’s Team”?', a: 'Dallas Cowboys', w: ['Green Bay Packers', 'Pittsburgh Steelers', 'New England Patriots'] },
-  { c: 'nfl', q: 'The “Immaculate Reception” belongs to which franchise?', a: 'Pittsburgh Steelers', w: ['Oakland Raiders', 'Dallas Cowboys', 'Green Bay Packers'] },
-  { c: 'nfl', q: 'How many yards separate the goal lines on an NFL field?', a: '100', w: ['120', '110', '90'] },
-  { c: 'nfl', q: 'Lawrence Taylor revolutionized play at which position?', a: 'Linebacker', w: ['Quarterback', 'Cornerback', 'Running back'] },
-  { c: 'nfl', q: 'Who was the No. 1 overall pick in the 2024 NFL Draft?', a: 'Caleb Williams', w: ['Jayden Daniels', 'Drake Maye', 'Marvin Harrison Jr.'] },
-  { c: 'nfl', q: 'Who won a record five NFL MVP awards?', a: 'Peyton Manning', w: ['Aaron Rodgers', 'Tom Brady', 'Brett Favre'] },
-  { c: 'nfl', q: 'Which back set the single-game rushing record with 296 yards?', a: 'Adrian Peterson', w: ['Jamal Lewis', 'Walter Payton', 'Jerome Harrison'] },
-  { c: 'nfl', q: 'A safety is worth how many points?', a: '2', w: ['1', '3', '6'] },
-  { c: 'nfl', q: 'The Vince Lombardi Trophy is awarded to the winner of what?', a: 'The Super Bowl', w: ['The Pro Bowl', 'The AFC Championship', 'The NFL Draft'] },
-  { c: 'nfl', q: 'What do the initials NFL stand for?', a: 'National Football League', w: ['National Franchise League', 'North American Football League', 'National Field League'] },
-  { c: 'nfl', q: 'Which quarterback has the most career touchdown passes?', a: 'Tom Brady', w: ['Drew Brees', 'Peyton Manning', 'Aaron Rodgers'] },
+  { c: 'nfl', d: 3, q: 'Who holds the record for most rushing yards in a single Super Bowl (204)?', a: 'Timmy Smith', w: ['Marcus Allen', 'John Riggins', 'Terrell Davis'], ex: 'Rookie Timmy Smith ran for 204 in Super Bowl XXII — and was out of the league within two years.' },
+  { c: 'nfl', d: 2, q: 'Who set the single-season rushing record with 2,105 yards (1984)?', a: 'Eric Dickerson', w: ['Adrian Peterson', 'Barry Sanders', 'Derrick Henry'] },
+  { c: 'nfl', d: 3, q: 'Who is the NFL’s all-time leader in career interceptions (81)?', a: 'Paul Krause', w: ['Rod Woodson', 'Emlen Tunnell', 'Ronnie Lott'] },
+  { c: 'nfl', d: 2, q: 'Who broke Johnny Unitas’ mark with 54 straight games throwing a TD pass?', a: 'Drew Brees', w: ['Tom Brady', 'Peyton Manning', 'Aaron Rodgers'] },
+  { c: 'nfl', d: 2, q: 'Who kicked the longest field goal in NFL history (66 yards)?', a: 'Justin Tucker', w: ['Matt Prater', 'Brett Maher', 'Harrison Butker'] },
+  { c: 'nfl', d: 3, q: 'Who holds the single-game receiving record with 336 yards (1989)?', a: 'Flipper Anderson', w: ['Calvin Johnson', 'Stephone Paige', 'Jerry Rice'] },
+  { c: 'nfl', d: 3, q: 'Who is the only player to win Super Bowl MVP while on the losing team?', a: 'Chuck Howley', w: ['Jake Scott', 'Harvey Martin', 'Randy White'], ex: 'The Cowboys LB won it in Super Bowl V despite a loss to Baltimore.' },
+  { c: 'nfl', d: 2, q: 'Who was the first player to win the AP MVP by unanimous vote (2010)?', a: 'Tom Brady', w: ['Peyton Manning', 'Aaron Rodgers', 'Lamar Jackson'] },
+  { c: 'nfl', d: 2, q: 'Who holds the record for most career rushing touchdowns (164)?', a: 'Emmitt Smith', w: ['LaDainian Tomlinson', 'Marcus Allen', 'Walter Payton'] },
+  { c: 'nfl', d: 2, q: 'The “Purple People Eaters” were the fearsome defensive line of which team?', a: 'Minnesota Vikings', w: ['Chicago Bears', 'Los Angeles Rams', 'Pittsburgh Steelers'] },
+  { c: 'nfl', d: 2, q: 'The “Tuck Rule” playoff game was between the Patriots and which team?', a: 'Oakland Raiders', w: ['New York Jets', 'Tennessee Titans', 'Pittsburgh Steelers'] },
+  { c: 'nfl', d: 2, q: 'The “Minneapolis Miracle” walk-off (2017 playoffs) eliminated which team?', a: 'New Orleans Saints', w: ['Philadelphia Eagles', 'Atlanta Falcons', 'Green Bay Packers'] },
+  { c: 'nfl', d: 3, q: 'Who led the NFL in rushing a record eight times?', a: 'Jim Brown', w: ['Barry Sanders', 'Walter Payton', 'Emmitt Smith'] },
+  { c: 'nfl', d: 2, q: 'Undrafted and once a grocery-store stocker, which QB won Super Bowl XXXIV MVP?', a: 'Kurt Warner', w: ['Trent Green', 'Rich Gannon', 'Jake Delhomme'] },
+  { c: 'nfl', d: 3, q: 'The “Hail Mary” term was coined by which QB after a 1975 playoff game?', a: 'Roger Staubach', w: ['Fran Tarkenton', 'Ken Stabler', 'Terry Bradshaw'] },
+  { c: 'nfl', d: 2, q: 'The “Steel Curtain” was the nickname for which team’s defense?', a: 'Pittsburgh Steelers', w: ['Baltimore Ravens', 'Chicago Bears', 'Minnesota Vikings'] },
+  { c: 'nfl', d: 2, q: 'The “Music City Miracle” kickoff-return lateral beat which team?', a: 'Buffalo Bills', w: ['Indianapolis Colts', 'New York Jets', 'Jacksonville Jaguars'] },
 
   // ===== Super Bowl =====
-  { c: 'sb', q: 'Who won Super Bowl LIX in February 2025?', a: 'Philadelphia Eagles', w: ['Kansas City Chiefs', 'San Francisco 49ers', 'Buffalo Bills'], ex: 'The Eagles routed the Chiefs 40–22.' },
-  { c: 'sb', q: 'Who was named MVP of Super Bowl LIX?', a: 'Jalen Hurts', w: ['Saquon Barkley', 'Patrick Mahomes', 'A.J. Brown'] },
-  { c: 'sb', q: 'Which quarterback has the most Super Bowl wins?', a: 'Tom Brady', w: ['Joe Montana', 'Terry Bradshaw', 'Patrick Mahomes'], ex: 'Brady won seven.' },
-  { c: 'sb', q: 'Which team has appeared in the most Super Bowls?', a: 'New England Patriots', w: ['Dallas Cowboys', 'Pittsburgh Steelers', 'Denver Broncos'] },
-  { c: 'sb', q: 'Whose famous guarantee came true in Super Bowl III?', a: 'Joe Namath', w: ['Johnny Unitas', 'Bart Starr', 'Roger Staubach'] },
-  { c: 'sb', q: 'David Tyree’s “Helmet Catch” helped which team win the Super Bowl?', a: 'New York Giants', w: ['New York Jets', 'Philadelphia Eagles', 'Dallas Cowboys'], ex: 'It upset the previously undefeated 2007 Patriots.' },
-  { c: 'sb', q: 'Which team did the Eagles beat to win Super Bowl LII?', a: 'New England Patriots', w: ['Atlanta Falcons', 'Kansas City Chiefs', 'Los Angeles Rams'] },
-  { c: 'sb', q: 'Who was MVP of Super Bowl LVII (2023)?', a: 'Patrick Mahomes', w: ['Jalen Hurts', 'Travis Kelce', 'Nick Bolton'] },
-  { c: 'sb', q: 'Which team won back-to-back titles in Super Bowls LVII and LVIII?', a: 'Kansas City Chiefs', w: ['Philadelphia Eagles', 'San Francisco 49ers', 'Los Angeles Rams'] },
-  { c: 'sb', q: 'Super Bowl 50 broke tradition by using what on its logo?', a: 'The Arabic numeral “50”', w: ['The Roman numeral “L”', 'Only team logos', 'No number at all'] },
-  { c: 'sb', q: 'In what year was the first Super Bowl played?', a: '1967', w: ['1966', '1970', '1960'] },
-  { c: 'sb', q: 'The “Philly Special” trick play featured a TD caught by which QB?', a: 'Nick Foles', w: ['Carson Wentz', 'Jalen Hurts', 'Donovan McNabb'] },
-  { c: 'sb', q: 'The Super Bowl championship trophy is named after which coach?', a: 'Vince Lombardi', w: ['George Halas', 'Tom Landry', 'Chuck Noll'] },
+  { c: 'sb', d: 2, q: 'Which team lost four consecutive Super Bowls?', a: 'Buffalo Bills', w: ['Minnesota Vikings', 'Denver Broncos', 'Dallas Cowboys'], ex: 'Buffalo lost SB XXV–XXVIII.' },
+  { c: 'sb', d: 2, q: 'Who was named MVP of Super Bowl I?', a: 'Bart Starr', w: ['Max McGee', 'Jim Taylor', 'Willie Wood'] },
+  { c: 'sb', d: 3, q: 'On the “Philly Special,” who threw the touchdown pass to Nick Foles?', a: 'Trey Burton', w: ['Corey Clement', 'Zach Ertz', 'Nelson Agholor'] },
+  { c: 'sb', d: 2, q: 'Whose goal-line interception sealed Super Bowl XLIX for New England?', a: 'Malcolm Butler', w: ['Darrelle Revis', 'Devin McCourty', 'Patrick Chung'] },
+  { c: 'sb', d: 2, q: 'Which team blew a 28–3 lead in the Super Bowl?', a: 'Atlanta Falcons', w: ['Carolina Panthers', 'Denver Broncos', 'San Diego Chargers'], ex: 'The Patriots stormed back in Super Bowl LI.' },
+  { c: 'sb', d: 2, q: 'Who holds the record for most passing yards in one Super Bowl (505)?', a: 'Tom Brady', w: ['Kurt Warner', 'Patrick Mahomes', 'Joe Montana'], ex: 'Brady threw for 505 in Super Bowl LII — and lost.' },
+  { c: 'sb', d: 3, q: 'James Harrison’s 100-yard interception-return TD came in which Super Bowl?', a: 'XLIII', w: ['XL', 'XLV', 'XLVII'] },
+  { c: 'sb', d: 2, q: 'Who has the most Super Bowl wins as a head coach (6)?', a: 'Bill Belichick', w: ['Chuck Noll', 'Bill Walsh', 'Vince Lombardi'] },
+  { c: 'sb', d: 2, q: 'Who won a record five Super Bowl MVP awards?', a: 'Tom Brady', w: ['Joe Montana', 'Terry Bradshaw', 'Eli Manning'] },
+  { c: 'sb', d: 2, q: 'Which QB threw the pass on David Tyree’s “Helmet Catch”?', a: 'Eli Manning', w: ['Kurt Warner', 'Phil Simms', 'Jeff Hostetler'] },
 
   // ===== Eagles =====
-  { c: 'eagles', q: 'In what year did the Eagles win their first Super Bowl?', a: '2018', w: ['2005', '2011', '2021'], ex: 'They beat the Patriots in Super Bowl LII (Feb 2018).' },
-  { c: 'eagles', q: 'What is the Eagles’ primary color?', a: 'Midnight green', w: ['Kelly green', 'Navy blue', 'Teal'] },
-  { c: 'eagles', q: 'Where do the Eagles play their home games?', a: 'Lincoln Financial Field', w: ['Veterans Stadium', 'MetLife Stadium', 'Soldier Field'] },
-  { c: 'eagles', q: 'What is the Eagles’ fight song?', a: 'Fly, Eagles Fly', w: ['Go Birds', 'Green Machine', 'Eagles Anthem'] },
-  { c: 'eagles', q: 'Which running back powered the Eagles’ 2024 title season?', a: 'Saquon Barkley', w: ['Miles Sanders', 'LeSean McCoy', 'D’Andre Swift'], ex: 'Barkley signed in 2024 and had a monster year.' },
-  { c: 'eagles', q: 'Hall of Famer Reggie White played which position for the Eagles?', a: 'Defensive end', w: ['Linebacker', 'Cornerback', 'Running back'], ex: 'He was known as “The Minister of Defense.”' },
-  { c: 'eagles', q: 'Which QB led the Eagles to Super Bowl XXXIX (2005)?', a: 'Donovan McNabb', w: ['Randall Cunningham', 'Michael Vick', 'Nick Foles'] },
-  { c: 'eagles', q: 'Which division do the Eagles play in?', a: 'NFC East', w: ['NFC North', 'NFC South', 'AFC East'] },
-  { c: 'eagles', q: 'What is the name of the Eagles’ mascot?', a: 'Swoop', w: ['Franklin', 'Big Red', 'Talon'] },
-  { c: 'eagles', q: 'Which coach led the Eagles to their first Super Bowl title (LII)?', a: 'Doug Pederson', w: ['Andy Reid', 'Nick Sirianni', 'Chip Kelly'] },
-  { c: 'eagles', q: 'Eagles Hall of Famer Brian Dawkins played which position?', a: 'Safety', w: ['Cornerback', 'Linebacker', 'Wide receiver'] },
-  { c: 'eagles', q: 'Which coach led the Eagles to the Super Bowl LIX championship?', a: 'Nick Sirianni', w: ['Doug Pederson', 'Andy Reid', 'Kellen Moore'] },
-  { c: 'eagles', q: 'The Eagles’ fierce in-state rival plays in which city?', a: 'Pittsburgh', w: ['Baltimore', 'Cleveland', 'Buffalo'], ex: 'The Steelers–Eagles “Battle of Pennsylvania.”' },
+  { c: 'eagles', d: 2, q: 'Whom did the Eagles select 2nd overall in the 2016 draft?', a: 'Carson Wentz', w: ['Jared Goff', 'Marcus Mariota', 'Dak Prescott'] },
+  { c: 'eagles', d: 2, q: 'Which Eagle strip-sacked Tom Brady late in Super Bowl LII?', a: 'Brandon Graham', w: ['Fletcher Cox', 'Derek Barnett', 'Chris Long'] },
+  { c: 'eagles', d: 3, q: 'The Eagles’ 1990 “Body Bag Game” was a rout of which team?', a: 'Washington', w: ['Dallas Cowboys', 'New York Giants', 'Chicago Bears'], ex: 'Buddy Ryan’s Eagles knocked so many players out that Washington finished with a running back at QB.' },
+  { c: 'eagles', d: 2, q: 'Who set the Eagles’ single-season rushing record in 2024?', a: 'Saquon Barkley', w: ['LeSean McCoy', 'Brian Westbrook', 'Wilbert Montgomery'], ex: 'Barkley topped 2,000 yards, blowing past LeSean McCoy’s old franchise mark.' },
+  { c: 'eagles', d: 3, q: 'Who caught the “4th-and-26” conversion in the 2004 playoffs vs. Green Bay?', a: 'Freddie Mitchell', w: ['Todd Pinkston', 'Brian Westbrook', 'Chad Lewis'] },
+  { c: 'eagles', d: 2, q: 'Reggie White left the Eagles in 1993 to sign with which team?', a: 'Green Bay Packers', w: ['Carolina Panthers', 'San Francisco 49ers', 'Dallas Cowboys'] },
+  { c: 'eagles', d: 3, q: 'Which QB started Super Bowl XV for the Eagles (a loss to the Raiders)?', a: 'Ron Jaworski', w: ['Randall Cunningham', 'Roman Gabriel', 'Norm Snead'] },
+  { c: 'eagles', d: 3, q: 'What jersey number did Brian Dawkins wear for the Eagles?', a: '20', w: ['24', '36', '4'] },
+  { c: 'eagles', d: 2, q: 'In which round did the Eagles draft Jalen Hurts in 2020?', a: '2nd round', w: ['1st round', '3rd round', '4th round'] },
+  { c: 'eagles', d: 3, q: 'How many pre-Super Bowl NFL championships did the Eagles win (1948, 1949, 1960)?', a: '3', w: ['1', '2', '4'] },
+  { c: 'eagles', d: 2, q: 'In what year did the Eagles draft Donovan McNabb 2nd overall?', a: '1999', w: ['1998', '2000', '2001'] },
+  { c: 'eagles', d: 2, q: 'Philadelphia fans infamously booed and threw snowballs at whom in 1968?', a: 'Santa Claus', w: ['The referees', 'The opposing coach', 'The team owner'] },
 
   // ===== MLB =====
-  { c: 'mlb', q: 'How many games are in a standard MLB regular season?', a: '162', w: ['154', '160', '144'] },
-  { c: 'mlb', q: 'Who holds the MLB career home run record?', a: 'Barry Bonds', w: ['Hank Aaron', 'Babe Ruth', 'Albert Pujols'], ex: 'Bonds hit 762.' },
-  { c: 'mlb', q: 'Who broke Major League Baseball’s color barrier in 1947?', a: 'Jackie Robinson', w: ['Larry Doby', 'Willie Mays', 'Satchel Paige'] },
-  { c: 'mlb', q: 'Which team won the 2024 World Series?', a: 'Los Angeles Dodgers', w: ['New York Yankees', 'Texas Rangers', 'Houston Astros'] },
-  { c: 'mlb', q: 'The “Green Monster” is a wall at which ballpark?', a: 'Fenway Park', w: ['Wrigley Field', 'Yankee Stadium', 'Camden Yards'] },
-  { c: 'mlb', q: 'Who is MLB’s all-time strikeout leader (pitcher)?', a: 'Nolan Ryan', w: ['Randy Johnson', 'Roger Clemens', 'Steve Carlton'], ex: 'Ryan struck out 5,714 batters.' },
-  { c: 'mlb', q: 'Who holds the single-season home run record (73)?', a: 'Barry Bonds', w: ['Mark McGwire', 'Sammy Sosa', 'Aaron Judge'] },
-  { c: 'mlb', q: 'Which franchise has won the most World Series titles?', a: 'New York Yankees', w: ['St. Louis Cardinals', 'Boston Red Sox', 'Los Angeles Dodgers'], ex: 'The Yankees have 27.' },
-  { c: 'mlb', q: 'Cal Ripken Jr. is famous for a record streak of what?', a: 'Consecutive games played', w: ['Home runs', 'Stolen bases', 'Strikeouts'], ex: '2,632 straight games.' },
-  { c: 'mlb', q: 'How many outs are in a half-inning?', a: '3', w: ['2', '4', '1'] },
-  { c: 'mlb', q: 'What does the stat “RBI” stand for?', a: 'Run Batted In', w: ['Runs Before Innings', 'Runner Base Index', 'Return Ball In'] },
-  { c: 'mlb', q: 'Which Red Sox slugger was nicknamed “Big Papi”?', a: 'David Ortiz', w: ['Manny Ramirez', 'Ted Williams', 'Mo Vaughn'] },
-  { c: 'mlb', q: 'The Red Sox ended an 86-year title drought by winning in which year?', a: '2004', w: ['2007', '2013', '1986'] },
-  { c: 'mlb', q: 'A pitcher who retires all 27 batters faced throws a what?', a: 'Perfect game', w: ['No-hitter only', 'Shutout', 'Complete save'] },
-  { c: 'mlb', q: 'How many players from one team are on the field on defense?', a: '9', w: ['8', '10', '11'] },
-  { c: 'mlb', q: 'Which number, retired league-wide, honors Jackie Robinson?', a: '42', w: ['24', '3', '21'] },
+  { c: 'mlb', d: 2, q: 'Who set the single-season hits record with 262 (2004)?', a: 'Ichiro Suzuki', w: ['George Sisler', 'Pete Rose', 'Rogers Hornsby'] },
+  { c: 'mlb', d: 2, q: 'Who was the last MLB player to hit .400 in a season?', a: 'Ted Williams', w: ['Tony Gwynn', 'Rod Carew', 'George Brett'], ex: 'Williams hit .406 in 1941.' },
+  { c: 'mlb', d: 2, q: 'Who is MLB’s all-time hits leader (4,256)?', a: 'Pete Rose', w: ['Ty Cobb', 'Hank Aaron', 'Stan Musial'] },
+  { c: 'mlb', d: 2, q: 'Who threw a record seven career no-hitters?', a: 'Nolan Ryan', w: ['Sandy Koufax', 'Randy Johnson', 'Bob Feller'] },
+  { c: 'mlb', d: 3, q: 'Who stole a single-season record 130 bases (1982)?', a: 'Rickey Henderson', w: ['Lou Brock', 'Vince Coleman', 'Ty Cobb'] },
+  { c: 'mlb', d: 2, q: 'Who is MLB’s all-time RBI leader (2,297)?', a: 'Hank Aaron', w: ['Babe Ruth', 'Alex Rodriguez', 'Albert Pujols'] },
+  { c: 'mlb', d: 2, q: 'Whose career total of 511 pitching wins is considered unbreakable?', a: 'Cy Young', w: ['Walter Johnson', 'Christy Mathewson', 'Warren Spahn'] },
+  { c: 'mlb', d: 3, q: 'Who won the American League Triple Crown in 1967?', a: 'Carl Yastrzemski', w: ['Ted Williams', 'Jim Rice', 'Wade Boggs'] },
+  { c: 'mlb', d: 3, q: 'Who caught Don Larsen’s perfect game in the 1956 World Series?', a: 'Yogi Berra', w: ['Roy Campanella', 'Elston Howard', 'Bill Dickey'] },
+  { c: 'mlb', d: 2, q: 'Who won a record seven Cy Young Awards?', a: 'Roger Clemens', w: ['Randy Johnson', 'Greg Maddux', 'Steve Carlton'] },
+  { c: 'mlb', d: 3, q: 'Whose 1988 walk-off World Series home run (off Dennis Eckersley) is legendary?', a: 'Kirk Gibson', w: ['Joe Carter', 'Bill Mazeroski', 'Carlton Fisk'], ex: 'The hobbled Dodger limped around the bases.' },
+  { c: 'mlb', d: 3, q: 'Who holds the single-season walks record (232 in 2004)?', a: 'Barry Bonds', w: ['Babe Ruth', 'Ted Williams', 'Rickey Henderson'] },
 
   // ===== NBA =====
-  { c: 'nba', q: 'Who is the NBA’s all-time leading scorer?', a: 'LeBron James', w: ['Kareem Abdul-Jabbar', 'Kobe Bryant', 'Michael Jordan'], ex: 'LeBron passed Kareem in 2023.' },
-  { c: 'nba', q: 'A made shot from beyond the arc is worth how many points?', a: '3', w: ['2', '4', '1'] },
-  { c: 'nba', q: 'Which franchise has won the most NBA championships?', a: 'Boston Celtics', w: ['Los Angeles Lakers', 'Chicago Bulls', 'Golden State Warriors'], ex: 'Their 2024 title made it 18.' },
-  { c: 'nba', q: 'Who won the 2024 NBA Finals?', a: 'Boston Celtics', w: ['Dallas Mavericks', 'Denver Nuggets', 'Miami Heat'] },
-  { c: 'nba', q: 'How many NBA titles did Michael Jordan win with the Bulls?', a: '6', w: ['5', '7', '4'] },
-  { c: 'nba', q: 'Who scored an NBA-record 100 points in a single game?', a: 'Wilt Chamberlain', w: ['Kobe Bryant', 'Michael Jordan', 'David Thompson'], ex: 'Kobe’s 81 is second-most.' },
-  { c: 'nba', q: 'How many players per team are on the court at once?', a: '5', w: ['6', '4', '7'] },
-  { c: 'nba', q: 'The NBA MVP trophy is now named after which player?', a: 'Michael Jordan', w: ['Bill Russell', 'Kareem Abdul-Jabbar', 'Magic Johnson'] },
-  { c: 'nba', q: 'Which player is nicknamed “The Greek Freak”?', a: 'Giannis Antetokounmpo', w: ['Nikola Jokić', 'Luka Dončić', 'Joel Embiid'] },
-  { c: 'nba', q: 'How high is an NBA rim above the floor?', a: '10 feet', w: ['9 feet', '11 feet', '12 feet'] },
-  { c: 'nba', q: 'Stephen Curry has spent his career with which team?', a: 'Golden State Warriors', w: ['Los Angeles Lakers', 'Sacramento Kings', 'Phoenix Suns'] },
-  { c: 'nba', q: 'The NBA Finals MVP trophy is named after which legend?', a: 'Bill Russell', w: ['Michael Jordan', 'Wilt Chamberlain', 'Larry Bird'] },
-  { c: 'nba', q: 'Which team did “Showtime” refer to in the 1980s?', a: 'Los Angeles Lakers', w: ['Boston Celtics', 'Detroit Pistons', 'Philadelphia 76ers'] },
-  { c: 'nba', q: 'How many quarters are in an NBA game?', a: '4', w: ['2', '3', '5'] },
+  { c: 'nba', d: 2, q: 'Who scored 81 points in a game — the most in the modern (post-2000) era?', a: 'Kobe Bryant', w: ['Devin Booker', 'Donovan Mitchell', 'Damian Lillard'] },
+  { c: 'nba', d: 2, q: 'Who is the NBA’s all-time career assists leader (15,806)?', a: 'John Stockton', w: ['Jason Kidd', 'Chris Paul', 'Magic Johnson'] },
+  { c: 'nba', d: 3, q: 'Who holds the single-season scoring average record (50.4 ppg)?', a: 'Wilt Chamberlain', w: ['Michael Jordan', 'Elgin Baylor', 'Kobe Bryant'] },
+  { c: 'nba', d: 2, q: 'Who was drafted 1st overall in 1984, ahead of Michael Jordan at No. 3?', a: 'Hakeem Olajuwon', w: ['Sam Bowie', 'Charles Barkley', 'Patrick Ewing'], ex: 'Sam Bowie went 2nd — right before Jordan.' },
+  { c: 'nba', d: 2, q: 'Which team posted a record 73–9 regular season?', a: 'Golden State Warriors', w: ['1995–96 Chicago Bulls', '1985–86 Boston Celtics', '1971–72 Lakers'] },
+  { c: 'nba', d: 3, q: 'Who grabbed a single-game record 55 rebounds?', a: 'Wilt Chamberlain', w: ['Bill Russell', 'Dennis Rodman', 'Moses Malone'] },
+  { c: 'nba', d: 2, q: 'Ray Allen’s clutch corner three in the 2013 Finals saved which team?', a: 'Miami Heat', w: ['Boston Celtics', 'Milwaukee Bucks', 'San Antonio Spurs'] },
+  { c: 'nba', d: 3, q: 'Who won the very first NBA MVP award (1956)?', a: 'Bob Pettit', w: ['Bill Russell', 'George Mikan', 'Bob Cousy'] },
+  { c: 'nba', d: 2, q: 'The “Malice at the Palace” brawl involved the Pacers and which team?', a: 'Detroit Pistons', w: ['New York Knicks', 'Chicago Bulls', 'Miami Heat'] },
+  { c: 'nba', d: 2, q: 'Who won a record 11 NBA championships as a player?', a: 'Bill Russell', w: ['Sam Jones', 'Kareem Abdul-Jabbar', 'Robert Horry'] },
+  { c: 'nba', d: 3, q: 'Which team drafted Kobe Bryant in 1996 before trading him to the Lakers?', a: 'Charlotte Hornets', w: ['Los Angeles Clippers', 'New Jersey Nets', 'Vancouver Grizzlies'] },
+  { c: 'nba', d: 2, q: 'What was Kareem Abdul-Jabbar’s signature unblockable shot called?', a: 'The skyhook', w: ['The dream shake', 'The fadeaway', 'The finger roll'] },
+  { c: 'nba', d: 3, q: 'Who is the shortest player in NBA history, at 5-foot-3?', a: 'Muggsy Bogues', w: ['Spud Webb', 'Earl Boykins', 'Nate Robinson'] },
 
   // ===== College =====
-  { c: 'cfb', q: 'The Heisman Trophy honors the top player in which sport?', a: 'College football', w: ['College basketball', 'College baseball', 'NFL rookies'] },
-  { c: 'cfb', q: '“March Madness” refers to which event?', a: 'The NCAA basketball tournament', w: ['The College Football Playoff', 'The MLB playoffs', 'The NHL playoffs'] },
-  { c: 'cfb', q: 'With the First Four, how many teams make the men’s NCAA tournament?', a: '68', w: ['64', '65', '72'] },
-  { c: 'cfb', q: '“Roll Tide” is the rallying cry of which school?', a: 'Alabama', w: ['Georgia', 'Ohio State', 'LSU'] },
-  { c: 'cfb', q: 'The Rose Bowl is played in which state?', a: 'California', w: ['Texas', 'Florida', 'Arizona'] },
-  { c: 'cfb', q: '“The Big House” is the stadium of which university?', a: 'Michigan', w: ['Ohio State', 'Penn State', 'Texas'] },
-  { c: 'cfb', q: 'College football’s champion is now decided by the what?', a: 'College Football Playoff', w: ['BCS', 'AP poll only', 'A bowl committee'] },
-  { c: 'cfb', q: '“Touchdown Jesus” overlooks the stadium at which school?', a: 'Notre Dame', w: ['USC', 'Michigan', 'Alabama'] },
-  { c: 'cfb', q: 'What does the SEC conference name stand for?', a: 'Southeastern Conference', w: ['Southern Elite Conference', 'South East Collegiate', 'Sunbelt East Conference'] },
-  { c: 'cfb', q: '“The Granddaddy of Them All” nickname belongs to which bowl?', a: 'Rose Bowl', w: ['Sugar Bowl', 'Orange Bowl', 'Cotton Bowl'] },
-  { c: 'cfb', q: 'Which school’s teams are the Buckeyes?', a: 'Ohio State', w: ['Michigan', 'Oregon', 'Penn State'] },
-  { c: 'cfb', q: 'Duke is a storied blue-blood program primarily in which sport?', a: 'Basketball', w: ['Football', 'Baseball', 'Hockey'] },
-  { c: 'cfb', q: 'The Army–Navy Game is a famous rivalry in which sport?', a: 'College football', w: ['College basketball', 'College hockey', 'College lacrosse'] },
-  { c: 'cfb', q: 'How many points is a touchdown worth (before the extra point)?', a: '6', w: ['5', '7', '3'] },
+  { c: 'cfb', d: 2, q: 'Who is the only two-time Heisman Trophy winner?', a: 'Archie Griffin', w: ['Tim Tebow', 'Herschel Walker', 'Reggie Bush'], ex: 'Ohio State’s Griffin won in 1974 and 1975.' },
+  { c: 'cfb', d: 2, q: 'The “Fab Five” freshman class played basketball for which school?', a: 'Michigan', w: ['Duke', 'UNLV', 'Kansas'] },
+  { c: 'cfb', d: 3, q: 'Which Wisconsin back won the 1999 Heisman and set the FBS rushing record?', a: 'Ron Dayne', w: ['Montee Ball', 'Melvin Gordon', 'Anthony Davis'] },
+  { c: 'cfb', d: 3, q: '“The Play” — a 5-lateral kickoff return through the band (1982) — was Cal vs. whom?', a: 'Stanford', w: ['USC', 'Oregon', 'UCLA'] },
+  { c: 'cfb', d: 2, q: 'Christian Laettner’s buzzer-beater in the 1992 tournament beat which team?', a: 'Kentucky', w: ['UNLV', 'Michigan', 'Indiana'] },
+  { c: 'cfb', d: 2, q: 'Which school has won the most men’s NCAA basketball titles (11)?', a: 'UCLA', w: ['Kentucky', 'North Carolina', 'Duke'] },
+  { c: 'cfb', d: 2, q: 'Who coached UCLA during its run of 10 titles in 12 years?', a: 'John Wooden', w: ['Dean Smith', 'Adolph Rupp', 'Bob Knight'] },
+  { c: 'cfb', d: 2, q: 'Who won the first-ever College Football Playoff title (2014 season)?', a: 'Ohio State', w: ['Oregon', 'Alabama', 'Florida State'] },
+  { c: 'cfb', d: 2, q: 'The “12th Man” tradition belongs to which university?', a: 'Texas A&M', w: ['Iowa', 'Clemson', 'Auburn'] },
+  { c: 'cfb', d: 3, q: 'Who won the 1988 Heisman as an Oklahoma State running back?', a: 'Barry Sanders', w: ['Thurman Thomas', 'Bo Jackson', 'Herschel Walker'] },
+  { c: 'cfb', d: 2, q: 'How many total college football national titles has Nick Saban won?', a: '7', w: ['6', '5', '8'], ex: 'One at LSU (2003) and six at Alabama.' },
+  { c: 'cfb', d: 2, q: 'Who coached the Nebraska teams that won three titles in the 1990s?', a: 'Tom Osborne', w: ['Bob Devaney', 'Frank Solich', 'Bo Pelini'] },
+
+  // ===== NFL Draft =====
+  { c: 'draft', d: 2, q: 'Who was selected with the No. 199 pick in the 2000 NFL Draft?', a: 'Tom Brady', w: ['Marc Bulger', 'Tim Rattay', 'Giovanni Carmazzi'], ex: 'Six QBs went before Brady, the sixth QB taken that year.' },
+  { c: 'draft', d: 2, q: 'Who was the No. 1 overall pick in 1998, taken just ahead of Ryan Leaf?', a: 'Peyton Manning', w: ['Ryan Leaf', 'Charlie Batch', 'Brian Griese'] },
+  { c: 'draft', d: 3, q: 'Ryan Leaf, one of the biggest busts ever, was drafted 2nd overall in 1998 by whom?', a: 'San Diego Chargers', w: ['Indianapolis Colts', 'Arizona Cardinals', 'Cincinnati Bengals'] },
+  { c: 'draft', d: 2, q: 'Who was the No. 1 overall pick in the 2025 NFL Draft?', a: 'Cam Ward', w: ['Travis Hunter', 'Abdul Carter', 'Shedeur Sanders'], ex: 'The Titans took the Miami QB first.' },
+  { c: 'draft', d: 3, q: 'Bo Jackson was the No. 1 overall pick in 1986 by which team (he refused to sign)?', a: 'Tampa Bay Buccaneers', w: ['Los Angeles Raiders', 'Kansas City Chiefs', 'Atlanta Falcons'] },
+  { c: 'draft', d: 2, q: 'Aaron Rodgers famously slid to which pick in the 2005 draft?', a: '24th (Green Bay)', w: ['12th', '18th', '32nd'] },
+  { c: 'draft', d: 2, q: 'Which “Mr. Irrelevant” (last pick, 2022) became a 49ers starting QB?', a: 'Brock Purdy', w: ['Bailey Zappe', 'Sam Howell', 'Desmond Ridder'] },
+  { c: 'draft', d: 3, q: 'How many QBs from the famed 1983 draft class reached the Hall of Fame?', a: '3', w: ['2', '4', '1'], ex: 'John Elway, Jim Kelly and Dan Marino.' },
+  { c: 'draft', d: 2, q: 'Which team drafted Dan Marino late in the 1983 first round (27th)?', a: 'Miami Dolphins', w: ['Buffalo Bills', 'Denver Broncos', 'Kansas City Chiefs'] },
+  { c: 'draft', d: 3, q: 'Eli Manning refused to play for which team that drafted him 1st overall in 2004?', a: 'San Diego Chargers', w: ['Cleveland Browns', 'Oakland Raiders', 'Arizona Cardinals'], ex: 'He was traded to the Giants for Philip Rivers.' },
+  { c: 'draft', d: 2, q: 'Who was the No. 1 overall pick in 2021, taken by Jacksonville?', a: 'Trevor Lawrence', w: ['Zach Wilson', 'Trey Lance', 'Justin Fields'] },
+  { c: 'draft', d: 2, q: 'Who was the No. 1 overall pick in 2023, taken by Carolina?', a: 'Bryce Young', w: ['C.J. Stroud', 'Anthony Richardson', 'Will Anderson Jr.'] },
+  { c: 'draft', d: 3, q: 'Who was the very first pick in the first-ever NFL Draft (1936)?', a: 'Jay Berwanger', w: ['Sammy Baugh', 'Sid Luckman', 'Byron White'], ex: 'Berwanger, the first Heisman winner, never played a down in the NFL.' },
+  { c: 'draft', d: 3, q: 'Marvin Harrison Jr. was drafted 4th overall in 2024 by which team?', a: 'Arizona Cardinals', w: ['Los Angeles Chargers', 'New York Giants', 'Tennessee Titans'] },
+  { c: 'draft', d: 2, q: 'How many rounds are in the modern NFL Draft?', a: '7', w: ['6', '8', '5'] },
 ];
 
 // --- persistence ----------------------------------------------------------
@@ -156,7 +162,7 @@ function dailyStreak(map) {
 // Returns [{q, choices, answer (index), cat, ex}]
 function makeQuestion(item, rng) {
   const choices = shuffleWith([item.a, ...item.w], rng);
-  return { q: item.q, choices, answer: choices.indexOf(item.a), cat: item.c, ex: item.ex || '' };
+  return { q: item.q, choices, answer: choices.indexOf(item.a), cat: item.c, d: item.d || 2, ex: item.ex || '' };
 }
 function buildFromPool(pool, count, rng) {
   const order = shuffleWith(pool.map((_, i) => i), rng).slice(0, count);
@@ -262,7 +268,7 @@ function renderQuestion() {
       <span class="q-streak ${S.streak >= 3 ? 'hot' : ''}">🔥 ${S.streak}${mult > 1 ? ` · ${mult}×` : ''}</span>
     </div>
     <div class="q-card">
-      <div class="q-cat">${(CATS.find((c) => c.k === q.cat) || {}).emoji || ''} ${catLabel(q.cat)}</div>
+      <div class="q-cat">${(CATS.find((c) => c.k === q.cat) || {}).emoji || ''} ${catLabel(q.cat)} <span class="q-diff d${q.d}">${q.d === 3 ? 'ELITE · 150' : 'HARD · 100'}</span></div>
       <h2 class="q-text">${esc(q.q)}</h2>
       <div class="q-opts">${q.choices.map((ch, i) => `<button class="opt" data-i="${i}">${esc(ch)}</button>`).join('')}</div>
       <div id="q-feedback" class="q-feedback" hidden></div>
@@ -284,7 +290,8 @@ function answer(i) {
     S.bestStreak = Math.max(S.bestStreak, S.streak);
     S.correct++;
     const mult = S.streak >= 5 ? 2 : S.streak >= 3 ? 1.5 : 1;
-    gained = Math.round(100 * mult);
+    const base = q.d === 3 ? 150 : 100; // elite questions are worth more
+    gained = Math.round(base * mult);
     S.score += gained;
   } else {
     S.streak = 0;

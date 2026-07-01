@@ -120,12 +120,14 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   CSS it depends on).
 - `trivia.html` / `trivia.css` / `trivia.js` — **🧠 Labs: Sports Trivia Lab**, a
   standalone page (linked from the About tab's Labs card, alongside the draft sim).
-  Self-contained, no backend. NFL-first (NFL history, Super Bowl, Eagles) plus MLB,
-  NBA and College — **no NHL/Olympics** (owner's pick). ~90 hand-written MC questions
-  in `Q` (`{q, a, w:[3 wrong], c:category, ex?:fact}`). Centerpiece is a **Daily
+  Self-contained, no backend. **NFL-focused** — categories: NFL History, **NFL Draft
+  (its own section)**, Super Bowl, Eagles, plus MLB, NBA, College — **no NHL/Olympics**
+  (owner's pick). ~90 hand-written MC questions in `Q` (`{q, a, w:[3 wrong], c:category,
+  d:difficulty, ex?:fact}`). **Difficulty is intentionally hard/deep-cut** (`d:2`=HARD /
+  `d:3`=ELITE, worth 100/150 base) — not casual bar trivia. Centerpiece is a **Daily
   Challenge**: a seeded (date-hash PRNG) set of 10 mixed questions, identical for a
-  given day. Also free-play by category (or Mixed). Scoring = 100/correct with streak
-  multipliers (1.5× at 3, 2× at 5); results screen has a miss-by-miss review.
+  given day. Also free-play by category (or Mixed). Scoring = base×streak multiplier
+  (1.5× at 3, 2× at 5); results screen has a miss-by-miss review.
   Persists to `localStorage`: `trivialab:life` (lifetime played/accuracy/best run),
   `trivialab:best` (per-category best score), `trivialab:daily` (per-date result →
   day-streak). NFL-themed skin (`trivia.css`) over `styles.css` (`?v=81`). Standalone,
