@@ -164,7 +164,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v83**.
+Current version as of this writing: **v84**.
 
 ## Testing reality
 
@@ -260,6 +260,23 @@ Current version as of this writing: **v83**.
     `winner` flag (captured in `teamObj`) before comparing scores, so World Cup
     knockout picks decided on penalties (level score) grade instead of being
     dropped as ties. Also fixes winner bolding on cards for those games.
+
+  **v84 — edge quality:** edges are now sized against the market, not just
+  flagged. `marketHomeProb` de-vigs the two moneylines into an implied home
+  win probability; `marketGap(pred, info)` = model's pick-side probability −
+  market's (in points; `predictGame` now returns raw `probHome`). When MLs are
+  posted, a disagreement only QUALIFIES as an edge at `gap ≥ MIN_EDGE_GAP`
+  (5 pts) — coin-flip disagreements against ~-110 lines no longer count (shown
+  nowhere, and not counted in the vs-line record). Spread-only odds (no MLs)
+  keep the old any-disagreement behavior. Edge cards sort by gap (conf
+  tiebreak) and the badge shows "+N vs market" (`.edge-gap`);
+  `marketCompare` (card + modal) appends "model X%, market Y%" on
+  disagreements. Pending picks store the qualified flag (`eg`) so
+  `gradePending` counts the same edges as live grading (old entries fall back
+  to fav-comparison). Also: the home/road split factor is damped by sample
+  (`min(homeGP, roadGP)/10`, blended with the generic home edge) so a 3-1
+  home record doesn't swing early-season picks; `teamProfile` now returns
+  `homeGP`/`roadGP`.
 - **Game detail modal** (`renderGameDetail`) — score, **🔴 Live Situation** panel
   (MLB bases diamond + count/outs/pitcher/batter; NFL field-position bar w/ red
   zone; soccer possession + shots; others last play), AI pick + factor breakdown,

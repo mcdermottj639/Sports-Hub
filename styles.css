@@ -159,6 +159,8 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ai-stat.edge .ai-stat-v { color: var(--accent); }
 .ai-stat-l { font-size: 12px; font-weight: 700; color: var(--silver); margin-top: 3px; }
 .ai-stat-s { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.edge-gap { margin-left: 8px; font-size: 11px; font-weight: 700; color: var(--gold); white-space: nowrap; }
+
 /* AI Picks: Model Report Card (collapsible record breakdown + history) */
 .ai-report { grid-column: 1 / -1; background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: var(--radius); }
 .ai-report-head { width: 100%; background: none; border: none; color: var(--text); font-weight: 700; font-size: 13.5px; padding: 12px 14px; min-height: 44px; display: flex; align-items: center; gap: 8px; cursor: pointer; text-align: left; }

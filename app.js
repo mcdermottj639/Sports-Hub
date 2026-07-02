@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v83';
+const APP_VERSION = 'v84';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -334,15 +334,38 @@ function normOdds(o, homeName, awayName) {
   const has = (o.details != null || o.spread != null || o.overUnder != null || hML != null || aML != null);
   return has ? { details: o.details ?? o.spread ?? null, ou: o.overUnder ?? o.total ?? null, hML, aML, favName, provider: o.provider?.name || null } : null;
 }
-function marketCompare(pred, favName) {
+// Market's implied win probability for the HOME side, de-vigged from the two
+// moneylines (-150 → 60%, +130 → 43.5%, then normalized to remove the juice).
+function marketHomeProb(info) {
+  const ip = (ml) => (typeof ml !== 'number' || !isFinite(ml) || ml === 0) ? null
+    : (ml < 0 ? -ml / (-ml + 100) : 100 / (ml + 100));
+  const h = ip(info?.hML), a = ip(info?.aML);
+  return h != null && a != null && h + a > 0 ? h / (h + a) : null;
+}
+// Model-vs-market gap in probability points on the MODEL'S pick side
+// (+13 = model likes its pick 13 points more than the book does).
+function marketGap(pred, info) {
+  const mkt = marketHomeProb(info);
+  if (!pred || mkt == null || pred.probHome == null) return null;
+  const pickProb = pred.homePick ? pred.probHome : 1 - pred.probHome;
+  const mktPick = pred.homePick ? mkt : 1 - mkt;
+  return Math.round((pickProb - mktPick) * 100);
+}
+function marketCompare(pred, favName, info) {
   if (!pred || !favName) return '';
-  return pred.winner.name === favName
-    ? `✅ Model agrees with the line (${favName})`
-    : `⚡ Model sees value — likes ${pred.winner.name}, market favors ${favName}`;
+  if (pred.winner.name === favName) return `✅ Model agrees with the line (${favName})`;
+  const mkt = marketHomeProb(info);
+  let probs = '';
+  if (mkt != null && pred.probHome != null) {
+    const pickProb = Math.round((pred.homePick ? pred.probHome : 1 - pred.probHome) * 100);
+    const mktPick = Math.round((pred.homePick ? mkt : 1 - mkt) * 100);
+    probs = ` — model ${pickProb}%, market ${mktPick}%`;
+  }
+  return `⚡ Model sees value — likes ${pred.winner.name}, market favors ${favName}${probs}`;
 }
 function oddsSectionHTML(info, awayAbbr, homeAbbr, pred) {
   if (!info) return '';
-  const cmp = marketCompare(pred, info.favName);
+  const cmp = marketCompare(pred, info.favName, info);
   const ml = (v) => (v == null ? '—' : (Number(v) > 0 ? `+${v}` : `${v}`));
   return `<div class="md-section-title acc-open">Betting Odds${info.provider ? ` · ${info.provider}` : ''}</div>
     <div class="odds-grid">
@@ -891,6 +914,8 @@ async function teamProfile(sport, teamId) {
     form: wtot ? wsum / wtot : 0,
     homeWP: wp(homeG),
     roadWP: wp(roadG),
+    homeGP: homeG.length,
+    roadGP: roadG.length,
     last10, streak,
     lastDate: games[gp - 1].date,
   };
@@ -1046,7 +1071,12 @@ async function predictGame(sport, g) {
       // at home. Everyone else: no home/road advantage either way.
       if (isWorldCupHost(g.home.name)) add('Host nation', 0.30, `${g.home.name} at home`);
     } else if (hf.homeWP != null && af.roadWP != null) {
-      add('Home/road split', 1.0 * (hf.homeWP - af.roadWP), `home ${(hf.homeWP * 100).toFixed(0)}% vs road ${(af.roadWP * 100).toFixed(0)}%`);
+      // A 3-1 home record says almost nothing — blend the split with the
+      // generic home edge until both sides have ~10 games of sample.
+      const shrink = clamp(Math.min(hf.homeGP ?? 0, af.roadGP ?? 0) / 10, 0, 1);
+      add('Home/road split', 1.0 * shrink * (hf.homeWP - af.roadWP),
+        `home ${(hf.homeWP * 100).toFixed(0)}% vs road ${(af.roadWP * 100).toFixed(0)}%${shrink < 1 ? ' (small sample, damped)' : ''}`);
+      if (shrink < 1) add('Home field', 0.28 * (1 - shrink), 'standard home edge');
     } else { add('Home field', 0.28, 'standard home edge'); }
     const day = 86400000;
     const hr = g.date && hf.lastDate ? clamp(Math.round((new Date(g.date) - new Date(hf.lastDate)) / day), 0, 10) : null;
@@ -1071,7 +1101,7 @@ async function predictGame(sport, g) {
     const pts = Math.abs(z) > 1e-6 ? (f.c / z) * edge : 0; // toward home if positive
     return { label: f.label, detail: f.detail, favor: f.c >= 0 ? g.home.name : g.away.name, pct: Math.abs(pts) };
   }).filter((b) => b.pct >= 0.1).sort((a, b) => b.pct - a.pct);
-  return { winner, conf, homePick, breakdown, notes: mu.notes, thin: !(hf && af) };
+  return { winner, conf, homePick, probHome: pHome, breakdown, notes: mu.notes, thin: !(hf && af) };
 }
 
 function aiPickHead(pred) {
@@ -1135,12 +1165,14 @@ const matchupLabel = (sport, g) =>
 const PENDING_KEY = 'sportshub:pending';
 const getPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || '{}'); } catch (_) { return {}; } };
 const setPending = (p) => { try { localStorage.setItem(PENDING_KEY, JSON.stringify(p)); } catch (_) {} };
-function recordPick(id, sport, date, pick, fav, conf) {
+function recordPick(id, sport, date, pick, fav, conf, isEdge) {
   if (!id || !pick) return;
   if (getTally()[id]) return; // already graded
   const p = getPending();
   if (p[id]) return;
-  p[id] = { sport, date, pick, fav: fav || null, conf: conf ?? null };
+  // eg carries the qualified-edge flag (gap-filtered) so deferred grading
+  // counts the same picks toward the vs-line record as live grading does.
+  p[id] = { sport, date, pick, fav: fav || null, conf: conf ?? null, eg: isEdge ? 1 : 0 };
   setPending(p);
 }
 async function gradePending() {
@@ -1164,9 +1196,10 @@ async function gradePending() {
       const g = byId[id]; if (!g || gameState(g) !== 'final') return;
       const actual = winnerName(g);
       if (!actual || actual === 'TIE') { delete p[id]; changed = true; return; }
-      const { pick, fav, conf } = p[id];
+      const { pick, fav, conf, eg } = p[id];
       const hit = actual === pick;
-      recordResult(id, hit, fav && pick !== fav ? (hit ? 'h' : 'm') : null,
+      const wasEdge = eg != null ? !!eg : !!(fav && pick !== fav); // old entries: fav comparison
+      recordResult(id, hit, wasEdge ? (hit ? 'h' : 'm') : null,
         { s: sport, d: Number(date), cf: conf ?? null, p: pick, m: matchupLabel(sport, g) });
       delete p[id]; changed = true;
     });
@@ -1255,10 +1288,16 @@ async function renderPredictions() {
   let right = 0, graded = 0;
 
   // Build a record per game and flag where the model bucks the betting favorite.
+  // With moneylines posted, a disagreement only counts as an edge when the
+  // model likes its side ≥5 probability points more than the de-vigged market
+  // — coin-flip disagreements against a -110 line are noise, not signal.
+  const MIN_EDGE_GAP = 5;
   const rows = playable.map((g, i) => {
     const p = preds[i];
     const info = p ? normOdds(g.odds, g.home.name, g.away.name) : null;
-    const isEdge = !!(p && info && info.favName && p.winner.name !== info.favName);
+    const gap = p && info ? marketGap(p, info) : null;
+    const isEdge = !!(p && info && info.favName && p.winner.name !== info.favName
+      && (gap == null || gap >= MIN_EDGE_GAP)); // no MLs (spread-only) → old behavior
     let resultTag = '';
     if (p && gameState(g) === 'final') {
       const actual = winnerName(g);
@@ -1271,9 +1310,9 @@ async function renderPredictions() {
       }
     } else if (p) {
       // stash the pick so it gets graded later even if the tab isn't open
-      recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf);
+      recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge);
     }
-    return { g, p, info, isEdge, resultTag };
+    return { g, p, info, gap, isEdge, resultTag };
   });
 
   // No line ≠ no disagreement: if ESPN sent no odds, say so instead of
@@ -1286,17 +1325,17 @@ async function renderPredictions() {
   const det = tallyDetails();
   if (det.total) container.appendChild(reportCard(det));
 
-  const buildCard = ({ g, p, info, isEdge, resultTag }) => {
+  const buildCard = ({ g, p, info, gap, isEdge, resultTag }) => {
     const card = gameCard(sport, g);
     if (isEdge) {
       const abbr = (g.home.name === p.winner.name ? g.home.abbr : g.away.abbr) || (p.winner.name || '').split(' ').pop();
-      const b = el('div', 'edge-badge', `⚡ Model edge: ${abbr} <span class="edge-conf">${p.conf}%</span>`);
+      const b = el('div', 'edge-badge', `⚡ Model edge: ${abbr} <span class="edge-conf">${p.conf}%</span>${gap != null ? `<span class="edge-gap">+${gap} vs market</span>` : ''}`);
       const meta = card.querySelector('.game-meta');
       if (meta) meta.insertAdjacentElement('afterend', b); else card.appendChild(b);
       card.classList.add('has-edge');
     }
     if (p) {
-      const cmp = info ? marketCompare(p, info.favName) : '';
+      const cmp = info ? marketCompare(p, info.favName, info) : '';
       const top = p.breakdown.slice(0, 2).map((b) => `${b.label} (${b.favor.split(' ').slice(-1)[0]} +${b.pct.toFixed(1)}%)`).join(' · ');
       const oddsLine = info ? `<div class="card-odds">📊 ${info.details ?? 'line n/a'}${info.ou != null ? ` · O/U ${info.ou}` : ''}</div>` : '';
       const block = el('div', 'ai-block');
@@ -1314,12 +1353,14 @@ async function renderPredictions() {
 
   // Only show games where the model disagrees with the book — the full slate
   // already lives on the Home tab. The rest of the space goes to trends.
-  const edges = rows.filter((r) => r.isEdge).sort((a, b) => (b.p?.conf || 0) - (a.p?.conf || 0));
+  // Biggest model-vs-market gap first (raw confidence as the tiebreak).
+  const edges = rows.filter((r) => r.isEdge)
+    .sort((a, b) => (b.gap ?? -1) - (a.gap ?? -1) || (b.p?.conf || 0) - (a.p?.conf || 0));
   if (edges.length) {
     container.appendChild(el('div', 'ai-section-head edge', `⚡ Model Edges — off the book (${edges.length})`));
     edges.forEach((r) => container.appendChild(buildCard(r)));
   } else if (anyLines) {
-    container.appendChild(el('div', 'ai-note', '✅ No model edges today — the model agrees with the betting favorite on every game. Check the trends below.'));
+    container.appendChild(el('div', 'ai-note', '✅ No model edges today — the model is within a few points of the book everywhere. Check the trends below.'));
   } else {
     container.appendChild(el('div', 'ai-note', '📭 No betting lines posted for this slate yet — edges appear once the books hang lines. Check the trends below.'));
   }
