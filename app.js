@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v86';
+const APP_VERSION = 'v87';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1959,6 +1959,61 @@ function renderMatchup(sport) {
     </div>`;
 }
 
+// --- weekly win-probability meter -------------------------------------------
+// How far through the Mon–Sun fantasy week we are (ET), by the hour.
+function weekProgress() {
+  const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const dayIdx = (et.getDay() + 6) % 7; // Mon=0 … Sun=6
+  return clamp((dayIdx + et.getHours() / 24) / 7, 0.02, 0.98);
+}
+// Typical week-to-week spread of each rate cat — normalizes "how big is this lead".
+const RATE_SD = { ERA: 1.2, WHIP: 0.18, OPS: 0.09, AVG: 0.035, OBP: 0.04, SLG: 0.055 };
+const isRateCat = (c) => /ERA|WHIP|OPS|AVG|OBP|SLG|PCT/i.test(c);
+// Estimate P(win the week) from the current category margins and time left:
+// counting cats = can the margin survive the remaining volume (Poisson-ish
+// variance on what's still to be played); rate cats = does the lead hold as
+// the remaining sample shrinks. Per-cat probabilities combine via a
+// Poisson-binomial DP into P(more cats won than lost); 50/50 on exact splits
+// and per-cat ties. A pace-free heuristic — NOT an official ESPN projection.
+function matchupWinProb(m) {
+  const phi = (z) => 1 / (1 + Math.exp(-1.702 * z)); // logistic ≈ normal CDF
+  const prog = weekProgress(), rem = 1 - prog;
+  const ps = [];
+  (m.categories || []).forEach((c) => {
+    const me = Number(c.me), opp = Number(c.opp);
+    if (Number.isNaN(me) || Number.isNaN(opp)) return;
+    const name = (c.cat || '').toUpperCase();
+    let p;
+    if (me === opp) { p = 0.5; }
+    else if (isRateCat(name)) {
+      const margin = /ERA|WHIP/.test(name) ? opp - me : me - opp; // reverse cats: lower wins
+      const sd = RATE_SD[name] ?? Math.max(Math.abs(me), Math.abs(opp), 0.1) * 0.12;
+      p = phi(clamp((margin / sd) * Math.sqrt(prog / (rem + 0.08)), -3.5, 3.5));
+    } else {
+      const margin = me - opp;
+      const expRem = Math.max(((me + opp) * rem) / Math.max(prog, 0.05), 0.5); // volume still to come
+      p = phi(clamp(margin / Math.sqrt(expRem + 2), -3.5, 3.5));
+    }
+    // ESPN can score a cat against the raw values (e.g. pitching rate cats
+    // lost to the weekly innings minimum). When its result contradicts the
+    // value-implied leader, call the cat a coin flip rather than pretend the
+    // raw margin is winning.
+    const res = (c.result || '').toUpperCase();
+    if ((res === 'LOSS' && p > 0.5) || (res === 'WIN' && p < 0.5)) p = 0.5;
+    ps.push(p);
+  });
+  if (!ps.length) return null;
+  let dp = [1];
+  ps.forEach((p) => {
+    const nd = new Array(dp.length + 1).fill(0);
+    dp.forEach((v, k) => { nd[k] += v * (1 - p); nd[k + 1] += v * p; });
+    dp = nd;
+  });
+  let win = 0;
+  dp.forEach((v, k) => { if (k * 2 > ps.length) win += v; else if (k * 2 === ps.length) win += v / 2; });
+  return { p: win, prog, daysLeft: rem * 7 };
+}
+
 // Project this week's category matchup: a quick verdict (leading/trailing/tied)
 // plus which CLOSE categories are still in play to target (flip) or defend.
 // Pure client-side read of the same weekly totals renderMatchup already shows —
@@ -1984,8 +2039,22 @@ function renderProjection(sport) {
   const vcls = won > lost ? 'win' : won < lost ? 'loss' : 'tie';
   const chips = (arr) => arr.map((c) => `<span class="pj-chip">${esc(c)}</span>`).join('');
   const hasSwing = target.length || defend.length;
+  // win-probability meter: current margins vs the time left in the week
+  const wp = matchupWinProb(m);
+  let meter = '';
+  if (wp) {
+    const pct = Math.round(wp.p * 100);
+    const cls = pct >= 55 ? 'win' : pct >= 45 ? 'tie' : 'loss';
+    const days = wp.daysLeft >= 1 ? `${wp.daysLeft.toFixed(1).replace(/\.0$/, '')} days` : 'final day';
+    meter = `<div class="pj-prob">
+        <div class="pj-prob-top"><span class="pj-lbl">📊 Projected win probability</span><b class="pj-prob-val ${cls}">${pct}%</b></div>
+        <div class="pj-meter"><span class="pj-meter-fill ${cls}" style="width:${pct}%"></span><span class="pj-meter-mid"></span></div>
+        <div class="pj-prob-note">${days} left · from current category margins vs time remaining — an estimate, not ESPN's projection</div>
+      </div>`;
+  }
   box.innerHTML = `<div class="pj-card">
       <div class="pj-top"><span class="pj-verdict ${vcls}">${verdict}</span>${tied ? `<span class="pj-tied">${tied} tied</span>` : ''}</div>
+      ${meter}
       ${target.length ? `<div class="pj-row"><span class="pj-lbl">🎯 Target</span><span class="pj-chips">${chips(target)}</span></div>` : ''}
       ${defend.length ? `<div class="pj-row"><span class="pj-lbl">🛡 Defend</span><span class="pj-chips">${chips(defend)}</span></div>` : ''}
       <div class="pj-note">${hasSwing ? 'Close categories still in play — focus adds & start/sit here.' : 'No close categories — this week looks decided.'}</div>

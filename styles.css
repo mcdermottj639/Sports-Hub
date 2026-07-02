@@ -530,6 +530,21 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .pj-chip { background: var(--card-2); border: 1px solid rgba(255,255,255,.1); border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; }
 .pj-note { color: var(--muted); font-size: 12px; margin-top: 8px; }
 
+/* Fantasy: weekly win-probability meter */
+.pj-prob { margin: 10px 0 12px; }
+.pj-prob-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.pj-prob-val { font-size: 20px; font-weight: 800; }
+.pj-prob-val.win { color: var(--accent); }
+.pj-prob-val.tie { color: var(--gold); }
+.pj-prob-val.loss { color: #ff6b6b; }
+.pj-meter { position: relative; height: 10px; background: rgba(255,255,255,.08); border-radius: 999px; overflow: hidden; margin: 7px 0 5px; }
+.pj-meter-fill { display: block; height: 100%; border-radius: 999px; transition: width .5s ease; }
+.pj-meter-fill.win { background: var(--accent); }
+.pj-meter-fill.tie { background: var(--gold); }
+.pj-meter-fill.loss { background: #ff6b6b; }
+.pj-meter-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,.28); }
+.pj-prob-note { font-size: 11px; color: var(--muted); line-height: 1.4; }
+
 /* Fantasy: roster category strengths */
 #fantasy-strength:empty, #fantasy-adddrop:empty { display: none; }
 .cs-list { display: flex; flex-direction: column; gap: 6px; }

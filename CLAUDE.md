@@ -164,7 +164,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v86**.
+Current version as of this writing: **v87**.
 
 ## Testing reality
 
@@ -314,6 +314,17 @@ Current version as of this writing: **v86**.
   - **Weekly category projection** (`renderProjection`, `#fantasy-projection`) —
     verdict (Leading/Trailing/Tied) + the CLOSE categories still in play to
     🎯 Target (flip) or 🛡 Defend, derived client-side from the matchup totals.
+    **v87: 📊 win-probability meter** (`matchupWinProb`/`weekProgress`,
+    `.pj-prob`/`.pj-meter` CSS) — P(win the week) from current category
+    margins vs time left in the Mon–Sun week (ET, hourly): counting cats =
+    can the margin survive the remaining volume (variance ≈ volume still to
+    come at the week's combined pace); rate cats = does the lead hold as the
+    remaining sample shrinks (normalized by `RATE_SD` typical spreads,
+    ERA/WHIP reversed); per-cat probs combine via Poisson-binomial DP into
+    P(more cats won than lost), exact splits/ties count half. Rendered as a
+    colored meter (green ≥55 / gold 45–54 / red <45) with a 50% notch and a
+    days-left note, above the Target/Defend chips. Labeled as an estimate —
+    it is NOT ESPN's projection and ignores pitcher-start scheduling.
   - **How You Stack Up** (`renderOpponent`, `#fantasy-opponent`) — v76 replaced the
     old opponent-roster scouting list with a **head-to-head SEASON comparison**: my
     team vs this week's opponent in every scored category, with each side's season
