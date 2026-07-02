@@ -164,7 +164,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v82**.
+Current version as of this writing: **v83**.
 
 ## Testing reality
 
@@ -241,7 +241,25 @@ Current version as of this writing: **v82**.
   ERA/WHIP, team OPS). **Shows ONLY edge games** (model vs. line) since the full
   slate is on Home. Stat bar tracks **all-time model record** and **vs-the-line
   record**; below the edges are **Team Trends** and **Player Prop trends**.
-  Records persist + auto-grade: see "AI record" below.
+  Records persist + auto-grade: see "AI record" below. **v83 additions:**
+  - **Calibration meta** — every pick now stores its confidence, and graded
+    tally entries carry `{s: sport, d: date, cf: conf, p: pick, m: matchup}`
+    (see localStorage note). Pre-v83 entries only have `{c,e}` and still count
+    toward totals; `recordResult` is write-once per game id so re-renders of a
+    final can't wipe the meta.
+  - **📜 Model Report Card** (`reportCard`/`tallyDetails`, `.ai-report`/`.rep-*`
+    CSS) — a tap-to-expand panel under the stat bar: record by confidence
+    bucket (50–59/60–69/70+ — shows whether a "75%" pick really wins ~75%),
+    record by sport, a this-week line in the header, and the last 15 graded
+    picks (✅/❌, ⚡ = against-the-line, matchup, pick + conf, date). Renders
+    whenever the tally is non-empty, even on no-game days.
+  - **"No lines" ≠ "no edges"** — if ESPN sent no odds for the slate, the
+    empty-edges note and the Edges-today tile say "no lines posted yet"
+    instead of claiming the model agrees with the book.
+  - **Shootout grading fix** — `winnerName` now prefers ESPN's per-competitor
+    `winner` flag (captured in `teamObj`) before comparing scores, so World Cup
+    knockout picks decided on penalties (level score) grade instead of being
+    dropped as ties. Also fixes winner bolding on cards for those games.
 - **Game detail modal** (`renderGameDetail`) — score, **🔴 Live Situation** panel
   (MLB bases diamond + count/outs/pitcher/batter; NFL field-position bar w/ red
   zone; soccer possession + shots; others last play), AI pick + factor breakdown,
@@ -365,8 +383,10 @@ Current version as of this writing: **v82**.
 
 ## localStorage keys
 
-- `sportshub:aitally` — graded pick results (all-time + vs-line record).
-- `sportshub:pending` — ungraded picks awaiting results.
+- `sportshub:aitally` — graded pick results (all-time + vs-line record). v83+:
+  entries also carry `{s, d, cf, p, m}` (sport, date, confidence, pick,
+  matchup) for the Report Card; older `{c,e}`-only entries remain valid.
+- `sportshub:pending` — ungraded picks awaiting results (v83+ includes `conf`).
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
 - `sportshub:fantasy:{sport}` — the saved fantasy roster, one per sport
   (`fanKey(sport)`, e.g. `sportshub:fantasy:baseball`).

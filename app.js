@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v82';
+const APP_VERSION = 'v83';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -114,6 +114,7 @@ function teamObj(c) {
     abbr: t.abbreviation,
     logo: t.logo || t.logos?.[0]?.href || null,
     score: c?.score != null && c.score !== '' ? Number(c.score) : null,
+    winner: c?.winner === true,      // ESPN's result flag (covers shootout wins)
     probables: c?.probables || null, // MLB probable starters
     leaders: c?.leaders || null,     // NFL/NBA team leaders
   };
@@ -215,7 +216,12 @@ const byStatus = (s) => (a, b) => {
   return d || ((isFav(s, b) ? 1 : 0) - (isFav(s, a) ? 1 : 0));
 };
 function winnerName(g) {
-  if (gameState(g) !== 'final' || g.home.score == null || g.away.score == null) return null;
+  if (gameState(g) !== 'final') return null;
+  // ESPN's winner flag first — it's the only truth when the score ends level
+  // but someone still advanced (World Cup knockouts decided on penalties).
+  if (g.home.winner && !g.away.winner) return g.home.name;
+  if (g.away.winner && !g.home.winner) return g.away.name;
+  if (g.home.score == null || g.away.score == null) return null;
   if (g.home.score === g.away.score) return 'TIE';
   return g.home.score > g.away.score ? g.home.name : g.away.name;
 }
@@ -1087,9 +1093,12 @@ function aiFactors(pred) {
 // Persistent model performance tally (vs results and vs the betting line).
 const TALLY_KEY = 'sportshub:aitally';
 const getTally = () => { try { return JSON.parse(localStorage.getItem(TALLY_KEY) || '{}'); } catch (_) { return {}; } };
-function recordResult(id, correct, edge) {
+// meta (added v83): s sport, d date YYYYMMDD, cf confidence, p pick name,
+// m matchup label — powers the report card. Older entries only have {c,e}.
+function recordResult(id, correct, edge, meta) {
   const t = getTally();
-  t[id] = { c: correct ? 1 : 0, e: edge }; // e: 'h' edge-hit, 'm' edge-miss, null agreed
+  if (t[id]) return; // graded once; re-renders of a final must not wipe the meta
+  t[id] = { c: correct ? 1 : 0, e: edge, ...(meta || {}) }; // e: 'h' edge-hit, 'm' edge-miss, null agreed
   localStorage.setItem(TALLY_KEY, JSON.stringify(t));
 }
 function tallyStats() {
@@ -1097,6 +1106,28 @@ function tallyStats() {
   Object.values(t).forEach((r) => { n++; if (r.c) w++; if (r.e === 'h') { eh++; en++; } else if (r.e === 'm') en++; });
   return { w, l: n - w, n, eh, el: en - eh, en };
 }
+// Report-card slices of the tally: record by confidence bucket / sport / last
+// 7 days, plus the most recent graded picks (entries with v83+ meta only).
+function tallyDetails() {
+  const entries = Object.values(getTally());
+  const bucketOf = (cf) => (cf >= 70 ? '70%+' : cf >= 60 ? '60–69%' : '50–59%');
+  const buckets = {}, sports = {};
+  const bump = (o, k, win) => { const r = (o[k] = o[k] || { w: 0, n: 0 }); r.n++; if (win) r.w++; };
+  const weekCut = Number(ymd(new Date(Date.now() - 7 * 86400000)));
+  const week = { w: 0, n: 0 };
+  const recent = [];
+  entries.forEach((r) => {
+    const win = !!r.c;
+    if (r.cf != null) bump(buckets, bucketOf(r.cf), win);
+    if (r.s) bump(sports, r.s, win);
+    if (r.d != null && Number(r.d) >= weekCut) { week.n++; if (win) week.w++; }
+    if (r.p) recent.push(r);
+  });
+  recent.sort((a, b) => Number(b.d || 0) - Number(a.d || 0));
+  return { total: entries.length, buckets, sports, week, recent: recent.slice(0, 15) };
+}
+const matchupLabel = (sport, g) =>
+  `${g.away.abbr || g.away.name} ${sport === 'soccer' ? 'vs' : '@'} ${g.home.abbr || g.home.name}`;
 
 // Pending picks: every prediction is stashed so the running record keeps
 // building even if you're not on the AI Picks tab when a game ends. On load
@@ -1104,12 +1135,12 @@ function tallyStats() {
 const PENDING_KEY = 'sportshub:pending';
 const getPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || '{}'); } catch (_) { return {}; } };
 const setPending = (p) => { try { localStorage.setItem(PENDING_KEY, JSON.stringify(p)); } catch (_) {} };
-function recordPick(id, sport, date, pick, fav) {
+function recordPick(id, sport, date, pick, fav, conf) {
   if (!id || !pick) return;
   if (getTally()[id]) return; // already graded
   const p = getPending();
   if (p[id]) return;
-  p[id] = { sport, date, pick, fav: fav || null };
+  p[id] = { sport, date, pick, fav: fav || null, conf: conf ?? null };
   setPending(p);
 }
 async function gradePending() {
@@ -1133,13 +1164,50 @@ async function gradePending() {
       const g = byId[id]; if (!g || gameState(g) !== 'final') return;
       const actual = winnerName(g);
       if (!actual || actual === 'TIE') { delete p[id]; changed = true; return; }
-      const { pick, fav } = p[id];
+      const { pick, fav, conf } = p[id];
       const hit = actual === pick;
-      recordResult(id, hit, fav && pick !== fav ? (hit ? 'h' : 'm') : null);
+      recordResult(id, hit, fav && pick !== fav ? (hit ? 'h' : 'm') : null,
+        { s: sport, d: Number(date), cf: conf ?? null, p: pick, m: matchupLabel(sport, g) });
       delete p[id]; changed = true;
     });
   }));
   if (changed) setPending(p);
+}
+
+// 📜 Model Report Card — a tap-to-expand panel under the stat bar: record by
+// confidence bucket (is a "75%" pick really a 75% pick?), by sport, and the
+// most recent graded picks so the record is inspectable, not just asserted.
+function reportCard(det) {
+  const box = el('div', 'ai-report');
+  const pct = (r) => (r.n ? ` (${Math.round((r.w / r.n) * 100)}%)` : '');
+  const row = (l, r) => `<div class="rep-row"><span class="rep-l">${l}</span><span class="rep-v">${r.w}-${r.n - r.w}${pct(r)}</span></div>`;
+  const bRows = ['50–59%', '60–69%', '70%+'].filter((k) => det.buckets[k])
+    .map((k) => row(`${k} confidence`, det.buckets[k])).join('');
+  const sRows = Object.entries(det.sports)
+    .sort((a, b) => b[1].n - a[1].n)
+    .map(([s, r]) => row(`${LEAGUES[s]?.emoji || ''} ${LEAGUES[s]?.label || s}`, r)).join('');
+  const recent = det.recent.map((r) => {
+    const d = String(r.d || '');
+    const dd = d.length === 8 ? `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}` : '';
+    return `<div class="rep-pick"><span class="rep-i">${r.c ? '✅' : '❌'}${r.e ? '⚡' : ''}</span><span class="rep-m">${esc(r.m || '')}</span><span class="rep-p">${esc((r.p || '').split(' ').slice(-1)[0])}${r.cf ? ` <span class="rep-cf">${r.cf}%</span>` : ''}</span><span class="rep-d">${dd}</span></div>`;
+  }).join('');
+  const week = det.week.n ? ` · this week ${det.week.w}-${det.week.n - det.week.w}` : '';
+  box.innerHTML = `
+    <button class="ai-report-head" aria-expanded="false">📜 Model Report Card${week}<span class="sec-chev">▸</span></button>
+    <div class="ai-report-body" hidden>
+      ${bRows ? `<div class="rep-sec">By confidence</div>${bRows}` : ''}
+      ${sRows ? `<div class="rep-sec">By sport</div>${sRows}` : ''}
+      ${recent ? `<div class="rep-sec">Recent picks (⚡ = against the line)</div>${recent}` : ''}
+      ${!bRows && !recent ? '<div class="ai-why" style="padding:6px 0">Detail builds as new picks grade — earlier picks only counted toward the totals.</div>' : ''}
+    </div>`;
+  const head = box.querySelector('.ai-report-head'), body = box.querySelector('.ai-report-body');
+  head.onclick = () => {
+    const open = body.hidden;
+    body.hidden = !open;
+    head.classList.toggle('open', open);
+    head.setAttribute('aria-expanded', String(open));
+  };
+  return box;
 }
 
 async function renderPredictions() {
@@ -1160,7 +1228,7 @@ async function renderPredictions() {
   };
   // Full-width tracking panel: overall model record, record when the model
   // bucked the book, and how many edges it sees today.
-  const statBar = (edgeCount) => {
+  const statBar = (edgeCount, edgeSub) => {
     const ts = tallyStats();
     const tile = (val, label, sub, cls) =>
       `<div class="ai-stat ${cls || ''}"><div class="ai-stat-v">${val}</div><div class="ai-stat-l">${label}</div><div class="ai-stat-s">${sub}</div></div>`;
@@ -1168,10 +1236,18 @@ async function renderPredictions() {
     bar.innerHTML =
       tile(ts.n ? `${ts.w}-${ts.l}` : '—', 'Model record', ts.n ? `${Math.round((ts.w / ts.n) * 100)}% all-time` : 'no graded games yet') +
       tile(ts.en ? `${ts.eh}-${ts.el}` : '—', 'vs the line', ts.en ? `${Math.round((ts.eh / ts.en) * 100)}% off the book` : 'edges not graded yet') +
-      tile(String(edgeCount), 'Edges today', edgeCount ? 'model disagrees w/ book' : 'model in line w/ book', edgeCount ? 'edge' : '');
+      tile(String(edgeCount), 'Edges today', edgeSub, edgeCount ? 'edge' : '');
     return bar;
   };
-  if (!playable.length) { container.innerHTML = ''; container.appendChild(statBar(0)); container.appendChild(el('div', 'empty', 'No games today for this sport.')); renderTally(''); return; }
+  if (!playable.length) {
+    container.innerHTML = '';
+    container.appendChild(statBar(0, 'no games today'));
+    const det0 = tallyDetails();
+    if (det0.total) container.appendChild(reportCard(det0));
+    container.appendChild(el('div', 'empty', 'No games today for this sport.'));
+    renderTally('');
+    return;
+  }
 
   const dateStr = ymd(sportsDate());
   const preds = await Promise.all(playable.map((g) => predictGame(sport, g).catch(() => null)));
@@ -1189,19 +1265,26 @@ async function renderPredictions() {
       if (actual && actual !== 'TIE') {
         graded++; const hit = actual === p.winner.name; if (hit) right++;
         const edge = info && info.favName ? (isEdge ? (hit ? 'h' : 'm') : null) : null;
-        recordResult(g.id, hit, edge);
+        recordResult(g.id, hit, edge,
+          { s: sport, d: Number(dateStr), cf: p.conf, p: p.winner.name, m: matchupLabel(sport, g) });
         resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
       }
     } else if (p) {
       // stash the pick so it gets graded later even if the tab isn't open
-      recordPick(g.id, sport, dateStr, p.winner.name, info?.favName);
+      recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf);
     }
     return { g, p, info, isEdge, resultTag };
   });
 
+  // No line ≠ no disagreement: if ESPN sent no odds, say so instead of
+  // claiming the model agrees with a book that never posted.
+  const anyLines = rows.some((r) => r.info?.favName);
   const upcomingEdges = rows.filter((r) => r.isEdge && gameState(r.g) !== 'final').length;
-  container.appendChild(statBar(upcomingEdges));
+  container.appendChild(statBar(upcomingEdges,
+    upcomingEdges ? 'model disagrees w/ book' : anyLines ? 'model in line w/ book' : 'no lines posted yet'));
   renderTally(graded ? `today ${right}-${graded - right}` : '');
+  const det = tallyDetails();
+  if (det.total) container.appendChild(reportCard(det));
 
   const buildCard = ({ g, p, info, isEdge, resultTag }) => {
     const card = gameCard(sport, g);
@@ -1235,8 +1318,10 @@ async function renderPredictions() {
   if (edges.length) {
     container.appendChild(el('div', 'ai-section-head edge', `⚡ Model Edges — off the book (${edges.length})`));
     edges.forEach((r) => container.appendChild(buildCard(r)));
-  } else {
+  } else if (anyLines) {
     container.appendChild(el('div', 'ai-note', '✅ No model edges today — the model agrees with the betting favorite on every game. Check the trends below.'));
+  } else {
+    container.appendChild(el('div', 'ai-note', '📭 No betting lines posted for this slate yet — edges appear once the books hang lines. Check the trends below.'));
   }
 
   renderAiTrends(container, sport, playable, rows);

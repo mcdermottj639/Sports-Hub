@@ -159,6 +159,23 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ai-stat.edge .ai-stat-v { color: var(--accent); }
 .ai-stat-l { font-size: 12px; font-weight: 700; color: var(--silver); margin-top: 3px; }
 .ai-stat-s { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+/* AI Picks: Model Report Card (collapsible record breakdown + history) */
+.ai-report { grid-column: 1 / -1; background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: var(--radius); }
+.ai-report-head { width: 100%; background: none; border: none; color: var(--text); font-weight: 700; font-size: 13.5px; padding: 12px 14px; min-height: 44px; display: flex; align-items: center; gap: 8px; cursor: pointer; text-align: left; }
+.ai-report-head .sec-chev { margin-left: auto; color: var(--muted); transition: transform .15s ease; }
+.ai-report-head.open .sec-chev { transform: rotate(90deg); }
+.ai-report-body { padding: 0 14px 12px; }
+.rep-sec { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 10px 0 5px; }
+.rep-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; }
+.rep-v { font-weight: 700; white-space: nowrap; }
+.rep-pick { display: flex; gap: 8px; align-items: center; font-size: 12.5px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+.rep-pick:last-child { border-bottom: none; }
+.rep-i { flex: none; }
+.rep-m { color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rep-p { font-weight: 700; white-space: nowrap; }
+.rep-cf { color: var(--muted); font-weight: 600; font-size: 11.5px; }
+.rep-d { color: var(--muted); font-size: 11px; flex: none; width: 32px; text-align: right; }
+
 .ai-section-head { grid-column: 1 / -1; font-size: 13px; font-weight: 800; color: var(--silver); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 -2px; }
 .ai-section-head.edge { color: var(--accent); }
 .ai-note { grid-column: 1 / -1; background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: var(--radius); padding: 14px 16px; color: var(--silver); font-size: 13.5px; line-height: 1.5; }
