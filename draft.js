@@ -10,6 +10,7 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const rnd = (n) => Math.floor(Math.random() * n);
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const pick = (arr) => arr[rnd(arr.length)];
 const shuffle = (arr) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
@@ -520,6 +521,7 @@ function simOne() {
   if (!pk || pk.owner === S.userTeam) return;
   cpuPick(pk);
   save(); renderWarRoom();
+  if (!currentPick()) showRecap(); // that was the last pick — roll the recap
 }
 function simToUser() {
   let guard = 0;
@@ -529,6 +531,7 @@ function simToUser() {
     cpuPick(pk);
   }
   save(); renderWarRoom();
+  if (!currentPick()) showRecap();
 }
 function userDraft(rank) {
   const pk = currentPick();
@@ -537,6 +540,7 @@ function userDraft(rank) {
   if (!p) return;
   makePick(pk, p);
   save(); renderWarRoom();
+  if (!currentPick()) showRecap();
 }
 
 // --- trades (pick-for-pick) ------------------------------------------------
@@ -561,6 +565,7 @@ function executeTrade(partner, myOveralls, theirOveralls) {
 // ==========================================================================
 function showSetup() {
   $('#warroom').hidden = true;
+  $('#recap').hidden = true;
   $('#setup').hidden = false;
   const box = $('#setup');
   box.innerHTML = `
@@ -628,6 +633,7 @@ function teamChip(abbr) {
 // ==========================================================================
 function showWarRoom() {
   $('#setup').hidden = true;
+  $('#recap').hidden = true;
   $('#warroom').hidden = false;
   renderWarRoom();
 }
@@ -645,7 +651,7 @@ function renderBar() {
   const onClock = isUserOnClock();
   const userT = teamBy[S.userTeam];
   const clockHTML = done
-    ? `<div class="clock done">✅ Draft complete</div>`
+    ? `<div class="clock done">✅ Draft complete <button id="a-recap" class="ds-btn primary">📊 Draft Recap</button></div>`
     : `<div class="clock ${onClock ? 'you' : ''}">
          <div class="clock-lbl">${onClock ? '🟢 YOU ARE ON THE CLOCK' : 'On the clock'}</div>
          <div class="clock-team">${teamChip(pk.owner)}${pk.owner !== pk.origin ? `<span class="via">via ${pk.origin}</span>` : ''}</div>
@@ -667,6 +673,8 @@ function renderBar() {
   $('#a-simuser').onclick = simToUser;
   $('#a-trade').onclick = openTrade;
   $('#a-restart').onclick = () => { if (confirm('Restart the draft and clear this session?')) { localStorage.removeItem(STORE); S = null; showSetup(); } };
+  const recapBtn = $('#a-recap');
+  if (recapBtn) recapBtn.onclick = showRecap;
 }
 
 function renderBoard() {
@@ -756,6 +764,179 @@ function sideNeeds() {
       return `<span class="need ${filled ? 'filled' : ''}">${n}${filled ? ' ✓' : ''}</span>`;
     }).join('')}</div>
     <p class="ds-note">✓ = you've drafted at that position. CPU teams weigh their own needs when picking.</p>`;
+}
+
+// ==========================================================================
+// RENDER: draft recap & grade (shown when the last pick is in)
+// ==========================================================================
+// Per-pick score: how far a player fell to you (overall − board rank),
+// scaled by draft position — a 10-spot steal at #8 is huge, at #200 it's
+// noise. Positive = value, negative = reach.
+const pickScore01 = (p) => clamp((p.overall - p.player.rank) / (6 + p.overall * 0.15), -2, 2);
+const LETTERS = [[93, 'A+'], [88, 'A'], [83, 'A-'], [78, 'B+'], [72, 'B'], [66, 'B-'], [60, 'C+'], [54, 'C'], [48, 'C-'], [42, 'D+'], [36, 'D']];
+function letterFor(score) {
+  for (const [min, l] of LETTERS) if (score >= min) return l;
+  return 'F';
+}
+const gradeColor = (letter) =>
+  letter[0] === 'A' ? 'var(--accent)' : letter[0] === 'B' ? '#8fd14f'
+  : letter[0] === 'C' ? 'var(--gold)' : letter[0] === 'D' ? '#ff9f43' : '#ff5a5a';
+const VERDICTS = {
+  A: 'Elite haul — you beat the board and hit your needs.',
+  B: 'Solid draft — real value and a clear plan.',
+  C: 'Average day at the podium — some value left on the board.',
+  D: 'Rough one — reaches and needs left open.',
+  F: 'The war room needs a hard reset.',
+};
+
+// Trades leave their fingerprints on the picks (owner vs origin), so the
+// ledger is reconstructed from state — no separate trade log needed.
+function tradeLedger() {
+  const acquired = S.picks.filter((p) => p.owner === S.userTeam && p.origin !== S.userTeam);
+  const sent = S.picks.filter((p) => p.origin === S.userTeam && p.owner !== S.userTeam);
+  const av = acquired.reduce((s, p) => s + pickValue(p.overall), 0);
+  const sv = sent.reduce((s, p) => s + pickValue(p.overall), 0);
+  return { acquired, sent, av, sv, net: av - sv, any: acquired.length + sent.length > 0 };
+}
+
+function draftGrades() {
+  const picks = S.picks.filter((p) => p.owner === S.userTeam && p.player);
+  const graded = picks.map((p) => {
+    const delta = p.overall - p.player.rank;
+    const score = clamp(68 + pickScore01(p) * 16, 0, 100);
+    return { p, delta, score, letter: letterFor(score) };
+  });
+  // Value vs the board — per-pick scores weighted by pick capital (early picks count more).
+  let w = 0, ws = 0;
+  graded.forEach((g) => { const wt = pickValue(g.p.overall); w += wt; ws += g.score * wt; });
+  const valueScore = w ? ws / w : null;
+  // Needs — of the needs you COULD have hit with the picks you made, how many did you?
+  const needs = TEAM_NEEDS[S.userTeam] || [];
+  const got = new Set(picks.map((x) => x.player.pos));
+  const filled = needs.filter((n) => got.has(n));
+  const chances = Math.min(picks.length, needs.length);
+  const needsScore = chances ? clamp((filled.length / chances) * 100, 0, 100) : null;
+  // Trades — net Jimmy Johnson chart value, if you made any.
+  const trades = tradeLedger();
+  const tradeScore = trades.any ? clamp(50 + trades.net / 10, 0, 100) : null;
+
+  const parts = [];
+  if (valueScore != null) parts.push([valueScore, trades.any ? 0.55 : 0.7]);
+  if (needsScore != null) parts.push([needsScore, trades.any ? 0.25 : 0.3]);
+  if (tradeScore != null) parts.push([tradeScore, 0.2]);
+  const tw = parts.reduce((s, x) => s + x[1], 0);
+  const overall = tw ? parts.reduce((s, x) => s + x[0] * x[1], 0) / tw : 50;
+  const letter = letterFor(overall);
+  return { picks, graded, valueScore, needs, filled, needsScore, trades, tradeScore, overall, letter };
+}
+
+const pickNote = (g) =>
+  g.delta >= 5 ? `📈 fell ${g.delta} spots — board #${g.p.player.rank}`
+  : g.delta <= -5 ? `📉 reach — ${-g.delta} spots above board #${g.p.player.rank}`
+  : '✅ right on the board';
+
+function recapHTML() {
+  const G = draftGrades();
+  const team = teamBy[S.userTeam] || { name: S.userTeam };
+  const grade = (v) => (v == null ? '—' : letterFor(v));
+  const bar = (label, v, note) => `
+    <div class="rc-bar-row">
+      <span class="rc-bar-lbl">${label}</span>
+      <span class="rc-bar"><span class="rc-bar-fill" style="width:${v == null ? 0 : Math.round(v)}%;background:${v == null ? 'transparent' : gradeColor(letterFor(v))}"></span></span>
+      <span class="rc-bar-grade" style="color:${v == null ? 'var(--muted)' : gradeColor(letterFor(v))}">${grade(v)}</span>
+      <span class="rc-bar-note">${note}</span>
+    </div>`;
+
+  // header + component bars
+  let html = `
+    <div class="rc-head">
+      <div class="rc-grade" style="border-color:${gradeColor(G.letter)};color:${gradeColor(G.letter)}">${G.letter}</div>
+      <div class="rc-head-body">
+        <h2 class="ds-h">${esc(team.name)} — Draft Recap</h2>
+        <div class="rc-verdict">${VERDICTS[G.letter[0]] || VERDICTS.C}</div>
+        <div class="ds-note">${S.rounds} round${S.rounds > 1 ? 's' : ''} · ${G.picks.length} pick${G.picks.length === 1 ? '' : 's'} · board: ${boardSource === 'real' ? `real ${DRAFT_YEAR} class` : 'sample'}</div>
+      </div>
+    </div>
+    <div class="rc-bars">
+      ${bar('Value vs board', G.valueScore, G.picks.length ? 'how far players fell to you' : 'no picks made')}
+      ${bar('Needs filled', G.needsScore, G.needs.length ? `${G.filled.length} of ${G.needs.length}: ${G.needs.map((n) => G.filled.includes(n) ? `<b class="rc-hit">${n}✓</b>` : n).join(' · ')}` : 'no listed needs')}
+      ${bar('Trade value', G.tradeScore, G.trades.any ? `${G.trades.net >= 0 ? '+' : ''}${G.trades.net} chart points net` : 'no trades made')}
+    </div>`;
+
+  // callouts: best steal / biggest reach
+  const sorted = [...G.graded].sort((a, b) => b.delta - a.delta);
+  const steal = sorted[0], reach = sorted[sorted.length - 1];
+  const callout = (tag, cls, g) => `
+    <div class="rc-callout ${cls}">
+      <span class="rc-co-tag">${tag}</span>
+      <b>${esc(g.p.player.name)}</b>
+      <span class="pmeta"><span class="ppos pos-${POS_GROUP[g.p.player.pos] || 'DB'}">${esc(g.p.player.pos)}</span> R${g.p.round} #${g.p.overall} · board #${g.p.player.rank}</span>
+    </div>`;
+  const callouts = [];
+  if (steal && steal.delta >= 5) callouts.push(callout('💎 Best value', 'steal', steal));
+  if (reach && reach !== steal && reach.delta <= -5) callouts.push(callout('😬 Biggest reach', 'reach', reach));
+  if (callouts.length) html += `<div class="rc-callouts">${callouts.join('')}</div>`;
+
+  // every pick, graded
+  html += `<h3 class="rc-h">Your picks, graded</h3>`;
+  html += G.graded.length ? G.graded.map((g) => `
+    <div class="rc-pick">
+      <span class="rc-pick-grade" style="color:${gradeColor(g.letter)};border-color:${gradeColor(g.letter)}">${g.letter}</span>
+      <span class="mp-pk">R${g.p.round} #${g.p.overall}</span>
+      <span class="rc-pick-body">
+        <b>${esc(g.p.player.name)}</b>
+        <span class="pmeta"><span class="ppos pos-${POS_GROUP[g.p.player.pos] || 'DB'}">${esc(g.p.player.pos)}</span> ${esc(g.p.player.school)} · ${pickNote(g)}</span>
+      </span>
+    </div>`).join('') : '<div class="ds-empty">You made no selections — the grade rides on your trades.</div>';
+
+  // trade ledger
+  if (G.trades.any) {
+    const led = (list) => list.map((p) => `<span class="rc-tp">R${p.round} #${p.overall} <i>(${pickValue(p.overall)})</i></span>`).join(' ') || '<span class="ds-empty">none</span>';
+    html += `<h3 class="rc-h">Trades</h3>
+      <div class="rc-trades">
+        <div><span class="rc-t-lbl">Acquired</span> ${led(G.trades.acquired)} <b class="rc-hit">${G.trades.av}</b></div>
+        <div><span class="rc-t-lbl">Sent away</span> ${led(G.trades.sent)} <b>${G.trades.sv}</b></div>
+        <div class="rc-t-net" style="color:${G.trades.net >= 0 ? 'var(--accent)' : '#ff8a8a'}">Net: ${G.trades.net >= 0 ? '+' : ''}${G.trades.net} chart points</div>
+      </div>`;
+  }
+
+  // position mix
+  const mix = {};
+  G.picks.forEach((p) => { const g = POS_GROUP[p.player.pos] || p.player.pos; mix[g] = (mix[g] || 0) + 1; });
+  if (G.picks.length) {
+    html += `<h3 class="rc-h">Position mix</h3><div class="needs-list">${Object.entries(mix).map(([pos, n]) => `<span class="need">${pos}${n > 1 ? ` ×${n}` : ''}</span>`).join('')}</div>`;
+  }
+
+  // full draft, round by round
+  const byRound = {};
+  S.picks.forEach((p) => { (byRound[p.round] = byRound[p.round] || []).push(p); });
+  html += `<h3 class="rc-h">Full draft results</h3>` + Object.keys(byRound).map((r) => `
+    <details class="rc-round"${r === '1' ? ' open' : ''}><summary>Round ${r}</summary>
+      ${byRound[r].map((p) => `
+        <div class="logrow ${p.owner === S.userTeam ? 'mine' : ''}">
+          <span class="lg-pk">#${p.overall}</span>
+          <span class="lg-team">${p.owner}</span>
+          <span class="lg-player">${p.player ? `<b>${esc(p.player.name)}</b> <span class="ppos pos-${POS_GROUP[p.player.pos] || 'DB'}">${esc(p.player.pos)}</span> <span class="muted">${esc(p.player.school)}</span>` : '<span class="ds-empty">passed</span>'}</span>
+        </div>`).join('')}
+    </details>`).join('');
+
+  html += `<div class="rc-actions">
+    <button id="recap-back" class="ds-btn">← Back to the war room</button>
+    <button id="recap-new" class="ds-btn primary">↻ Start a new draft</button>
+  </div>
+  <p class="ds-note">Grades weigh board value (how far players fell to you) most, then needs filled, then trade-chart net. For fun — every scout would grade it differently.</p>`;
+  return html;
+}
+
+function showRecap() {
+  $('#setup').hidden = true;
+  $('#warroom').hidden = true;
+  const box = $('#recap');
+  box.hidden = false;
+  box.innerHTML = recapHTML();
+  $('#recap-back').onclick = showWarRoom;
+  $('#recap-new').onclick = () => { if (confirm('Start a new draft and clear this one?')) { localStorage.removeItem(STORE); S = null; showSetup(); } };
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ==========================================================================

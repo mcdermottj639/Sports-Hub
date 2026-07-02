@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v81';
+const APP_VERSION = 'v82';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -586,6 +586,7 @@ async function renderHome() {
   $('#featured').innerHTML = html;
   renderHomeByLeague($('#home-games'), games);
   renderHomeHeadline();
+  renderWCBracket();
 }
 
 // Top 3 sports headlines up top, numbered 1-2-3 so they scan left to right.
@@ -693,6 +694,134 @@ async function addGolfHomeSection(addSection) {
     <div style="font-weight:700;margin:4px 0">${esc(ev.name || 'PGA Tour')}</div>
     ${top || '<div class="muted">Leaderboard unavailable.</div>'}`;
   addSection('home-golf', '⛳ Golf', [card]);
+}
+
+// --- WORLD CUP KNOCKOUT BRACKET (Home) -------------------------------------
+// One ranged scoreboard call covers the whole knockout window, then games are
+// bucketed into rounds — by ESPN's round note when present, else by date
+// (the 2026 knockout schedule below). Rounds with games still TBD get dashed
+// placeholder slots so the full bracket shape is always visible.
+const WC_ROUNDS = [
+  { key: 'r32',   label: 'Round of 32',   from: '20260628', to: '20260703', size: 16, when: 'Jun 28 – Jul 3' },
+  { key: 'r16',   label: 'Round of 16',   from: '20260704', to: '20260707', size: 8,  when: 'Jul 4–7' },
+  { key: 'qf',    label: 'Quarterfinals', from: '20260708', to: '20260712', size: 4,  when: 'Jul 9–11' },
+  { key: 'sf',    label: 'Semifinals',    from: '20260713', to: '20260716', size: 2,  when: 'Jul 14–15' },
+  { key: 'third', label: 'Third Place',   from: '20260717', to: '20260718', size: 1,  when: 'Jul 18' },
+  { key: 'final', label: 'Final',         from: '20260719', to: '20260720', size: 1,  when: 'Jul 19' },
+];
+const etYmd = (iso) => {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d).replace(/-/g, '');
+};
+function wcRoundOf(ev) {
+  // Prefer ESPN's own round label (scoreboard notes / headline) when it's there.
+  const note = `${(ev.competitions?.[0]?.notes || []).map((n) => n.headline || '').join(' ')} ${ev.season?.slug || ''}`.toLowerCase();
+  if (/round of 32/.test(note)) return 'r32';
+  if (/round of 16/.test(note)) return 'r16';
+  if (/quarter/.test(note)) return 'qf';
+  if (/semi/.test(note)) return 'sf';
+  if (/third/.test(note)) return 'third';
+  if (/\bfinal\b/.test(note)) return 'final';
+  const d = etYmd(ev.date);
+  const r = WC_ROUNDS.find((x) => d >= x.from && d <= x.to);
+  return r ? r.key : null;
+}
+function wcTeamObj(c) {
+  const t = c?.team || {};
+  return {
+    name: t.shortDisplayName || t.displayName || t.name || 'TBD',
+    full: t.displayName || t.name || '',
+    abbr: t.abbreviation || '',
+    logo: t.logo || t.logos?.[0]?.href || null,
+    score: c?.score != null && c.score !== '' ? Number(c.score) : null,
+    pens: c?.shootoutScore != null && c.shootoutScore !== '' ? Number(c.shootoutScore) : null,
+    winner: c?.winner === true,
+  };
+}
+function wcMatchObj(ev) {
+  const comp = ev.competitions?.[0] || {};
+  const cs = comp.competitors || [];
+  const st = ev.status?.type || comp.status?.type || {};
+  return {
+    date: ev.date,
+    state: st.state, // 'pre' | 'in' | 'post'
+    statusText: st.shortDetail || st.detail || st.description || '',
+    home: wcTeamObj(cs.find((c) => c.homeAway === 'home') || cs[0]),
+    away: wcTeamObj(cs.find((c) => c.homeAway === 'away') || cs[1]),
+    tv: tvFor(comp),
+  };
+}
+// Which side won a finished knockout game — ESPN's winner flag first, then
+// score, then the penalty shootout.
+function wcWinSide(m) {
+  if (m.state !== 'post') return null;
+  if (m.home.winner) return 'home';
+  if (m.away.winner) return 'away';
+  if (m.home.score == null || m.away.score == null) return null;
+  if (m.home.score !== m.away.score) return m.home.score > m.away.score ? 'home' : 'away';
+  if (m.home.pens != null && m.away.pens != null && m.home.pens !== m.away.pens) return m.home.pens > m.away.pens ? 'home' : 'away';
+  return null;
+}
+function wcMatchHTML(m) {
+  const live = m.state === 'in';
+  const win = wcWinSide(m);
+  const isFavT = (t) => favSet('soccer').includes((t.full || t.name || '').toLowerCase()) || favSet('soccer').includes((t.abbr || '').toLowerCase());
+  const d = new Date(m.date);
+  const pre = isNaN(d) ? '' : `${d.toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' })} · ${fmtTime(d)}`;
+  const status = live ? (m.statusText || 'LIVE')
+    : m.state === 'post' ? `FINAL${m.home.pens != null || m.away.pens != null ? ' · PENS' : ''}`
+    : pre || scheduledLabel({ statusText: m.statusText, date: m.date });
+  const row = (t, side) => {
+    const w = win === side, out = win && !w;
+    const score = m.state === 'pre' ? '' : `${t.score ?? '–'}${t.pens != null ? ` <span class="wc-pens">(${t.pens})</span>` : ''}`;
+    return `<div class="wc-team ${w ? 'winner' : ''} ${out ? 'out' : ''}">${logoHTML(t)}<span class="wc-name" title="${esc(t.full)}">${esc(t.name)}</span><span class="wc-score">${score}</span></div>`;
+  };
+  return `<div class="wc-match ${live ? 'live' : ''} ${isFavT(m.home) || isFavT(m.away) ? 'fav' : ''}">
+    <div class="wc-status"><span class="${live ? 'live' : ''}">${esc(status)}</span>${m.state === 'pre' && m.tv ? `<span>📺 ${esc(m.tv)}</span>` : ''}</div>
+    ${row(m.away, 'away')}${row(m.home, 'home')}</div>`;
+}
+async function renderWCBracket() {
+  const box = $('#home-wc');
+  if (!box) return;
+  box.innerHTML = '';
+  if (LEAGUES.soccer.espnPath !== 'soccer/fifa.world') return;
+  let events = [];
+  try {
+    const j = await fetchJSON(`${SITE}/${LEAGUES.soccer.espnPath}/scoreboard?dates=${WC_ROUNDS[0].from}-${WC_ROUNDS[WC_ROUNDS.length - 1].to}&limit=120`, 60000);
+    events = j.events || [];
+  } catch (_) { return; } // ESPN unreachable → just no bracket section
+  const rounds = WC_ROUNDS.map((r) => ({ ...r, games: [] }));
+  events.forEach((ev) => {
+    const r = rounds.find((x) => x.key === wcRoundOf(ev));
+    if (r) r.games.push(wcMatchObj(ev));
+  });
+  if (!rounds.some((r) => r.games.length)) return; // nothing knockout yet → hide
+  rounds.forEach((r) => r.games.sort((a, b) => new Date(a.date) - new Date(b.date)));
+
+  // "Current" round = the first one that isn't fully finished; scroll to it.
+  const current = rounds.find((r) => r.games.length < r.size || r.games.some((g) => g.state !== 'post')) || rounds[rounds.length - 1];
+  const cols = rounds.map((r) => {
+    const slots = r.games.map(wcMatchHTML);
+    while (slots.length < r.size) slots.push(`<div class="wc-match tbd"><div class="wc-status"><span>${esc(r.when)}</span></div><div class="wc-team"><span class="logo placeholder">?</span><span class="wc-name">TBD</span></div><div class="wc-team"><span class="logo placeholder">?</span><span class="wc-name">TBD</span></div></div>`);
+    return `<div class="wc-round ${r.key === current.key ? 'current' : ''}" data-round="${r.key}">
+      <div class="wc-round-head"><span>${r.label}</span><span class="wc-round-when">${esc(r.when)}</span></div>${slots.join('')}</div>`;
+  }).join('');
+  box.innerHTML = `<h2 class="section-title" id="home-wc-title">🏆 World Cup Bracket</h2>
+    <div class="wc-bracket">${cols}</div>
+    <div class="wc-hint muted">Swipe for earlier / later rounds →</div>`;
+  const wrap = box.querySelector('.wc-bracket');
+  const cur = wrap.querySelector('.wc-round.current');
+  if (cur) wrap.scrollLeft = Math.max(0, cur.offsetLeft - wrap.offsetLeft - 12);
+
+  // add a jump chip for the bracket to the Home league nav
+  const nav = $('#home-games .jump-nav');
+  if (nav && !nav.querySelector('[data-wc]')) {
+    const b = el('button', 'chip', '🏆 Bracket');
+    b.dataset.wc = '1';
+    b.onclick = () => $('#home-wc-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    nav.appendChild(b);
+  }
 }
 
 // --- SCORES ---------------------------------------------------------------

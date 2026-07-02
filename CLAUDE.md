@@ -114,7 +114,18 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   reverse-standings, 32 distinct). Team abbrevs from ESPN are normalized via
   `ABBR_ALIAS`.
   CPU picks = best-available with a positional-needs nudge (`TEAM_NEEDS`). State
-  autosaves to `localStorage` (`draftsim:v1`). Because
+  autosaves to `localStorage` (`draftsim:v1`). **Draft Recap (`#recap`,
+  `showRecap`/`recapHTML`/`draftGrades`, `.rc-*` CSS):** auto-opens when the
+  final pick is made (also via the 📊 button on the completed clock bar). Grades
+  the draft — overall letter weighted from **value vs board** (per-pick: how far
+  each player fell vs board rank, scaled by pick number via `pickScore01`,
+  aggregated weighted by JJ pick capital; 55–70%), **needs filled** (of the
+  needs you could hit with your pick count; 25–30%) and **trade value** (net
+  Jimmy Johnson chart points from the ledger reconstructed off pick
+  owner-vs-origin; 20% when trades exist). Shows per-pick letter grades,
+  best-value/biggest-reach callouts, needs checklist, trade ledger, position
+  mix, and full round-by-round results in `<details>` accordions, with
+  back-to-war-room / new-draft actions. Because
   it's standalone it does NOT participate in the `APP_VERSION`/`?v=` ritual, though
   it links `styles.css` for the base theme (uses `?v=80`; bump if you change shared
   CSS it depends on).
@@ -153,7 +164,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v81**.
+Current version as of this writing: **v82**.
 
 ## Testing reality
 
@@ -207,7 +218,20 @@ Current version as of this writing: **v81**.
   **view-only top-5 leaderboard** inline (no modal). (The old cross-league "Live"
   section was removed in v68; the Scores-tab ⚡ Model-edge badges that briefly
   lived here in v78 were dropped in v79 to keep the slate a clean scan — edges
-  still live on the AI Picks tab.)
+  still live on the AI Picks tab.) **🏆 World Cup Bracket (v82)** — a knockout
+  bracket below Today's Games (`#home-wc`, `renderWCBracket`, `.wc-*` CSS): one
+  ranged scoreboard call covers the whole 2026 knockout window (`WC_ROUNDS`,
+  Jun 28 – Jul 19 ET), games are bucketed into rounds by ESPN's round note when
+  present else by date window (`wcRoundOf`), and rendered as a horizontally
+  swipeable column per round (R32 → R16 → QF → SF → 3rd → Final) that
+  auto-scrolls to the current round. View-only match cards show score / pens /
+  live status (winner via ESPN's `winner` flag, falling back to score then
+  shootout), TV for upcoming games, dashed TBD slots for unset matchups, and a
+  fav highlight (USA). A 🏆 Bracket chip is appended to the Home jump-nav once
+  loaded. Renders only while `LEAGUES.soccer` points at `fifa.world` AND
+  knockout fixtures exist — the section hides itself (`#home-wc:empty`) after
+  the tournament or if ESPN is unreachable, so nothing needs removing when the
+  Cup ends (the dead code can be cleaned up later).
 - **Eagles tab** — hero, Next Opponent, Latest News (tap → summary), Team Stats &
   rankings, Schedule (2026-27), Depth Chart (Offense/Defense/ST, **Field formation
   view** + List), Player Leaders, By the Numbers, Coaching Staff. Section order and

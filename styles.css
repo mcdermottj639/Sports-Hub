@@ -533,3 +533,27 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ad-line.drop { color: var(--muted); }
 .ad-need { color: var(--accent); font-size: 11.5px; font-weight: 700; }
 .ad-lead { color: var(--silver); font-size: 12px; }
+
+/* Home: World Cup knockout bracket (one column per round, swipe sideways) */
+#home-wc:empty { display: none; }
+.wc-bracket { display: flex; gap: 12px; overflow-x: auto; padding: 4px 2px 10px; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+.wc-round { flex: 0 0 200px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 8px; }
+.wc-round-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); padding: 2px 2px 0; }
+.wc-round.current .wc-round-head { color: var(--gold); }
+.wc-round-when { font-size: 10px; font-weight: 700; letter-spacing: .3px; text-transform: none; }
+.wc-match { background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; padding: 8px 10px; }
+.wc-match.fav { border-color: var(--accent); }
+.wc-match.live { border-color: var(--live); }
+.wc-match.tbd { border-style: dashed; opacity: .55; }
+.wc-status { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); margin-bottom: 4px; white-space: nowrap; overflow: hidden; }
+.wc-status .live { color: var(--live); font-weight: 800; }
+.wc-team { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 2px 0; }
+.wc-team .logo { width: 18px; height: 18px; object-fit: contain; flex: none; }
+.wc-team .logo.placeholder { display: inline-flex; align-items: center; justify-content: center; background: var(--card-2); border-radius: 50%; font-size: 8px; color: var(--muted); }
+.wc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wc-score { font-weight: 800; font-variant-numeric: tabular-nums; }
+.wc-pens { font-size: 11px; color: var(--muted); font-weight: 700; }
+.wc-team.winner { font-weight: 800; }
+.wc-team.winner .wc-score { color: var(--accent); }
+.wc-team.out { opacity: .55; }
+.wc-hint { font-size: 11px; margin: 2px 2px 0; }
