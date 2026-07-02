@@ -164,7 +164,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v85**.
+Current version as of this writing: **v86**.
 
 ## Testing reality
 
@@ -281,6 +281,25 @@ Current version as of this writing: **v85**.
   (`min(homeGP, roadGP)/10`, blended with the generic home edge) so a 3-1
   home record doesn't swing early-season picks; `teamProfile` now returns
   `homeGP`/`roadGP`.
+
+  **v86 — totals picks + starter form:**
+  - **🎯 Totals Edges** — `predictGame` returns `projTotal` (average of the
+    two teams' combined-scoring rates); vs the posted O/U, a gap ≥
+    `TOT_EDGE_MIN` (mlb 1.0 / nba 6 / nfl 4 / soccer 0.6) makes a totals
+    edge, listed as compact rows under the side edges (sorted by gap, graded
+    result shown inline on finals; model total also shows in the game modal).
+    Totals picks persist keyed `${gameId}:t` with `t:1` (pending + tally) and
+    grade off the combined final score (push → dropped ungraded). They keep
+    their OWN record — `tallyStats` returns `tw/tl/tn`, shown in the header
+    line ("totals X-Y"), a Totals row in the report card, and 🎯-marked
+    entries in Recent picks — so side-pick calibration stays clean.
+  - **SP recent form** — `starterForm(athleteId)` aggregates each probable's
+    last 3 starts from `athleteGamelog('mlb', …)` (needs 12+ outs, else
+    silent); adds a 0.12-weight `SP recent form` factor (half the season-line
+    weight) + an `SP form (L3)` note when both starters have samples.
+  - NOT done (deliberately): backend record sync — Railway free tier has no
+    persistent disk, so a naive sync endpoint would silently lose the record
+    on every redeploy/restart; needs a volume or external store first.
 - **Game detail modal** (`renderGameDetail`) — score, **🔴 Live Situation** panel
   (MLB bases diamond + count/outs/pitcher/batter; NFL field-position bar w/ red
   zone; soccer possession + shots; others last play), AI pick + factor breakdown,

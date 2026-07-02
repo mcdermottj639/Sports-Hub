@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v85';
+const APP_VERSION = 'v86';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1031,8 +1031,29 @@ function startersHTML(g) {
   return `<div class="md-section-title">Projected Starters</div>${row(g.away.abbr || 'Away', a)}${row(g.home.abbr || 'Home', h)}`;
 }
 
-// Player-matchup signal: MLB starting pitchers (ERA + WHIP) and team OPS;
-// football/basketball key player. Returns weighted factors + display notes.
+// Probable starter's recent form: last 3 starts aggregated from the gamelog
+// (a 4.20-season-ERA arm on a three-gem heater is a different bet). Needs a
+// real recent sample (12+ outs) or it stays silent.
+async function starterForm(athleteId) {
+  if (!athleteId) return null;
+  const games = await athleteGamelog('mlb', athleteId).catch(() => null);
+  if (!games || !games.length) return null;
+  const recent = games.filter((g) => g.date && !isNaN(g.date)).sort((a, b) => b.date - a.date).slice(0, 3);
+  let er = 0, o = 0, bb = 0, h = 0;
+  recent.forEach((g) => {
+    const d = g.dict;
+    er += gv(d, 'earnedruns', 'er');
+    o += ipToOuts(gvRaw(d, 'inningspitched', 'ip', 'innings'));
+    bb += gv(d, 'walks', 'bb', 'baseonballs');
+    h += gv(d, 'hits', 'h');
+  });
+  if (o < 12) return null;
+  return { era: (er * 27) / o, whip: ((bb + h) * 3) / o, starts: recent.length };
+}
+
+// Player-matchup signal: MLB starting pitchers (season ERA/WHIP + last-3-starts
+// form) and team OPS; football/basketball key player. Returns weighted factors
+// + display notes.
 async function matchupFactor(sport, g) {
   const notes = [], factors = [];
   if (sport === 'mlb') {
@@ -1050,6 +1071,13 @@ async function matchupFactor(sport, g) {
       if (hERA != null && aERA != null) parts.push(clamp((aERA - hERA) / 1.5, -2, 2)); // lower ERA = home edge
       if (hWHIP != null && aWHIP != null) parts.push(clamp((aWHIP - hWHIP) / 0.25, -2, 2)); // lower WHIP = home edge
       if (parts.length) factors.push({ label: 'Starting pitcher', c: 0.24 * (parts.reduce((s, v) => s + v, 0) / parts.length), detail: 'ERA/WHIP edge' });
+      // recent form on top of the season line (half the season-stat weight)
+      const [hForm, aForm] = await Promise.all([starterForm(hp?.athlete?.id), starterForm(ap?.athlete?.id)]);
+      if (hForm && aForm) {
+        notes.push(`SP form (L3): ${hn} ${hForm.era.toFixed(2)} ERA vs ${an} ${aForm.era.toFixed(2)} ERA`);
+        const fparts = [clamp((aForm.era - hForm.era) / 2.0, -2, 2), clamp((aForm.whip - hForm.whip) / 0.35, -2, 2)];
+        factors.push({ label: 'SP recent form', c: 0.12 * (fparts.reduce((s, v) => s + v, 0) / fparts.length), detail: `L3 starts: ${hForm.era.toFixed(2)} vs ${aForm.era.toFixed(2)} ERA` });
+      }
     }
     const [hOPS, aOPS] = await Promise.all([teamOPS(g.home.id), teamOPS(g.away.id)]);
     if (hOPS != null && aOPS != null) {
@@ -1115,7 +1143,11 @@ async function predictGame(sport, g) {
     const pts = Math.abs(z) > 1e-6 ? (f.c / z) * edge : 0; // toward home if positive
     return { label: f.label, detail: f.detail, favor: f.c >= 0 ? g.home.name : g.away.name, pct: Math.abs(pts) };
   }).filter((b) => b.pct >= 0.1).sort((a, b) => b.pct - a.pct);
-  return { winner, conf, homePick, probHome: pHome, breakdown, notes: mu.notes, thin: !(hf && af) };
+  // Projected game total: average of the two teams' combined-scoring rates —
+  // compared against the posted O/U for totals edges.
+  const projTotal = hf && af && hf.ppg != null && af.ppg != null
+    ? (hf.ppg + hf.papg + af.ppg + af.papg) / 2 : null;
+  return { winner, conf, homePick, probHome: pHome, projTotal, breakdown, notes: mu.notes, thin: !(hf && af) };
 }
 
 function aiPickHead(pred) {
@@ -1123,6 +1155,7 @@ function aiPickHead(pred) {
   return `<div class="md-section-title acc-open">🤖 AI Pick</div>
     <div class="ai-pick">Pick: <b>${esc(pred.winner.name)}</b> <span class="ai-conf">${pred.conf}%</span></div>
     <div class="conf-bar"><span style="width:${pred.conf}%"></span></div>
+    ${pred.projTotal != null ? `<div class="ai-why">Model total: ${pred.projTotal.toFixed(1)}</div>` : ''}
     ${pred.thin ? '<div class="ai-why">Not enough games played yet for full analysis.</div>' : ''}`;
 }
 function aiFactors(pred) {
@@ -1146,9 +1179,15 @@ function recordResult(id, correct, edge, meta) {
   localStorage.setItem(TALLY_KEY, JSON.stringify(t));
 }
 function tallyStats() {
-  const t = getTally(); let w = 0, n = 0, eh = 0, en = 0;
-  Object.values(t).forEach((r) => { n++; if (r.c) w++; if (r.e === 'h') { eh++; en++; } else if (r.e === 'm') en++; });
-  return { w, l: n - w, n, eh, el: en - eh, en };
+  // Totals (O/U) picks live in the same store (id suffixed ':t', entry t:1)
+  // but count as their own record — mixing them into the side W-L would
+  // muddy the calibration the report card exists to show.
+  const t = getTally(); let w = 0, n = 0, eh = 0, en = 0, tw = 0, tn = 0;
+  Object.values(t).forEach((r) => {
+    if (r.t) { tn++; if (r.c) tw++; return; }
+    n++; if (r.c) w++; if (r.e === 'h') { eh++; en++; } else if (r.e === 'm') en++;
+  });
+  return { w, l: n - w, n, eh, el: en - eh, en, tw, tl: tn - tw, tn };
 }
 // Report-card slices of the tally: record by confidence bucket / sport / last
 // 7 days, plus the most recent graded picks (entries with v83+ meta only).
@@ -1159,16 +1198,18 @@ function tallyDetails() {
   const bump = (o, k, win) => { const r = (o[k] = o[k] || { w: 0, n: 0 }); r.n++; if (win) r.w++; };
   const weekCut = Number(ymd(new Date(Date.now() - 7 * 86400000)));
   const week = { w: 0, n: 0 };
+  const totals = { w: 0, n: 0 };
   const recent = [];
   entries.forEach((r) => {
     const win = !!r.c;
+    if (r.t) { totals.n++; if (win) totals.w++; if (r.p) recent.push(r); return; } // O/U picks: own record, but in history
     if (r.cf != null) bump(buckets, bucketOf(r.cf), win);
     if (r.s) bump(sports, r.s, win);
     if (r.d != null && Number(r.d) >= weekCut) { week.n++; if (win) week.w++; }
     if (r.p) recent.push(r);
   });
   recent.sort((a, b) => Number(b.d || 0) - Number(a.d || 0));
-  return { total: entries.length, buckets, sports, week, recent: recent.slice(0, 15) };
+  return { total: entries.length, buckets, sports, week, totals, recent: recent.slice(0, 15) };
 }
 const matchupLabel = (sport, g) =>
   `${g.away.abbr || g.away.name} ${sport === 'soccer' ? 'vs' : '@'} ${g.home.abbr || g.home.name}`;
@@ -1189,6 +1230,16 @@ function recordPick(id, sport, date, pick, fav, conf, isEdge) {
   p[id] = { sport, date, pick, fav: fav || null, conf: conf ?? null, eg: isEdge ? 1 : 0 };
   setPending(p);
 }
+// Totals pick: keyed `${gameId}:t` so it never collides with the side pick.
+function recordTotalPick(gameId, sport, date, side, line) {
+  const id = `${gameId}:t`;
+  if (!gameId || !side || line == null) return;
+  if (getTally()[id]) return;
+  const p = getPending();
+  if (p[id]) return;
+  p[id] = { sport, date, t: 1, pick: side, line };
+  setPending(p);
+}
 async function gradePending() {
   const p = getPending();
   const tally = getTally();
@@ -1207,10 +1258,19 @@ async function gradePending() {
     try { games = await getGames(sport, date); } catch (_) { return; }
     const byId = {}; games.forEach((g) => (byId[g.id] = g));
     ids.forEach((id) => {
-      const g = byId[id]; if (!g || gameState(g) !== 'final') return;
+      const g = byId[id.replace(/:t$/, '')]; if (!g || gameState(g) !== 'final') return;
+      const entry = p[id];
+      if (entry.t) { // totals pick: grade combined score vs the line (push → drop)
+        const total = g.home.score != null && g.away.score != null ? g.home.score + g.away.score : null;
+        if (total == null || total === entry.line) { delete p[id]; changed = true; return; }
+        const hit = entry.pick === 'OVER' ? total > entry.line : total < entry.line;
+        recordResult(id, hit, null,
+          { s: sport, d: Number(date), t: 1, p: `${entry.pick} ${entry.line}`, m: matchupLabel(sport, g) });
+        delete p[id]; changed = true; return;
+      }
       const actual = winnerName(g);
       if (!actual || actual === 'TIE') { delete p[id]; changed = true; return; }
-      const { pick, fav, conf, eg } = p[id];
+      const { pick, fav, conf, eg } = entry;
       const hit = actual === pick;
       const wasEdge = eg != null ? !!eg : !!(fav && pick !== fav); // old entries: fav comparison
       recordResult(id, hit, wasEdge ? (hit ? 'h' : 'm') : null,
@@ -1236,15 +1296,18 @@ function reportCard(det) {
   const recent = det.recent.map((r) => {
     const d = String(r.d || '');
     const dd = d.length === 8 ? `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}` : '';
-    return `<div class="rep-pick"><span class="rep-i">${r.c ? '✅' : '❌'}${r.e ? '⚡' : ''}</span><span class="rep-m">${esc(r.m || '')}</span><span class="rep-p">${esc((r.p || '').split(' ').slice(-1)[0])}${r.cf ? ` <span class="rep-cf">${r.cf}%</span>` : ''}</span><span class="rep-d">${dd}</span></div>`;
+    const pickTxt = r.t ? (r.p || '') : (r.p || '').split(' ').slice(-1)[0]; // totals keep "OVER 8.5"
+    return `<div class="rep-pick"><span class="rep-i">${r.c ? '✅' : '❌'}${r.e ? '⚡' : r.t ? '🎯' : ''}</span><span class="rep-m">${esc(r.m || '')}</span><span class="rep-p">${esc(pickTxt)}${r.cf ? ` <span class="rep-cf">${r.cf}%</span>` : ''}</span><span class="rep-d">${dd}</span></div>`;
   }).join('');
+  const tRow = det.totals?.n ? row('🎯 Totals (O/U) record', det.totals) : '';
   const week = det.week.n ? ` · this week ${det.week.w}-${det.week.n - det.week.w}` : '';
   box.innerHTML = `
     <button class="ai-report-head" aria-expanded="false">📜 Model Report Card${week}<span class="sec-chev">▸</span></button>
     <div class="ai-report-body" hidden>
       ${bRows ? `<div class="rep-sec">By confidence</div>${bRows}` : ''}
       ${sRows ? `<div class="rep-sec">By sport</div>${sRows}` : ''}
-      ${recent ? `<div class="rep-sec">Recent picks (⚡ = against the line)</div>${recent}` : ''}
+      ${tRow ? `<div class="rep-sec">Totals</div>${tRow}` : ''}
+      ${recent ? `<div class="rep-sec">Recent picks (⚡ = against the line · 🎯 = totals)</div>${recent}` : ''}
       ${!bRows && !recent ? '<div class="ai-why" style="padding:6px 0">Detail builds as new picks grade — earlier picks only counted toward the totals.</div>' : ''}
     </div>`;
   const head = box.querySelector('.ai-report-head'), body = box.querySelector('.ai-report-body');
@@ -1270,6 +1333,7 @@ async function renderPredictions() {
     const parts = [];
     if (ts.n) parts.push(`All-time ${ts.w}-${ts.l} (${Math.round((ts.w / ts.n) * 100)}%)`);
     if (ts.en) parts.push(`vs line ${ts.eh}-${ts.el}`);
+    if (ts.tn) parts.push(`totals ${ts.tw}-${ts.tl}`);
     if (todayTxt) parts.push(todayTxt);
     $('#ai-score').textContent = parts.join(' · ');
   };
@@ -1306,12 +1370,21 @@ async function renderPredictions() {
   // model likes its side ≥5 probability points more than the de-vigged market
   // — coin-flip disagreements against a -110 line are noise, not signal.
   const MIN_EDGE_GAP = 5;
+  // Totals edge: model's projected total vs the posted O/U, sport-scaled floor.
+  const TOT_EDGE_MIN = { mlb: 1.0, nba: 6, nfl: 4, soccer: 0.6 };
   const rows = playable.map((g, i) => {
     const p = preds[i];
     const info = p ? normOdds(g.odds, g.home.name, g.away.name) : null;
     const gap = p && info ? marketGap(p, info) : null;
     const isEdge = !!(p && info && info.favName && p.winner.name !== info.favName
       && (gap == null || gap >= MIN_EDGE_GAP)); // no MLs (spread-only) → old behavior
+    let tot = null;
+    if (p?.projTotal != null && info?.ou != null) {
+      const diff = p.projTotal - Number(info.ou);
+      if (isFinite(diff) && Math.abs(diff) >= (TOT_EDGE_MIN[sport] ?? 1)) {
+        tot = { side: diff > 0 ? 'OVER' : 'UNDER', line: Number(info.ou), proj: p.projTotal, diff };
+      }
+    }
     let resultTag = '';
     if (p && gameState(g) === 'final') {
       const actual = winnerName(g);
@@ -1322,11 +1395,19 @@ async function renderPredictions() {
           { s: sport, d: Number(dateStr), cf: p.conf, p: p.winner.name, m: matchupLabel(sport, g) });
         resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
       }
+      if (tot && g.home.score != null && g.away.score != null) {
+        const total = g.home.score + g.away.score;
+        if (total !== tot.line) {
+          recordResult(`${g.id}:t`, tot.side === 'OVER' ? total > tot.line : total < tot.line, null,
+            { s: sport, d: Number(dateStr), t: 1, p: `${tot.side} ${tot.line}`, m: matchupLabel(sport, g) });
+        }
+      }
     } else if (p) {
-      // stash the pick so it gets graded later even if the tab isn't open
+      // stash the picks so they get graded later even if the tab isn't open
       recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge);
+      if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line);
     }
-    return { g, p, info, gap, isEdge, resultTag };
+    return { g, p, info, gap, isEdge, tot, resultTag };
   });
 
   // No line ≠ no disagreement: if ESPN sent no odds, say so instead of
@@ -1377,6 +1458,22 @@ async function renderPredictions() {
     container.appendChild(el('div', 'ai-note', '✅ No model edges today — the model is within a few points of the book everywhere. Check the trends below.'));
   } else {
     container.appendChild(el('div', 'ai-note', '📭 No betting lines posted for this slate yet — edges appear once the books hang lines. Check the trends below.'));
+  }
+
+  // Totals edges — the model's projected total vs the posted O/U. Finished
+  // games show the graded result inline.
+  const totRows = rows.filter((r) => r.tot).sort((a, b) => Math.abs(b.tot.diff) - Math.abs(a.tot.diff));
+  if (totRows.length) {
+    container.appendChild(el('div', 'ai-section-head', `🎯 Totals Edges — model vs the O/U (${totRows.length})`));
+    const box = el('div', 'trend-list');
+    totRows.forEach(({ g, tot }) => {
+      const total = gameState(g) === 'final' && g.home.score != null && g.away.score != null ? g.home.score + g.away.score : null;
+      const res = total == null ? '' : total === tot.line ? ` · ⬜ push (${total})`
+        : (tot.side === 'OVER' ? total > tot.line : total < tot.line) ? ` · ✅ hit (${total})` : ` · ❌ miss (${total})`;
+      box.appendChild(el('div', 'trend-row',
+        `<b>${tot.side} ${tot.line}</b> — ${esc(matchupLabel(sport, g))} · model projects ${tot.proj.toFixed(1)} (${tot.diff > 0 ? '+' : ''}${tot.diff.toFixed(1)} vs line)${res}`));
+    });
+    container.appendChild(box);
   }
 
   renderAiTrends(container, sport, playable, rows);
