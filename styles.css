@@ -312,6 +312,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .game-card.no-tap.fav:hover { border-color: var(--accent); }
 .tap-hint { text-align: center; font-size: 10px; color: var(--muted); margin-top: 5px; opacity: .8; }
 .game-tv { margin-top: 6px; font-size: 11px; color: var(--muted); font-weight: 600; }
+.game-odds { margin-top: 4px; font-size: 11px; color: var(--silver); font-weight: 600; }
 .golf-line { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 2px 0; }
 .golf-line .score { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
 .golf-line.fav { color: var(--accent); }

@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v84';
+const APP_VERSION = 'v85';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -257,12 +257,26 @@ function gameCard(sport, g, opts = {}) {
       <span class="score">${score}</span></div>`;
   };
   const tapHint = interactive ? '<div class="tap-hint">tap for live stats →</div>' : '';
+  // View-only (Home) cards get the pregame betting line inline, since there's
+  // no modal to open for it. AI Picks cards keep their own richer odds block.
+  let oddsLine = '';
+  if (!interactive && st === 'scheduled') {
+    const info = normOdds(g.odds, g.home.name, g.away.name);
+    const ml = (v) => (Number(v) > 0 ? `+${v}` : `${v}`);
+    let line = info?.details;
+    if (!line && info && (info.hML != null || info.aML != null)) {
+      line = [info.aML != null ? `${g.away.abbr || 'Away'} ${ml(info.aML)}` : '',
+              info.hML != null ? `${g.home.abbr || 'Home'} ${ml(info.hML)}` : ''].filter(Boolean).join(' / ');
+    }
+    const bits = [line, info?.ou != null ? `O/U ${info.ou}` : ''].filter(Boolean).join(' · ');
+    if (bits) oddsLine = `<div class="game-odds">📊 ${esc(bits)}</div>`;
+  }
   card.innerHTML = `
     <div class="game-meta">
       <span class="game-league">${cfg.emoji} ${cfg.label}</span>
       <span class="${cls}">${label}</span>
     </div>${row(g.away)}${row(g.home)}
-    ${g.tv ? `<div class="game-tv">📺 ${esc(g.tv)}</div>` : ''}${tapHint}`;
+    ${g.tv ? `<div class="game-tv">📺 ${esc(g.tv)}</div>` : ''}${oddsLine}${tapHint}`;
   if (interactive && g.id) card.onclick = () => openGameDetail(sport, g.id, g);
   return card;
 }

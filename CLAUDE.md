@@ -164,7 +164,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v84**.
+Current version as of this writing: **v85**.
 
 ## Testing reality
 
@@ -214,7 +214,11 @@ Current version as of this writing: **v84**.
   {interactive:false})` renders each with a `.no-tap` class — no click-to-modal,
   no "tap for stats" hint — showing just the score/time and, when ESPN provides
   one, the **📺 TV channel** (`tvFor()` reads `geoBroadcasts`/`broadcasts` in
-  `normEvent`, stored as `g.tv`). The golf card likewise shows a compact
+  `normEvent`, stored as `g.tv`), and — v85 — the **📊 pregame betting line**
+  (`.game-odds` in `gameCard`, view-only + scheduled games only: spread/ML via
+  `normOdds` + O/U; falls back to raw moneylines when ESPN sends no `details`
+  string; NOT on the WC bracket cards, and AI Picks cards keep their own odds
+  block). The golf card likewise shows a compact
   **view-only top-5 leaderboard** inline (no modal). (The old cross-league "Live"
   section was removed in v68; the Scores-tab ⚡ Model-edge badges that briefly
   lived here in v78 were dropped in v79 to keep the slate a clean scan — edges
