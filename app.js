@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v92';
+const APP_VERSION = 'v93';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -235,8 +235,8 @@ async function getStandings(sport) {
 
 // --- game helpers ---------------------------------------------------------
 const gameState = (g) => (g.state === 'in' ? 'live' : g.state === 'post' ? 'final' : 'scheduled');
-// Scan order within a league: live first, then finished, then not-yet-started.
-const STATE_ORDER = { live: 0, final: 1, scheduled: 2 };
+// Scan order within a league: live first, then upcoming, then finished last.
+const STATE_ORDER = { live: 0, scheduled: 1, final: 2 };
 const byStatus = (s) => (a, b) => {
   const d = STATE_ORDER[gameState(a)] - STATE_ORDER[gameState(b)];
   return d || ((isFav(s, b) ? 1 : 0) - (isFav(s, a) ? 1 : 0));

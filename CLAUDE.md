@@ -182,7 +182,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v92**.
+Current version as of this writing: **v93**.
 
 ## Testing reality
 
@@ -228,7 +228,8 @@ Current version as of this writing: **v92**.
   (numbered 1-2-3 story strip from in-season leagues' lead stories, tap → in-app
   summary popup — headlines stay tappable), My Teams featured card, then Today's
   Games grouped by league (jump-nav chips), each league's slate sorted live →
-  finished → unstarted; leagues with a live game get a 🔴 flag on their
+  upcoming → finished (`STATE_ORDER`; changed v93 — finals now sink to the
+  bottom); leagues with a live game get a 🔴 flag on their
   chip/heading. **The game cards are TAPPABLE again (v89, reversing v79's
   view-only):** `gameCard(sport, g, {odds:true})` — tap opens the game modal,
   which leads with the 📊 Game Report (see AI Picks v88 note). Cards still show
