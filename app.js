@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v88';
+const APP_VERSION = 'v89';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -282,11 +282,11 @@ function gameCard(sport, g, opts = {}) {
       <span class="team">${logoHTML(team)}${esc(team.name || 'TBD')}</span>
       <span class="score">${score}</span></div>`;
   };
-  const tapHint = interactive ? '<div class="tap-hint">tap for live stats →</div>' : '';
-  // View-only (Home) cards get the pregame betting line inline, since there's
-  // no modal to open for it. AI Picks cards keep their own richer odds block.
+  const tapHint = interactive ? '<div class="tap-hint">tap for game report →</div>' : '';
+  // opts.odds (Home slate): show the pregame betting line right on the card.
+  // AI Picks cards skip it — they carry their own richer odds block.
   let oddsLine = '';
-  if (!interactive && st === 'scheduled') {
+  if (opts.odds && st === 'scheduled') {
     const info = normOdds(g.odds, g.home.name, g.away.name);
     const ml = (v) => (Number(v) > 0 ? `+${v}` : `${v}`);
     let line = info?.details;
@@ -755,8 +755,9 @@ function renderHomeByLeague(container, games) {
   sportsWithGames.forEach((s) => {
     const list = [...(games[s] || [])].sort(byStatus(s));
     const hasLive = list.some((g) => gameState(g) === 'live');
-    // View-only cards — the Home slate is a quick scan of scores, times and TV.
-    const cards = list.map((g) => gameCard(s, g, { interactive: false }));
+    // Tappable cards (v89): scores/time/TV/line at a glance, tap → the game
+    // modal, which leads with the 📊 Game Report.
+    const cards = list.map((g) => gameCard(s, g, { odds: true }));
     addSection(`home-${s}`, `${LEAGUES[s].emoji} ${LEAGUES[s].label}`, cards, hasLive);
   });
   if (!sportsWithGames.length) container.appendChild(el('div', 'empty', 'No games today for your sports.'));
@@ -1645,34 +1646,8 @@ async function renderPredictions() {
     container.appendChild(box);
   }
 
-  // 📊 Game Reports — every game gets a tap-to-open PRO-style report (model
-  // price vs book with grades, line movement, DK money splits + sharp reads).
-  const report = await getBettingReport(sport);
-  const repList = rows.filter((r) => r.p);
-  if (repList.length) {
-    container.appendChild(el('div', 'ai-section-head', `📊 Game Reports (${repList.length})`));
-    const box = el('div', 'report-list');
-    repList.forEach(({ g, p, info }) => {
-      const sp = splitsFor(report, g);
-      const sharp = sp ? sharpSignals(g, sp, lineMoves(sport, g, report)) : [];
-      const line = info?.details || (info?.hML != null ? `${g.home.abbr || 'Home'} ${fmtML(info.hML)}` : 'no line');
-      const row = el('button', 'report-row');
-      row.innerHTML = `<span class="rr-m">${esc(matchupLabel(sport, g))}</span>
-        <span class="rr-line">${esc(line)}</span>
-        <span class="rr-pick">🤖 ${esc(p.winner.abbr || (p.winner.name || '').split(' ').slice(-1)[0])} ${p.conf}%</span>
-        <span class="rr-flags">${sp ? '💰' : ''}${sharp.some((s) => s.startsWith('🔪')) ? '🔪' : ''}</span>
-        <span class="rr-chev">›</span>`;
-      row.onclick = () => openGameDetail(sport, g.id, g);
-      box.appendChild(row);
-    });
-    container.appendChild(box);
-    if (report?.splits && !report.splits.ok) {
-      container.appendChild(el('div', 'ai-note', `💰 DK betting splits unavailable right now (${esc(report.splits.error || 'source down')}) — reports still show model grades & line moves.`));
-    } else if (!report && BETTING_SPORTS.has(sport)) {
-      container.appendChild(el('div', 'ai-note', '💰 Betting-intel service unreachable — reports show model grades only.'));
-    }
-  }
-
+  // (v89: the Game Reports list moved off this tab — reports open from the
+  // Home slate's tappable cards instead. AI Picks stays model tracking + trends.)
   renderAiTrends(container, sport, playable, rows);
 }
 

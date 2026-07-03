@@ -175,7 +175,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v88**.
+Current version as of this writing: **v89**.
 
 ## Testing reality
 
@@ -201,8 +201,9 @@ Current version as of this writing: **v88**.
 - Tabs: Home, Eagles, AI Picks, Fantasy, About. `showTab()` +
   `renderers{}` map drive rendering. (**Scores** and **Standings** tabs were
   removed in v78 — the owner gets those better elsewhere; Home is now the daily
-  full-slate overview. In v79 the Home slate was made **view-only** — cards
-  don't open the detail modal; they just show score/time + TV channel.)
+  full-slate overview. In v79 the Home slate was made view-only; **v89 reversed
+  that** — cards open the detail modal again, since the modal now leads with
+  the Game Report the owner wants one tap away.)
 - **`sportsDate()`** — "today" doesn't roll to the next day until **4 AM ET**, so
   late/live games stay on the current slate overnight. Use this (not `new Date()`)
   for default game dates.
@@ -221,15 +222,16 @@ Current version as of this writing: **v88**.
   summary popup — headlines stay tappable), My Teams featured card, then Today's
   Games grouped by league (jump-nav chips), each league's slate sorted live →
   finished → unstarted; leagues with a live game get a 🔴 flag on their
-  chip/heading. **The game cards are view-only (v79):** `gameCard(sport, g,
-  {interactive:false})` renders each with a `.no-tap` class — no click-to-modal,
-  no "tap for stats" hint — showing just the score/time and, when ESPN provides
-  one, the **📺 TV channel** (`tvFor()` reads `geoBroadcasts`/`broadcasts` in
-  `normEvent`, stored as `g.tv`), and — v85 — the **📊 pregame betting line**
-  (`.game-odds` in `gameCard`, view-only + scheduled games only: spread/ML via
-  `normOdds` + O/U; falls back to raw moneylines when ESPN sends no `details`
-  string; NOT on the WC bracket cards, and AI Picks cards keep their own odds
-  block). The golf card likewise shows a compact
+  chip/heading. **The game cards are TAPPABLE again (v89, reversing v79's
+  view-only):** `gameCard(sport, g, {odds:true})` — tap opens the game modal,
+  which leads with the 📊 Game Report (see AI Picks v88 note). Cards still show
+  the quick-scan info: score/time, the **📺 TV channel** (`tvFor()` reads
+  `geoBroadcasts`/`broadcasts` in `normEvent`, stored as `g.tv`), and — v85 —
+  the **📊 pregame betting line** (`.game-odds` in `gameCard`, gated on the
+  `odds` option + scheduled games only: spread/ML via `normOdds` + O/U; falls
+  back to raw moneylines when ESPN sends no `details` string; NOT on the WC
+  bracket cards, and AI Picks cards keep their own odds block). The golf card
+  stays view-only and shows a compact
   **view-only top-5 leaderboard** inline (no modal). (The old cross-league "Live"
   section was removed in v68; the Scores-tab ⚡ Model-edge badges that briefly
   lived here in v78 were dropped in v79 to keep the slate a clean scan — edges
@@ -312,11 +314,11 @@ Current version as of this writing: **v88**.
     persistent disk, so a naive sync endpoint would silently lose the record
     on every redeploy/restart; needs a volume or external store first.
 
-  **v88 — 📊 Game Reports (Action-Network-style betting view):**
-  - **Game Reports list** — every game on the slate gets a tap-to-open row
-    under the totals edges (`.report-list`/`.report-row`; 💰 = DK splits
-    matched, 🔪 = sharp signal); tap → the game modal, which now leads its
-    extra sections with a **📊 Game Report** (`gameReportHTML`, `.gr-*` CSS):
+  **v88 — 📊 Game Report (Action-Network-style betting view):**
+  - Opens from the **Home slate's tappable cards** (v89; a v88-only "Game
+    Reports" list on this tab was removed the next day — the owner wants AI
+    Picks kept to model tracking + trends). The game modal leads its extra
+    sections with the **📊 Game Report** (`gameReportHTML`, `.gr-*` CSS):
     (1) **model vs market table** — the model's fair moneyline per side
     (`fairML` from `probHome`), the book's ML, and a per-side **price grade**
     (`priceGrade`: model prob − de-vigged market prob → A…F, A = book price
