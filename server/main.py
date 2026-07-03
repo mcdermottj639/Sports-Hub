@@ -14,10 +14,14 @@ import json as _json
 import math
 import os
 import random
+import re
+import threading
 import time
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
+from html.parser import HTMLParser
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -28,7 +32,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b5-draft-2026"
+SERVER_VERSION = "b6-betting"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -800,9 +804,251 @@ def draft_prospects(year: int = 2026, limit: int = 260):
     return data
 
 
+# =============================================================================
+# Betting intel (powers the frontend "Game Report" view)
+# -----------------------------------------------------------------------------
+# Two sources, both impossible from the browser:
+#  1. VSiN's public DraftKings betting-splits page (handle% vs bets% per side)
+#     — scraped server-side (no API exists; the page isn't CORS-open). Cached
+#     ~10 min. The parser is deliberately tolerant and self-diagnosing: it
+#     reports what it fetched/parsed so a page redesign shows up as
+#     "unavailable + reason", never as wrong numbers.
+#  2. ESPN line movement — a daemon thread snapshots each game's moneylines /
+#     spread / total every LINES_POLL_SECONDS. In-memory only (Railway free
+#     tier has no disk), so history resets on redeploy: fine for intraday
+#     movement, which is all the frontend shows.
+# =============================================================================
+BETTING_SPORTS = {"mlb": "baseball/mlb", "nfl": "football/nfl", "nba": "basketball/nba"}
+LINES_POLL_SECONDS = int(os.getenv("LINES_POLL_SECONDS", "900"))
+VSIN_TTL_SECONDS = int(os.getenv("VSIN_TTL_SECONDS", "600"))
+
+_LINES: dict = {}  # sport -> {eventId: {home, away, date, snaps: [{t,hML,aML,details,ou}]}}
+_LINES_LOCK = threading.Lock()
+_VSIN_CACHE: dict = {}  # sport -> {"ts": float, "data": {...}}
+
+
+def _http_get_text(url: str, timeout: int = 12) -> tuple:
+    """(status, text) with a browser-ish UA — some hosts 403 obvious bots."""
+    req = urllib.request.Request(url, headers={
+        "User-Agent": ("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                       "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile Safari/604.1"),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, ""
+    except Exception as e:
+        return 0, f"__ERR__{type(e).__name__}: {e}"
+
+
+def _snap_lines_once():
+    """Snapshot current ESPN lines for every betting sport (append on change)."""
+    for sport, path in BETTING_SPORTS.items():
+        try:
+            j = _draft_get(f"https://site.api.espn.com/apis/site/v2/sports/{path}/scoreboard")
+        except Exception:
+            continue
+        now = int(time.time())
+        with _LINES_LOCK:
+            store = _LINES.setdefault(sport, {})
+            on_board = set()
+            for ev in j.get("events", []):
+                eid = str(ev.get("id") or "")
+                if not eid:
+                    continue
+                on_board.add(eid)
+                comp = (ev.get("competitions") or [{}])[0]
+                odds = (comp.get("odds") or [{}])[0] or {}
+                snap = {
+                    "t": now,
+                    "hML": (odds.get("homeTeamOdds") or {}).get("moneyLine"),
+                    "aML": (odds.get("awayTeamOdds") or {}).get("moneyLine"),
+                    "details": odds.get("details"),
+                    "ou": odds.get("overUnder"),
+                }
+                if snap["hML"] is None and snap["aML"] is None and snap["ou"] is None and not snap["details"]:
+                    continue
+                comps = comp.get("competitors") or []
+                home = next((c for c in comps if c.get("homeAway") == "home"), {})
+                away = next((c for c in comps if c.get("homeAway") == "away"), {})
+                rec = store.setdefault(eid, {
+                    "home": ((home.get("team") or {}).get("displayName")) or "",
+                    "away": ((away.get("team") or {}).get("displayName")) or "",
+                    "date": ev.get("date"),
+                    "snaps": [],
+                })
+                snaps = rec["snaps"]
+                if not snaps or any(snaps[-1].get(k) != snap.get(k) for k in ("hML", "aML", "details", "ou")):
+                    snaps.append(snap)
+                    del snaps[:-50]  # bound per-game history
+            # drop games that left the scoreboard (yesterday's finals)
+            for eid in [e for e in store if e not in on_board]:
+                store.pop(eid, None)
+
+
+def _lines_loop():
+    while True:
+        try:
+            _snap_lines_once()
+        except Exception:
+            pass
+        time.sleep(max(120, LINES_POLL_SECONDS))
+
+
+threading.Thread(target=_lines_loop, daemon=True, name="lines-poller").start()
+
+
+class _TableGrab(HTMLParser):
+    """Collect every <table> as rows of cell texts (stdlib-only, layout-blind)."""
+    def __init__(self):
+        super().__init__()
+        self.tables, self._t, self._row, self._cell = [], None, None, None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "table":
+            self._t = []
+        elif tag == "tr" and self._t is not None:
+            self._row = []
+        elif tag in ("td", "th") and self._row is not None:
+            self._cell = []
+        elif tag == "br" and self._cell is not None:
+            self._cell.append(" ")
+
+    def handle_endtag(self, tag):
+        if tag == "table" and self._t is not None:
+            self.tables.append(self._t)
+            self._t = None
+        elif tag == "tr" and self._row is not None:
+            if self._t is not None and self._row:
+                self._t.append(self._row)
+            self._row = None
+        elif tag in ("td", "th") and self._cell is not None and self._row is not None:
+            self._row.append(" ".join("".join(self._cell).split()))
+            self._cell = None
+
+    def handle_data(self, data):
+        if self._cell is not None:
+            self._cell.append(data)
+
+
+_PCT_RE = re.compile(r"(\d{1,3})\s*%")
+
+# Positional meaning of the percent columns on VSiN's DK splits tables.
+# Classic layout is three market groups, each Handle% then Bets%:
+#   Spread | Total | Moneyline. If the page changes, the raw `pcts` list is
+# still returned so the mapping can be fixed from a ?debug=1 dump.
+_SIX_COL = ["spread_handle", "spread_bets", "total_handle", "total_bets", "ml_handle", "ml_bets"]
+
+
+def _parse_vsin(html: str):
+    """Extract per-team split rows from whatever tables the page has."""
+    grab = _TableGrab()
+    try:
+        grab.feed(html)
+    except Exception:
+        pass
+    headers, rows = [], []
+    for table in grab.tables:
+        for r in table:
+            joined = " ".join(r).lower()
+            if "handle" in joined or ("bets" in joined and "%" not in joined):
+                if len(headers) < 6:
+                    headers.append(r)
+                continue
+            pcts = [int(m) for c in r for m in _PCT_RE.findall(c)]
+            team = (r[0] or "").strip() if r else ""
+            if team and len(pcts) >= 2 and re.search(r"[A-Za-z]{3}", team):
+                rows.append({"team": team, "pcts": pcts})
+    games = []
+    for i in range(0, len(rows) - 1, 2):
+        a, b = rows[i], rows[i + 1]
+
+        def side(row):
+            out = {"team": row["team"], "pcts": row["pcts"]}
+            if len(row["pcts"]) == 6:
+                out.update(dict(zip(_SIX_COL, row["pcts"])))
+            elif len(row["pcts"]) == 2:  # single-market table → assume moneyline
+                out.update({"ml_handle": row["pcts"][0], "ml_bets": row["pcts"][1]})
+            return out
+        games.append({"away": side(a), "home": side(b)})
+    return games, headers
+
+
+def _vsin_splits(sport: str) -> dict:
+    """DK betting splits for a sport, cached. Never raises — always returns a
+    dict with ok/error/diagnostics so the frontend can degrade gracefully."""
+    now = time.time()
+    hit = _VSIN_CACHE.get(sport)
+    if hit and now - hit["ts"] < VSIN_TTL_SECONDS:
+        return hit["data"]
+    urls = [
+        f"https://data.vsin.com/{sport}/betting-splits/",
+        f"https://data.vsin.com/{sport}/betting-splits/?division=DK",
+        "https://data.vsin.com/betting-splits/",
+        f"https://www.vsin.com/betting-resources/{sport}/",
+    ]
+    attempts, games, headers, used = [], [], [], None
+    for u in urls:
+        status, text = _http_get_text(u)
+        attempts.append({"url": u, "status": status, "bytes": len(text) if not text.startswith("__ERR__") else 0,
+                         **({"err": text[7:120]} if text.startswith("__ERR__") else {})})
+        if status == 200 and text and not text.startswith("__ERR__"):
+            g, h = _parse_vsin(text)
+            if g:
+                games, headers, used = g, h, u
+                break
+            # keep first 200-OK page's headers for diagnosis even if 0 games
+            if not headers:
+                headers = h
+    data = {
+        "ok": bool(games),
+        "source": used,
+        "book": "DraftKings via VSiN",
+        "games": games,
+        "headers": headers[:4],
+        "attempts": attempts,
+        "error": None if games else "no split rows parsed (page blocked, empty slate, or layout changed)",
+        "fetched": int(now),
+    }
+    _VSIN_CACHE[sport] = {"ts": now, "data": data}
+    return data
+
+
+@app.get("/api/betting/{sport}/report")
+def betting_report(sport: str, debug: int = 0):
+    """Betting intel bundle for a sport: DK splits (VSiN) + intraday ESPN line
+    movement keyed by ESPN event id. The frontend matches splits rows to games
+    by team name and computes RLM/big-money signals client-side."""
+    sport = sport.lower()
+    if sport not in BETTING_SPORTS:
+        raise HTTPException(404, f"No betting feed for '{sport}'. Try: {', '.join(BETTING_SPORTS)}.")
+    splits = _vsin_splits(sport)
+    with _LINES_LOCK:
+        movement = {
+            eid: {"home": rec["home"], "away": rec["away"],
+                  "first": rec["snaps"][0], "last": rec["snaps"][-1], "n": len(rec["snaps"])}
+            for eid, rec in (_LINES.get(sport) or {}).items() if rec["snaps"]
+        }
+    out = {
+        "ok": True,
+        "sport": sport,
+        "splits": {k: splits[k] for k in ("ok", "source", "book", "games", "error", "fetched")},
+        "movement": movement,
+        "pollSeconds": LINES_POLL_SECONDS,
+    }
+    if debug:
+        out["splits"]["headers"] = splits.get("headers")
+        out["splits"]["attempts"] = splits.get("attempts")
+    return out
+
+
 @app.get("/api/refresh")
 def refresh():
     """Drop the cached League objects so the next call re-pulls from ESPN."""
     _build_league.cache_clear()
     _DRAFT_CACHE.clear()
+    _VSIN_CACHE.clear()
     return {"ok": True, "cleared": True}

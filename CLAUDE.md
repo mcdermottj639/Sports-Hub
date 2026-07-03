@@ -43,7 +43,18 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > ranked board **plus that year's real round-1 pick order** for the Labs
 > mock-draft sim — pulled from ESPN's core API server-side since the browser
 > can't read it; **defaults to `year=2026`**, the most recent draft; cached
-> `DRAFT_TTL_SECONDS`/24h, stdlib-only), `/api/refresh`.
+> `DRAFT_TTL_SECONDS`/24h, stdlib-only), `/api/betting/{sport}/report`
+> (mlb/nfl/nba; powers the v88 **Game Report** view — bundles (a) **DraftKings
+> betting splits scraped from VSiN's public page** (`_vsin_splits`, stdlib
+> `_TableGrab` HTML-table parser, tries several URLs, cached
+> `VSIN_TTL_SECONDS`/10m, self-diagnosing: returns `ok/error/attempts`, add
+> `?debug=1` for header rows + per-URL statuses — a VSiN redesign shows as
+> "unavailable + reason", never wrong numbers; the 6-percent column order
+> assumption is `_SIX_COL` = spread/total/ML × handle/bets) and (b) **ESPN
+> line movement** — a daemon thread (`_lines_loop`, `LINES_POLL_SECONDS`/15m)
+> snapshots each scoreboard game's ML/spread/O-U on change, keyed by ESPN
+> event id, **in-memory only** (resets on redeploy — intraday movement is the
+> product, so that's fine)), `/api/refresh` (also clears the VSiN cache).
 > **Baseball is live** (league `42353353`, team "Duran Duran" id `2`); football is
 > coded but not yet configured (no league id set). The Fantasy tab calls the API
 > once per session (`syncFromLeague`), overwrites the saved roster with the real
@@ -164,7 +175,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v87**.
+Current version as of this writing: **v88**.
 
 ## Testing reality
 
@@ -300,6 +311,31 @@ Current version as of this writing: **v87**.
   - NOT done (deliberately): backend record sync — Railway free tier has no
     persistent disk, so a naive sync endpoint would silently lose the record
     on every redeploy/restart; needs a volume or external store first.
+
+  **v88 — 📊 Game Reports (Action-Network-style betting view):**
+  - **Game Reports list** — every game on the slate gets a tap-to-open row
+    under the totals edges (`.report-list`/`.report-row`; 💰 = DK splits
+    matched, 🔪 = sharp signal); tap → the game modal, which now leads its
+    extra sections with a **📊 Game Report** (`gameReportHTML`, `.gr-*` CSS):
+    (1) **model vs market table** — the model's fair moneyline per side
+    (`fairML` from `probHome`), the book's ML, and a per-side **price grade**
+    (`priceGrade`: model prob − de-vigged market prob → A…F, A = book price
+    much better than model-fair); (2) model total vs the O/U; (3) **line
+    movement** — backend snapshots (real intraday, keyed by ESPN event id)
+    with device-local first-seen tracking as fallback (`trackLines` in
+    `getGames`, localStorage `sportshub:lines:{date}`, today only, old days
+    purged); (4) **💰 Big Money** — DK moneyline splits (bets% vs money%
+    bars + diff) matched to the game by team-name fuzzy match (`vsinMatches`,
+    handles "LA Angels"/"Red Sox vs White Sox" ambiguity); (5) **🔪 sharp
+    signals** — money-vs-tickets divergence (handle − bets ≥ 7) and
+    **reverse line movement** (ML implied-prob move ≥ 1.5 pts toward one side
+    while ≥55% of bets sit on the other). All of it degrades: backend down →
+    model grades + device movement + an honest note; splits source down →
+    "unavailable + reason" (surfaced from the backend's diagnostics).
+  - What this deliberately is NOT: real-time paid data. Bet%/handle% comes
+    from VSiN's free DK page (scrape may break on redesign — check
+    `/api/betting/mlb/report?debug=1`); "sharp" is computed RLM/divergence,
+    not a proprietary feed.
 - **Game detail modal** (`renderGameDetail`) — score, **🔴 Live Situation** panel
   (MLB bases diamond + count/outs/pitcher/batter; NFL field-position bar w/ red
   zone; soccer possession + shots; others last play), AI pick + factor breakdown,
@@ -439,6 +475,9 @@ Current version as of this writing: **v87**.
   matchup) for the Report Card; older `{c,e}`-only entries remain valid.
 - `sportshub:pending` — ungraded picks awaiting results (v83+ includes `conf`).
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
+- `sportshub:lines:{YYYYMMDD}` — device-local line tracking for today's games
+  (first-seen + latest ML/O-U per game; movement fallback for Game Reports).
+  Only today's key is kept; older days are purged on write.
 - `sportshub:fantasy:{sport}` — the saved fantasy roster, one per sport
   (`fanKey(sport)`, e.g. `sportshub:fantasy:baseball`).
 - Note: localStorage is **per browser/device** — the home-screen PWA and Safari

@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v87';
+const APP_VERSION = 'v88';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -195,7 +195,33 @@ async function getGames(sport, dateStr) {
   const path = LEAGUES[sport].espnPath;
   const q = dateStr ? `?dates=${dateStr}` : '';
   const json = await fetchJSON(`${SITE}/${path}/scoreboard${q}`);
-  return (json.events || []).map(normEvent);
+  const games = (json.events || []).map(normEvent);
+  if (dateStr === ymd(sportsDate())) trackLines(sport, games); // today only
+  return games;
+}
+
+// Device-local line tracking: remember the first line this device saw for each
+// game today (opener proxy) + the latest, so the Game Report can show movement
+// even when the backend tracker is unreachable. One key per sports-day.
+function trackLines(sport, games) {
+  try {
+    const key = `sportshub:lines:${ymd(sportsDate())}`;
+    const all = JSON.parse(localStorage.getItem(key) || '{}');
+    let changed = false;
+    games.forEach((g) => {
+      const info = normOdds(g.odds, g.home.name, g.away.name);
+      if (!info) return;
+      const snap = { t: Date.now(), hML: info.hML ?? null, aML: info.aML ?? null, ou: info.ou ?? null, details: info.details ?? null };
+      const k = `${sport}:${g.id}`;
+      if (!all[k]) { all[k] = { first: snap }; changed = true; return; }
+      const last = all[k].last || all[k].first;
+      if (['hML', 'aML', 'ou', 'details'].some((f) => last[f] !== snap[f])) { all[k].last = snap; changed = true; }
+    });
+    if (changed) {
+      localStorage.setItem(key, JSON.stringify(all));
+      Object.keys(localStorage).forEach((k) => { if (k.startsWith('sportshub:lines:') && k !== key) localStorage.removeItem(k); });
+    }
+  } catch (_) {}
 }
 async function getStandings(sport) {
   const path = LEAGUES[sport].espnPath;
@@ -320,16 +346,18 @@ async function openGameDetail(sport, id, g) {
   $('#modal-body').innerHTML = '<div class="empty">Loading live stats…</div>';
   try {
     const path = LEAGUES[sport].espnPath;
-    const [data, pred, hitters] = await Promise.all([
+    const [data, pred, hitters, report] = await Promise.all([
       fetchJSON(`${SITE}/${path}/summary?event=${id}`, 30000),
       g ? predictGame(sport, g).catch(() => null) : Promise.resolve(null),
       g && sport === 'mlb' ? Promise.all([topHitters(g.home.id), topHitters(g.away.id)]).catch(() => null) : Promise.resolve(null),
+      g ? getBettingReport(sport) : Promise.resolve(null),
     ]);
     let extra = '';
+    if (g) extra += gameReportHTML(sport, g, pred, normOdds(g.odds, g.home.name, g.away.name), report);
     if (g && sport === 'mlb') {
-      extra = startersHTML(g) + (hitters ? hittersHTML(g, hitters[0], hitters[1]) : '');
+      extra += startersHTML(g) + (hitters ? hittersHTML(g, hitters[0], hitters[1]) : '');
     } else if (g && sport === 'nfl') {
-      extra = nflKeyHTML(g);
+      extra += nflKeyHTML(g);
     }
     $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g);
     makeAccordion($('#modal-body'), '.md-section-title', 0);
@@ -377,6 +405,24 @@ function marketCompare(pred, favName, info) {
   }
   return `⚡ Model sees value — likes ${pred.winner.name}, market favors ${favName}${probs}`;
 }
+// Fair American moneyline for a win probability (the model's "price").
+const fairML = (p) => {
+  if (p == null || !isFinite(p)) return null;
+  const q = clamp(p, 0.02, 0.98);
+  return q >= 0.5 ? -Math.round((100 * q) / (1 - q)) : Math.round((100 * (1 - q)) / q);
+};
+const fmtML = (v) => (v == null ? '—' : Number(v) > 0 ? `+${v}` : `${v}`);
+// Price grade for a side: model prob − de-vigged market prob, in points.
+// A = the book is offering a much better price than the model thinks is fair.
+function priceGrade(gapPts) {
+  const T = [[10, 'A'], [7, 'A-'], [5, 'B+'], [3, 'B'], [1.5, 'B-'], [0, 'C+'], [-1.5, 'C'], [-3, 'C-'], [-5, 'D']];
+  for (const [min, l] of T) if (gapPts >= min) return l;
+  return 'F';
+}
+const gradeHue = (letter) =>
+  letter[0] === 'A' ? 'var(--accent)' : letter[0] === 'B' ? '#8fd14f'
+  : letter[0] === 'C' ? 'var(--gold)' : letter[0] === 'D' ? '#ff9f43' : '#ff5a5a';
+
 function oddsSectionHTML(info, awayAbbr, homeAbbr, pred) {
   if (!info) return '';
   const cmp = marketCompare(pred, info.favName, info);
@@ -1167,6 +1213,129 @@ function aiFactors(pred) {
     <div class="ai-why" style="margin-top:6px">Factors above the 50% coin-flip add up to the ${pred.conf}% pick.</div>`;
 }
 
+// --- Game Report (betting intel: model vs market, line moves, DK splits) ----
+// The backend bundles VSiN's DraftKings splits + its own ESPN line snapshots;
+// everything degrades gracefully when it's unreachable (model grades and
+// device-tracked movement still render).
+const BETTING_SPORTS = new Set(['mlb', 'nfl', 'nba']);
+async function getBettingReport(sport) {
+  if (!BETTING_SPORTS.has(sport)) return null;
+  return fetchJSON(`${FANTASY_API}/api/betting/${sport}/report`, 5 * 60000).catch(() => null);
+}
+// Match a VSiN team cell ("9:40 PM LA Angels +1.5") to an ESPN team name.
+function vsinMatches(vstr, teamName) {
+  const v = ` ${norm(vstr || '').replace(/[+-]?\d+(\.\d+)?/g, ' ')} `;
+  const n = norm(teamName || '');
+  if (!n) return false;
+  if (v.includes(` ${n} `) || v.includes(n)) return true;
+  const words = n.split(/\s+/);
+  const nick = words[words.length - 1];
+  const nick2 = words.slice(-2).join(' ');
+  if (['red sox', 'white sox', 'blue jays'].includes(nick2)) {
+    return v.includes(nick2) || v.includes(words.slice(0, -2).join(' ')); // "red sox" or the city
+  }
+  const city = words.slice(0, -1).join(' ');
+  return v.includes(nick) || (!!city && v.includes(city));
+}
+function splitsFor(report, g) {
+  for (const s of report?.splits?.games || []) {
+    if (vsinMatches(s.away?.team, g.away.name) && vsinMatches(s.home?.team, g.home.name)) return { away: s.away, home: s.home };
+    if (vsinMatches(s.away?.team, g.home.name) && vsinMatches(s.home?.team, g.away.name)) return { away: s.home, home: s.away };
+  }
+  return null;
+}
+// Best movement record for a game: backend snapshots (real openers, keyed by
+// ESPN event id) first, else this device's own first-seen tracking.
+function lineMoves(sport, g, report) {
+  const be = report?.movement?.[String(g.id)];
+  if (be?.first && be.n > 1) return { first: be.first, last: be.last || be.first, src: 'server' };
+  try {
+    const rec = JSON.parse(localStorage.getItem(`sportshub:lines:${ymd(sportsDate())}`) || '{}')[`${sport}:${g.id}`];
+    if (rec?.first) return { first: rec.first, last: rec.last || rec.first, src: 'device' };
+  } catch (_) {}
+  return be?.first ? { first: be.first, last: be.last || be.first, src: 'server' } : null;
+}
+// Sharp-flavored reads computed from splits + movement (labeled, no hand-waving).
+function sharpSignals(g, sp, mv) {
+  const out = [];
+  const ip = (ml) => (typeof ml !== 'number' || !isFinite(ml) || ml === 0) ? null : (ml < 0 ? -ml / (-ml + 100) : 100 / (ml + 100));
+  if (sp) {
+    [['away', g.away], ['home', g.home]].forEach(([side, team]) => {
+      const s = sp[side];
+      if (s && s.ml_handle != null && s.ml_bets != null && s.ml_handle - s.ml_bets >= 7) {
+        out.push(`💰 Big money on ${esc(team.abbr || team.name)} — ${s.ml_handle}% of dollars vs ${s.ml_bets}% of bets`);
+      }
+    });
+  }
+  if (sp && mv?.first && mv?.last) {
+    const f = ip(mv.first.hML), l = ip(mv.last.hML);
+    if (f != null && l != null) {
+      const d = (l - f) * 100; // + = moved toward home
+      if (Math.abs(d) >= 1.5) {
+        const toward = d > 0 ? g.home : g.away, against = d > 0 ? g.away : g.home;
+        const bets = sp[d > 0 ? 'away' : 'home']?.ml_bets;
+        if (bets != null && bets >= 55) {
+          out.push(`🔪 Reverse line move — line moved toward ${esc(toward.abbr || toward.name)} while ${bets}% of bets sit on ${esc(against.abbr || against.name)} (classic sharp-side signal)`);
+        }
+      }
+    }
+  }
+  return out;
+}
+// The modal's PRO-style report: model line vs book (graded per side), model
+// total, line movement, DK money splits, and sharp signals.
+function gameReportHTML(sport, g, pred, info, report) {
+  const parts = [];
+  const mkt = info ? marketHomeProb(info) : null;
+  if (pred && pred.probHome != null) {
+    const rows = [['away', 1 - pred.probHome, info?.aML], ['home', pred.probHome, info?.hML]].map(([side, p, book]) => {
+      const team = g[side];
+      const mktP = mkt != null ? (side === 'home' ? mkt : 1 - mkt) : null;
+      const grade = mktP != null ? priceGrade((p - mktP) * 100) : null;
+      return `<div class="gr-row">
+        <span class="gr-team">${logoHTML(team)}${esc(team.abbr || team.name)}</span>
+        <span class="gr-fair">${fmtML(fairML(p))}</span>
+        <span class="gr-book">${fmtML(book)}</span>
+        ${grade ? `<span class="gr-grade" style="color:${gradeHue(grade)};border-color:${gradeHue(grade)}">${grade}</span>` : '<span class="gr-grade none">—</span>'}
+      </div>`;
+    }).join('');
+    parts.push(`<div class="gr-head"><span></span><span>Model line</span><span>Book</span><span>Grade</span></div>${rows}`);
+    if (pred.projTotal != null && info?.ou != null) {
+      const lean = pred.projTotal > info.ou ? 'OVER' : pred.projTotal < info.ou ? 'UNDER' : null;
+      parts.push(`<div class="gr-total">Total: model ${pred.projTotal.toFixed(1)} vs O/U ${info.ou}${lean ? ` → <b>${lean}</b>` : ''}</div>`);
+    }
+  }
+  const mv = lineMoves(sport, g, report);
+  if (mv) {
+    const f = mv.first, l = mv.last;
+    const changes = [];
+    if (f.hML != null && l.hML != null && f.hML !== l.hML) changes.push(`${esc(g.home.abbr || 'Home')} ML ${fmtML(f.hML)} → ${fmtML(l.hML)}`);
+    if (f.aML != null && l.aML != null && f.aML !== l.aML) changes.push(`${esc(g.away.abbr || 'Away')} ML ${fmtML(f.aML)} → ${fmtML(l.aML)}`);
+    if (f.ou != null && l.ou != null && f.ou !== l.ou) changes.push(`O/U ${f.ou} → ${l.ou}`);
+    if (!changes.length && f.details && l.details && f.details !== l.details) changes.push(`${esc(f.details)} → ${esc(l.details)}`);
+    const since = f.t ? timeAgo(new Date(f.t > 2e10 ? f.t : f.t * 1000)) : '';
+    parts.push(`<div class="gr-move">📈 ${changes.length ? changes.join(' · ') : 'No line movement yet'}
+      <span class="gr-src">${mv.src === 'server' ? `server tracking since ${since}` : `since first seen on this device (${since})`}</span></div>`);
+  }
+  const sp = splitsFor(report, g);
+  if (sp) {
+    const bar = (v) => `<span class="gr-bar"><i style="width:${clamp(v, 0, 100)}%"></i></span>`;
+    const row = (team, s) => `<div class="gr-money-row"><span class="gr-mteam">${esc(team.abbr || team.name)}</span>
+      <span class="gr-pcts">bets ${s.ml_bets ?? '–'}%${s.ml_bets != null ? bar(s.ml_bets) : ''}</span>
+      <span class="gr-pcts">money ${s.ml_handle ?? '–'}%${s.ml_handle != null ? bar(s.ml_handle) : ''}</span>
+      ${s.ml_handle != null && s.ml_bets != null ? `<span class="gr-diff ${s.ml_handle - s.ml_bets > 0 ? 'up' : ''}">${s.ml_handle - s.ml_bets > 0 ? '+' : ''}${s.ml_handle - s.ml_bets}</span>` : '<span></span>'}
+    </div>`;
+    parts.push(`<div class="gr-sub">💰 Big Money — moneyline splits (${esc(report?.splits?.book || 'DraftKings')})</div>${row(g.away, sp.away)}${row(g.home, sp.home)}`);
+    sharpSignals(g, sp, mv).forEach((s) => parts.push(`<div class="gr-sharp">${s}</div>`));
+  } else if (report?.splits && !report.splits.ok) {
+    parts.push(`<div class="gr-unavail">DK betting splits unavailable — ${esc(report.splits.error || 'source down')}.</div>`);
+  } else if (report?.splits?.ok) {
+    parts.push(`<div class="gr-unavail">No DK splits row matched for this game.</div>`);
+  }
+  if (!parts.length) return '';
+  return `<div class="md-section-title acc-open">📊 Game Report</div><div class="gr-card">${parts.join('')}</div>`;
+}
+
 // Persistent model performance tally (vs results and vs the betting line).
 const TALLY_KEY = 'sportshub:aitally';
 const getTally = () => { try { return JSON.parse(localStorage.getItem(TALLY_KEY) || '{}'); } catch (_) { return {}; } };
@@ -1474,6 +1643,34 @@ async function renderPredictions() {
         `<b>${tot.side} ${tot.line}</b> — ${esc(matchupLabel(sport, g))} · model projects ${tot.proj.toFixed(1)} (${tot.diff > 0 ? '+' : ''}${tot.diff.toFixed(1)} vs line)${res}`));
     });
     container.appendChild(box);
+  }
+
+  // 📊 Game Reports — every game gets a tap-to-open PRO-style report (model
+  // price vs book with grades, line movement, DK money splits + sharp reads).
+  const report = await getBettingReport(sport);
+  const repList = rows.filter((r) => r.p);
+  if (repList.length) {
+    container.appendChild(el('div', 'ai-section-head', `📊 Game Reports (${repList.length})`));
+    const box = el('div', 'report-list');
+    repList.forEach(({ g, p, info }) => {
+      const sp = splitsFor(report, g);
+      const sharp = sp ? sharpSignals(g, sp, lineMoves(sport, g, report)) : [];
+      const line = info?.details || (info?.hML != null ? `${g.home.abbr || 'Home'} ${fmtML(info.hML)}` : 'no line');
+      const row = el('button', 'report-row');
+      row.innerHTML = `<span class="rr-m">${esc(matchupLabel(sport, g))}</span>
+        <span class="rr-line">${esc(line)}</span>
+        <span class="rr-pick">🤖 ${esc(p.winner.abbr || (p.winner.name || '').split(' ').slice(-1)[0])} ${p.conf}%</span>
+        <span class="rr-flags">${sp ? '💰' : ''}${sharp.some((s) => s.startsWith('🔪')) ? '🔪' : ''}</span>
+        <span class="rr-chev">›</span>`;
+      row.onclick = () => openGameDetail(sport, g.id, g);
+      box.appendChild(row);
+    });
+    container.appendChild(box);
+    if (report?.splits && !report.splits.ok) {
+      container.appendChild(el('div', 'ai-note', `💰 DK betting splits unavailable right now (${esc(report.splits.error || 'source down')}) — reports still show model grades & line moves.`));
+    } else if (!report && BETTING_SPORTS.has(sport)) {
+      container.appendChild(el('div', 'ai-note', '💰 Betting-intel service unreachable — reports show model grades only.'));
+    }
   }
 
   renderAiTrends(container, sport, playable, rows);
