@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v90';
+const APP_VERSION = 'v91';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -379,16 +379,42 @@ function normOdds(o, homeName, awayName) {
   const hML = o.homeTeamOdds?.moneyLine, aML = o.awayTeamOdds?.moneyLine;
   const favName = o.homeTeamOdds?.favorite ? homeName : o.awayTeamOdds?.favorite ? awayName
     : (typeof hML === 'number' && typeof aML === 'number') ? (hML < aML ? homeName : awayName) : null;
-  const has = (o.details != null || o.spread != null || o.overUnder != null || hML != null || aML != null);
-  return has ? { details: o.details ?? o.spread ?? null, ou: o.overUnder ?? o.total ?? null, hML, aML, favName, provider: o.provider?.name || null } : null;
+  const details = o.details ?? o.spread ?? null;
+  // MLB scoreboards often carry NO raw moneylines — just the favorite string
+  // ("SEA -231"). A 3+ digit number there is a moneyline (spreads are small),
+  // so keep it as a fallback for implied-probability math.
+  let dML = null;
+  const dm = typeof details === 'string' ? details.match(/[+-]\d{3,4}\b/) : null;
+  if (dm && Math.abs(Number(dm[0])) >= 100) dML = Number(dm[0]);
+  const has = (details != null || o.overUnder != null || hML != null || aML != null);
+  return has ? { details, ou: o.overUnder ?? o.total ?? null, hML, aML, dML,
+    favHome: favName ? favName === homeName : null, favName, provider: o.provider?.name || null } : null;
 }
-// Market's implied win probability for the HOME side, de-vigged from the two
-// moneylines (-150 → 60%, +130 → 43.5%, then normalized to remove the juice).
+const impliedP = (ml) => (typeof ml !== 'number' || !isFinite(ml) || ml === 0) ? null
+  : (ml < 0 ? -ml / (-ml + 100) : 100 / (ml + 100));
+// Market's implied win probability for the HOME side — de-vigged from the two
+// moneylines when both exist, else from the favorite's ML in the details
+// string (no de-vig possible there; close enough for gap sizing).
 function marketHomeProb(info) {
-  const ip = (ml) => (typeof ml !== 'number' || !isFinite(ml) || ml === 0) ? null
-    : (ml < 0 ? -ml / (-ml + 100) : 100 / (ml + 100));
-  const h = ip(info?.hML), a = ip(info?.aML);
-  return h != null && a != null && h + a > 0 ? h / (h + a) : null;
+  const h = impliedP(info?.hML), a = impliedP(info?.aML);
+  if (h != null && a != null && h + a > 0) return h / (h + a);
+  if (info?.dML != null && info?.favHome != null) {
+    const p = impliedP(info.dML);
+    if (p != null) return info.favHome ? p : 1 - p;
+  }
+  return null;
+}
+// Implied home prob from a single line snapshot (movement records) — raw ML
+// first, else the favorite string matched to a side by abbreviation.
+function snapHomeProb(snap, g) {
+  if (snap?.hML != null) return impliedP(snap.hML);
+  const m = typeof snap?.details === 'string' ? snap.details.match(/([A-Z]{2,4})\s*([+-]\d{3,4})\b/) : null;
+  if (!m || Math.abs(Number(m[2])) < 100) return null;
+  const p = impliedP(Number(m[2]));
+  if (p == null) return null;
+  if ((g.home.abbr || '').toUpperCase() === m[1]) return p;
+  if ((g.away.abbr || '').toUpperCase() === m[1]) return 1 - p;
+  return null;
 }
 // Model-vs-market gap in probability points on the MODEL'S pick side
 // (+13 = model likes its pick 13 points more than the book does).
@@ -1265,7 +1291,6 @@ function lineMoves(sport, g, report) {
 // Sharp-flavored reads computed from splits + movement (labeled, no hand-waving).
 function sharpSignals(g, sp, mv) {
   const out = [];
-  const ip = (ml) => (typeof ml !== 'number' || !isFinite(ml) || ml === 0) ? null : (ml < 0 ? -ml / (-ml + 100) : 100 / (ml + 100));
   if (sp) {
     [['away', g.away], ['home', g.home]].forEach(([side, team]) => {
       const s = sp[side];
@@ -1275,7 +1300,7 @@ function sharpSignals(g, sp, mv) {
     });
   }
   if (sp && mv?.first && mv?.last) {
-    const f = ip(mv.first.hML), l = ip(mv.last.hML);
+    const f = snapHomeProb(mv.first, g), l = snapHomeProb(mv.last, g);
     if (f != null && l != null) {
       const d = (l - f) * 100; // + = moved toward home
       if (Math.abs(d) >= 1.5) {

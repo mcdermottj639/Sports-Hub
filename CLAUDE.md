@@ -48,13 +48,20 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > betting splits scraped from VSiN's public page** (`_vsin_splits`, stdlib
 > `_TableGrab` HTML-table parser, tries several URLs, cached
 > `VSIN_TTL_SECONDS`/10m, self-diagnosing: returns `ok/error/attempts`, add
-> `?debug=1` for header rows + per-URL statuses — a VSiN redesign shows as
-> "unavailable + reason", never wrong numbers; the 6-percent column order
-> assumption is `_SIX_COL` = spread/total/ML × handle/bets) and (b) **ESPN
-> line movement** — a daemon thread (`_lines_loop`, `LINES_POLL_SECONDS`/15m)
-> snapshots each scoreboard game's ML/spread/O-U on change, keyed by ESPN
-> event id, **in-memory only** (resets on redeploy — intraday movement is the
-> product, so that's fine)), `/api/refresh` (also clears the VSiN cache).
+> `?debug=1` for header rows + per-URL statuses + `forensics` (table row
+> counts, sample rows, ajax-URL candidates) — a VSiN redesign shows as
+> "unavailable + reason", never wrong numbers. b7 rewrote the parser for the
+> LIVE page layout confirmed via debug: **one row per game** with away/home
+> stacked inside each cell (line breaks preserved from `<br>/<div>`), 6
+> percent cells per row ordered `_SIX_COL` = spread/total/ML × handle/bets,
+> decimals rounded, logo/time cells skipped; a legacy two-rows-per-game path
+> is kept) and (b) **ESPN line movement** — a daemon thread (`_lines_loop`,
+> `LINES_POLL_SECONDS`/15m) snapshots each scoreboard game's ML/spread/O-U on
+> change, keyed by ESPN event id, **in-memory only** (resets on redeploy —
+> intraday movement is the product, so that's fine). NOTE: ESPN's MLB
+> scoreboard sends NO raw moneylines — only the favorite string ("SEA -231")
+> + O/U — so snapshots often have `hML/aML: null` and only `details`),
+> `/api/refresh` (also clears the VSiN cache).
 > **Baseball is live** (league `42353353`, team "Duran Duran" id `2`); football is
 > coded but not yet configured (no league id set). The Fantasy tab calls the API
 > once per session (`syncFromLeague`), overwrites the saved roster with the real
@@ -175,7 +182,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v90**.
+Current version as of this writing: **v91**.
 
 ## Testing reality
 
@@ -325,7 +332,12 @@ Current version as of this writing: **v90**.
     much better than model-fair). v90: the report's odds come from the
     summary's `pickcenter` first (like the odds grid), falling back to the
     scoreboard object — the scoreboard often lacks MLs (always once live),
-    which blanked Book/Grade; (2) model total vs the O/U; (3) **line
+    which blanked Book/Grade. v91: because ESPN's MLB scoreboard sends no raw
+    MLs at all, `normOdds` now extracts the favorite's ML from the details
+    string (`dML` + `favHome`; 3+ digit numbers only so NFL/NBA spreads don't
+    trigger it) and `marketHomeProb` falls back to it — this re-arms the v84
+    edge-gap sizing on MLB and `snapHomeProb` does the same for movement
+    snapshots so RLM works with details-only data; (2) model total vs the O/U; (3) **line
     movement** — backend snapshots (real intraday, keyed by ESPN event id)
     with device-local first-seen tracking as fallback (`trackLines` in
     `getGames`, localStorage `sportshub:lines:{date}`, today only, old days

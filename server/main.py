@@ -32,7 +32,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b6-betting"
+SERVER_VERSION = "b7-splits2"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -902,78 +902,107 @@ threading.Thread(target=_lines_loop, daemon=True, name="lines-poller").start()
 
 
 class _TableGrab(HTMLParser):
-    """Collect every <table> as rows of cell texts (stdlib-only, layout-blind)."""
+    """Collect every <table> as rows of cell texts. Nested tables are handled
+    with a stack, and block-level breaks inside a cell (<br>, </div>, </p>)
+    become newlines so stacked away/home values stay separable."""
     def __init__(self):
         super().__init__()
-        self.tables, self._t, self._row, self._cell = [], None, None, None
+        self.tables, self._tstack, self._row, self._cell = [], [], None, None
 
     def handle_starttag(self, tag, attrs):
         if tag == "table":
-            self._t = []
-        elif tag == "tr" and self._t is not None:
+            self._tstack.append([])
+        elif tag == "tr" and self._tstack:
             self._row = []
         elif tag in ("td", "th") and self._row is not None:
             self._cell = []
         elif tag == "br" and self._cell is not None:
-            self._cell.append(" ")
+            self._cell.append("\n")
 
     def handle_endtag(self, tag):
-        if tag == "table" and self._t is not None:
-            self.tables.append(self._t)
-            self._t = None
+        if tag == "table" and self._tstack:
+            self.tables.append(self._tstack.pop())
         elif tag == "tr" and self._row is not None:
-            if self._t is not None and self._row:
-                self._t.append(self._row)
+            if self._tstack and self._row:
+                self._tstack[-1].append(self._row)
             self._row = None
         elif tag in ("td", "th") and self._cell is not None and self._row is not None:
-            self._row.append(" ".join("".join(self._cell).split()))
+            lines = [" ".join(l.split()) for l in "".join(self._cell).split("\n")]
+            self._row.append("\n".join([l for l in lines if l]))
             self._cell = None
+        elif tag in ("div", "p", "li") and self._cell is not None:
+            self._cell.append("\n")
 
     def handle_data(self, data):
         if self._cell is not None:
             self._cell.append(data)
 
 
-_PCT_RE = re.compile(r"(\d{1,3})\s*%")
+_PCT_RE = re.compile(r"(\d{1,3}(?:\.\d+)?)\s*%")
+_TIME_RE = re.compile(r"^\d{1,2}:\d{2}\s*(a|p)\.?m\.?\s*", re.I)
 
-# Positional meaning of the percent columns on VSiN's DK splits tables.
-# Classic layout is three market groups, each Handle% then Bets%:
-#   Spread | Total | Moneyline. If the page changes, the raw `pcts` list is
-# still returned so the mapping can be fixed from a ?debug=1 dump.
+# Positional meaning of the percent columns on VSiN's DK splits tables:
+# three market groups (Spread | Total | Moneyline), each Handle% then Bets%
+# (confirmed from the live page's header row via ?debug=1).
 _SIX_COL = ["spread_handle", "spread_bets", "total_handle", "total_bets", "ml_handle", "ml_bets"]
 
 
+def _pcts_of(cell: str):
+    return [int(round(float(m))) for m in _PCT_RE.findall(cell or "")]
+
+
+def _label_side(team: str, pcts: list) -> dict:
+    out = {"team": team, "pcts": pcts}
+    if len(pcts) == 6:
+        out.update(dict(zip(_SIX_COL, pcts)))
+    elif len(pcts) == 2:  # single-market table → assume moneyline
+        out.update({"ml_handle": pcts[0], "ml_bets": pcts[1]})
+    return out
+
+
 def _parse_vsin(html: str):
-    """Extract per-team split rows from whatever tables the page has."""
+    """Extract per-game split rows. Handles BOTH layouts: the live page's
+    one-row-per-game (away/home stacked inside each cell, split on line
+    breaks) and a legacy two-rows-per-game shape."""
     grab = _TableGrab()
     try:
         grab.feed(html)
     except Exception:
         pass
-    headers, rows = [], []
+    headers, games, loose_rows = [], [], []
     for table in grab.tables:
         for r in table:
             joined = " ".join(r).lower()
-            if "handle" in joined or ("bets" in joined and "%" not in joined):
+            if "handle" in joined and "%" not in joined:  # header row
                 if len(headers) < 6:
-                    headers.append(r)
+                    headers.append([c.replace("\n", " ") for c in r])
                 continue
-            pcts = [int(m) for c in r for m in _PCT_RE.findall(c)]
-            team = (r[0] or "").strip() if r else ""
-            if team and len(pcts) >= 2 and re.search(r"[A-Za-z]{3}", team):
-                rows.append({"team": team, "pcts": pcts})
-    games = []
-    for i in range(0, len(rows) - 1, 2):
-        a, b = rows[i], rows[i + 1]
-
-        def side(row):
-            out = {"team": row["team"], "pcts": row["pcts"]}
-            if len(row["pcts"]) == 6:
-                out.update(dict(zip(_SIX_COL, row["pcts"])))
-            elif len(row["pcts"]) == 2:  # single-market table → assume moneyline
-                out.update({"ml_handle": row["pcts"][0], "ml_bets": row["pcts"][1]})
-            return out
-        games.append({"away": side(a), "home": side(b)})
+            # team cell = first cell with a real word and no percent values
+            ti = next((i for i, c in enumerate(r) if re.search(r"[A-Za-z]{3}", c) and "%" not in c), None)
+            if ti is None:
+                continue
+            tlines = [
+                _TIME_RE.sub("", l).strip() for l in r[ti].split("\n")
+                if re.search(r"[A-Za-z]{3}", _TIME_RE.sub("", l))
+            ]
+            cellp = [_pcts_of(c) for i, c in enumerate(r) if i != ti]
+            flat = [p for cp in cellp for p in cp]
+            if not tlines or len(flat) < 2:
+                continue
+            two_stacked = [cp for cp in cellp if len(cp) == 2]
+            if len(tlines) >= 2 and len(two_stacked) >= 2:
+                # one row per game: line 0 = away, line 1 = home in every cell
+                apcts = [cp[0] for cp in two_stacked]
+                hpcts = [cp[1] for cp in two_stacked]
+                games.append({"away": _label_side(tlines[0], apcts),
+                              "home": _label_side(tlines[1], hpcts)})
+            else:
+                loose_rows.append({"team": " ".join(tlines), "pcts": flat})
+    # legacy: two consecutive one-team rows form a game (away first)
+    for i in range(0, len(loose_rows) - 1, 2):
+        a, b = loose_rows[i], loose_rows[i + 1]
+        games.append({"away": _label_side(a["team"], a["pcts"]),
+                      "home": _label_side(b["team"], b["pcts"])})
     return games, headers
 
 
@@ -990,7 +1019,7 @@ def _vsin_splits(sport: str) -> dict:
         "https://data.vsin.com/betting-splits/",
         f"https://www.vsin.com/betting-resources/{sport}/",
     ]
-    attempts, games, headers, used = [], [], [], None
+    attempts, games, headers, used, forensics = [], [], [], None, {}
     for u in urls:
         status, text = _http_get_text(u)
         attempts.append({"url": u, "status": status, "bytes": len(text) if not text.startswith("__ERR__") else 0,
@@ -1000,9 +1029,22 @@ def _vsin_splits(sport: str) -> dict:
             if g:
                 games, headers, used = g, h, u
                 break
-            # keep first 200-OK page's headers for diagnosis even if 0 games
-            if not headers:
+            # keep forensics from the first 200-OK page for ?debug=1 diagnosis
+            if not forensics:
                 headers = h
+                grab = _TableGrab()
+                try:
+                    grab.feed(text)
+                except Exception:
+                    pass
+                big = sorted(grab.tables, key=len, reverse=True)[:6]
+                forensics = {
+                    "tableStats": [{"rows": len(t), "cols": len(t[0]) if t else 0} for t in big],
+                    "sampleRows": [[c.replace("\n", " ¶ ")[:60] for c in r]
+                                   for t in big[:1] for r in t[:3]],
+                    "ajaxCandidates": (re.findall(r"https?://[^\"'\s]*(?:ajax|json|wp-json)[^\"'\s]*", text)
+                                       + re.findall(r"[\w/.-]*admin-ajax\.php[^\"'\s]*", text))[:6],
+                }
     data = {
         "ok": bool(games),
         "source": used,
@@ -1010,6 +1052,7 @@ def _vsin_splits(sport: str) -> dict:
         "games": games,
         "headers": headers[:4],
         "attempts": attempts,
+        "forensics": forensics,
         "error": None if games else "no split rows parsed (page blocked, empty slate, or layout changed)",
         "fetched": int(now),
     }
@@ -1042,6 +1085,7 @@ def betting_report(sport: str, debug: int = 0):
     if debug:
         out["splits"]["headers"] = splits.get("headers")
         out["splits"]["attempts"] = splits.get("attempts")
+        out["splits"]["forensics"] = splits.get("forensics")
     return out
 
 
