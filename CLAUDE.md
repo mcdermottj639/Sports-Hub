@@ -182,7 +182,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v91**.
+Current version as of this writing: **v92**.
 
 ## Testing reality
 
@@ -353,11 +353,16 @@ Current version as of this writing: **v91**.
     from VSiN's free DK page (scrape may break on redesign — check
     `/api/betting/mlb/report?debug=1`); "sharp" is computed RLM/divergence,
     not a proprietary feed.
-- **Game detail modal** (`renderGameDetail`) — score, **🔴 Live Situation** panel
-  (MLB bases diamond + count/outs/pitcher/batter; NFL field-position bar w/ red
-  zone; soccer possession + shots; others last play), AI pick + factor breakdown,
-  betting odds (open by default) with model-vs-market compare, line score, top
-  performers, team stats.
+- **Game detail modal** (`renderGameDetail`) — **section order (v92):**
+  **🔴 Live Situation** on top *when the game is live* (MLB bases diamond +
+  count/outs/pitcher/batter; NFL field-position bar w/ red zone; soccer
+  possession + shots; others last play), then **Betting Odds** (model-vs-market
+  compare), then the **📊 Game Report** (passed into `renderGameDetail` as its
+  own `report` arg — split out of `extra` so it can be positioned), then **AI
+  Pick** + factor breakdown, then the sport extras (starters/hitters/key
+  players), line score, top performers, team stats. The owner wanted the two
+  betting sections (odds + report) leading for a non-live game, with the live
+  panel jumping above them while a game is in progress.
 - **Fantasy** — roster saved in localStorage; season stats + hot/cold recent-form
   trends (hitters by OPS over last ~20 days; pitchers by ERA/WHIP over last 5
   outings), grouped Hitters/Pitchers, top-3 hitters, projected starters. MLB teams

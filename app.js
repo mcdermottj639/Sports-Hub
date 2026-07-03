@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v91';
+const APP_VERSION = 'v92';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -352,20 +352,21 @@ async function openGameDetail(sport, id, g) {
       g && sport === 'mlb' ? Promise.all([topHitters(g.home.id), topHitters(g.away.id)]).catch(() => null) : Promise.resolve(null),
       g ? getBettingReport(sport) : Promise.resolve(null),
     ]);
-    let extra = '';
+    let reportHTML = '';
     if (g) {
       // Odds for the report: prefer the summary's pickcenter — the scoreboard
       // object often drops its odds once a game goes live, which blanked the
       // Book/Grade columns mid-game.
       const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g.odds;
-      extra += gameReportHTML(sport, g, pred, normOdds(rawO, g.home.name, g.away.name), report);
+      reportHTML = gameReportHTML(sport, g, pred, normOdds(rawO, g.home.name, g.away.name), report);
     }
+    let extra = '';
     if (g && sport === 'mlb') {
       extra += startersHTML(g) + (hitters ? hittersHTML(g, hitters[0], hitters[1]) : '');
     } else if (g && sport === 'nfl') {
       extra += nflKeyHTML(g);
     }
-    $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g);
+    $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, reportHTML);
     makeAccordion($('#modal-body'), '.md-section-title', 0);
   } catch (_) {
     $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>';
@@ -568,7 +569,7 @@ function soccerSituation(sit, data, comp) {
   return `<div class="md-section-title acc-open">🔴 Live Situation</div>${html}`;
 }
 
-function renderGameDetail(sport, data, pred, extra, g) {
+function renderGameDetail(sport, data, pred, extra, g, report) {
   const comp = data.header?.competitions?.[0] || data.competitions?.[0] || {};
   const cs = comp.competitors || [];
   const home = cs.find((c) => c.homeAway === 'home') || cs[0] || {};
@@ -588,16 +589,17 @@ function renderGameDetail(sport, data, pred, extra, g) {
   let html = `<div class="md-head">${teamCell(away)}<div style="color:var(--muted);font-weight:700">${sep}</div>${teamCell(home)}</div>
     <div class="md-status ${live ? 'live' : ''}">${st.detail || st.shortDetail || ''}</div>`;
 
-  // live situation (bases/count for baseball, last play otherwise)
+  // Order: 🔴 Live Situation on top when the game is live (most timely), then
+  // Betting Odds, then the Game Report, then the model's read + box-score detail.
   if (live) html += liveSituationHTML(sport, data, comp, g);
-
-  // AI pick headline first (open), then collapsible detail sections
-  html += aiPickHead(pred);
-  html += aiFactors(pred);
 
   const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g?.odds;
   const oddsInfo = normOdds(rawO, home.team?.displayName, away.team?.displayName);
   html += oddsSectionHTML(oddsInfo, away.team?.abbreviation, home.team?.abbreviation, pred);
+  html += report || '';
+
+  html += aiPickHead(pred);
+  html += aiFactors(pred);
   html += extra || '';
 
   // line score (innings / quarters)
