@@ -175,7 +175,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v89**.
+Current version as of this writing: **v90**.
 
 ## Testing reality
 
@@ -322,7 +322,10 @@ Current version as of this writing: **v89**.
     (1) **model vs market table** — the model's fair moneyline per side
     (`fairML` from `probHome`), the book's ML, and a per-side **price grade**
     (`priceGrade`: model prob − de-vigged market prob → A…F, A = book price
-    much better than model-fair); (2) model total vs the O/U; (3) **line
+    much better than model-fair). v90: the report's odds come from the
+    summary's `pickcenter` first (like the odds grid), falling back to the
+    scoreboard object — the scoreboard often lacks MLs (always once live),
+    which blanked Book/Grade; (2) model total vs the O/U; (3) **line
     movement** — backend snapshots (real intraday, keyed by ESPN event id)
     with device-local first-seen tracking as fallback (`trackLines` in
     `getGames`, localStorage `sportshub:lines:{date}`, today only, old days

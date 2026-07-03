@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v89';
+const APP_VERSION = 'v90';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -353,7 +353,13 @@ async function openGameDetail(sport, id, g) {
       g ? getBettingReport(sport) : Promise.resolve(null),
     ]);
     let extra = '';
-    if (g) extra += gameReportHTML(sport, g, pred, normOdds(g.odds, g.home.name, g.away.name), report);
+    if (g) {
+      // Odds for the report: prefer the summary's pickcenter — the scoreboard
+      // object often drops its odds once a game goes live, which blanked the
+      // Book/Grade columns mid-game.
+      const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g.odds;
+      extra += gameReportHTML(sport, g, pred, normOdds(rawO, g.home.name, g.away.name), report);
+    }
     if (g && sport === 'mlb') {
       extra += startersHTML(g) + (hitters ? hittersHTML(g, hitters[0], hitters[1]) : '');
     } else if (g && sport === 'nfl') {
