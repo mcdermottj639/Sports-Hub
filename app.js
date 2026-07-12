@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v104';
+const APP_VERSION = 'v105';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1996,7 +1996,7 @@ function renderFantasyFootball() {
   const addBtn = box.querySelector('#bd-add');
   if (addBtn) addBtn.onclick = () => addPlayer(box.querySelector('#bd-name').value, box.querySelector('#bd-pos').value, Number(box.querySelector('#bd-tier').value) || 3);
   const ms = box.querySelector('#mock-start');
-  if (ms) ms.onclick = () => { fanState.mock = { setup: true, teams: 10, slot: 5, rounds: 10 }; renderFantasyFootball(); };
+  if (ms) ms.onclick = () => { fanState.mock = { setup: true, teams: 12, slot: 6, rounds: 10 }; renderFantasyFootball(); };
   initTeamResearch();
 }
 
