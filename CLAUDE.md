@@ -106,7 +106,19 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
 - `index.html` — single page, all tabs/sections. Asset URLs carry `?v=N` cache-busting.
 - `app.js` (~2100 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
-- `styles.css` — all styling. Dark theme; CSS vars at top (`--accent` #3ad29f green, `--gold`, `--eagles-green` #004C54, etc.).
+- `styles.css` — all styling. **Dark theme is the default** (base `:root` CSS vars at top:
+  `--accent` #3ad29f green, `--gold`, `--eagles-green` #004C54, etc.). A **light theme**
+  ("Editorial / Premium" — warm paper `#f7f4ee`, off-white cards, hairline rules, gold
+  "kicker" section headings, serif masthead/headlines) lives in a `:root[data-theme="light"]`
+  block appended at the END of the file. It re-declares the variables (so most surfaces
+  recolor for free) plus targeted overrides for spots that hardcoded dark-only values
+  (white hairline borders, dark gradients, dark chips/tracks). **Dark mode is untouched** —
+  the light block only applies when `<html data-theme="light">`. Theme is chosen by a
+  header toggle (🌙/☀️): an inline `<head>` script sets `data-theme` before first paint
+  (saved pref in `sportshub:theme`, else the OS `prefers-color-scheme`); `applyTheme()` in
+  `app.js` wires the toggle, syncs the `theme-color` meta, and follows the OS until the user
+  picks explicitly. When adding new components, use the CSS vars (esp. `var(--card)`,
+  `var(--text)`, `var(--muted)`, `var(--line)`) so they theme automatically.
 - `sw.js` — service worker (network-first auto-update; see below).
 - `manifest.webmanifest` — PWA manifest. Icons are real eagle emoji extracted from NotoColorEmoji (one-off via `/tmp/make-icon.js`, not in repo).
 - `draft.html` / `draft.css` / `draft.js` — **🧪 Labs: NFL Mock Draft Simulator**,
@@ -182,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v93**.
+Current version as of this writing: **v94**.
 
 ## Testing reality
 
@@ -503,6 +515,8 @@ Current version as of this writing: **v93**.
   Only today's key is kept; older days are purged on write.
 - `sportshub:fantasy:{sport}` — the saved fantasy roster, one per sport
   (`fanKey(sport)`, e.g. `sportshub:fantasy:baseball`).
+- `sportshub:theme` — chosen color theme (`'light'` | `'dark'`). Absent = follow the
+  OS `prefers-color-scheme`. Read by the inline `<head>` script and by `applyTheme`.
 - Note: localStorage is **per browser/device** — the home-screen PWA and Safari
   keep separate tallies/rosters.
 

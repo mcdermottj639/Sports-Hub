@@ -11,7 +11,20 @@
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=93" />
+  <link rel="stylesheet" href="styles.css?v=94" />
+  <script>
+    /* Set the theme before first paint to avoid a flash. Uses the saved
+       preference if present, else follows the OS light/dark setting. */
+    (function () {
+      try {
+        var t = localStorage.getItem('sportshub:theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <header class="topbar">
@@ -20,6 +33,7 @@
       <h1>Sports-Hub</h1>
     </div>
     <div class="head-right">
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle light or dark mode">🌙</button>
       <span id="app-version" class="version"></span>
       <div id="mode-badge" class="badge">…</div>
     </div>
@@ -133,6 +147,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=93" defer></script>
+  <script src="app.js?v=94" defer></script>
 </body>
 </html>

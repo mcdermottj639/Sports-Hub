@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v93';
+const APP_VERSION = 'v94';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3238,6 +3238,37 @@ state.aiSport = sortedSports({ teamOnly: true })[0];
 
 const verEl = $('#app-version');
 if (verEl) verEl.textContent = APP_VERSION;
+
+// --- light / dark theme -----------------------------------------------------
+// The <head> inline script sets data-theme before first paint (saved pref, else
+// OS setting). Here we wire the header toggle and keep the meta theme-color and
+// the button icon in sync. Saving a pref opts out of following the OS.
+const THEME_KEY = 'sportshub:theme';
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+const effectiveTheme = () => (document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  if (themeMeta) themeMeta.setAttribute('content', t === 'light' ? '#f7f4ee' : '#004c54');
+  const btn = $('#theme-toggle');
+  if (btn) {
+    const dark = t !== 'light';
+    btn.textContent = dark ? '☀️' : '🌙';
+    btn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+    btn.setAttribute('title', dark ? 'Light mode' : 'Dark mode');
+  }
+}
+applyTheme(effectiveTheme());
+$('#theme-toggle')?.addEventListener('click', () => {
+  const next = effectiveTheme() === 'light' ? 'dark' : 'light';
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  applyTheme(next);
+});
+// Follow the OS theme while the user hasn't picked an explicit preference.
+try {
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? 'light' : 'dark');
+  });
+} catch (e) {}
 
 // back-to-top button
 const toTop = $('#to-top');

@@ -619,3 +619,173 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .wc-team.winner .wc-score { color: var(--accent); }
 .wc-team.out { opacity: .55; }
 .wc-hint { font-size: 11px; margin: 2px 2px 0; }
+
+/* ==========================================================================
+   LIGHT MODE — "Editorial / Premium" theme (Design 3).
+   Active only when <html data-theme="light">. Dark mode is the default and is
+   left completely untouched (base :root above). Warm-paper background, hairline
+   rules, gold "kicker" section headings, and serif masthead/headlines for a
+   sports-section feel. Most surfaces recolor for free via the variable swap
+   below; the rules after it fix the spots that hardcoded dark-only values
+   (white hairline borders, dark gradients, dark chips/tracks).
+   ========================================================================== */
+:root[data-theme="light"] {
+  --eagles-green: #00434b;
+  --eagles-green-light: #0a6c78;
+  --silver: #6f6858;
+  --bg: #f7f4ee;        /* warm paper */
+  --card: #fffdf9;      /* off-white card */
+  --card-2: #efe9dd;    /* chips / tracks / insets */
+  --text: #1c1a15;      /* warm ink */
+  --muted: #7a7466;
+  --accent: #0b7a5c;    /* deeper green so it reads on paper */
+  --live: #c8352e;
+  --gold: #b0810a;
+  --line: #e5dece;      /* hairline rules */
+}
+
+/* Page background (was a dark radial gradient) */
+:root[data-theme="light"] body { background: var(--bg); }
+
+/* Masthead topbar (was an Eagles-green gradient) */
+:root[data-theme="light"] .topbar {
+  background: var(--card);
+  border-bottom: 2px solid var(--text);
+  box-shadow: none;
+}
+:root[data-theme="light"] .topbar h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--text);
+}
+:root[data-theme="light"] .version {
+  color: var(--muted);
+  background: var(--card-2);
+  border-color: var(--line);
+}
+:root[data-theme="light"] .badge {
+  background: var(--card-2);
+  border-color: var(--line);
+  color: var(--muted);
+}
+:root[data-theme="light"] .badge.live { background: var(--accent); color: #fff; }
+:root[data-theme="light"] .badge.demo { background: var(--gold); color: #3a2c00; }
+
+/* Tabs → underline nav */
+:root[data-theme="light"] .tabs {
+  background: rgba(247, 244, 238, .94);
+  border-bottom: 1px solid var(--line);
+}
+:root[data-theme="light"] .tabs button { color: var(--muted); }
+:root[data-theme="light"] .tabs button:hover { color: var(--text); }
+:root[data-theme="light"] .tabs button.active {
+  background: transparent;
+  color: var(--text);
+  border-radius: 0;
+  box-shadow: inset 0 -3px 0 var(--gold);
+}
+
+/* Section titles → gold kicker with a divider rule */
+:root[data-theme="light"] .section-title {
+  color: var(--gold);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+/* Serif headline treatment (magazine feel) */
+:root[data-theme="light"] .featured-card h2,
+:root[data-theme="light"] .news-title,
+:root[data-theme="light"] .hl-title { font-family: Georgia, "Times New Roman", serif; }
+
+/* Featured / hero cards → light card with a green rail (was a dark gradient) */
+:root[data-theme="light"] .featured-card {
+  background: var(--card);
+  border: 1px solid var(--text);
+}
+:root[data-theme="light"] .featured-card::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px;
+  background: var(--eagles-green);
+}
+:root[data-theme="light"] .featured-card::after { opacity: .06; }
+:root[data-theme="light"] .featured-game {
+  background: var(--card-2);
+  border: 1px solid var(--line);
+}
+:root[data-theme="light"] .recs-box {
+  background: var(--card);
+  border-color: var(--line);
+}
+
+/* Card / control hairline borders that were white-on-dark */
+:root[data-theme="light"] .hl-card,
+:root[data-theme="light"] .game-card,
+:root[data-theme="light"] .ai-stat,
+:root[data-theme="light"] .ai-report,
+:root[data-theme="light"] .ai-note,
+:root[data-theme="light"] .trend-row,
+:root[data-theme="light"] .odds-grid > div,
+:root[data-theme="light"] .setup-card,
+:root[data-theme="light"] .chip,
+:root[data-theme="light"] input[type="date"],
+:root[data-theme="light"] .stat-row,
+:root[data-theme="light"] .sched-row,
+:root[data-theme="light"] .opp-card,
+:root[data-theme="light"] .staff-card,
+:root[data-theme="light"] .depth-player,
+:root[data-theme="light"] .news-item,
+:root[data-theme="light"] .fan-card,
+:root[data-theme="light"] .fan-item,
+:root[data-theme="light"] .lg-card,
+:root[data-theme="light"] .mu-card,
+:root[data-theme="light"] .pj-card,
+:root[data-theme="light"] .cs-row,
+:root[data-theme="light"] .ad-row,
+:root[data-theme="light"] .wv-item,
+:root[data-theme="light"] .ss-cols > div,
+:root[data-theme="light"] .wc-match,
+:root[data-theme="light"] .pick-btns button,
+:root[data-theme="light"] .modal-card,
+:root[data-theme="light"] .to-top { border-color: var(--line); }
+
+/* Row dividers (were white-on-dark hairlines) */
+:root[data-theme="light"] th,
+:root[data-theme="light"] td,
+:root[data-theme="light"] .fac-row,
+:root[data-theme="light"] .rep-pick,
+:root[data-theme="light"] .leader-row,
+:root[data-theme="light"] .hit-row,
+:root[data-theme="light"] .md-leader,
+:root[data-theme="light"] .md-line th,
+:root[data-theme="light"] .md-line td,
+:root[data-theme="light"] .ss-cols li,
+:root[data-theme="light"] .st-table th,
+:root[data-theme="light"] .st-table td,
+:root[data-theme="light"] .fan-body { border-color: var(--line); }
+:root[data-theme="light"] .standings-league { border-bottom-color: var(--line); }
+
+/* Dark chips / tracks → light */
+:root[data-theme="light"] .status.final { background: var(--card-2); color: var(--muted); }
+:root[data-theme="light"] .conf-bar,
+:root[data-theme="light"] .pj-meter,
+:root[data-theme="light"] .gr-bar,
+:root[data-theme="light"] .poss-bar { background: rgba(0, 0, 0, .08); }
+:root[data-theme="light"] .modal-x { background: var(--card-2); }
+:root[data-theme="light"] .setup-card code,
+:root[data-theme="light"] .setup-card pre { background: var(--card-2); }
+
+/* Live-situation base cells inside the modal */
+:root[data-theme="light"] .diamond .base,
+:root[data-theme="light"] .out-dot { background: var(--card-2); border-color: rgba(0, 0, 0, .2); }
+
+/* Modal backdrop a touch lighter than the dark theme's */
+:root[data-theme="light"] .modal-backdrop { background: rgba(20, 16, 10, .45); }
+
+/* Header light/dark toggle button (styled for both themes) */
+.theme-toggle {
+  background: rgba(0, 0, 0, .18); border: 1px solid rgba(255, 255, 255, .25);
+  color: #fff; width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+:root[data-theme="light"] .theme-toggle {
+  background: var(--card-2); border-color: var(--line); color: var(--text);
+}
