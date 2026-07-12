@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v94**.
+Current version as of this writing: **v99**.
 
 ## Testing reality
 
@@ -479,9 +479,22 @@ Current version as of this writing: **v94**.
   - **Live-day auto-refresh** (`scheduleLiveRefresh`) — while any roster game is
     live AND the Fantasy tab is open, force-resyncs every 5 min (matches backend
     cache TTL); cleared/re-armed each render, stops when idle or tab inactive.
-  - **Football chip hidden until configured** — the 🏈 chip only renders when the
-    backend reports a football league (`cfg.football`), so the tab never shows a
-    hollow football view out of season.
+  - **🏈 Football — Preseason Prep** (v99) — the Football chip now shows
+    year-round. Until a live NFL league is wired up, selecting it renders a
+    self-contained **preseason-prep view** (`renderFantasyFootball`,
+    `#fantasy-football`, `.pp-*`/`.tl-*`/`.bd-*` CSS) instead of the baseball
+    category sections: a **kickoff countdown** + **offseason timeline** (expected
+    2026 dates, `NFL_DATES`/`daysUntil`), a personal **Draft Board** (add
+    name/pos/tier, quick-add suggestion chips from `NFL_SUGGEST`, position
+    filter; saved on-device in `sportshub:fantasy:nflboard`), and evergreen prep
+    tips. `renderFantasy` hides the baseball wrapper (`#fantasy-live`) and returns
+    early for football; `injectJumpNav` now skips hidden headings so the hidden
+    baseball sections don't produce dead chips. The **live** football league
+    sections (matchup/standings/etc., which need the backend league + `catranks`)
+    are still TODO — they'll branch on `cfg.football` when the NFL league is
+    configured. The Labs rookie **Mock Draft Simulator** is a different thing (real
+    NFL draft of incoming rookies); a *fantasy* snake-draft sim, if built, belongs
+    here in Fantasy → Football.
 - **World Cup neutral sites** — soccer games get **no home-field edge** in the
   model except host nations (USA/Mexico/Canada via `isWorldCupHost`); neutral games
   read "vs" not "@" in the modal.

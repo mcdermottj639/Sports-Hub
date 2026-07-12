@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v98';
+const APP_VERSION = 'v99';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1878,13 +1878,121 @@ function playerLine(p, entries) {
   return { text: `${d.H ?? 0}-${d.AB ?? 0}${hr ? `, ${hr} HR` : ''}${rbi ? `, ${rbi} RBI` : ''}`, d, pitcher: false };
 }
 
+// --- Fantasy: NFL preseason prep ------------------------------------------
+// Everything here is client-side (no backend league needed): a kickoff
+// countdown, an offseason timeline, and a personal draft board saved on-device.
+const NFLBOARD_KEY = 'sportshub:fantasy:nflboard';
+const loadNflBoard = () => { try { return JSON.parse(localStorage.getItem(NFLBOARD_KEY)) || []; } catch (_) { return []; } };
+const saveNflBoard = (list) => { try { localStorage.setItem(NFLBOARD_KEY, JSON.stringify(list)); } catch (_) {} };
+
+// 2026 NFL calendar (expected). Kickoff is the Week-1 Thursday nighter.
+const NFL_KICKOFF = '2026-09-10';
+const NFL_DATES = [
+  ['Training camps open', '2026-07-22'],
+  ['Hall of Fame Game', '2026-07-30'],
+  ['Preseason Week 1', '2026-08-07'],
+  ['Preseason Week 2', '2026-08-14'],
+  ['Preseason Week 3', '2026-08-21'],
+  ['Cutdown to 53', '2026-08-26'],
+  ['Kickoff — Week 1', NFL_KICKOFF],
+];
+// Quick-add starter names by position (NOT a ranking — a seed list to edit).
+const NFL_SUGGEST = {
+  QB: ['Josh Allen', 'Lamar Jackson', 'Jalen Hurts', 'Patrick Mahomes', 'Jayden Daniels'],
+  RB: ['Bijan Robinson', 'Saquon Barkley', 'Jahmyr Gibbs', 'Christian McCaffrey', "De'Von Achane"],
+  WR: ["Ja'Marr Chase", 'Justin Jefferson', 'CeeDee Lamb', 'Amon-Ra St. Brown', 'A.J. Brown'],
+  TE: ['Brock Bowers', 'Trey McBride', 'George Kittle', 'Sam LaPorta'],
+};
+const NFL_POS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST'];
+const daysUntil = (iso) => Math.ceil((new Date(iso + 'T12:00:00') - new Date()) / 86400000);
+
+function renderFantasyFootball() {
+  const box = $('#fantasy-football');
+  if (!box) return;
+  const board = loadNflBoard();
+  const filter = fanState.nflFilter || 'ALL';
+  const kick = daysUntil(NFL_KICKOFF);
+  const status = kick > 0
+    ? `<span class="pp-big">${kick}</span> day${kick === 1 ? '' : 's'} until Week 1 kickoff`
+    : (kick === 0 ? '<span class="pp-big">🏈</span> Kickoff is today!' : 'Season underway — live league sync will light up here.');
+
+  const tl = NFL_DATES.map(([label, iso]) => {
+    const n = daysUntil(iso);
+    const when = n > 0 ? `in ${n}d` : (n === 0 ? 'today' : 'done');
+    const cls = n > 0 ? '' : (n === 0 ? ' now' : ' past');
+    const md = new Date(iso + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return `<div class="tl-row${cls}"><span class="tl-date">${md}</span><span class="tl-label">${esc(label)}</span><span class="tl-when">${when}</span></div>`;
+  }).join('');
+
+  const shown = board.filter((p) => filter === 'ALL' || p.pos === filter)
+    .sort((a, b) => (a.pos === b.pos ? (a.tier - b.tier || a.name.localeCompare(b.name)) : NFL_POS.indexOf(a.pos) - NFL_POS.indexOf(b.pos)));
+  const boardHTML = shown.length
+    ? shown.map((p) => `<div class="bd-row"><span class="bd-tier t${p.tier}">T${p.tier}</span><span class="bd-name">${esc(p.name)}</span><span class="bd-pos">${esc(p.pos)}</span><button class="bd-rm" data-name="${esc(p.name)}" aria-label="Remove ${esc(p.name)}">×</button></div>`).join('')
+    : '<div class="muted" style="padding:8px 2px">No targets yet — add players below, or tap a suggestion.</div>';
+
+  const filterChips = ['ALL', 'QB', 'RB', 'WR', 'TE'].map((f) =>
+    `<button class="chip${f === filter ? ' active' : ''}" data-filter="${f}">${f === 'ALL' ? 'All' : f}</button>`).join('');
+  const sugg = Object.entries(NFL_SUGGEST).map(([pos, names]) =>
+    `<div class="pp-sugg-row"><span class="pp-sugg-pos">${pos}</span>${names.map((n) =>
+      `<button class="chip sm" data-add="${esc(n)}" data-pos="${pos}">${esc(n)}</button>`).join('')}</div>`).join('');
+
+  box.innerHTML = `
+    <div class="setup-card pp-hero">
+      <div class="pp-kicker">🏈 NFL Fantasy — Preseason Prep</div>
+      <div class="pp-count">${status}</div>
+      <div class="muted" style="margin-top:8px">Your live ESPN league — matchups, roster, standings — will sync here once the season starts and the league is connected. Until then, get your draft ready below.</div>
+    </div>
+
+    <h2 class="section-title">Offseason Timeline</h2>
+    <div class="tl-list">${tl}</div>
+    <div class="muted" style="font-size:11px;margin-top:6px">Expected 2026 dates — may shift when the official calendar is set.</div>
+
+    <h2 class="section-title">My Draft Board</h2>
+    <div class="chips" style="margin-bottom:10px">${filterChips}</div>
+    <div class="bd-list">${boardHTML}</div>
+    <div class="pp-add">
+      <input id="bd-name" type="text" placeholder="Add a player…" autocomplete="off" />
+      <select id="bd-pos">${NFL_POS.map((p) => `<option>${p}</option>`).join('')}</select>
+      <select id="bd-tier">${[1, 2, 3, 4, 5].map((t) => `<option value="${t}"${t === 3 ? ' selected' : ''}>Tier ${t}</option>`).join('')}</select>
+      <button id="bd-add" class="fan-btn">Add</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin:12px 0 6px">Quick add — popular names to start (tap to add, then edit freely; not a ranking):</div>
+    ${sugg}
+
+    <h2 class="section-title">Prep Tips</h2>
+    <ul class="pp-tips">
+      <li>Know your <b>scoring</b> first — PPR lifts pass-catching backs and slot receivers; standard leans to volume RBs.</li>
+      <li>Plan the early rounds as <b>tiers</b>, not exact names — your slot and position runs will move the board.</li>
+      <li>Track <b>bye weeks</b> so you don't stack too many starters on the same week.</li>
+      <li>Don't reach for <b>QB or TE</b> early unless it's a truly elite one — both are deep.</li>
+      <li><b>Handcuff</b> your stud RB late, and save a bench spot for a Week-1 waiver dart.</li>
+    </ul>`;
+
+  const addPlayer = (name, pos, tier) => {
+    name = (name || '').trim();
+    if (!name) return;
+    const list = loadNflBoard();
+    if (list.some((p) => p.name.toLowerCase() === name.toLowerCase())) return;
+    list.push({ name, pos, tier });
+    saveNflBoard(list);
+    renderFantasyFootball();
+  };
+  box.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { fanState.nflFilter = b.dataset.filter; renderFantasyFootball(); }));
+  box.querySelectorAll('.bd-rm').forEach((b) => (b.onclick = () => { saveNflBoard(loadNflBoard().filter((p) => p.name !== b.dataset.name)); renderFantasyFootball(); }));
+  box.querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => addPlayer(b.dataset.add, b.dataset.pos, 3)));
+  const addBtn = box.querySelector('#bd-add');
+  if (addBtn) addBtn.onclick = () => addPlayer(box.querySelector('#bd-name').value, box.querySelector('#bd-pos').value, Number(box.querySelector('#bd-tier').value) || 3);
+}
+
 async function renderFantasy() {
   // Which sports have a real league wired up. Football only appears once its
   // ESPN league is configured on the backend (i.e. in-season) — until then the
   // chip is hidden so the tab never shows a hollow football view.
   const cfg = await leagueConfig();
-  const sports = [['baseball', '⚾ Baseball']];
-  if (cfg.football) sports.push(['football', '🏈 Football']);
+  // Baseball has a live category league; Football is shown year-round for
+  // preseason prep (its live-league sections will come once an NFL league is
+  // wired up and in season).
+  const sports = [['baseball', '⚾ Baseball'], ['football', '🏈 Football']];
   if (!sports.some(([s]) => s === fanState.sport)) fanState.sport = 'baseball';
 
   // sport chips
@@ -1895,6 +2003,19 @@ async function renderFantasy() {
     c.onclick = () => { fanState.sport = s; renderFantasy(); };
     chips.appendChild(c);
   });
+
+  // Football = preseason-prep view for now. Swap out the live-league (baseball)
+  // sections and render the prep tools, then rebuild the jump nav and stop.
+  const liveWrap = $('#fantasy-live');
+  const fbBox = $('#fantasy-football');
+  if (fanState.sport === 'football') {
+    if (liveWrap) liveWrap.style.display = 'none';
+    renderFantasyFootball();
+    injectJumpNav('fantasy');
+    return;
+  }
+  if (liveWrap) liveWrap.style.display = '';
+  if (fbBox) fbBox.innerHTML = '';
 
   const leagueKey = fanState.sport === 'baseball' ? 'mlb' : 'nfl';
   let games = [];
@@ -3223,7 +3344,9 @@ function injectJumpNav(name) {
   // never produce a dead chip. Many fantasy sections render asynchronously, so
   // this runs again as they finish (see renderAddDrop) — it's idempotent and
   // rebuilds the bar in place.
-  const titles = [...panel.querySelectorAll('.section-title')];
+  // Skip headings inside a hidden wrapper (e.g. the baseball sections while the
+  // Football preseason view is showing) so they don't become dead chips.
+  const titles = [...panel.querySelectorAll('.section-title')].filter((h) => h.offsetParent !== null);
   const items = titles.map((h, i) => {
     if (!h.id) h.id = `${name}-sec-${i}`;
     const clone = h.cloneNode(true);

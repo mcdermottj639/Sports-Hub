@@ -625,6 +625,39 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .wc-team.out { opacity: .55; }
 .wc-hint { font-size: 11px; margin: 2px 2px 0; }
 
+/* Fantasy: NFL preseason prep (countdown, timeline, draft board) */
+.pp-hero { border-left: 4px solid var(--accent); }
+.pp-kicker { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); }
+.pp-count { font-size: 16px; font-weight: 700; margin-top: 8px; }
+.pp-big { font-size: 30px; font-weight: 900; color: var(--accent); vertical-align: -3px; margin-right: 4px; font-variant-numeric: tabular-nums; }
+.tl-list { display: flex; flex-direction: column; gap: 6px; }
+.tl-row { display: grid; grid-template-columns: 58px 1fr auto; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.06)); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; }
+.tl-date { font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }
+.tl-when { font-size: 11px; color: var(--muted); font-weight: 700; white-space: nowrap; }
+.tl-row.now { border-color: var(--accent); }
+.tl-row.now .tl-when { color: var(--accent); }
+.tl-row.past { opacity: .5; }
+.bd-list { display: flex; flex-direction: column; gap: 6px; }
+.bd-row { display: grid; grid-template-columns: 34px 1fr auto 30px; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.06)); border-radius: 10px; padding: 8px 12px; }
+.bd-tier { font-size: 11px; font-weight: 900; text-align: center; border-radius: 6px; padding: 2px 0; border: 1.5px solid var(--accent); color: var(--accent); background: transparent; }
+.bd-tier.t2 { border-color: var(--gold); color: var(--gold); }
+.bd-tier.t3 { border-color: var(--muted); color: var(--muted); }
+.bd-tier.t4, .bd-tier.t5 { border-color: var(--line, rgba(255,255,255,.2)); color: var(--muted); }
+.bd-name { font-weight: 700; font-size: 14px; }
+.bd-pos { font-size: 11px; font-weight: 800; color: var(--muted); }
+.bd-rm { background: none; border: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 0; }
+.bd-rm:hover { color: var(--live); }
+.pp-add { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.pp-add input { flex: 1 1 100%; }
+.pp-add select { flex: 1 1 30%; }
+.pp-add input, .pp-add select { background: var(--card-2); color: var(--text); border: 1px solid var(--line, rgba(255,255,255,.1)); border-radius: 8px; padding: 8px 10px; font-size: 13px; min-height: 42px; }
+.pp-add .fan-btn { flex: 0 0 auto; min-height: 42px; padding: 8px 18px; }
+.pp-sugg-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.pp-sugg-pos { font-size: 11px; font-weight: 800; color: var(--muted); width: 28px; flex: none; }
+.chip.sm { min-height: 32px; padding: 5px 11px; font-size: 12px; }
+.pp-tips { margin: 0; padding-left: 18px; }
+.pp-tips li { font-size: 13.5px; line-height: 1.5; margin: 6px 0; color: var(--text); }
+
 /* ==========================================================================
    LIGHT MODE — "Editorial / Premium" theme (Design 3).
    Active only when <html data-theme="light">. Dark mode is the default and is
