@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v103';
+const APP_VERSION = 'v104';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2343,25 +2343,33 @@ const mockCounts = (roster) => { const c = {}; roster.forEach((p) => { c[p.pos] 
 
 function mockFiller(m) { m._f = (m._f || 0) + 1; return { name: 'Best Available ' + m._f, pos: 'FLEX', team: '', rank: 900 + m._f }; }
 
-// CPU: best available with a positional-need + round nudge, slight randomness.
+// How many of each position a team wants starting — drives the need boost.
+const MOCK_NEED = { QB: 1, RB: 2, WR: 3, TE: 1, K: 1, DST: 1 };
+// Score a player for a team: steep rank value × positional need × a reach/slide
+// factor. Returns -1 for an illegal pick (position full, or K/DST too early) so
+// drafts vary by team need and don't play out identically every time.
+function mockScore(p, counts, round, rounds) {
+  const have = counts[p.pos] || 0;
+  if (have >= (MOCK_CAP[p.pos] || 9)) return -1;
+  if ((p.pos === 'K' || p.pos === 'DST') && round < rounds - 1) return -1;
+  const value = Math.exp(-(p.rank - 1) / 14); // tier-shaped: nearby ranks close, far ranks fall off
+  const need = MOCK_NEED[p.pos] || 1;
+  let mult = have < need ? 1.5 - 0.12 * have : Math.max(0.2, 0.8 - 0.28 * (have - need));
+  if ((p.pos === 'QB' || p.pos === 'TE') && have >= 1 && round < 8) mult *= 0.25; // one early is plenty
+  if (p.pos === 'QB' && round < 3) mult *= 0.6;                                    // rarely a top-2-round QB
+  const reach = Math.exp((Math.random() - 0.5) * 0.7); // ~0.70–1.42, simulates differing team boards
+  return value * mult * reach;
+}
 function mockCpuChoose(m) {
   if (!m.pool.length) return mockFiller(m);
-  const teamIdx = mockTeamOnClock(m.onClock, m.teams);
-  const c = mockCounts(m.rosters[teamIdx]);
+  const counts = mockCounts(m.rosters[mockTeamOnClock(m.onClock, m.teams)]);
   const round = Math.floor(m.onClock / m.teams) + 1;
-  const ok = (p) => {
-    if ((c[p.pos] || 0) >= (MOCK_CAP[p.pos] || 9)) return false;
-    if ((p.pos === 'K' || p.pos === 'DST') && round < m.rounds - 1) return false;
-    if ((p.pos === 'QB' || p.pos === 'TE') && (c[p.pos] || 0) >= 1 && round < 8) return false;
-    return true;
-  };
-  let cand = m.pool.filter(ok);
-  if (!cand.length) cand = m.pool.filter((p) => (c[p.pos] || 0) < (MOCK_CAP[p.pos] || 9));
-  if (!cand.length) cand = m.pool;
-  const top = cand.slice(0, 3);
-  const r = Math.random();
-  const idx = r < 0.6 ? 0 : (r < 0.85 ? 1 : 2);
-  return top[Math.min(idx, top.length - 1)] || cand[0];
+  let best = null, bestScore = -Infinity;
+  for (const p of m.pool) {
+    const s = mockScore(p, counts, round, m.rounds);
+    if (s >= 0 && s > bestScore) { bestScore = s; best = p; }
+  }
+  return best || m.pool.find((p) => (counts[p.pos] || 0) < (MOCK_CAP[p.pos] || 9)) || m.pool[0];
 }
 
 function mockAssign(m, teamIdx, player) {

@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v103**.
+Current version as of this writing: **v104**.
 
 ## Testing reality
 
@@ -500,8 +500,11 @@ Current version as of this writing: **v103**.
     slot/rounds) → draft room (best-available board with position filter +
     search, your team by position, recent-picks log, auto-pick / sim-rest / exit)
     → completion screen with a **value-vs-slot draft grade** (`mockGrade`). CPU
-    picks best-available with a positional-need + round nudge and slight
-    randomness (`mockCpuChoose`); snake order via `mockTeamOnClock`. Player pool
+    uses a value model (`mockScore`/`mockCpuChoose`): tier-shaped rank value ×
+    positional need (`MOCK_NEED` vs `MOCK_CAP`) × a per-pick reach/slide factor,
+    with K/DST gated to the last two rounds — so drafts vary run-to-run and CPU
+    teams draft to their needs (v104 replaced the old fixed top-3 pick, which
+    played out near-identically every time). Snake order via `mockTeamOnClock`. Player pool
     is a **built-in SAMPLE board** (`MOCK_POOL_RAW`, ~100 names + K/DST) — for
     practice, NOT live ADP. Distinct from the Labs *rookie* sim.
   - **🏈 Team Research** (v101, backups added v102) — in the Football prep view,
