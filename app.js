@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v96';
+const APP_VERSION = 'v97';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3023,6 +3023,14 @@ function rowIndex(unit, label) {
   const i = rows.findIndex((keys) => keys.includes(u));
   return i >= 0 ? i : Math.min(1, rows.length - 1);
 }
+// Surname for the compact field tiles: the last name word, skipping a trailing
+// generational suffix (Jr./Sr./II–V) so "Nolan Smith Jr." shows "Smith", not "Jr.".
+const NAME_SUFFIXES = new Set(['jr', 'jr.', 'sr', 'sr.', 'ii', 'iii', 'iv', 'v']);
+function lastName(name) {
+  const parts = (name || '').trim().split(/\s+/);
+  while (parts.length > 1 && NAME_SUFFIXES.has(parts[parts.length - 1].toLowerCase())) parts.pop();
+  return parts[parts.length - 1] || '';
+}
 function fieldHTML(entries, unit) {
   const spots = [];
   entries.filter((e) => e.unit === unit).forEach((e) =>
@@ -3031,7 +3039,7 @@ function fieldHTML(entries, unit) {
   const extra = [];
   spots.forEach((s) => { const r = rowIndex(unit, s.label); (rows[r] || extra).push(s); });
   rows.forEach((r) => r.sort((a, b) => (FIELD_ORDER[a.label.toUpperCase()] ?? 50) - (FIELD_ORDER[b.label.toUpperCase()] ?? 50)));
-  const spot = (s) => `<div class="field-spot"><div class="pl">${s.label}</div><div class="pn">${(s.name || '').split(' ').slice(-1)[0]}</div>${s.jersey ? `<div class="pj">#${s.jersey}</div>` : ''}</div>`;
+  const spot = (s) => `<div class="field-spot"><div class="pl">${s.label}</div><div class="pn">${esc(lastName(s.name))}</div>${s.jersey ? `<div class="pj">#${s.jersey}</div>` : ''}</div>`;
   let html = '<div class="field">';
   rows.concat([extra]).forEach((r) => { if (r.length) html += `<div class="field-row">${r.map(spot).join('')}</div>`; });
   return html + '</div>';
