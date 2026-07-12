@@ -762,6 +762,11 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-theme="light"] .fan-body { border-color: var(--line); }
 :root[data-theme="light"] .standings-league { border-bottom-color: var(--line); }
 
+/* Live jump-nav chip forces white text (readable on dark chips only) — give it
+   ink text in light mode so the label isn't white-on-white. The red border +
+   🔴 flag still signal "live". */
+:root[data-theme="light"] .chip-live { color: var(--text); }
+
 /* Dark chips / tracks → light */
 :root[data-theme="light"] .status.final { background: var(--card-2); color: var(--muted); }
 :root[data-theme="light"] .conf-bar,
