@@ -678,6 +678,33 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .mk-log { display: flex; flex-direction: column; gap: 4px; }
 .mk-log-row { font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--line, rgba(255,255,255,.05)); }
 
+/* Fantasy: Team Research (projected offensive starters) */
+.tr-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.tr-bar label { font-weight: 700; font-size: 13px; color: var(--muted); flex: none; }
+.tr-bar select { flex: 1; background: var(--card-2); color: var(--text); border: 1px solid var(--line, rgba(255,255,255,.1)); border-radius: 8px; padding: 10px; min-height: 44px; font-size: 14px; }
+.tr-content { display: flex; flex-direction: column; gap: 10px; }
+.tr-pos-h { font-size: 11px; font-weight: 800; color: var(--gold); text-transform: uppercase; letter-spacing: .5px; margin: 6px 0 5px; }
+.tr-player { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.06)); border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; cursor: pointer; color: var(--text); }
+.tr-player:hover { border-color: var(--accent); }
+.tr-player.starter { box-shadow: inset 3px 0 0 var(--accent); }
+.tr-player img, .tr-ph { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--card-2); flex: none; }
+.tr-ph { display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: var(--muted); }
+.tr-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.tr-name { font-weight: 700; font-size: 14.5px; }
+.tr-meta { font-size: 11.5px; color: var(--muted); }
+.tr-arrow { color: var(--muted); font-size: 20px; flex: none; }
+
+/* Player detail modal */
+.pl-head { display: flex; align-items: center; gap: 14px; margin: 6px 0 12px; }
+.pl-shot { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; background: var(--card-2); flex: none; }
+.pl-name { font-size: 20px; font-weight: 800; line-height: 1.15; }
+.pl-sub { color: var(--muted); font-size: 13px; margin-top: 3px; font-weight: 700; }
+.pl-bio { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pl-b { display: flex; justify-content: space-between; gap: 10px; background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.06)); border-radius: 8px; padding: 8px 11px; }
+.pl-bk { color: var(--muted); font-size: 12px; }
+.pl-bv { font-weight: 700; font-size: 13px; text-align: right; }
+.pl-inj { margin-bottom: 12px; background: rgba(255,209,102,.12); border: 1px solid rgba(255,209,102,.35); color: var(--gold); border-radius: 8px; padding: 8px 11px; font-size: 12.5px; font-weight: 700; }
+
 /* ==========================================================================
    LIGHT MODE — "Editorial / Premium" theme (Design 3).
    Active only when <html data-theme="light">. Dark mode is the default and is

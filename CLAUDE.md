@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v100**.
+Current version as of this writing: **v101**.
 
 ## Testing reality
 
@@ -504,6 +504,22 @@ Current version as of this writing: **v100**.
     randomness (`mockCpuChoose`); snake order via `mockTeamOnClock`. Player pool
     is a **built-in SAMPLE board** (`MOCK_POOL_RAW`, ~100 names + K/DST) — for
     practice, NOT live ADP. Distinct from the Labs *rookie* sim.
+  - **🏈 Team Research** (v101) — in the Football prep view, a team `<select>`
+    (all 32 NFL teams, `loadNflTeams` from `${SITE}/football/nfl/teams`) →
+    **projected offensive fantasy starters** grouped QB/RB/WR/TE
+    (`renderTeamResearch`/`paintResearch`, `.tr-*` CSS). Starters come from the
+    latest depth chart (`FBCORE/.../depthcharts`, `STAT_SEASON`) with the top N
+    per `FANTASY_STARTERS` (QB1/RB2/WR3/TE1) marked "Projected starter" (+2 depth
+    each); falls back to roster-by-position if the depth chart is empty. Each
+    player row opens a **player detail modal** (`openPlayerModal`, reuses
+    `#game-modal`, `.pl-*` CSS): headshot, pos·#, an injury banner when present,
+    a bio grid (position/age/height/weight/college/experience from the roster
+    athlete object), and a "Full profile & stats on ESPN ↗" link. Selection +
+    fetched depth are cached in `fanState.researchCache`/`researchAthletes` so the
+    section survives the prep view's full re-renders. NOTE: needs a live
+    connection — the sandbox can't reach ESPN, so the team list + depth data were
+    NOT testable here (structure + the modal were verified with seeded data);
+    verify live on device.
 - **World Cup neutral sites** — soccer games get **no home-field edge** in the
   model except host nations (USA/Mexico/Canada via `isWorldCupHost`); neutral games
   read "vs" not "@" in the modal.

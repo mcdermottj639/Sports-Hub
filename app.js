@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v100';
+const APP_VERSION = 'v101';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1944,6 +1944,11 @@ function renderFantasyFootball() {
       <div class="muted" style="margin-top:8px">Your live ESPN league — matchups, roster, standings — will sync here once the season starts and the league is connected. Until then, get your draft ready below.</div>
     </div>
 
+    <h2 class="section-title">Team Research</h2>
+    <div class="tr-bar"><label for="tr-team">Team</label><select id="tr-team"><option>Loading teams…</option></select></div>
+    <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Projected offensive fantasy starters from the latest depth chart (QB · RB · WR · TE). Tap a player for more info.</div>
+    <div id="tr-content" class="tr-content"></div>
+
     <h2 class="section-title">Offseason Timeline</h2>
     <div class="tl-list">${tl}</div>
     <div class="muted" style="font-size:11px;margin-top:6px">Expected 2026 dates — may shift when the official calendar is set.</div>
@@ -1992,6 +1997,114 @@ function renderFantasyFootball() {
   if (addBtn) addBtn.onclick = () => addPlayer(box.querySelector('#bd-name').value, box.querySelector('#bd-pos').value, Number(box.querySelector('#bd-tier').value) || 3);
   const ms = box.querySelector('#mock-start');
   if (ms) ms.onclick = () => { fanState.mock = { setup: true, teams: 10, slot: 5, rounds: 10 }; renderFantasyFootball(); };
+  initTeamResearch();
+}
+
+// --- Fantasy: Team Research (any NFL team's projected offensive starters) ---
+async function loadNflTeams() {
+  if (fanState.nflTeams) return fanState.nflTeams;
+  const d = await fetchJSON(`${SITE}/football/nfl/teams`, 24 * 3600000).catch(() => null);
+  const teams = (d?.sports?.[0]?.leagues?.[0]?.teams || []).map(({ team }) => ({
+    id: team.id, name: team.displayName, abbr: team.abbreviation, logo: team.logos?.[0]?.href,
+  })).sort((a, b) => a.name.localeCompare(b.name));
+  fanState.nflTeams = teams.length ? teams : null;
+  return fanState.nflTeams;
+}
+
+async function initTeamResearch() {
+  const sel = $('#tr-team');
+  if (!sel) return;
+  const teams = await loadNflTeams();
+  if (!$('#tr-team')) return; // view changed while loading
+  if (!teams) { const c = $('#tr-content'); if (c) c.innerHTML = '<div class="muted">Team list unavailable right now — try again with a connection.</div>'; return; }
+  if (!fanState.researchTeam) fanState.researchTeam = (teams.find((t) => t.abbr === 'PHI') || teams[0]).id;
+  sel.innerHTML = teams.map((t) => `<option value="${t.id}"${t.id === fanState.researchTeam ? ' selected' : ''}>${esc(t.name)}</option>`).join('');
+  sel.onchange = () => { fanState.researchTeam = sel.value; renderTeamResearch(); };
+  renderTeamResearch();
+}
+
+// Fantasy positions we surface as "starters", with how many start at each.
+const FANTASY_STARTERS = { QB: 1, RB: 2, WR: 3, TE: 1 };
+async function renderTeamResearch() {
+  const c = $('#tr-content');
+  if (!c) return;
+  const id = fanState.researchTeam;
+  if (!id) return;
+  fanState.researchCache = fanState.researchCache || {};
+  fanState.researchAthletes = fanState.researchAthletes || {};
+  if (fanState.researchCache[id]) { paintResearch(c, fanState.researchCache[id]); return; }
+  c.innerHTML = '<div class="muted">Loading projected starters…</div>';
+  const [rosterR, dcR] = await Promise.all([
+    fetchJSON(`${SITE}/football/nfl/teams/${id}/roster`, 12 * 3600000).catch(() => null),
+    safeJSON(`${FBCORE}/seasons/${STAT_SEASON}/teams/${id}/depthcharts`, 24 * 3600000),
+  ]);
+  const idMap = {};
+  (rosterR?.athletes || []).forEach((grp) => (grp.items || []).forEach((a) => { if (a.id) { idMap[a.id] = a; fanState.researchAthletes[a.id] = a; } }));
+  const groups = {};
+  (dcR?.items || []).forEach((u) => Object.values(u.positions || {}).forEach((pos) => {
+    const label = (pos.position?.abbreviation || '').toUpperCase();
+    if (!FANTASY_STARTERS[label] || groups[label]) return;
+    const players = (pos.athletes || []).sort((a, b) => (a.rank || 99) - (b.rank || 99))
+      .map((a) => idMap[refId(a.athlete?.$ref)]).filter(Boolean);
+    if (players.length) groups[label] = players;
+  }));
+  // Fallback: derive by roster position if the depth chart is unavailable.
+  let fallback = false;
+  if (!Object.keys(groups).length && Object.keys(idMap).length) {
+    fallback = true;
+    Object.values(idMap).forEach((a) => {
+      const p = (a.position?.abbreviation || '').toUpperCase();
+      if (FANTASY_STARTERS[p]) (groups[p] = groups[p] || []).push(a);
+    });
+  }
+  const data = { groups, error: !Object.keys(groups).length, fallback };
+  fanState.researchCache[id] = data;
+  if (fanState.researchTeam === id) paintResearch(c, data);
+}
+
+function paintResearch(c, data) {
+  if (data.error) { c.innerHTML = '<div class="muted">Depth chart unavailable for this team right now.</div>'; return; }
+  const order = ['QB', 'RB', 'WR', 'TE'];
+  const POSNAME = { QB: 'Quarterback', RB: 'Running Back', WR: 'Wide Receiver', TE: 'Tight End' };
+  const row = (a, starter) => `<button class="tr-player${starter ? ' starter' : ''}" data-aid="${esc(a.id)}">
+    ${a.headshot?.href ? `<img src="${esc(a.headshot.href)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'tr-ph',textContent:'${esc((a.position?.abbreviation || '').slice(0, 3))}'}))">` : `<span class="tr-ph">${esc((a.position?.abbreviation || '').slice(0, 3))}</span>`}
+    <span class="tr-info"><span class="tr-name">${esc(a.displayName)}</span><span class="tr-meta">${starter ? 'Projected starter' : 'Depth'}${a.jersey ? ' · #' + esc(a.jersey) : ''}</span></span>
+    <span class="tr-arrow">›</span></button>`;
+  c.innerHTML = order.filter((p) => data.groups[p]).map((pos) => {
+    const n = FANTASY_STARTERS[pos];
+    const starters = data.groups[pos].slice(0, n);
+    const depth = data.groups[pos].slice(n, n + 2);
+    return `<div class="tr-pos"><div class="tr-pos-h">${POSNAME[pos]}</div>${starters.map((a) => row(a, true)).join('')}${depth.map((a) => row(a, false)).join('')}</div>`;
+  }).join('') + (data.fallback ? '<div class="muted" style="font-size:11px;margin-top:4px">Depth order unavailable — showing roster by position.</div>' : '');
+  c.querySelectorAll('.tr-player').forEach((b) => (b.onclick = () => openPlayerModal(b.dataset.aid)));
+}
+
+async function openPlayerModal(aid) {
+  const a = (fanState.researchAthletes || {})[aid];
+  modal().classList.remove('hidden');
+  const body = $('#modal-body');
+  if (!a) { body.innerHTML = '<div class="muted" style="padding:20px">Player info unavailable.</div>'; return; }
+  const head = a.headshot?.href;
+  const exp = a.experience?.years;
+  const bio = [
+    ['Position', a.position?.displayName || a.position?.abbreviation],
+    ['Age', a.age],
+    ['Height', a.displayHeight],
+    ['Weight', a.displayWeight],
+    ['College', a.college?.name],
+    ['Experience', exp != null ? (exp === 0 ? 'Rookie' : exp + ' yrs') : null],
+  ].filter(([, v]) => v != null && v !== '');
+  const inj = a.injuries?.find((i) => i.status && i.status !== 'Active');
+  const espn = `https://www.espn.com/nfl/player/_/id/${esc(a.id)}`;
+  body.innerHTML = `
+    <div class="pl-head">
+      ${head ? `<img class="pl-shot" src="${esc(head)}" alt="" onerror="this.style.display='none'">` : ''}
+      <div><div class="pl-name">${esc(a.displayName)}</div>
+      <div class="pl-sub">${esc([a.position?.abbreviation, a.jersey ? '#' + a.jersey : ''].filter(Boolean).join(' · '))}</div></div>
+    </div>
+    ${inj ? `<div class="pl-inj">🩹 ${esc(inj.status)}${inj.details?.type ? ' — ' + esc(inj.details.type) : ''}</div>` : ''}
+    <div class="pl-bio">${bio.map(([k, v]) => `<div class="pl-b"><span class="pl-bk">${k}</span><span class="pl-bv">${esc(String(v))}</span></div>`).join('')}</div>
+    <a class="fan-btn" href="${espn}" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;text-decoration:none">Full profile &amp; stats on ESPN ↗</a>`;
 }
 
 // --- Fantasy: NFL mock draft (client-side snake draft vs CPU GMs) ----------
