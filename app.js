@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v101';
+const APP_VERSION = 'v102';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2001,24 +2001,28 @@ function renderFantasyFootball() {
 }
 
 // --- Fantasy: Team Research (any NFL team's projected offensive starters) ---
-async function loadNflTeams() {
-  if (fanState.nflTeams) return fanState.nflTeams;
-  const d = await fetchJSON(`${SITE}/football/nfl/teams`, 24 * 3600000).catch(() => null);
-  const teams = (d?.sports?.[0]?.leagues?.[0]?.teams || []).map(({ team }) => ({
-    id: team.id, name: team.displayName, abbr: team.abbreviation, logo: team.logos?.[0]?.href,
-  })).sort((a, b) => a.name.localeCompare(b.name));
-  fanState.nflTeams = teams.length ? teams : null;
-  return fanState.nflTeams;
-}
+// Static ESPN NFL team ids (stable) so the picker never hangs on a network
+// call — only each team's roster/depth loads on demand (same feeds the Eagles
+// tab uses). Alphabetical by name.
+const NFL_TEAM_LIST = [
+  { id: '22', name: 'Arizona Cardinals' }, { id: '1', name: 'Atlanta Falcons' }, { id: '33', name: 'Baltimore Ravens' },
+  { id: '2', name: 'Buffalo Bills' }, { id: '29', name: 'Carolina Panthers' }, { id: '3', name: 'Chicago Bears' },
+  { id: '4', name: 'Cincinnati Bengals' }, { id: '5', name: 'Cleveland Browns' }, { id: '6', name: 'Dallas Cowboys' },
+  { id: '7', name: 'Denver Broncos' }, { id: '8', name: 'Detroit Lions' }, { id: '9', name: 'Green Bay Packers' },
+  { id: '34', name: 'Houston Texans' }, { id: '11', name: 'Indianapolis Colts' }, { id: '30', name: 'Jacksonville Jaguars' },
+  { id: '12', name: 'Kansas City Chiefs' }, { id: '13', name: 'Las Vegas Raiders' }, { id: '24', name: 'Los Angeles Chargers' },
+  { id: '14', name: 'Los Angeles Rams' }, { id: '15', name: 'Miami Dolphins' }, { id: '16', name: 'Minnesota Vikings' },
+  { id: '17', name: 'New England Patriots' }, { id: '18', name: 'New Orleans Saints' }, { id: '19', name: 'New York Giants' },
+  { id: '20', name: 'New York Jets' }, { id: '21', name: 'Philadelphia Eagles' }, { id: '23', name: 'Pittsburgh Steelers' },
+  { id: '25', name: 'San Francisco 49ers' }, { id: '26', name: 'Seattle Seahawks' }, { id: '27', name: 'Tampa Bay Buccaneers' },
+  { id: '10', name: 'Tennessee Titans' }, { id: '28', name: 'Washington Commanders' },
+];
 
-async function initTeamResearch() {
+function initTeamResearch() {
   const sel = $('#tr-team');
   if (!sel) return;
-  const teams = await loadNflTeams();
-  if (!$('#tr-team')) return; // view changed while loading
-  if (!teams) { const c = $('#tr-content'); if (c) c.innerHTML = '<div class="muted">Team list unavailable right now — try again with a connection.</div>'; return; }
-  if (!fanState.researchTeam) fanState.researchTeam = (teams.find((t) => t.abbr === 'PHI') || teams[0]).id;
-  sel.innerHTML = teams.map((t) => `<option value="${t.id}"${t.id === fanState.researchTeam ? ' selected' : ''}>${esc(t.name)}</option>`).join('');
+  if (!fanState.researchTeam) fanState.researchTeam = '21'; // Eagles by default
+  sel.innerHTML = NFL_TEAM_LIST.map((t) => `<option value="${t.id}"${t.id === fanState.researchTeam ? ' selected' : ''}>${esc(t.name)}</option>`).join('');
   sel.onchange = () => { fanState.researchTeam = sel.value; renderTeamResearch(); };
   renderTeamResearch();
 }
@@ -2062,20 +2066,76 @@ async function renderTeamResearch() {
   if (fanState.researchTeam === id) paintResearch(c, data);
 }
 
+// Active injury label for an athlete (from the roster object), if any.
+const injOf = (a) => a?.injuries?.find((i) => i.status && i.status !== 'Active')?.status || '';
+// 0 healthy · 1 questionable · 2 doubtful · 3 out/IR/suspended.
+function injSeverity(status) {
+  const s = (status || '').toLowerCase();
+  if (!s) return 0;
+  if (/out|reserve|\bir\b|suspend|\bpup\b|non-football/.test(s)) return 3;
+  if (/doubtful/.test(s)) return 2;
+  if (/questionable|day-to-day/.test(s)) return 1;
+  return 0;
+}
+// Estimated chance a backup takes over the starting job this season. Heuristic,
+// NOT a real probability: base rate by position × depth-rank decay × the
+// starter's injury severity × the starter's age (older = more likely replaced).
+const POS_BASE = { QB: 9, RB: 30, WR: 16, TE: 13 };
+const rankDecay = (d) => (d <= 1 ? 1 : d === 2 ? 0.42 : d === 3 ? 0.18 : 0.08);
+const sevMult = (sev) => [1, 1.5, 2.3, 3.4][sev] || 1;
+function ageMult(pos, age) {
+  if (!age) return 1;
+  if (pos === 'RB') return age >= 31 ? 1.7 : age >= 29 ? 1.4 : age >= 27 ? 1.15 : 1;
+  if (pos === 'WR') return age >= 32 ? 1.4 : age >= 30 ? 1.2 : 1;
+  if (pos === 'QB') return age >= 37 ? 1.4 : age >= 35 ? 1.2 : 1;
+  if (pos === 'TE') return age >= 33 ? 1.4 : age >= 31 ? 1.2 : 1;
+  return 1;
+}
+function stealOdds(pos, depth, starters, backup) {
+  const worstSev = Math.max(0, ...starters.map((s) => injSeverity(injOf(s))));
+  const oldest = Math.max(0, ...starters.map((s) => s.age || 0));
+  let pct = (POS_BASE[pos] || 12) * rankDecay(depth) * sevMult(worstSev) * ageMult(pos, oldest);
+  if (injOf(backup)) pct *= 0.4; // a hurt backup is itself less able to step in
+  pct = Math.round(pct);
+  if (depth === 1) { // primary backup gets a floor when the starter is hurt
+    if (worstSev === 3) pct = Math.max(pct, 75);
+    else if (worstSev === 2) pct = Math.max(pct, 55);
+    else if (worstSev === 1) pct = Math.max(pct, 36);
+  }
+  pct = Math.max(2, Math.min(94, pct));
+  const note = worstSev >= 1 ? 'starter banged up' : ageMult(pos, oldest) > 1.15 ? 'aging starter' : (pos === 'RB' ? 'committee risk' : 'depth');
+  return { pct, note, cls: pct >= 45 ? 'hi' : pct >= 22 ? 'mid' : 'lo' };
+}
+
 function paintResearch(c, data) {
   if (data.error) { c.innerHTML = '<div class="muted">Depth chart unavailable for this team right now.</div>'; return; }
   const order = ['QB', 'RB', 'WR', 'TE'];
   const POSNAME = { QB: 'Quarterback', RB: 'Running Back', WR: 'Wide Receiver', TE: 'Tight End' };
-  const row = (a, starter) => `<button class="tr-player${starter ? ' starter' : ''}" data-aid="${esc(a.id)}">
-    ${a.headshot?.href ? `<img src="${esc(a.headshot.href)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'tr-ph',textContent:'${esc((a.position?.abbreviation || '').slice(0, 3))}'}))">` : `<span class="tr-ph">${esc((a.position?.abbreviation || '').slice(0, 3))}</span>`}
-    <span class="tr-info"><span class="tr-name">${esc(a.displayName)}</span><span class="tr-meta">${starter ? 'Projected starter' : 'Depth'}${a.jersey ? ' · #' + esc(a.jersey) : ''}</span></span>
-    <span class="tr-arrow">›</span></button>`;
+  const avatar = (a) => a.headshot?.href
+    ? `<img src="${esc(a.headshot.href)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'tr-ph',textContent:'${esc((a.position?.abbreviation || '').slice(0, 3))}'}))">`
+    : `<span class="tr-ph">${esc((a.position?.abbreviation || '').slice(0, 3))}</span>`;
+  const row = (a, starter, odds) => {
+    const inj = injOf(a);
+    const bits = [starter ? 'Projected starter' : 'Backup', a.jersey ? '#' + esc(a.jersey) : '', inj ? '🩹 ' + esc(inj) : '', odds ? esc(odds.note) : ''].filter(Boolean);
+    const right = odds
+      ? `<span class="tr-odds ${odds.cls}" title="Estimated chance to take over the starting job">${odds.pct}%<small>to start</small></span>`
+      : '<span class="tr-arrow">›</span>';
+    return `<button class="tr-player${starter ? ' starter' : ''}" data-aid="${esc(a.id)}">
+      ${avatar(a)}
+      <span class="tr-info"><span class="tr-name">${esc(a.displayName)}</span><span class="tr-meta">${bits.join(' · ')}</span></span>
+      ${right}</button>`;
+  };
   c.innerHTML = order.filter((p) => data.groups[p]).map((pos) => {
     const n = FANTASY_STARTERS[pos];
     const starters = data.groups[pos].slice(0, n);
-    const depth = data.groups[pos].slice(n, n + 2);
-    return `<div class="tr-pos"><div class="tr-pos-h">${POSNAME[pos]}</div>${starters.map((a) => row(a, true)).join('')}${depth.map((a) => row(a, false)).join('')}</div>`;
-  }).join('') + (data.fallback ? '<div class="muted" style="font-size:11px;margin-top:4px">Depth order unavailable — showing roster by position.</div>' : '');
+    const backups = data.groups[pos].slice(n, n + 3);
+    return `<div class="tr-pos"><div class="tr-pos-h">${POSNAME[pos]}</div>`
+      + starters.map((a) => row(a, true, null)).join('')
+      + backups.map((a, i) => row(a, false, stealOdds(pos, i + 1, starters, a))).join('')
+      + '</div>';
+  }).join('')
+    + '<div class="muted" style="font-size:11px;margin-top:6px">“% to start” is our estimate from depth-chart rank, the starter’s injury status &amp; age — not a real probability.'
+    + (data.fallback ? ' Depth order unavailable, so it’s roster-by-position here.' : '') + '</div>';
   c.querySelectorAll('.tr-player').forEach((b) => (b.onclick = () => openPlayerModal(b.dataset.aid)));
 }
 

@@ -693,6 +693,11 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .tr-name { font-weight: 700; font-size: 14.5px; }
 .tr-meta { font-size: 11.5px; color: var(--muted); }
 .tr-arrow { color: var(--muted); font-size: 20px; flex: none; }
+.tr-odds { display: flex; flex-direction: column; align-items: flex-end; flex: none; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; line-height: 1; min-width: 40px; }
+.tr-odds small { font-size: 8.5px; font-weight: 700; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .3px; }
+.tr-odds.hi { color: var(--live); }
+.tr-odds.mid { color: var(--gold); }
+.tr-odds.lo { color: var(--muted); }
 
 /* Player detail modal */
 .pl-head { display: flex; align-items: center; gap: 14px; margin: 6px 0 12px; }
