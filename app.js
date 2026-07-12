@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v102';
+const APP_VERSION = 'v103';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2038,9 +2038,10 @@ async function renderTeamResearch() {
   fanState.researchAthletes = fanState.researchAthletes || {};
   if (fanState.researchCache[id]) { paintResearch(c, fanState.researchCache[id]); return; }
   c.innerHTML = '<div class="muted">Loading projected starters…</div>';
-  const [rosterR, dcR] = await Promise.all([
+  const [rosterR, dcR, newsR] = await Promise.all([
     fetchJSON(`${SITE}/football/nfl/teams/${id}/roster`, 12 * 3600000).catch(() => null),
     safeJSON(`${FBCORE}/seasons/${STAT_SEASON}/teams/${id}/depthcharts`, 24 * 3600000),
+    fetchJSON(`${SITE}/football/nfl/news?team=${id}`, 30 * 60000).catch(() => null),
   ]);
   const idMap = {};
   (rosterR?.athletes || []).forEach((grp) => (grp.items || []).forEach((a) => { if (a.id) { idMap[a.id] = a; fanState.researchAthletes[a.id] = a; } }));
@@ -2061,9 +2062,42 @@ async function renderTeamResearch() {
       if (FANTASY_STARTERS[p]) (groups[p] = groups[p] || []).push(a);
     });
   }
-  const data = { groups, error: !Object.keys(groups).length, fallback };
+  // ESPN team news → match a recent headline to each shown player (real beat
+  // context: injuries, "first-team reps", "named starter", IR moves, etc.).
+  const articles = (newsR?.articles || []).map((a) => ({
+    h: a.headline || '', d: a.description || '', link: a.links?.web?.href || a.links?.mobile?.href || '', when: a.published || '',
+  })).filter((a) => a.h);
+  fanState.researchNews = fanState.researchNews || {};
+  const news = {};
+  const shown = [];
+  Object.entries(groups).forEach(([pos, arr]) => arr.slice(0, FANTASY_STARTERS[pos] + 3).forEach((a) => shown.push(a)));
+  shown.forEach((a) => { const n = playerNews(a, articles); if (n) { news[a.id] = n; fanState.researchNews[a.id] = n; } });
+
+  const data = { groups, error: !Object.keys(groups).length, fallback, news };
   fanState.researchCache[id] = data;
   if (fanState.researchTeam === id) paintResearch(c, data);
+}
+
+// Most recent team-news article that mentions this player + a role/injury
+// signal, if any. Matching is deliberately conservative to avoid false hits.
+const NEWS_DOWNGRADE = ['out for the season', 'season-ending', 'injured reserve', 'placed on ir', 'to ir', 'ruled out', 'will miss', 'expected to miss', 'suspended', 'carted off', 'torn ', 'acl', 'achilles', 'undergo surgery', 'out indefinitely'];
+const NEWS_PROMOTE = ['first-team', 'first team', 'expected to start', 'named the starter', 'named starter', 'will start', 'gets the start', 'starting job', 'taking over', 'promoted to', 'ahead of', 'atop the depth', 'first string'];
+function classifyNews(text) {
+  if (NEWS_DOWNGRADE.some((k) => text.includes(k))) return 'downgrade';
+  if (NEWS_PROMOTE.some((k) => text.includes(k))) return 'promote';
+  return 'note';
+}
+function playerNews(a, articles) {
+  const name = (a.displayName || '').toLowerCase();
+  const last = lastName(a.displayName).toLowerCase();
+  if (!last) return null;
+  for (const art of articles) { // articles arrive newest-first
+    const text = (art.h + ' ' + art.d).toLowerCase();
+    const hit = text.includes(name) || (last.length >= 4 && text.includes(last));
+    if (!hit) continue;
+    return { headline: art.h, link: art.link, when: art.when, signal: classifyNews(text) };
+  }
+  return null;
 }
 
 // Active injury label for an athlete (from the roster object), if any.
@@ -2114,27 +2148,40 @@ function paintResearch(c, data) {
   const avatar = (a) => a.headshot?.href
     ? `<img src="${esc(a.headshot.href)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'tr-ph',textContent:'${esc((a.position?.abbreviation || '').slice(0, 3))}'}))">`
     : `<span class="tr-ph">${esc((a.position?.abbreviation || '').slice(0, 3))}</span>`;
-  const row = (a, starter, odds) => {
+  const newsIcon = (sig) => (sig === 'downgrade' ? '🔻' : sig === 'promote' ? '🔼' : '🗞');
+  const row = (a, starter, odds, nw) => {
     const inj = injOf(a);
     const bits = [starter ? 'Projected starter' : 'Backup', a.jersey ? '#' + esc(a.jersey) : '', inj ? '🩹 ' + esc(inj) : '', odds ? esc(odds.note) : ''].filter(Boolean);
     const right = odds
       ? `<span class="tr-odds ${odds.cls}" title="Estimated chance to take over the starting job">${odds.pct}%<small>to start</small></span>`
       : '<span class="tr-arrow">›</span>';
-    return `<button class="tr-player${starter ? ' starter' : ''}" data-aid="${esc(a.id)}">
+    const newsLine = nw ? `<span class="tr-news">${newsIcon(nw.signal)} ${esc(nw.headline)}</span>` : '';
+    return `<button class="tr-player${starter ? ' starter' : ''}${nw && nw.signal !== 'note' ? ' news' : ''}" data-aid="${esc(a.id)}">
       ${avatar(a)}
-      <span class="tr-info"><span class="tr-name">${esc(a.displayName)}</span><span class="tr-meta">${bits.join(' · ')}</span></span>
+      <span class="tr-info"><span class="tr-name">${esc(a.displayName)}</span><span class="tr-meta">${bits.join(' · ')}</span>${newsLine}</span>
       ${right}</button>`;
   };
+  const nwOf = (a) => data.news && data.news[a.id];
   c.innerHTML = order.filter((p) => data.groups[p]).map((pos) => {
     const n = FANTASY_STARTERS[pos];
     const starters = data.groups[pos].slice(0, n);
     const backups = data.groups[pos].slice(n, n + 3);
+    const starterDown = starters.some((s) => nwOf(s) && nwOf(s).signal === 'downgrade');
     return `<div class="tr-pos"><div class="tr-pos-h">${POSNAME[pos]}</div>`
-      + starters.map((a) => row(a, true, null)).join('')
-      + backups.map((a, i) => row(a, false, stealOdds(pos, i + 1, starters, a))).join('')
+      + starters.map((a) => row(a, true, null, nwOf(a))).join('')
+      + backups.map((a, i) => {
+        const o = stealOdds(pos, i + 1, starters, a);
+        const nw = nwOf(a);
+        let { pct, note } = o;
+        if (starterDown && i === 0) { pct = Math.max(pct, 80); note = 'starter sidelined (news)'; }
+        if (nw && nw.signal === 'promote') { pct = Math.max(pct, i === 0 ? 66 : 46); note = 'beat buzz: first-team reps'; }
+        pct = Math.min(94, pct);
+        const cls = pct >= 45 ? 'hi' : pct >= 22 ? 'mid' : 'lo';
+        return row(a, false, { pct, note, cls }, nw);
+      }).join('')
       + '</div>';
   }).join('')
-    + '<div class="muted" style="font-size:11px;margin-top:6px">“% to start” is our estimate from depth-chart rank, the starter’s injury status &amp; age — not a real probability.'
+    + '<div class="muted" style="font-size:11px;margin-top:6px">“% to start” is our estimate from depth-chart rank, the starter’s injury status, age &amp; recent ESPN news — not a real probability.'
     + (data.fallback ? ' Depth order unavailable, so it’s roster-by-position here.' : '') + '</div>';
   c.querySelectorAll('.tr-player').forEach((b) => (b.onclick = () => openPlayerModal(b.dataset.aid)));
 }
@@ -2155,7 +2202,9 @@ async function openPlayerModal(aid) {
     ['Experience', exp != null ? (exp === 0 ? 'Rookie' : exp + ' yrs') : null],
   ].filter(([, v]) => v != null && v !== '');
   const inj = a.injuries?.find((i) => i.status && i.status !== 'Active');
+  const nw = (fanState.researchNews || {})[aid];
   const espn = `https://www.espn.com/nfl/player/_/id/${esc(a.id)}`;
+  const nwWhen = nw?.when ? new Date(nw.when).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
   body.innerHTML = `
     <div class="pl-head">
       ${head ? `<img class="pl-shot" src="${esc(head)}" alt="" onerror="this.style.display='none'">` : ''}
@@ -2163,6 +2212,7 @@ async function openPlayerModal(aid) {
       <div class="pl-sub">${esc([a.position?.abbreviation, a.jersey ? '#' + a.jersey : ''].filter(Boolean).join(' · '))}</div></div>
     </div>
     ${inj ? `<div class="pl-inj">🩹 ${esc(inj.status)}${inj.details?.type ? ' — ' + esc(inj.details.type) : ''}</div>` : ''}
+    ${nw ? `<div class="md-section-title">Latest News</div><a class="pl-news-card" href="${esc(nw.link || espn)}" target="_blank" rel="noopener"><div class="pl-news-h">${esc(nw.headline)}</div><div class="pl-news-w">${nwWhen ? esc(nwWhen) + ' · ' : ''}ESPN ↗</div></a>` : ''}
     <div class="pl-bio">${bio.map(([k, v]) => `<div class="pl-b"><span class="pl-bk">${k}</span><span class="pl-bv">${esc(String(v))}</span></div>`).join('')}</div>
     <a class="fan-btn" href="${espn}" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;text-decoration:none">Full profile &amp; stats on ESPN ↗</a>`;
 }

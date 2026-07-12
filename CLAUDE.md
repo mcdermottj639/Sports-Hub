@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v102**.
+Current version as of this writing: **v103**.
 
 ## Testing reality
 
@@ -521,8 +521,15 @@ Current version as of this writing: **v102**.
     an estimated "% to start"** (`stealOdds`/`paintResearch`) = position base
     rate × depth-rank decay × the starter's injury severity (`injSeverity`) × the
     starter's age (`ageMult`), floored high when the starter is Out/Doubtful; a
-    starter's own injury shows as a 🩹 badge on their row. Clearly labeled an
-    estimate, not a real probability. Selection +
+    starter's own injury shows as a 🩹 badge on their row. **News-enriched
+    (v103):** each shown player is matched to a recent **ESPN team-news** headline
+    (`${SITE}/.../news?team=`, `playerNews`/`classifyNews`) — a starter with a
+    downgrade signal (IR/out-for-season/suspended) pushes his primary backup to a
+    high floor, a backup with a promote signal (first-team reps / named starter)
+    gets bumped, and the driving headline shows on the row (🔻/🔼/🗞) and in the
+    player modal's "Latest News" card. All ESPN free feeds, no keys — Twitter/X
+    is paywalled and Reddit is browser-CORS-blocked + noisy, so neither is used.
+    Clearly labeled an estimate, not a real probability. Selection +
     fetched depth are cached in `fanState.researchCache`/`researchAthletes` so the
     section survives the prep view's full re-renders. NOTE: needs a live
     connection — the sandbox can't reach ESPN, so the team list + depth data were
