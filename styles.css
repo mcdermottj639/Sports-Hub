@@ -658,6 +658,26 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .pp-tips { margin: 0; padding-left: 18px; }
 .pp-tips li { font-size: 13.5px; line-height: 1.5; margin: 6px 0; color: var(--text); }
 
+/* Fantasy: NFL mock draft */
+.mock-setrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0; }
+.mock-setrow label { font-weight: 700; font-size: 14px; }
+.mock-setrow select { background: var(--card-2); color: var(--text); border: 1px solid var(--line, rgba(255,255,255,.1)); border-radius: 8px; padding: 8px 12px; min-height: 42px; font-size: 14px; min-width: 90px; }
+.mk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 2px 0 10px; }
+.mk-clock { font-weight: 700; font-size: 15px; }
+.mk-sub { color: var(--muted); font-size: 12px; font-weight: 600; }
+.mk-board { display: flex; flex-direction: column; gap: 6px; }
+.mk-row { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.06)); border-radius: 10px; padding: 8px 12px; }
+.mk-rank { color: var(--muted); font-weight: 800; font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; }
+.mk-nm { font-weight: 700; font-size: 14px; min-width: 0; }
+.mk-meta { color: var(--muted); font-size: 11px; font-weight: 700; }
+.mk-draft { background: transparent; border: 1.5px solid var(--accent); color: var(--accent); border-radius: 8px; padding: 6px 12px; font-weight: 800; font-size: 12px; cursor: pointer; }
+.mk-draft:hover { background: var(--accent); color: #fff; }
+.mk-team { background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.06)); border-radius: 10px; padding: 8px 14px 12px; }
+.mk-team .pos-h { font-size: 11px; font-weight: 800; color: var(--gold); text-transform: uppercase; letter-spacing: .5px; margin: 10px 0 3px; }
+.mk-pick-line { font-size: 13.5px; padding: 2px 0; font-weight: 600; }
+.mk-log { display: flex; flex-direction: column; gap: 4px; }
+.mk-log-row { font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--line, rgba(255,255,255,.05)); }
+
 /* ==========================================================================
    LIGHT MODE — "Editorial / Premium" theme (Design 3).
    Active only when <html data-theme="light">. Dark mode is the default and is

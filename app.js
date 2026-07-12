@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v99';
+const APP_VERSION = 'v100';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1909,6 +1909,7 @@ const daysUntil = (iso) => Math.ceil((new Date(iso + 'T12:00:00') - new Date()) 
 function renderFantasyFootball() {
   const box = $('#fantasy-football');
   if (!box) return;
+  if (fanState.mock) return renderMockDraft();
   const board = loadNflBoard();
   const filter = fanState.nflFilter || 'ALL';
   const kick = daysUntil(NFL_KICKOFF);
@@ -1959,6 +1960,13 @@ function renderFantasyFootball() {
     <div class="muted" style="font-size:12px;margin:12px 0 6px">Quick add — popular names to start (tap to add, then edit freely; not a ranking):</div>
     ${sugg}
 
+    <h2 class="section-title">Mock Draft</h2>
+    <div class="setup-card">
+      <p style="margin-top:0">Practice your draft against CPU GMs — snake order, a live best-available board, instant results.</p>
+      <button id="mock-start" class="fan-btn">🏈 Start Mock Draft</button>
+      <div class="muted" style="font-size:11px;margin-top:8px">Uses a built-in sample player board (~100 players) — for practice, not live ADP.</div>
+    </div>
+
     <h2 class="section-title">Prep Tips</h2>
     <ul class="pp-tips">
       <li>Know your <b>scoring</b> first — PPR lifts pass-catching backs and slot receivers; standard leans to volume RBs.</li>
@@ -1982,6 +1990,303 @@ function renderFantasyFootball() {
   box.querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => addPlayer(b.dataset.add, b.dataset.pos, 3)));
   const addBtn = box.querySelector('#bd-add');
   if (addBtn) addBtn.onclick = () => addPlayer(box.querySelector('#bd-name').value, box.querySelector('#bd-pos').value, Number(box.querySelector('#bd-tier').value) || 3);
+  const ms = box.querySelector('#mock-start');
+  if (ms) ms.onclick = () => { fanState.mock = { setup: true, teams: 10, slot: 5, rounds: 10 }; renderFantasyFootball(); };
+}
+
+// --- Fantasy: NFL mock draft (client-side snake draft vs CPU GMs) ----------
+// Built-in SAMPLE big board (~100 players) — for practice, not live ADP.
+const MOCK_POOL_RAW = `Ja'Marr Chase|WR|CIN
+Bijan Robinson|RB|ATL
+Justin Jefferson|WR|MIN
+Saquon Barkley|RB|PHI
+Jahmyr Gibbs|RB|DET
+CeeDee Lamb|WR|DAL
+Christian McCaffrey|RB|SF
+Amon-Ra St. Brown|WR|DET
+Puka Nacua|WR|LAR
+Malik Nabers|WR|NYG
+De'Von Achane|RB|MIA
+Ashton Jeanty|RB|LV
+Nico Collins|WR|HOU
+Brian Thomas Jr.|WR|JAX
+A.J. Brown|WR|PHI
+Drake London|WR|ATL
+Jonathan Taylor|RB|IND
+Derrick Henry|RB|BAL
+Brock Bowers|TE|LV
+Josh Jacobs|RB|GB
+Bucky Irving|RB|TB
+Ladd McConkey|WR|LAC
+Tee Higgins|WR|CIN
+Jaxon Smith-Njigba|WR|SEA
+Kyren Williams|RB|LAR
+Chase Brown|RB|CIN
+Trey McBride|TE|ARI
+Garrett Wilson|WR|NYJ
+Davante Adams|WR|LAR
+Terry McLaurin|WR|WAS
+Marvin Harrison Jr.|WR|ARI
+James Cook|RB|BUF
+Kenneth Walker III|RB|SEA
+Breece Hall|RB|NYJ
+DK Metcalf|WR|PIT
+Mike Evans|WR|TB
+DJ Moore|WR|CHI
+Josh Allen|QB|BUF
+Lamar Jackson|QB|BAL
+Jayden Daniels|QB|WAS
+Jalen Hurts|QB|PHI
+George Kittle|TE|SF
+Omarion Hampton|RB|LAC
+Alvin Kamara|RB|NO
+Rashee Rice|WR|KC
+Courtland Sutton|WR|DEN
+Jaylen Waddle|WR|MIA
+Zay Flowers|WR|BAL
+DeVonta Smith|WR|PHI
+Chuba Hubbard|RB|CAR
+TreVeyon Henderson|RB|NE
+Sam LaPorta|TE|DET
+James Conner|RB|ARI
+Aaron Jones|RB|MIN
+Jerry Jeudy|WR|CLE
+Calvin Ridley|WR|TEN
+Jameson Williams|WR|DET
+Tetairoa McMillan|WR|CAR
+Patrick Mahomes|QB|KC
+Joe Burrow|QB|CIN
+RJ Harvey|RB|DEN
+Tony Pollard|RB|TEN
+David Montgomery|RB|DET
+Travis Hunter|WR|JAX
+Xavier Worthy|WR|KC
+Jordan Addison|WR|MIN
+Jakobi Meyers|WR|LV
+T.J. Hockenson|TE|MIN
+Mark Andrews|TE|BAL
+D'Andre Swift|RB|CHI
+Isiah Pacheco|RB|KC
+Brian Robinson Jr.|RB|WAS
+Rome Odunze|WR|CHI
+Chris Godwin|WR|TB
+Stefon Diggs|WR|NE
+Bo Nix|QB|DEN
+Baker Mayfield|QB|TB
+Kaleb Johnson|RB|PIT
+Tyrone Tracy Jr.|RB|NYG
+Jaylen Warren|RB|PIT
+Khalil Shakir|WR|BUF
+Deebo Samuel|WR|WAS
+Keon Coleman|WR|BUF
+Ricky Pearsall|WR|SF
+Dallas Goedert|TE|PHI
+David Njoku|TE|CLE
+Evan Engram|TE|DEN
+Caleb Williams|QB|CHI
+Kyler Murray|QB|ARI
+Justin Fields|QB|NYJ
+Najee Harris|RB|LAC
+Rhamondre Stevenson|RB|NE
+Jauan Jennings|WR|SF
+Cooper Kupp|WR|SEA
+Jordan Mason|RB|MIN
+Tyler Warren|TE|IND
+Colston Loveland|TE|CHI
+Dak Prescott|QB|DAL
+Brock Purdy|QB|SF
+Chris Olave|WR|NO
+Brandon Aubrey|K|DAL
+Jake Bates|K|DET
+Cameron Dicker|K|LAC
+Harrison Butker|K|KC
+Eagles D/ST|DST|PHI
+Ravens D/ST|DST|BAL
+Broncos D/ST|DST|DEN
+Texans D/ST|DST|HOU
+Steelers D/ST|DST|PIT`;
+const MOCK_POOL = MOCK_POOL_RAW.trim().split('\n').map((l, i) => {
+  const [name, pos, team] = l.split('|');
+  return { name, pos, team, rank: i + 1 };
+});
+const MOCK_CAP = { QB: 2, RB: 6, WR: 7, TE: 2, K: 1, DST: 1, FLEX: 9 };
+
+const mockTeamOnClock = (overall, teams) => {
+  const rnd = Math.floor(overall / teams);
+  const pos = overall % teams;
+  return rnd % 2 === 0 ? pos : teams - 1 - pos;
+};
+const mockCounts = (roster) => { const c = {}; roster.forEach((p) => { c[p.pos] = (c[p.pos] || 0) + 1; }); return c; };
+
+function mockFiller(m) { m._f = (m._f || 0) + 1; return { name: 'Best Available ' + m._f, pos: 'FLEX', team: '', rank: 900 + m._f }; }
+
+// CPU: best available with a positional-need + round nudge, slight randomness.
+function mockCpuChoose(m) {
+  if (!m.pool.length) return mockFiller(m);
+  const teamIdx = mockTeamOnClock(m.onClock, m.teams);
+  const c = mockCounts(m.rosters[teamIdx]);
+  const round = Math.floor(m.onClock / m.teams) + 1;
+  const ok = (p) => {
+    if ((c[p.pos] || 0) >= (MOCK_CAP[p.pos] || 9)) return false;
+    if ((p.pos === 'K' || p.pos === 'DST') && round < m.rounds - 1) return false;
+    if ((p.pos === 'QB' || p.pos === 'TE') && (c[p.pos] || 0) >= 1 && round < 8) return false;
+    return true;
+  };
+  let cand = m.pool.filter(ok);
+  if (!cand.length) cand = m.pool.filter((p) => (c[p.pos] || 0) < (MOCK_CAP[p.pos] || 9));
+  if (!cand.length) cand = m.pool;
+  const top = cand.slice(0, 3);
+  const r = Math.random();
+  const idx = r < 0.6 ? 0 : (r < 0.85 ? 1 : 2);
+  return top[Math.min(idx, top.length - 1)] || cand[0];
+}
+
+function mockAssign(m, teamIdx, player) {
+  m.pool = m.pool.filter((p) => p !== player);
+  m.picks.push({ overall: m.onClock, round: Math.floor(m.onClock / m.teams) + 1, teamIdx, player });
+  m.rosters[teamIdx].push(player);
+  m.onClock++;
+}
+// Auto-run CPU picks until it's the user's turn (or the draft is done).
+function mockAdvance(m) {
+  const total = m.teams * m.rounds;
+  while (m.onClock < total && mockTeamOnClock(m.onClock, m.teams) !== m.userIdx) {
+    mockAssign(m, mockTeamOnClock(m.onClock, m.teams), mockCpuChoose(m));
+  }
+}
+const mockDone = (m) => m.onClock >= m.teams * m.rounds;
+
+function mockStart(m) {
+  m.userIdx = Math.max(0, Math.min(m.teams - 1, (m.slot || 1) - 1));
+  m.pool = MOCK_POOL.slice();
+  m.rosters = Array.from({ length: m.teams }, () => []);
+  m.picks = [];
+  m.onClock = 0;
+  m.setup = false;
+  mockAdvance(m);
+}
+function mockUserPick(m, player) { mockAssign(m, m.userIdx, player); mockAdvance(m); }
+function mockSimRest(m) {
+  const total = m.teams * m.rounds;
+  while (m.onClock < total) {
+    const t = mockTeamOnClock(m.onClock, m.teams);
+    mockAssign(m, t, mockCpuChoose(m));
+  }
+}
+function mockGrade(m) {
+  const mine = m.picks.filter((p) => p.teamIdx === m.userIdx && p.player.rank < 900);
+  if (!mine.length) return { letter: '—', diff: 0 };
+  const diff = mine.reduce((s, p) => s + ((p.overall + 1) - p.player.rank), 0) / mine.length;
+  const letter = diff >= 8 ? 'A+' : diff >= 5 ? 'A' : diff >= 2 ? 'B+' : diff >= -1 ? 'B' : diff >= -4 ? 'C' : diff >= -8 ? 'D' : 'F';
+  return { letter, diff };
+}
+
+function renderMockDraft() {
+  const box = $('#fantasy-football');
+  const m = fanState.mock;
+  if (!box || !m) return;
+
+  // Setup screen
+  if (m.setup) {
+    const slotOpts = () => Array.from({ length: m.teams }, (_, i) => `<option value="${i + 1}"${i + 1 === m.slot ? ' selected' : ''}>${i + 1}</option>`).join('');
+    box.innerHTML = `
+      <h2 class="section-title">Mock Draft — Setup</h2>
+      <div class="setup-card">
+        <div class="mock-setrow"><label>Teams</label><select id="mk-teams">${[8, 10, 12, 14].map((n) => `<option value="${n}"${n === m.teams ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
+        <div class="mock-setrow"><label>Your pick</label><select id="mk-slot">${slotOpts()}</select></div>
+        <div class="mock-setrow"><label>Rounds</label><select id="mk-rounds">${[6, 8, 10, 12, 15].map((n) => `<option value="${n}"${n === m.rounds ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
+        <div class="fan-actions">
+          <button id="mk-go" class="fan-btn">Start draft</button>
+          <button id="mk-cancel" class="fan-btn ghost">Cancel</button>
+        </div>
+      </div>`;
+    const teamsSel = box.querySelector('#mk-teams');
+    teamsSel.onchange = () => { m.teams = Number(teamsSel.value); if (m.slot > m.teams) m.slot = m.teams; renderMockDraft(); };
+    box.querySelector('#mk-slot').onchange = (e) => { m.slot = Number(e.target.value); };
+    box.querySelector('#mk-rounds').onchange = (e) => { m.rounds = Number(e.target.value); };
+    box.querySelector('#mk-go').onclick = () => { m.slot = Number(box.querySelector('#mk-slot').value); m.rounds = Number(box.querySelector('#mk-rounds').value); mockStart(m); renderMockDraft(); };
+    box.querySelector('#mk-cancel').onclick = () => { fanState.mock = null; renderFantasyFootball(); };
+    return;
+  }
+
+  const done = mockDone(m);
+  const round = Math.floor(m.onClock / m.teams) + 1;
+  const inRound = (m.onClock % m.teams) + 1;
+  const teamLabel = (i) => (i === m.userIdx ? 'You' : `Team ${i + 1}`);
+
+  // Your roster panel
+  const mine = m.rosters[m.userIdx];
+  const posOrder = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST'];
+  const teamHTML = posOrder.map((pos) => {
+    const list = mine.filter((p) => p.pos === pos);
+    if (!list.length) return '';
+    return `<div class="pos-h">${pos}</div>` + list.map((p) => `<div class="mk-pick-line">${esc(p.name)} <span class="mk-meta">${esc(p.team || '')}</span></div>`).join('');
+  }).join('') || '<div class="muted">No picks yet.</div>';
+
+  // Recent picks log (last 8)
+  const log = m.picks.slice(-8).reverse().map((pk) =>
+    `<div class="mk-log-row"><span class="mk-meta">R${pk.round} · ${teamLabel(pk.teamIdx)}</span> ${esc(pk.player.name)} <span class="mk-meta">${esc(pk.player.pos)}</span></div>`).join('');
+
+  if (done) {
+    const g = mockGrade(m);
+    box.innerHTML = `
+      <div class="setup-card pp-hero"><div class="pp-kicker">🏈 Draft Complete</div>
+        <div class="pp-count"><span class="pp-big">${g.letter}</span> your draft grade</div>
+        <div class="muted" style="margin-top:6px">Value vs slot: ${g.diff >= 0 ? '+' : ''}${g.diff.toFixed(1)} per pick (positive = you landed players below where they went).</div>
+      </div>
+      <h2 class="section-title">Your Team</h2>
+      <div class="mk-team">${teamHTML}</div>
+      <div class="fan-actions">
+        <button id="mk-new" class="fan-btn">New draft</button>
+        <button id="mk-exit" class="fan-btn ghost">Back to prep</button>
+      </div>`;
+    box.querySelector('#mk-new').onclick = () => { fanState.mock = { setup: true, teams: m.teams, slot: m.slot, rounds: m.rounds }; renderMockDraft(); };
+    box.querySelector('#mk-exit').onclick = () => { fanState.mock = null; renderFantasyFootball(); };
+    return;
+  }
+
+  const filter = m.filter || 'ALL';
+  const filterChips = ['ALL', 'QB', 'RB', 'WR', 'TE'].map((f) =>
+    `<button class="chip sm${f === filter ? ' active' : ''}" data-mf="${f}">${f === 'ALL' ? 'All' : f}</button>`).join('');
+
+  box.innerHTML = `
+    <div class="mk-head">
+      <div class="mk-clock">🕐 On the clock: <b>${teamLabel(mockTeamOnClock(m.onClock, m.teams))}</b></div>
+      <div class="mk-sub">Round ${round} · Pick ${inRound}/${m.teams} · #${m.onClock + 1} overall</div>
+    </div>
+    <div class="chips" style="margin-bottom:8px">${filterChips}
+      <input id="mk-search" type="text" placeholder="Search…" autocomplete="off" style="flex:1 1 120px;min-width:100px" />
+    </div>
+    <div id="mk-list" class="mk-board"></div>
+    <div class="fan-actions">
+      <button id="mk-auto" class="fan-btn">Auto-pick best</button>
+      <button id="mk-sim" class="fan-btn ghost">Sim rest</button>
+      <button id="mk-exit" class="fan-btn ghost">Exit</button>
+    </div>
+    <h2 class="section-title">Your Team <span class="season-tag">${mine.length} pick${mine.length === 1 ? '' : 's'}</span></h2>
+    <div class="mk-team">${teamHTML}</div>
+    <h2 class="section-title">Recent Picks</h2>
+    <div class="mk-log">${log || '<div class="muted">Draft just started.</div>'}</div>`;
+
+  const listBox = box.querySelector('#mk-list');
+  const searchEl = box.querySelector('#mk-search');
+  const paint = () => {
+    const q = (searchEl.value || '').toLowerCase().trim();
+    const shown = m.pool.filter((p) => (filter === 'ALL' || p.pos === filter) && (!q || p.name.toLowerCase().includes(q))).slice(0, 40);
+    listBox.innerHTML = shown.length
+      ? shown.map((p) => `<div class="mk-row"><span class="mk-rank">${p.rank < 900 ? p.rank : '–'}</span><span class="mk-nm">${esc(p.name)} <span class="mk-meta">${esc(p.pos)}·${esc(p.team || '')}</span></span><button class="mk-draft" data-rank="${p.rank}">Draft</button></div>`).join('')
+      : '<div class="muted" style="padding:8px 2px">No players match.</div>';
+    listBox.querySelectorAll('.mk-draft').forEach((b) => (b.onclick = () => {
+      const player = m.pool.find((p) => String(p.rank) === b.dataset.rank);
+      if (player) { mockUserPick(m, player); renderMockDraft(); }
+    }));
+  };
+  paint();
+  box.querySelectorAll('[data-mf]').forEach((b) => (b.onclick = () => { m.filter = b.dataset.mf; renderMockDraft(); }));
+  searchEl.oninput = paint;
+  box.querySelector('#mk-auto').onclick = () => { mockUserPick(m, mockCpuChoose(m)); renderMockDraft(); };
+  box.querySelector('#mk-sim').onclick = () => { mockSimRest(m); renderMockDraft(); };
+  box.querySelector('#mk-exit').onclick = () => { fanState.mock = null; renderFantasyFootball(); };
 }
 
 async function renderFantasy() {

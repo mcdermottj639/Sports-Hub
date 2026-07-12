@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v99**.
+Current version as of this writing: **v100**.
 
 ## Testing reality
 
@@ -493,8 +493,17 @@ Current version as of this writing: **v99**.
     sections (matchup/standings/etc., which need the backend league + `catranks`)
     are still TODO — they'll branch on `cfg.football` when the NFL league is
     configured. The Labs rookie **Mock Draft Simulator** is a different thing (real
-    NFL draft of incoming rookies); a *fantasy* snake-draft sim, if built, belongs
-    here in Fantasy → Football.
+    NFL draft of incoming rookies).
+  - **🏈 Fantasy Mock Draft** (v100) — a client-side snake draft vs CPU GMs, in
+    the Football prep view (`renderMockDraft`, launched from the "Mock Draft"
+    card; state in `fanState.mock`, `.mk-*`/`.mock-*` CSS). Setup (teams/your
+    slot/rounds) → draft room (best-available board with position filter +
+    search, your team by position, recent-picks log, auto-pick / sim-rest / exit)
+    → completion screen with a **value-vs-slot draft grade** (`mockGrade`). CPU
+    picks best-available with a positional-need + round nudge and slight
+    randomness (`mockCpuChoose`); snake order via `mockTeamOnClock`. Player pool
+    is a **built-in SAMPLE board** (`MOCK_POOL_RAW`, ~100 names + K/DST) — for
+    practice, NOT live ADP. Distinct from the Labs *rookie* sim.
 - **World Cup neutral sites** — soccer games get **no home-field edge** in the
   model except host nations (USA/Mexico/Canada via `isWorldCupHost`); neutral games
   read "vs" not "@" in the modal.
