@@ -781,6 +781,16 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-theme="light"] .diamond .base,
 :root[data-theme="light"] .out-dot { background: var(--card-2); border-color: rgba(0, 0, 0, .2); }
 
+/* Eagles depth-chart "field" view — the player tiles are translucent-dark and
+   are meant to sit on a green field. In light mode the field lost its green fill
+   (the yard-line gradient overrides the green one), leaving muddy gray tiles with
+   dark-on-dark text. Restore the green field and keep the tile text light so it
+   reads exactly as it does in dark mode. */
+:root[data-theme="light"] .field { background-color: #0e3b2c; }
+:root[data-theme="light"] .field-spot .pl { color: #ffd166; }
+:root[data-theme="light"] .field-spot .pn { color: #f4f8f6; }
+:root[data-theme="light"] .field-spot .pj { color: #3ad29f; }
+
 /* Modal backdrop a touch lighter than the dark theme's */
 :root[data-theme="light"] .modal-backdrop { background: rgba(20, 16, 10, .45); }
 
