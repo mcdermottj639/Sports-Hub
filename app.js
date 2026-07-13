@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v115';
+const APP_VERSION = 'v116';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -283,7 +283,7 @@ function playoffOutlook(rows, teamName, sport) {
       detail = `${gb != null ? `${gb.toFixed(1)} back of the last wild card · ` : ''}${projW}-${projL} pace`;
     }
   }
-  return { madeIt, isLeader, status, detail, projW, projL, divGB, division: me.division };
+  return { madeIt, isLeader, status, detail, projW, projL, divGB, division: me.division, wildPool, wc };
 }
 
 async function renderStandingsBlock(sport, teamName, standSel, poSel) {
@@ -309,9 +309,24 @@ async function renderStandingsBlock(sport, teamName, standSel, poSel) {
   }
   if (poEl) {
     const o = playoffOutlook(rows, teamName, sport);
-    poEl.innerHTML = o
-      ? `<div class="po-card ${o.madeIt ? 'in' : 'out'}"><div class="po-status">${o.madeIt ? '✅' : '⚠️'} ${esc(o.status)}</div><div class="po-detail">${esc(o.detail)}</div><div class="po-note">Pace-based estimate from current standings — not official playoff odds.</div></div>`
-      : '<div class="empty">Playoff outlook unavailable.</div>';
+    if (!o) { poEl.innerHTML = '<div class="empty">Playoff outlook unavailable.</div>'; return; }
+    let html = `<div class="po-card ${o.madeIt ? 'in' : 'out'}"><div class="po-status">${o.madeIt ? '✅' : '⚠️'} ${esc(o.status)}</div><div class="po-detail">${esc(o.detail)}</div><div class="po-note">Pace-based estimate from current standings — not official playoff odds.</div></div>`;
+    // Wild-card race — shown when the team's path runs through the wild card
+    // (i.e. they're not their division's leader). Dashed line marks the cut.
+    if (!o.isLeader && (o.wildPool || []).length) {
+      const cut = o.wildPool[o.wc - 1];
+      const shown = o.wildPool.slice(0, Math.max(o.wc + 3, 6));
+      const wcBody = shown.map((r, i) => {
+        const pct = pctOf(r).toFixed(3).replace(/^0/, '');
+        const wgb = cut ? gamesBack(cut, r) : 0;
+        const gbTxt = r === cut ? '—' : (wgb < 0 ? '+' + (-wgb).toFixed(1) : wgb.toFixed(1));
+        const logo = r.logo ? `<img class="tlogo" src="${esc(r.logo)}" alt="" onerror="this.style.display='none'">` : '';
+        const tag = i < o.wc ? ` <span class="wc-in">WC${i + 1}</span>` : '';
+        return `<tr class="${sameTeam(r.team, teamName) ? 'fav' : ''}${i === o.wc ? ' wc-cut' : ''}"><td>${logo}${esc(r.team)}${tag}</td><td class="num">${r.wins}</td><td class="num">${r.losses}</td><td class="num">${pct}</td><td class="num">${gbTxt}</td></tr>`;
+      }).join('');
+      html += `<div class="standings-group wc">Wild Card race</div><table><tr><th>Team</th><th class="num">W</th><th class="num">L</th><th class="num">PCT</th><th class="num">WCGB</th></tr>${wcBody}</table><div class="po-note">Dashed line = the cut (top ${o.wc} make it). WCGB is vs the last wild-card spot.</div>`;
+    }
+    poEl.innerHTML = html;
   }
 }
 
@@ -4168,10 +4183,21 @@ async function renderRedSoxLeaders(idMap) {
   const data = await safeJSON(`${BBCORE}/seasons/${MLB_SEASON}/types/2/teams/${REDSOX.teamId}/leaders`, 6 * 3600000);
   const cats = (data?.categories || []).filter((c) => (c.leaders || []).length);
   if (!cats.length) { elx.innerHTML = '<div class="empty">Player leaders will appear during the season.</div>'; return; }
-  elx.innerHTML = cats.slice(0, 10).map((c) => {
+  // The core leaders feed gives the athlete only as a $ref; resolve names from
+  // the roster map first, and fetch any that aren't on it (deduped + cached) so
+  // rows don't fall back to "—".
+  const entries = cats.slice(0, 12).map((c) => {
     const top = c.leaders[0];
-    const who = idMap[refId(top.athlete?.$ref)]?.displayName || top.athlete?.displayName || '';
-    return `<div class="leader-row"><span class="cat">${esc(c.displayName || c.name)}</span><span class="who">${esc(who) || '—'}</span><span class="val">${esc(top.displayValue || top.value || '')}</span></div>`;
+    const ref = top.athlete?.$ref ? top.athlete.$ref.replace(/^http:/, 'https:') : null;
+    const who = idMap[refId(top.athlete?.$ref)]?.displayName || top.athlete?.displayName || top.athlete?.fullName || '';
+    return { cat: c.displayName || c.name, who, ref, val: top.displayValue ?? top.value ?? '' };
+  });
+  const missing = [...new Set(entries.filter((e) => !e.who && e.ref).map((e) => e.ref))];
+  const nameByRef = {};
+  await Promise.all(missing.map(async (u) => { const a = await safeJSON(u, 24 * 3600000); nameByRef[u] = a?.displayName || a?.fullName || ''; }));
+  elx.innerHTML = entries.map((e) => {
+    const who = e.who || (e.ref ? nameByRef[e.ref] : '') || '—';
+    return `<div class="leader-row"><span class="cat">${esc(e.cat)}</span><span class="who">${esc(who)}</span><span class="val">${esc(e.val)}</span></div>`;
   }).join('');
 }
 

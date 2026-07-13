@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v115**.
+Current version as of this writing: **v116**.
 
 - **News summaries** (`summarize`, v110) — the in-app news popup (Home
   headlines, Eagles news, Team Research player modal) uses a real **extractive**
@@ -288,15 +288,22 @@ Current version as of this writing: **v115**.
   (tap → in-app summary), Team Stats & Rankings (batting+pitching from `BBCORE`
   statistics, ranked), Schedule & Results (windowed to last ~6 + next ~8 with a
   recent W/L trend), Roster (grouped by the roster's position groups), Team
-  Leaders (`BBCORE` leaders), By the Numbers, Manager (Alex Cora, static). Curated
+  Leaders (`BBCORE` leaders — the feed gives athletes as `$ref` only, so
+  `renderRedSoxLeaders` resolves names from the roster map and **fetches any
+  missing `$ref`**, v116, so rows don't fall back to "—"), By the Numbers, Manager
+  (`REDSOX.manager` — was Alex Cora, now fired; bump when the replacement is
+  known). Curated
   nav so `injectJumpNav` skips it (like Eagles). **Standings + Playoff Outlook
   (v115, on BOTH the Eagles and Red Sox tabs)** — `renderStandingsBlock(sport,
   teamName, standSel, poSel)` renders the team's **division standings** table
   (real ESPN `getStandings`, W/L/PCT/GB, team row highlighted) and a **Playoff
   Outlook** card (`playoffOutlook`): a **pace-based** read (projected final record
   from current win% over `SEASON_GAMES`, division-lead vs wild-card position with
-  games ahead/back of the cut, in/out of the field). Clearly labeled "not
-  official odds" — ESPN's free feed has no playoff-probability endpoint. Reuses
+  games ahead/back of the cut, in/out of the field). **v116:** when the team is
+  NOT its division leader (so the wild card is its path), the outlook also renders
+  a **Wild Card race** table (`o.wildPool`/`o.wc`) — top teams with WC1/WC2… badges,
+  a dashed cut line (`tr.wc-cut`), and WCGB vs the last wild-card spot. Clearly
+  labeled "not official odds" — ESPN's free feed has no playoff-probability endpoint. Reuses
   the Eagles CSS
   (`.stat-row`/`.leader-row`/`.sched-row`/`.depth-player`/`.opp-card`). NOTE:
   ESPN not reachable from the sandbox — verified structure/empty-states/no-errors;
