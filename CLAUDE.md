@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v110**.
+Current version as of this writing: **v111**.
 
 - **News summaries** (`summarize`, v110) — the in-app news popup (Home
   headlines, Eagles news, Team Research player modal) uses a real **extractive**
@@ -247,8 +247,10 @@ Current version as of this writing: **v110**.
 ## Features built (high level)
 
 - **Home** — the app's front door and full daily overview. Top Headlines
-  (numbered 1-2-3 story strip from in-season leagues' lead stories, tap → in-app
-  summary popup — headlines stay tappable), My Teams featured card, then Today's
+  (numbered story strip, **up to 10** as of v111, from in-season leagues' lead
+  stories — leads first, then up to 5 more per league, deduped; tap → in-app
+  summary popup — headlines stay tappable; the strip stays a horizontal scroll on
+  desktop too via fixed-width `.hl-card`), My Teams featured card, then Today's
   Games grouped by league (jump-nav chips), each league's slate sorted live →
   upcoming → finished (`STATE_ORDER`; changed v93 — finals now sink to the
   bottom); leagues with a live game get a 🔴 flag on their
@@ -555,7 +557,13 @@ Current version as of this writing: **v110**.
     summary** (`openNewsSummary(article, backFn)` — the raw ESPN article is kept
     on `fanState.researchNews[id].article`; a "‹ Back" returns to the player), and
     the "Full profile" link uses the canonical id **+ name slug** URL so it
-    universal-links into the ESPN app instead of bouncing to a browser. All ESPN free feeds, no keys — Twitter/X
+    universal-links into the ESPN app instead of bouncing to a browser.
+    **v111 match precision (`playerNews`/`newsNorm`):** requires the **full name**
+    (word-bounded, initials/apostrophes normalized so "A.J."↔"AJ", "De'Von"↔"DeVon"),
+    and allows last-name-only matching ONLY for **distinctive surnames (≥6 chars)** —
+    this stops common-word surnames (Price, Love, Green, Chase, Rice…) from
+    matching generic article words (the "Jadarian Price" ↔ "$9.6B purchase price"
+    false positive). All ESPN free feeds, no keys — Twitter/X
     is paywalled and Reddit is browser-CORS-blocked + noisy, so neither is used.
     Clearly labeled an estimate, not a real probability. Selection +
     fetched depth are cached in `fanState.researchCache`/`researchAthletes` so the

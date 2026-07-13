@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v110';
+const APP_VERSION = 'v111';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -754,7 +754,7 @@ async function renderHomeHeadline() {
     if (r.status !== 'fulfilled') return;
     const arts = (r.value.articles || []).filter((a) => a.type !== 'Media' && (a.headline || a.description));
     if (arts[0]) leads.push({ sport: sports[i], a: arts[0] });
-    arts.slice(1, 3).forEach((a) => more.push({ sport: sports[i], a }));
+    arts.slice(1, 6).forEach((a) => more.push({ sport: sports[i], a }));
   });
   leads.sort(newest); more.sort(newest);
   const picks = [], seen = new Set();
@@ -762,7 +762,7 @@ async function renderHomeHeadline() {
     const k = (p.a.headline || '').toLowerCase();
     if (!k || seen.has(k)) continue;
     seen.add(k); picks.push(p);
-    if (picks.length >= 3) break;
+    if (picks.length >= 10) break;
   }
   if (!picks.length) { box.innerHTML = ''; return; }
 
@@ -2141,15 +2141,22 @@ function classifyNews(text) {
   if (NEWS_PROMOTE.some((k) => text.includes(k))) return 'promote';
   return 'note';
 }
+// Normalize for name matching: drop periods/apostrophes (so "A.J."→"aj",
+// "De'Von"→"devon"), turn other punctuation into spaces, collapse whitespace.
+const newsNorm = (s) => (s || '').toLowerCase().replace(/[.'’]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 function playerNews(a, articles) {
-  const name = (a.displayName || '').toLowerCase();
-  const last = lastName(a.displayName).toLowerCase();
-  if (!last) return null;
+  const fullN = newsNorm(a.displayName);
+  const lastN = newsNorm(lastName(a.displayName));
+  if (!fullN || !lastN) return null;
   for (const art of articles) { // articles arrive newest-first
-    const text = ((art.headline || '') + ' ' + (art.description || '')).toLowerCase();
-    const hit = text.includes(name) || (last.length >= 4 && text.includes(last));
+    const raw = (art.headline || '') + ' ' + (art.description || '');
+    const T = ` ${newsNorm(raw)} `;
+    // Require the FULL name (word-bounded); allow last-name-only ONLY when it's
+    // distinctive (≥6 chars) — this stops common-word surnames like "Price",
+    // "Love", "Green", "Chase" from matching generic article words.
+    const hit = T.includes(` ${fullN} `) || (lastN.length >= 6 && T.includes(` ${lastN} `));
     if (!hit) continue;
-    return { headline: art.headline, when: art.published, signal: classifyNews(text), article: art };
+    return { headline: art.headline, when: art.published, signal: classifyNews(raw.toLowerCase()), article: art };
   }
   return null;
 }
