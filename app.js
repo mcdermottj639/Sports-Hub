@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v109';
+const APP_VERSION = 'v110';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -316,7 +316,31 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal
 
 // News: in-app extractive summary popup (condenses the article text).
 const stripHTML = (html) => { const d = document.createElement('div'); d.innerHTML = html || ''; return (d.textContent || '').replace(/\s+/g, ' ').trim(); };
-const summarize = (text, max = 5) => { const t = stripHTML(text); if (!t) return ''; const s = t.match(/[^.!?]+[.!?]+/g) || [t]; return s.slice(0, max).join(' ').trim(); };
+const SUM_STOP = new Set(('a an the and or but nor so yet of to in on at for with by from as is are was were be been being it its this that these those he she they them his her their our your my we you i not no do does did has have had will would can could should may might must about into over after before under out up down off than then also just more most some any all one two he\'s they\'re it\'s').split(' '));
+const sumWords = (s) => (s.toLowerCase().match(/[a-z0-9']+/g) || []).filter((w) => w.length > 2 && !SUM_STOP.has(w));
+// Extractive summary: rank sentences by keyword weight (term frequency across
+// the article + headline overlap, length-normalized, mild lead boost), take the
+// top `max`, then restore original order so it reads as prose — not just the lede.
+function summarize(text, max = 4, title = '') {
+  const t = stripHTML(text);
+  if (!t) return '';
+  let sents = (t.match(/[^.!?]+[.!?]+(?=\s|$)/g) || [t]).map((s) => s.trim()).filter((s) => s.length >= 40 && s.length <= 320);
+  if (sents.length <= max) return sents.join(' ');
+  const freq = {};
+  sents.forEach((s) => sumWords(s).forEach((w) => { freq[w] = (freq[w] || 0) + 1; }));
+  const maxF = Math.max(1, ...Object.values(freq));
+  const titleWords = new Set(sumWords(title));
+  const scored = sents.map((s, i) => {
+    const ws = sumWords(s);
+    if (!ws.length) return { i, s, score: 0 };
+    let score = ws.reduce((a, w) => a + (freq[w] || 0) / maxF, 0) / Math.sqrt(ws.length);
+    score *= 1 + 0.15 * ws.filter((w) => titleWords.has(w)).length; // reward on-topic sentences
+    if (i === 0) score *= 1.25; else if (i === 1) score *= 1.1;     // the lede usually matters
+    return { i, s, score };
+  });
+  return scored.slice().sort((a, b) => b.score - a.score).slice(0, max).sort((a, b) => a.i - b.i)
+    .map((x) => x.s.replace(/^[\s\-–—:]+/, '')).join(' '); // drop leading dateline dashes
+}
 async function openNewsSummary(a, backFn) {
   if (!a) return;
   modal().classList.remove('hidden');
@@ -337,7 +361,7 @@ async function openNewsSummary(a, backFn) {
   if (apiHref) {
     const d = await fetchJSON(apiHref.replace(/^http:/, 'https:'), 6 * 3600000).catch(() => null);
     const story = d?.story || d?.headlines?.[0]?.story || d?.content || (d?.articles && d.articles[0]?.story);
-    const sum = summarize(story, 5);
+    const sum = summarize(story, 4, a.headline);
     const elx = document.getElementById('news-sum');
     if (sum && elx) elx.textContent = sum;
   }

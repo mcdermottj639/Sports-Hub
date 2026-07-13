@@ -194,7 +194,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v109**.
+Current version as of this writing: **v110**.
+
+- **News summaries** (`summarize`, v110) — the in-app news popup (Home
+  headlines, Eagles news, Team Research player modal) uses a real **extractive**
+  summary: sentences are scored by term-frequency (across the article) +
+  headline overlap, length-normalized with a mild lead boost; the top ~4 are
+  taken and **re-ordered to original position** so it reads as prose. Replaced
+  the old "first N sentences" (which was just the lede). Client-side only, no LLM.
 
 ## Testing reality
 
