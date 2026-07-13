@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v120';
+const APP_VERSION = 'v121';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3793,13 +3793,13 @@ function heroFormChips(t, sport) {
       const n = sk.value != null ? Number(sk.value) : parseFloat(dv);
       if (!isNaN(n) && n !== 0) label = (n > 0 ? 'W' : 'L') + Math.abs(Math.round(n));
     }
-    if (label) chips.push(['Streak', label]);
+    if (label) chips.push(['Streak', label, 'streak']);
   }
 
   const home = byType(['home'])?.summary;
-  if (home) chips.push(['Home', home]);
+  if (home) chips.push(['Home', home, 'home']);
   const away = (byType(['road', 'away']) || {}).summary;
-  if (away) chips.push(['Away', away]);
+  if (away) chips.push(['Away', away, 'away']);
   // Last 10 is appended by injectHeroLastGame from the schedule (ESPN's team
   // object doesn't reliably carry a "last ten" record item), so it's not here.
 
@@ -3818,13 +3818,22 @@ function heroFormChips(t, sport) {
   }
   if (diffN != null) {
     const r = Math.round(diffN);
-    if (r !== 0) chips.push([sport === 'mlb' ? 'Run Diff' : 'Pt Diff', (r > 0 ? '+' : '') + r]);
+    if (r !== 0) chips.push([sport === 'mlb' ? 'Run Diff' : 'Pt Diff', (r > 0 ? '+' : '') + r, 'diff']);
   }
 
   if (!chips.length) return '';
-  return '<div class="hero-chips">' + chips.map(([l, v]) =>
-    `<div class="hero-chip"><span class="hc-v">${esc(String(v))}</span><span class="hc-l">${esc(l)}</span></div>`
+  return '<div class="hero-chips">' + chips.map(([l, v, k]) =>
+    `<div class="hero-chip" data-chip="${k}"><span class="hc-v">${esc(String(v))}</span><span class="hc-l">${esc(l)}</span></div>`
   ).join('') + '</div>';
+}
+
+// Fixed left-to-right order for the hero chips regardless of which render path
+// (sync record chips vs async schedule chips) added them.
+const HERO_CHIP_ORDER = ['last', 'streak', 'last10', 'home', 'away', 'diff'];
+function orderHeroChips(wrap) {
+  if (!wrap) return;
+  const rank = (el) => { const i = HERO_CHIP_ORDER.indexOf(el.dataset.chip); return i < 0 ? 99 : i; };
+  [...wrap.children].sort((a, b) => rank(a) - rank(b)).forEach((el) => wrap.appendChild(el));
 }
 
 // Async companion to heroFormChips: fetch the team's schedule and inject two
@@ -3863,12 +3872,12 @@ async function injectHeroLastGame(sport, path, teamId, heroSel) {
         const os = opp?.score?.displayValue ?? opp?.score?.value ?? '';
         const home = me.homeAway === 'home';
         const oppAbbr = opp?.team?.abbreviation || opp?.team?.shortDisplayName || 'OPP';
-        ensureWrap().insertAdjacentHTML('afterbegin',
-          `<div class="hero-chip last"><span class="hc-v ${win ? 'w' : 'l'}">${win ? 'W' : 'L'} ${esc(String(ms))}-${esc(String(os))}</span><span class="hc-l">Last · ${home ? 'vs' : '@'} ${esc(oppAbbr)}</span></div>`);
+        ensureWrap().insertAdjacentHTML('beforeend',
+          `<div class="hero-chip last" data-chip="last"><span class="hc-v ${win ? 'w' : 'l'}">${win ? 'W' : 'L'} ${esc(String(ms))}-${esc(String(os))}</span><span class="hc-l">Last · ${home ? 'vs' : '@'} ${esc(oppAbbr)}</span></div>`);
       }
     }
 
-    // Last 10 (end) — W-L over the 10 most recent completed games.
+    // Last 10 — W-L over the 10 most recent completed games.
     let w10 = 0, l10 = 0;
     done.slice(0, 10).forEach(({ comp }) => {
       const me = (comp.competitors || []).find((c) => String(c.team?.id) === String(teamId));
@@ -3878,8 +3887,10 @@ async function injectHeroLastGame(sport, path, teamId, heroSel) {
     if (w10 + l10 > 0) {
       const n = w10 + l10;
       ensureWrap().insertAdjacentHTML('beforeend',
-        `<div class="hero-chip"><span class="hc-v">${w10}-${l10}</span><span class="hc-l">Last ${n < 10 ? n : 10}</span></div>`);
+        `<div class="hero-chip" data-chip="last10"><span class="hc-v">${w10}-${l10}</span><span class="hc-l">Last ${n < 10 ? n : 10}</span></div>`);
     }
+    // Put every chip in the fixed order: Last · Streak · Last 10 · Home · Away · Diff.
+    orderHeroChips(heroEl.querySelector('.hero-chips'));
   } catch (e) { /* schedule unreachable — hero still shows record chips */ }
 }
 
