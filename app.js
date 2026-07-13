@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v113';
+const APP_VERSION = 'v114';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3963,6 +3963,186 @@ async function renderEaglesNextOpp(team) {
     <div class="od">${esc(next.name || '')}${when ? ' · ' + when : ''}</div></div></div>`;
 }
 
+// --- Red Sox tab (MLB deep-dive, mirrors the Eagles tab) ------------------
+const REDSOX = { teamId: 2, manager: 'Alex Cora' }; // ESPN MLB team id for BOS = 2
+const MLB_TEAM = `${SITE}/baseball/mlb/teams/${REDSOX.teamId}`;
+const MLB_SEASON = new Date().getFullYear();
+
+async function renderRedSox() {
+  const id = REDSOX.teamId;
+  const [teamR, rosterR, newsR] = await Promise.allSettled([
+    fetchJSON(MLB_TEAM, 5 * 60000),
+    fetchJSON(`${MLB_TEAM}/roster`, 30 * 60000),
+    fetchJSON(`${SITE}/baseball/mlb/news?team=${id}`, 10 * 60000),
+  ]);
+
+  // hero
+  const t = teamR.status === 'fulfilled' ? teamR.value.team : null;
+  const logo = t?.logos?.[0]?.href;
+  const rec = t?.record?.items?.[0]?.summary;
+  const standing = t?.standingSummary;
+  const next = t?.nextEvent?.[0];
+  let hero = `<h2>${logo ? `<img src="${esc(logo)}" style="height:30px;vertical-align:middle;margin-right:8px">` : '⚾ '}${esc(t?.displayName || 'Boston Red Sox')}</h2>`;
+  if (rec || standing) hero += `<div class="muted">${[rec ? `Record ${rec}` : '', standing].filter(Boolean).join(' • ')}</div>`;
+  hero += '<div class="featured-line">';
+  if (next) {
+    const nm = next.name || next.shortName || '';
+    const when = next.date ? new Date(next.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + fmtTime(next.date) : '';
+    hero += `<div class="featured-game"><div><strong>Next:</strong> ${esc(nm)}</div><span class="status">${esc(when)}</span></div>`;
+  } else {
+    hero += '<div class="muted">No game scheduled.</div>';
+  }
+  hero += '</div>';
+  $('#redsox-hero').innerHTML = hero;
+
+  $('#redsox-staff').innerHTML = `<div class="staff-card"><div class="role">Manager</div><div class="who">${esc(REDSOX.manager)}</div></div>`;
+
+  // roster map (id -> player)
+  const groups = rosterR.status === 'fulfilled' ? (rosterR.value.athletes || []) : [];
+  const allPlayers = [];
+  const idMap = {};
+  groups.forEach((grp) => (grp.items || grp.athletes || []).forEach((a) => { allPlayers.push(a); if (a.id) idMap[a.id] = a; }));
+  const card = (val, lbl) => `<div class="fan-card"><div class="big">${val}</div><div class="lbl">${lbl}</div></div>`;
+
+  const ages = allPlayers.map((a) => a.age).filter((n) => typeof n === 'number');
+  const avgAge = ages.length ? (ages.reduce((s, n) => s + n, 0) / ages.length).toFixed(1) : '–';
+  const youngest = allPlayers.filter((a) => a.age).sort((a, b) => a.age - b.age)[0];
+  const oldest = allPlayers.filter((a) => a.age).sort((a, b) => b.age - a.age)[0];
+  $('#redsox-analytics').innerHTML = allPlayers.length
+    ? card(allPlayers.length, 'Players on roster') + card(avgAge, 'Average age') +
+      (youngest ? card(`${youngest.age}`, `Youngest · ${esc(youngest.displayName)}`) : '') +
+      (oldest ? card(`${oldest.age}`, `Oldest · ${esc(oldest.displayName)}`) : '')
+    : card('–', 'Roster loading');
+
+  const articles = newsR.status === 'fulfilled' ? (newsR.value.articles || []) : [];
+  const newsEl = $('#redsox-news');
+  if (!articles.length) {
+    newsEl.innerHTML = '<div class="empty">No recent Red Sox news right now.</div>';
+  } else {
+    newsEl.innerHTML = articles.slice(0, 12).map((a, idx) => {
+      const img = a.images?.[0]?.url;
+      const when = a.published ? new Date(a.published).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+      return `<div class="news-item" data-news="${idx}">${img ? `<img src="${esc(img)}" alt="" onerror="this.style.display='none'">` : ''}<div><div class="nh">${esc(a.headline || '')}</div><div class="nd">${esc(a.description || '')}</div><div class="nt">${when} · tap for summary</div></div></div>`;
+    }).join('');
+    newsEl.querySelectorAll('.news-item').forEach((it) => { it.onclick = () => openNewsSummary(articles[+it.dataset.news]); });
+  }
+
+  const navItems = [['rs-nextgame', 'Next'], ['rs-news', 'News'], ['rs-stats', 'Stats'], ['rs-schedule', 'Schedule'], ['rs-roster', 'Roster'], ['rs-leaders', 'Leaders'], ['rs-numbers', 'Numbers'], ['rs-staff', 'Manager']];
+  const navEl = $('#redsox-nav');
+  navEl.innerHTML = navItems.map(([tg, l]) => `<button class="chip" data-target="${tg}">${l}</button>`).join('');
+  navEl.querySelectorAll('button').forEach((b) => (b.onclick = () => { const elx = document.getElementById(b.dataset.target); if (elx?._accSet) elx._accSet(true); elx?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+
+  makeAccordion(document.getElementById('redsox'), '.section-title', 2);
+
+  renderRedSoxRoster(groups);
+  renderRedSoxTeamStats();
+  renderRedSoxLeaders(idMap);
+  renderRedSoxSchedule();
+  renderRedSoxNextGame(t);
+}
+
+function renderRedSoxRoster(groups) {
+  const elx = $('#redsox-roster');
+  const chip = (a) => {
+    const pos = a.position?.abbreviation || '';
+    const age = a.age ? ` <span class="age">${a.age}y</span>` : '';
+    return `<span class="depth-player"><span class="jersey">${esc(pos || '—')}</span> ${esc(a.displayName || a.fullName || '')}${a.jersey ? ` #${esc(a.jersey)}` : ''}${age}</span>`;
+  };
+  const html = groups.map((grp) => {
+    const items = grp.items || grp.athletes || [];
+    if (!items.length) return '';
+    const p = grp.position;
+    const label = typeof p === 'string' ? p : (p?.displayName || p?.name || 'Players');
+    return `<div class="depth-group"><h4>${esc(label.charAt(0).toUpperCase() + label.slice(1))}</h4><div>${items.map(chip).join('')}</div></div>`;
+  }).join('');
+  elx.innerHTML = html || '<div class="empty">Roster not available right now.</div>';
+}
+
+async function renderRedSoxTeamStats() {
+  $('#redsox-stats-season').textContent = `(${MLB_SEASON})`;
+  const elx = $('#redsox-teamstats');
+  const data = await safeJSON(`${BBCORE}/seasons/${MLB_SEASON}/types/2/teams/${REDSOX.teamId}/statistics`, 6 * 3600000);
+  const flat = [];
+  (data?.splits?.categories || []).forEach((c) => (c.stats || []).forEach((s) => { if (s.displayValue != null) flat.push(s); }));
+  if (!flat.length) { elx.innerHTML = '<div class="empty">Team stats will appear once the season is underway.</div>'; return; }
+  const WANT = ['AVG', 'R', 'HR', 'RBI', 'OBP', 'SLG', 'OPS', 'SB', 'ERA', 'WHIP', 'SO', 'K', 'SV', 'W'];
+  const seen = new Set();
+  const take = (s) => { const k = (s.abbreviation || s.name || '').toUpperCase(); if (!k || seen.has(k)) return false; seen.add(k); return true; };
+  let picked = flat.filter((s) => WANT.includes((s.abbreviation || '').toUpperCase())).filter(take);
+  if (picked.length < 6) flat.filter((s) => s.rank).forEach((s) => { if (picked.length < 10 && take(s)) picked.push(s); });
+  if (picked.length < 6) flat.forEach((s) => { if (picked.length < 10 && take(s)) picked.push(s); });
+  elx.innerHTML = picked.slice(0, 10).map((s) => {
+    const rank = s.rank;
+    const rc = rank ? (rank <= 8 ? 'top' : rank >= 23 ? 'bot' : '') : '';
+    const rankHtml = rank ? `<span class="rank ${rc}">${esc(s.rankDisplayValue || ('#' + rank))}</span>` : '';
+    return `<div class="stat-row"><div class="sname">${esc(s.displayName || s.name)}</div><div class="sval"><span class="v">${esc(s.displayValue)}</span>${rankHtml}</div></div>`;
+  }).join('');
+}
+
+async function renderRedSoxLeaders(idMap) {
+  const elx = $('#redsox-leaders');
+  const data = await safeJSON(`${BBCORE}/seasons/${MLB_SEASON}/types/2/teams/${REDSOX.teamId}/leaders`, 6 * 3600000);
+  const cats = (data?.categories || []).filter((c) => (c.leaders || []).length);
+  if (!cats.length) { elx.innerHTML = '<div class="empty">Player leaders will appear during the season.</div>'; return; }
+  elx.innerHTML = cats.slice(0, 10).map((c) => {
+    const top = c.leaders[0];
+    const who = idMap[refId(top.athlete?.$ref)]?.displayName || top.athlete?.displayName || '';
+    return `<div class="leader-row"><span class="cat">${esc(c.displayName || c.name)}</span><span class="who">${esc(who) || '—'}</span><span class="val">${esc(top.displayValue || top.value || '')}</span></div>`;
+  }).join('');
+}
+
+async function renderRedSoxSchedule() {
+  const elx = $('#redsox-schedule');
+  const data = await safeJSON(`${MLB_TEAM}/schedule`, 3 * 3600000);
+  const events = (data?.events || []).filter((e) => e.date);
+  if (!events.length) { elx.innerHTML = '<div class="empty">Schedule not available.</div>'; return; }
+  const now = Date.now();
+  const sorted = events.map((ev) => ({ ev, t: new Date(ev.date).getTime() })).sort((a, b) => a.t - b.t);
+  const past = sorted.filter((x) => x.t < now);
+  const future = sorted.filter((x) => x.t >= now);
+  const show = [...past.slice(-6), ...future.slice(0, 8)].map((x) => x.ev);
+  let wins = 0, losses = 0; const trend = [];
+  past.slice(-10).forEach(({ ev }) => {
+    const comp = ev.competitions?.[0] || {};
+    const me = (comp.competitors || []).find((c) => String(c.team?.id) === String(REDSOX.teamId));
+    if (comp.status?.type?.completed && me) { if (me.winner === true) { wins++; trend.push('w'); } else { losses++; trend.push('l'); } }
+  });
+  const trendHTML = trend.length ? `<div class="trend"><span class="rec">Last ${trend.length}: ${wins}-${losses}</span>${trend.map((r) => `<span class="pill ${r}">${r.toUpperCase()}</span>`).join('')}</div>` : '';
+  const rows = show.map((ev) => {
+    const comp = ev.competitions?.[0] || {};
+    const me = (comp.competitors || []).find((c) => String(c.team?.id) === String(REDSOX.teamId));
+    const opp = (comp.competitors || []).find((c) => String(c.team?.id) !== String(REDSOX.teamId));
+    const home = me?.homeAway === 'home';
+    const done = comp.status?.type?.completed;
+    const when = ev.date ? new Date(ev.date).toLocaleDateString([], { month: 'numeric', day: 'numeric' }) : '';
+    const oppName = opp?.team?.abbreviation || opp?.team?.displayName || 'TBD';
+    let res = `<span class="res up">${ev.date ? fmtTime(ev.date) : '—'}</span>`;
+    if (done && me) {
+      const win = me.winner === true;
+      const ms = me.score?.displayValue ?? me.score?.value ?? '';
+      const os = opp?.score?.displayValue ?? opp?.score?.value ?? '';
+      res = `<span class="res ${win ? 'w' : 'l'}">${win ? 'W' : 'L'} ${ms}-${os}</span>`;
+    }
+    return `<div class="sched-row"><span class="wk">${esc(when)}</span><span class="opp">${home ? 'vs' : '@'} ${esc(oppName)}</span>${res}</div>`;
+  }).join('');
+  elx.innerHTML = trendHTML + rows;
+}
+
+async function renderRedSoxNextGame(team) {
+  const elx = $('#redsox-nextgame');
+  const next = team?.nextEvent?.[0];
+  const comp = next?.competitions?.[0];
+  const opp = (comp?.competitors || []).find((c) => String(c.team?.id) !== String(REDSOX.teamId));
+  if (!opp?.team) { elx.innerHTML = '<div class="empty">No upcoming game scheduled.</div>'; return; }
+  const od = await safeJSON(`${SITE}/baseball/mlb/teams/${opp.team.id}`, 60 * 60000);
+  const ot = od?.team;
+  const rec = ot?.record?.items?.[0]?.summary;
+  const standing = ot?.standingSummary;
+  const oLogo = ot?.logos?.[0]?.href || opp.team.logo;
+  const when = next.date ? new Date(next.date).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }) + ' · ' + fmtTime(next.date) : '';
+  elx.innerHTML = `<div class="opp-card">${oLogo ? `<img src="${esc(oLogo)}" alt="">` : ''}<div><div class="on">${esc(ot?.displayName || opp.team.displayName)}</div><div class="od">${[rec ? `Record ${rec}` : '', standing].filter(Boolean).join(' • ') || ''}</div><div class="od">${esc(next.name || '')}${when ? ' · ' + when : ''}</div></div></div>`;
+}
+
 // --- mode badge + tabs + boot --------------------------------------------
 function setMode(live) {
   state.liveOK = live;
@@ -3975,7 +4155,7 @@ function setMode(live) {
 // (Eagles has its own curated nav, so it's skipped here.)
 function injectJumpNav(name) {
   const panel = document.getElementById(name);
-  if (!panel || name === 'eagles' || name === 'home') return;
+  if (!panel || name === 'eagles' || name === 'redsox' || name === 'home') return;
   // Derive each chip label from the heading text WITHOUT any nested controls
   // (e.g. the Standings/Power toggle inside the "League" heading) so labels stay
   // clean. Empty sections set their box to '' and emit no .section-title, so they
@@ -4000,7 +4180,7 @@ function injectJumpNav(name) {
     (b.onclick = () => document.getElementById(b.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
 }
 
-const renderers = { home: renderHome, eagles: renderEagles, predictions: renderPredictions, fantasy: renderFantasy, labs: () => {}, about: () => {} };
+const renderers = { home: renderHome, eagles: renderEagles, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, labs: () => {}, about: () => {} };
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => {

@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v113**.
+Current version as of this writing: **v114**.
 
 - **News summaries** (`summarize`, v110) — the in-app news popup (Home
   headlines, Eagles news, Team Research player modal) uses a real **extractive**
@@ -224,7 +224,7 @@ Current version as of this writing: **v113**.
 - `fetchJSON(url, ttl)` — in-memory cache by URL with TTL; 9s abort. All data goes through it.
 - `LEAGUES` — per-sport config (label, emoji, espnPath, `fav` favorite teams, type).
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
-- Tabs: Home, Eagles, AI Picks, Fantasy, **Labs**, About. `showTab()` +
+- Tabs: Home, Eagles, **Red Sox**, AI Picks, Fantasy, **Labs**, About. `showTab()` +
   `renderers{}` map drive rendering. (**Labs** — its own top-level tab as of
   v107, holding the Labs experiments: the standalone `draft.html`/`trivia.html`
   links plus the in-app **Fantasy Mock Draft** rendered into `#labs-mock`; its
@@ -281,6 +281,19 @@ Current version as of this writing: **v113**.
   knockout fixtures exist — the section hides itself (`#home-wc:empty`) after
   the tournament or if ESPN is unreachable, so nothing needs removing when the
   Cup ends (the dead code can be cleaned up later).
+- **Red Sox tab** (⚾, v114) — an MLB deep-dive mirroring the Eagles tab
+  (`renderRedSox` + `renderRedSox*` sub-renderers; `REDSOX={teamId:2}`, ESPN MLB
+  id for BOS): hero (record/standing/next game, ⚾ watermark via
+  `.featured-card.rs-hero::after`), curated jump-nav, Next Game, Latest News
+  (tap → in-app summary), Team Stats & Rankings (batting+pitching from `BBCORE`
+  statistics, ranked), Schedule & Results (windowed to last ~6 + next ~8 with a
+  recent W/L trend), Roster (grouped by the roster's position groups), Team
+  Leaders (`BBCORE` leaders), By the Numbers, Manager (Alex Cora, static). Curated
+  nav so `injectJumpNav` skips it (like Eagles). Reuses the Eagles CSS
+  (`.stat-row`/`.leader-row`/`.sched-row`/`.depth-player`/`.opp-card`). NOTE:
+  ESPN not reachable from the sandbox — verified structure/empty-states/no-errors;
+  live MLB data verifies on device. The Red Sox are also the MLB `fav`
+  (highlighted on the Home slate + AI Picks); this tab is the deep-dive.
 - **Eagles tab** — hero, Next Opponent, Latest News (tap → summary), Team Stats &
   rankings, Schedule (2026-27), Depth Chart (Offense/Defense/ST, **Field formation
   view** + List), Player Leaders, By the Numbers, Coaching Staff. Section order and

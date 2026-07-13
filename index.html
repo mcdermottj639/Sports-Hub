@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=113" />
+  <link rel="stylesheet" href="styles.css?v=114" />
   <script>
     /* Set the theme before first paint to avoid a flash. Uses the saved
        preference if present, else follows the OS light/dark setting. */
@@ -42,6 +42,7 @@
   <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
     <button id="tab-home" data-tab="home" class="active" role="tab" aria-selected="true" aria-controls="home">Home</button>
     <button id="tab-eagles" data-tab="eagles" role="tab" aria-selected="false" aria-controls="eagles">🦅 Eagles</button>
+    <button id="tab-redsox" data-tab="redsox" role="tab" aria-selected="false" aria-controls="redsox">⚾ Red Sox</button>
     <button id="tab-predictions" data-tab="predictions" role="tab" aria-selected="false" aria-controls="predictions">🤖 AI Picks</button>
     <button id="tab-fantasy" data-tab="fantasy" role="tab" aria-selected="false" aria-controls="fantasy">Fantasy</button>
     <button id="tab-labs" data-tab="labs" role="tab" aria-selected="false" aria-controls="labs">🧪 Labs</button>
@@ -77,6 +78,27 @@
       <div id="eagles-analytics" class="fan-cards"></div>
       <h2 class="section-title" id="sec-staff">Coaching Staff</h2>
       <div id="eagles-staff" class="fan-cards"></div>
+    </section>
+
+    <section id="redsox" class="tab-panel" role="tabpanel" aria-labelledby="tab-redsox" tabindex="0">
+      <div id="redsox-hero" class="featured-card rs-hero">Loading Red Sox…</div>
+      <div id="redsox-nav" class="eagles-nav"></div>
+      <h2 class="section-title" id="rs-nextgame">Next Game</h2>
+      <div id="redsox-nextgame"></div>
+      <h2 class="section-title" id="rs-news">Latest News</h2>
+      <div id="redsox-news"></div>
+      <h2 class="section-title" id="rs-stats">Team Stats & Rankings <span id="redsox-stats-season" class="season-tag"></span></h2>
+      <div id="redsox-teamstats"></div>
+      <h2 class="section-title" id="rs-schedule">Schedule &amp; Results</h2>
+      <div id="redsox-schedule"></div>
+      <h2 class="section-title" id="rs-roster">Roster</h2>
+      <div id="redsox-roster"></div>
+      <h2 class="section-title" id="rs-leaders">Team Leaders</h2>
+      <div id="redsox-leaders"></div>
+      <h2 class="section-title" id="rs-numbers">By the Numbers</h2>
+      <div id="redsox-analytics" class="fan-cards"></div>
+      <h2 class="section-title" id="rs-staff">Manager</h2>
+      <div id="redsox-staff" class="fan-cards"></div>
     </section>
 
     <section id="predictions" class="tab-panel" role="tabpanel" aria-labelledby="tab-predictions" tabindex="0">
@@ -159,6 +181,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=113" defer></script>
+  <script src="app.js?v=114" defer></script>
 </body>
 </html>
