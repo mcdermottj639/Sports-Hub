@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v108';
+const APP_VERSION = 'v109';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1946,6 +1946,7 @@ function renderFantasyFootball() {
     </div>
 
     <h2 class="section-title">Team Research</h2>
+    <div id="tr-nav" class="tr-nav"></div>
     <div class="tr-bar"><label for="tr-team">Team</label><select id="tr-team"><option>Loading teams…</option></select></div>
     <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Projected offensive fantasy starters from the latest depth chart (QB · RB · WR · TE). Tap a player for more info.</div>
     <div id="tr-content" class="tr-content"></div>
@@ -2010,12 +2011,49 @@ const NFL_TEAM_LIST = [
   { id: '10', name: 'Tennessee Titans' }, { id: '28', name: 'Washington Commanders' },
 ];
 
+// Division quick-nav: 8 division chips → that division's 4 teams as chips.
+const NFL_DIVISIONS = [
+  ['AFC East', ['2', '15', '17', '20']], ['AFC North', ['33', '4', '5', '23']],
+  ['AFC South', ['34', '11', '30', '10']], ['AFC West', ['7', '12', '13', '24']],
+  ['NFC East', ['6', '19', '21', '28']], ['NFC North', ['3', '8', '9', '16']],
+  ['NFC South', ['1', '29', '18', '27']], ['NFC West', ['22', '14', '25', '26']],
+];
+const NFL_NAME = Object.fromEntries(NFL_TEAM_LIST.map((t) => [t.id, t.name]));
+const DIVISIONS = NFL_DIVISIONS.map(([name, ids]) => ({
+  name, teams: ids.map((id) => ({ id, name: NFL_NAME[id], short: (NFL_NAME[id] || '').split(' ').pop() })),
+}));
+const divisionOf = (id) => (DIVISIONS.find((d) => d.teams.some((t) => t.id === id)) || DIVISIONS[0]).name;
+
+function paintTeamNav() {
+  const nav = $('#tr-nav');
+  if (!nav) return;
+  const cur = fanState.researchTeam;
+  const activeDiv = fanState.researchDiv || (fanState.researchDiv = divisionOf(cur));
+  const divs = DIVISIONS.map((d) => `<button class="chip sm tr-div${d.name === activeDiv ? ' active' : ''}" data-div="${esc(d.name)}">${esc(d.name)}</button>`).join('');
+  const teams = (DIVISIONS.find((d) => d.name === activeDiv)?.teams || [])
+    .map((t) => `<button class="chip sm tr-team-chip${t.id === cur ? ' active' : ''}" data-team="${t.id}">${esc(t.short)}</button>`).join('');
+  nav.innerHTML = `<div class="tr-divs">${divs}</div><div class="tr-teams">${teams}</div>`;
+  nav.querySelectorAll('[data-div]').forEach((b) => (b.onclick = () => { fanState.researchDiv = b.dataset.div; paintTeamNav(); }));
+  nav.querySelectorAll('[data-team]').forEach((b) => (b.onclick = () => selectResearchTeam(b.dataset.team)));
+}
+function selectResearchTeam(id) {
+  fanState.researchTeam = id;
+  fanState.researchDiv = divisionOf(id);
+  const sel = $('#tr-team');
+  if (sel) sel.value = id;
+  paintTeamNav();
+  renderTeamResearch();
+}
 function initTeamResearch() {
   const sel = $('#tr-team');
   if (!sel) return;
   if (!fanState.researchTeam) fanState.researchTeam = '21'; // Eagles by default
-  sel.innerHTML = NFL_TEAM_LIST.map((t) => `<option value="${t.id}"${t.id === fanState.researchTeam ? ' selected' : ''}>${esc(t.name)}</option>`).join('');
-  sel.onchange = () => { fanState.researchTeam = sel.value; renderTeamResearch(); };
+  fanState.researchDiv = divisionOf(fanState.researchTeam);
+  // Full list, grouped by division (keeps the dropdown but easier to scan).
+  sel.innerHTML = DIVISIONS.map((d) => `<optgroup label="${esc(d.name)}">${d.teams
+    .map((t) => `<option value="${t.id}"${t.id === fanState.researchTeam ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</optgroup>`).join('');
+  sel.onchange = () => selectResearchTeam(sel.value);
+  paintTeamNav();
   renderTeamResearch();
 }
 

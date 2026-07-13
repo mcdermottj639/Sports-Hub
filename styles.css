@@ -262,6 +262,8 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .setup-card pre { background: var(--card-2); padding: 14px; border-radius: 10px; overflow-x: auto; }
 .setup-card pre code { background: none; padding: 0; }
 .setup-card a { color: var(--accent); }
+/* Button-style links (Labs cards) keep white text — not the inline-link accent. */
+.setup-card a.fan-btn { color: #fff; }
 
 /* Eagles tab */
 .eagles-nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0 6px; }
@@ -689,6 +691,10 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .mk-pk-val.zero, .mk-pk-val.na { color: var(--muted); }
 
 /* Fantasy: Team Research (projected offensive starters) */
+.tr-nav { margin-bottom: 8px; }
+.tr-divs, .tr-teams { display: flex; flex-wrap: wrap; gap: 6px; }
+.tr-teams { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line, rgba(255,255,255,.1)); }
+.chip.tr-team-chip { font-weight: 700; }
 .tr-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 .tr-bar label { font-weight: 700; font-size: 13px; color: var(--muted); flex: none; }
 .tr-bar select { flex: 1; background: var(--card-2); color: var(--text); border: 1px solid var(--line, rgba(255,255,255,.1)); border-radius: 8px; padding: 10px; min-height: 44px; font-size: 14px; }

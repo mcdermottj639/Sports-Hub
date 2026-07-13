@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v108**.
+Current version as of this writing: **v109**.
 
 ## Testing reality
 
@@ -521,7 +521,11 @@ Current version as of this writing: **v108**.
     a team `<select>` built from a **static id list** (`NFL_TEAM_LIST`, all 32,
     Eagles default) — v101 fetched the team list from ESPN and it hung ("Loading
     teams…") on device, so v102 hardcoded the ids (stable; only per-team
-    roster/depth still fetch). Shows **projected offensive fantasy starters +
+    roster/depth still fetch). **v109** added a **division quick-nav** above the
+    dropdown (`paintTeamNav`/`selectResearchTeam`, `NFL_DIVISIONS`/`DIVISIONS`,
+    `.tr-nav`/`.tr-div`/`.tr-team-chip` CSS): 8 division chips → that division's
+    4 teams as chips; the dropdown itself is grouped by division via `<optgroup>`.
+    Shows **projected offensive fantasy starters +
     backups** grouped QB/RB/WR/TE
     (`renderTeamResearch`/`paintResearch`, `.tr-*` CSS). Starters come from the
     latest depth chart (`FBCORE/.../depthcharts`, `STAT_SEASON`) with the top N
