@@ -194,9 +194,9 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v118**.
+Current version as of this writing: **v119**.
 
-- **Team-hero quick-form chips** (`heroFormChips` + `injectHeroLastGame`, v117–v118)
+- **Team-hero quick-form chips** (`heroFormChips` + `injectHeroLastGame`, v117–v119)
   — the Eagles + Red Sox hero cards used to end with a "Next:" game line that just
   duplicated the Next Game/Next Opponent section right below. That line is replaced
   by a row of compact **form stat chips** (`.hero-chips`/`.hero-chip`) pulled from
@@ -211,7 +211,11 @@ Current version as of this writing: **v118**.
   `differential` (e.g. `0.2999…`), converts it to a rounded season total via games
   played (so it reads `+28`, not `+0.2999999999999998`). Only chips with data
   render, so a preseason 0-0 team just shows name + record + standing. Shared by
-  both team heroes.
+  both team heroes. **v119:** the **Last 10** chip is now computed from the
+  schedule too (appended as the LAST card by `injectHeroLastGame` — ESPN's team
+  object doesn't reliably carry a "last ten" record item, so the old record-item
+  path was dropped from `heroFormChips`). Final card order: Last game · Streak ·
+  Home · Away · Run/Pt Diff · Last 10.
 
 - **News summaries** (`summarize`, v110) — the in-app news popup (Home
   headlines, Eagles news, Team Research player modal) uses a real **extractive**

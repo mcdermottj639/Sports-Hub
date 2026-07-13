@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v118';
+const APP_VERSION = 'v119';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3800,8 +3800,8 @@ function heroFormChips(t, sport) {
   if (home) chips.push(['Home', home]);
   const away = (byType(['road', 'away']) || {}).summary;
   if (away) chips.push(['Away', away]);
-  const l10 = (byType(['lastten', 'last10']) || {}).summary;
-  if (l10) chips.push(['Last 10', l10]);
+  // Last 10 is appended by injectHeroLastGame from the schedule (ESPN's team
+  // object doesn't reliably carry a "last ten" record item), so it's not here.
 
   // Run/Point differential — prefer a clean total from pointsFor − pointsAgainst.
   // ESPN's `differential` is often a per-game AVERAGE (e.g. 0.2999…), so convert
@@ -3827,38 +3827,58 @@ function heroFormChips(t, sport) {
   ).join('') + '</div>';
 }
 
-// Async companion to heroFormChips: fetch the team's schedule, find the most
-// recent COMPLETED game (within ~15 days so an offseason team doesn't surface a
-// months-old result), and inject a "Last · vs OPP  W 5-3" chip at the front of
-// the hero's chip row (creating the row if the record chips were empty).
+// Async companion to heroFormChips: fetch the team's schedule and inject two
+// chips computed from it — a "Last · vs OPP  W 5-3" chip at the FRONT of the
+// hero's chip row (most recent completed game, within ~15 days so an offseason
+// team doesn't surface a months-old result), and a "Last 10  7-3" chip at the
+// END. Creates the chip row if the record chips were empty.
 async function injectHeroLastGame(sport, path, teamId, heroSel) {
   try {
     const data = await safeJSON(`${SITE}/${path}/teams/${teamId}/schedule`, 3 * 3600000);
     const now = Date.now();
-    const past = (data?.events || [])
+    // Completed games, newest first.
+    const done = (data?.events || [])
       .filter((e) => e.date)
-      .map((ev) => ({ ev, t: new Date(ev.date).getTime() }))
-      .filter((x) => x.t < now)
+      .map((ev) => ({ ev, t: new Date(ev.date).getTime(), comp: ev.competitions?.[0] || {} }))
+      .filter((x) => x.t < now && x.comp.status?.type?.completed)
       .sort((a, b) => b.t - a.t);
-    for (const { ev, t } of past) {
-      if (now - t > 15 * 86400000) break; // too stale (offseason)
-      const comp = ev.competitions?.[0] || {};
-      if (!comp.status?.type?.completed) continue;
+    if (!done.length) return;
+
+    const heroEl = $(heroSel);
+    if (!heroEl) return;
+    const ensureWrap = () => {
+      let w = heroEl.querySelector('.hero-chips');
+      if (!w) { heroEl.insertAdjacentHTML('beforeend', '<div class="hero-chips"></div>'); w = heroEl.querySelector('.hero-chips'); }
+      return w;
+    };
+
+    // Last game (front) — only if recent enough to be relevant.
+    const last = done[0];
+    if (now - last.t <= 15 * 86400000) {
+      const me = (last.comp.competitors || []).find((c) => String(c.team?.id) === String(teamId));
+      const opp = (last.comp.competitors || []).find((c) => String(c.team?.id) !== String(teamId));
+      if (me) {
+        const win = me.winner === true;
+        const ms = me.score?.displayValue ?? me.score?.value ?? '';
+        const os = opp?.score?.displayValue ?? opp?.score?.value ?? '';
+        const home = me.homeAway === 'home';
+        const oppAbbr = opp?.team?.abbreviation || opp?.team?.shortDisplayName || 'OPP';
+        ensureWrap().insertAdjacentHTML('afterbegin',
+          `<div class="hero-chip last"><span class="hc-v ${win ? 'w' : 'l'}">${win ? 'W' : 'L'} ${esc(String(ms))}-${esc(String(os))}</span><span class="hc-l">Last · ${home ? 'vs' : '@'} ${esc(oppAbbr)}</span></div>`);
+      }
+    }
+
+    // Last 10 (end) — W-L over the 10 most recent completed games.
+    let w10 = 0, l10 = 0;
+    done.slice(0, 10).forEach(({ comp }) => {
       const me = (comp.competitors || []).find((c) => String(c.team?.id) === String(teamId));
-      const opp = (comp.competitors || []).find((c) => String(c.team?.id) !== String(teamId));
-      if (!me) continue;
-      const win = me.winner === true;
-      const ms = me.score?.displayValue ?? me.score?.value ?? '';
-      const os = opp?.score?.displayValue ?? opp?.score?.value ?? '';
-      const home = me.homeAway === 'home';
-      const oppAbbr = opp?.team?.abbreviation || opp?.team?.shortDisplayName || 'OPP';
-      const chip = `<div class="hero-chip last"><span class="hc-v ${win ? 'w' : 'l'}">${win ? 'W' : 'L'} ${esc(String(ms))}-${esc(String(os))}</span><span class="hc-l">Last · ${home ? 'vs' : '@'} ${esc(oppAbbr)}</span></div>`;
-      const heroEl = $(heroSel);
-      if (!heroEl) return;
-      let wrap = heroEl.querySelector('.hero-chips');
-      if (!wrap) { heroEl.insertAdjacentHTML('beforeend', '<div class="hero-chips"></div>'); wrap = heroEl.querySelector('.hero-chips'); }
-      wrap.insertAdjacentHTML('afterbegin', chip);
-      return;
+      if (!me) return;
+      if (me.winner === true) w10++; else l10++;
+    });
+    if (w10 + l10 > 0) {
+      const n = w10 + l10;
+      ensureWrap().insertAdjacentHTML('beforeend',
+        `<div class="hero-chip"><span class="hc-v">${w10}-${l10}</span><span class="hc-l">Last ${n < 10 ? n : 10}</span></div>`);
     }
   } catch (e) { /* schedule unreachable — hero still shows record chips */ }
 }
