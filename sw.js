@@ -3,7 +3,7 @@
 // app's own files pass through here; ESPN/X requests go straight to the network.
 // CACHE is versioned (bump it with APP_VERSION) so each deploy starts clean and
 // the activate handler can purge stale caches instead of letting them pile up.
-const CACHE = 'sportshub-v116';
+const CACHE = 'sportshub-v117';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(

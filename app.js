@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v116';
+const APP_VERSION = 'v117';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3764,6 +3764,42 @@ const SCHEDULE_SEASON = 2026; // upcoming 2026-27 season schedule
 const refId = (ref) => (ref || '').match(/\/(?:athletes|teams)\/(\d+)/)?.[1];
 const safeJSON = (url, ttl) => fetchJSON(url, ttl).catch(() => null);
 
+// Build a row of quick "form" stat chips for a team-tab hero from the ESPN team
+// object's record items — current streak, home/away split, last-10 (MLB), and
+// run/point differential. Replaces the old "Next:" line, which just duplicated
+// the Next Game section right below the hero. Only chips with data are shown;
+// returns '' when nothing is available so the hero stays clean.
+function heroFormChips(t, sport) {
+  const items = t?.record?.items || [];
+  const byType = (types) => items.find((r) => types.includes(String(r.type || '').toLowerCase()));
+  const totalItem = byType(['total']) || items[0];
+  const stat = (it, names) => {
+    const s = (it?.stats || []).find((x) => names.includes(String(x.name || '').toLowerCase()));
+    if (!s) return null;
+    const v = s.displayValue != null ? s.displayValue : s.value;
+    return (v === '' || v == null) ? null : String(v);
+  };
+  const chips = [];
+  const streak = stat(totalItem, ['streak']);
+  if (streak && streak !== '0') chips.push(['Streak', streak]);
+  const home = byType(['home'])?.summary;
+  if (home) chips.push(['Home', home]);
+  const away = (byType(['road', 'away']) || {}).summary;
+  if (away) chips.push(['Away', away]);
+  const l10 = (byType(['lastten', 'last10']) || {}).summary;
+  if (l10) chips.push(['Last 10', l10]);
+  const diff = stat(totalItem, ['differential', 'pointdifferential', 'pointdiff', 'rundifferential']);
+  if (diff && diff !== '0') {
+    const n = parseFloat(diff);
+    const val = (!isNaN(n) && n > 0) ? `+${diff}` : diff;
+    chips.push([sport === 'mlb' ? 'Run Diff' : 'Pt Diff', val]);
+  }
+  if (!chips.length) return '';
+  return '<div class="hero-chips">' + chips.map(([l, v]) =>
+    `<div class="hero-chip"><span class="hc-v">${esc(String(v))}</span><span class="hc-l">${esc(l)}</span></div>`
+  ).join('') + '</div>';
+}
+
 async function renderEagles() {
   const id = EAGLES.teamId;
   const [teamR, rosterR, newsR] = await Promise.allSettled([
@@ -3780,15 +3816,7 @@ async function renderEagles() {
   const next = t?.nextEvent?.[0];
   let hero = `<h2>${logo ? `<img src="${logo}" style="height:30px;vertical-align:middle;margin-right:8px">` : '🦅 '}${t?.displayName || 'Philadelphia Eagles'}</h2>`;
   if (rec || standing) hero += `<div class="muted">${[rec ? `Record ${rec}` : '', standing].filter(Boolean).join(' • ')}</div>`;
-  hero += '<div class="featured-line">';
-  if (next) {
-    const nm = next.name || next.shortName || '';
-    const when = next.date ? new Date(next.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + fmtTime(next.date) : '';
-    hero += `<div class="featured-game"><div><strong>Next:</strong> ${nm}</div><span class="status">${when}</span></div>`;
-  } else {
-    hero += `<div class="muted">No game scheduled — schedule fills in as the season approaches.</div>`;
-  }
-  hero += '</div>';
+  hero += heroFormChips(t, 'nfl');
   $('#eagles-hero').innerHTML = hero;
 
   // coaching staff
@@ -4082,15 +4110,7 @@ async function renderRedSox() {
   const next = t?.nextEvent?.[0];
   let hero = `<h2>${logo ? `<img src="${esc(logo)}" style="height:30px;vertical-align:middle;margin-right:8px">` : '⚾ '}${esc(t?.displayName || 'Boston Red Sox')}</h2>`;
   if (rec || standing) hero += `<div class="muted">${[rec ? `Record ${rec}` : '', standing].filter(Boolean).join(' • ')}</div>`;
-  hero += '<div class="featured-line">';
-  if (next) {
-    const nm = next.name || next.shortName || '';
-    const when = next.date ? new Date(next.date).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + fmtTime(next.date) : '';
-    hero += `<div class="featured-game"><div><strong>Next:</strong> ${esc(nm)}</div><span class="status">${esc(when)}</span></div>`;
-  } else {
-    hero += '<div class="muted">No game scheduled.</div>';
-  }
-  hero += '</div>';
+  hero += heroFormChips(t, 'mlb');
   $('#redsox-hero').innerHTML = hero;
 
   $('#redsox-staff').innerHTML = `<div class="staff-card"><div class="role">Manager</div><div class="who">${esc(REDSOX.manager)}</div></div>`;
