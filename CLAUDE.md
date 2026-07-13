@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v107**.
+Current version as of this writing: **v108**.
 
 ## Testing reality
 
@@ -540,7 +540,11 @@ Current version as of this writing: **v107**.
     downgrade signal (IR/out-for-season/suspended) pushes his primary backup to a
     high floor, a backup with a promote signal (first-team reps / named starter)
     gets bumped, and the driving headline shows on the row (🔻/🔼/🗞) and in the
-    player modal's "Latest News" card. All ESPN free feeds, no keys — Twitter/X
+    player modal's "Latest News" card. **v108:** the news card opens an **in-app
+    summary** (`openNewsSummary(article, backFn)` — the raw ESPN article is kept
+    on `fanState.researchNews[id].article`; a "‹ Back" returns to the player), and
+    the "Full profile" link uses the canonical id **+ name slug** URL so it
+    universal-links into the ESPN app instead of bouncing to a browser. All ESPN free feeds, no keys — Twitter/X
     is paywalled and Reddit is browser-CORS-blocked + noisy, so neither is used.
     Clearly labeled an estimate, not a real probability. Selection +
     fetched depth are cached in `fanState.researchCache`/`researchAthletes` so the

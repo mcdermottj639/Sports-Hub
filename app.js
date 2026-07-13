@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v107';
+const APP_VERSION = 'v108';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -317,20 +317,22 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal
 // News: in-app extractive summary popup (condenses the article text).
 const stripHTML = (html) => { const d = document.createElement('div'); d.innerHTML = html || ''; return (d.textContent || '').replace(/\s+/g, ' ').trim(); };
 const summarize = (text, max = 5) => { const t = stripHTML(text); if (!t) return ''; const s = t.match(/[^.!?]+[.!?]+/g) || [t]; return s.slice(0, max).join(' ').trim(); };
-async function openNewsSummary(a) {
+async function openNewsSummary(a, backFn) {
   if (!a) return;
   modal().classList.remove('hidden');
   const img = a.images?.[0]?.url;
   const when = a.published ? new Date(a.published).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' }) : '';
   const by = a.byline || '';
   const href = a.links?.web?.href || a.links?.mobile?.href || '#';
-  $('#modal-body').innerHTML = `${img ? `<img class="news-hero" src="${esc(img)}" onerror="this.style.display='none'">` : ''}
+  $('#modal-body').innerHTML = `${backFn ? '<button class="md-back" id="md-back">‹ Back</button>' : ''}
+    ${img ? `<img class="news-hero" src="${esc(img)}" onerror="this.style.display='none'">` : ''}
     <h2 class="news-title">${esc(a.headline || '')}</h2>
     <div class="news-by">${esc([by, when].filter(Boolean).join(' · '))}</div>
     <div class="md-section-title">Summary</div>
     <div class="news-summary" id="news-sum">${esc(a.description || 'Summarizing…')}</div>
     <a class="fan-btn" href="${esc(href)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;text-decoration:none">Read full article ↗</a>
     <div class="ai-why" style="margin-top:8px;opacity:.7">Auto-condensed from the article text.</div>`;
+  if (backFn) { const bb = document.getElementById('md-back'); if (bb) bb.onclick = backFn; }
   const apiHref = a.links?.api?.self?.href || a.links?.api?.news?.href;
   if (apiHref) {
     const d = await fetchJSON(apiHref.replace(/^http:/, 'https:'), 6 * 3600000).catch(() => null);
@@ -2054,9 +2056,9 @@ async function renderTeamResearch() {
   }
   // ESPN team news → match a recent headline to each shown player (real beat
   // context: injuries, "first-team reps", "named starter", IR moves, etc.).
-  const articles = (newsR?.articles || []).map((a) => ({
-    h: a.headline || '', d: a.description || '', link: a.links?.web?.href || a.links?.mobile?.href || '', when: a.published || '',
-  })).filter((a) => a.h);
+  // Keep the raw ESPN article objects so the player modal can show an in-app
+  // summary (openNewsSummary) instead of linking out.
+  const articles = (newsR?.articles || []).filter((a) => a.headline);
   fanState.researchNews = fanState.researchNews || {};
   const news = {};
   const shown = [];
@@ -2082,10 +2084,10 @@ function playerNews(a, articles) {
   const last = lastName(a.displayName).toLowerCase();
   if (!last) return null;
   for (const art of articles) { // articles arrive newest-first
-    const text = (art.h + ' ' + art.d).toLowerCase();
+    const text = ((art.headline || '') + ' ' + (art.description || '')).toLowerCase();
     const hit = text.includes(name) || (last.length >= 4 && text.includes(last));
     if (!hit) continue;
-    return { headline: art.h, link: art.link, when: art.when, signal: classifyNews(text) };
+    return { headline: art.headline, when: art.published, signal: classifyNews(text), article: art };
   }
   return null;
 }
@@ -2193,7 +2195,10 @@ async function openPlayerModal(aid) {
   ].filter(([, v]) => v != null && v !== '');
   const inj = a.injuries?.find((i) => i.status && i.status !== 'Active');
   const nw = (fanState.researchNews || {})[aid];
-  const espn = `https://www.espn.com/nfl/player/_/id/${esc(a.id)}`;
+  // Canonical ESPN player URL (id + name slug) — the slugged URL universal-links
+  // into the ESPN app, whereas a bare /id/N redirects and falls back to a browser.
+  const slug = (a.displayName || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const espn = `https://www.espn.com/nfl/player/_/id/${esc(a.id)}/${esc(slug)}`;
   const nwWhen = nw?.when ? new Date(nw.when).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
   body.innerHTML = `
     <div class="pl-head">
@@ -2202,9 +2207,13 @@ async function openPlayerModal(aid) {
       <div class="pl-sub">${esc([a.position?.abbreviation, a.jersey ? '#' + a.jersey : ''].filter(Boolean).join(' · '))}</div></div>
     </div>
     ${inj ? `<div class="pl-inj">🩹 ${esc(inj.status)}${inj.details?.type ? ' — ' + esc(inj.details.type) : ''}</div>` : ''}
-    ${nw ? `<div class="md-section-title">Latest News</div><a class="pl-news-card" href="${esc(nw.link || espn)}" target="_blank" rel="noopener"><div class="pl-news-h">${esc(nw.headline)}</div><div class="pl-news-w">${nwWhen ? esc(nwWhen) + ' · ' : ''}ESPN ↗</div></a>` : ''}
+    ${nw ? `<div class="md-section-title">Latest News</div><button class="pl-news-card" id="pl-news-open" type="button"><div class="pl-news-h">${esc(nw.headline)}</div><div class="pl-news-w">${nwWhen ? esc(nwWhen) + ' · ' : ''}tap for in-app summary</div></button>` : ''}
     <div class="pl-bio">${bio.map(([k, v]) => `<div class="pl-b"><span class="pl-bk">${k}</span><span class="pl-bv">${esc(String(v))}</span></div>`).join('')}</div>
     <a class="fan-btn" href="${espn}" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;text-decoration:none">Full profile &amp; stats on ESPN ↗</a>`;
+  if (nw?.article) {
+    const btn = body.querySelector('#pl-news-open');
+    if (btn) btn.onclick = () => openNewsSummary(nw.article, () => openPlayerModal(aid));
+  }
 }
 
 // --- Fantasy: NFL mock draft (client-side snake draft vs CPU GMs) ----------

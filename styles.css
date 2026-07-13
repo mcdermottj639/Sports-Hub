@@ -711,7 +711,9 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .tr-news { font-size: 11px; color: var(--silver); margin-top: 3px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .tr-player.news { border-color: rgba(255,209,102,.4); }
 /* player modal: latest-news card */
-.pl-news-card { display: block; background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 10px; padding: 10px 12px; text-decoration: none; color: var(--text); margin-bottom: 4px; }
+.pl-news-card { display: block; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 10px; padding: 10px 12px; text-decoration: none; color: var(--text); margin-bottom: 4px; cursor: pointer; font: inherit; }
+.pl-news-card:hover { border-color: var(--accent); }
+.md-back { background: none; border: none; color: var(--accent); font-weight: 800; font-size: 13.5px; cursor: pointer; padding: 2px 0 8px; display: inline-flex; align-items: center; }
 .pl-news-h { font-weight: 700; font-size: 13.5px; line-height: 1.35; }
 .pl-news-w { color: var(--muted); font-size: 11px; font-weight: 700; margin-top: 4px; }
 
