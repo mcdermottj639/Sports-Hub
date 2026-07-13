@@ -642,11 +642,13 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .tl-row.now .tl-when { color: var(--accent); }
 .tl-row.past { opacity: .5; }
 .bd-list { display: flex; flex-direction: column; gap: 6px; }
-.bd-row { display: grid; grid-template-columns: 34px 1fr auto 30px; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.06)); border-radius: 10px; padding: 8px 12px; }
-.bd-tier { font-size: 11px; font-weight: 900; text-align: center; border-radius: 6px; padding: 2px 0; border: 1.5px solid var(--accent); color: var(--accent); background: transparent; }
-.bd-tier.t2 { border-color: var(--gold); color: var(--gold); }
-.bd-tier.t3 { border-color: var(--muted); color: var(--muted); }
-.bd-tier.t4, .bd-tier.t5 { border-color: var(--line, rgba(255,255,255,.2)); color: var(--muted); }
+.bd-row { display: grid; grid-template-columns: 50px 1fr auto 30px; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.06)); border-radius: 10px; padding: 8px 12px; }
+/* Per-row tier picker — adjust a player's tier after adding them. */
+.bd-tier-sel { font-size: 12px; font-weight: 900; text-align: center; border-radius: 6px; padding: 4px 2px; border: 1.5px solid var(--accent); color: var(--accent); background: transparent; cursor: pointer; min-width: 0; -webkit-appearance: none; appearance: none; }
+.bd-tier-sel.t2 { border-color: var(--gold); color: var(--gold); }
+.bd-tier-sel.t3 { border-color: var(--muted); color: var(--muted); }
+.bd-tier-sel.t4, .bd-tier-sel.t5 { border-color: var(--line, rgba(255,255,255,.2)); color: var(--muted); }
+.bd-tier-sel option { color: var(--text); }
 .bd-name { font-weight: 700; font-size: 14px; }
 .bd-pos { font-size: 11px; font-weight: 800; color: var(--muted); }
 .bd-rm { background: none; border: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 0; }

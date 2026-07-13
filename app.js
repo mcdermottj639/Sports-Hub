@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v112';
+const APP_VERSION = 'v113';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1955,7 +1955,7 @@ function renderFantasyFootball() {
   const shown = board.filter((p) => filter === 'ALL' || p.pos === filter)
     .sort((a, b) => (a.pos === b.pos ? (a.tier - b.tier || a.name.localeCompare(b.name)) : NFL_POS.indexOf(a.pos) - NFL_POS.indexOf(b.pos)));
   const boardHTML = shown.length
-    ? shown.map((p) => `<div class="bd-row"><span class="bd-tier t${p.tier}">T${p.tier}</span><span class="bd-name">${esc(p.name)}</span><span class="bd-pos">${esc(p.pos)}</span><button class="bd-rm" data-name="${esc(p.name)}" aria-label="Remove ${esc(p.name)}">×</button></div>`).join('')
+    ? shown.map((p) => `<div class="bd-row"><select class="bd-tier-sel t${p.tier}" data-name="${esc(p.name)}" aria-label="Tier for ${esc(p.name)}">${[1, 2, 3, 4, 5].map((t) => `<option value="${t}"${t === p.tier ? ' selected' : ''}>T${t}</option>`).join('')}</select><span class="bd-name">${esc(p.name)}</span><span class="bd-pos">${esc(p.pos)}</span><button class="bd-rm" data-name="${esc(p.name)}" aria-label="Remove ${esc(p.name)}">×</button></div>`).join('')
     : '<div class="muted" style="padding:8px 2px">No targets yet — add players below, or tap a suggestion.</div>';
 
   const filterChips = ['ALL', 'QB', 'RB', 'WR', 'TE'].map((f) =>
@@ -1978,13 +1978,10 @@ function renderFantasyFootball() {
     <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Projected offensive fantasy starters from the latest depth chart (QB · RB · WR · TE). Tap a player for more info.</div>
     <div id="tr-content" class="tr-content"></div>
 
-    <h2 class="section-title">Offseason Timeline</h2>
-    <div class="tl-list">${tl}</div>
-    <div class="muted" style="font-size:11px;margin-top:6px">Expected 2026 dates — may shift when the official calendar is set.</div>
-
     <h2 class="section-title">My Draft Board</h2>
     <div class="chips" style="margin-bottom:10px">${filterChips}</div>
     <div class="bd-list">${boardHTML}</div>
+    <div class="muted" style="font-size:11px;margin:4px 0 0">Tap a player's <b>tier</b> dropdown to re-rank them; the board re-sorts by position then tier.</div>
     <div class="pp-add">
       <input id="bd-name" type="text" placeholder="Add a player…" autocomplete="off" />
       <select id="bd-pos">${NFL_POS.map((p) => `<option>${p}</option>`).join('')}</select>
@@ -2001,7 +1998,11 @@ function renderFantasyFootball() {
       <li>Track <b>bye weeks</b> so you don't stack too many starters on the same week.</li>
       <li>Don't reach for <b>QB or TE</b> early unless it's a truly elite one — both are deep.</li>
       <li><b>Handcuff</b> your stud RB late, and save a bench spot for a Week-1 waiver dart.</li>
-    </ul>`;
+    </ul>
+
+    <h2 class="section-title">Offseason Timeline</h2>
+    <div class="tl-list">${tl}</div>
+    <div class="muted" style="font-size:11px;margin-top:6px">Expected 2026 dates — may shift when the official calendar is set.</div>`;
 
   const addPlayer = (name, pos, tier) => {
     name = (name || '').trim();
@@ -2014,6 +2015,11 @@ function renderFantasyFootball() {
   };
   box.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { fanState.nflFilter = b.dataset.filter; renderFantasyFootball(); }));
   box.querySelectorAll('.bd-rm').forEach((b) => (b.onclick = () => { saveNflBoard(loadNflBoard().filter((p) => p.name !== b.dataset.name)); renderFantasyFootball(); }));
+  box.querySelectorAll('.bd-tier-sel').forEach((s) => (s.onchange = () => {
+    const list = loadNflBoard();
+    const pl = list.find((p) => p.name === s.dataset.name);
+    if (pl) { pl.tier = Number(s.value) || pl.tier; saveNflBoard(list); renderFantasyFootball(); }
+  }));
   box.querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => addPlayer(b.dataset.add, b.dataset.pos, 3)));
   const addBtn = box.querySelector('#bd-add');
   if (addBtn) addBtn.onclick = () => addPlayer(box.querySelector('#bd-name').value, box.querySelector('#bd-pos').value, Number(box.querySelector('#bd-tier').value) || 3);

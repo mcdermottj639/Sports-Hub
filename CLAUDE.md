@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v112**.
+Current version as of this writing: **v113**.
 
 - **News summaries** (`summarize`, v110) — the in-app news popup (Home
   headlines, Eagles news, Team Research player modal) uses a real **extractive**
@@ -503,8 +503,11 @@ Current version as of this writing: **v112**.
     category sections: a **kickoff countdown** + **offseason timeline** (expected
     2026 dates, `NFL_DATES`/`daysUntil`), a personal **Draft Board** (add
     name/pos/tier, quick-add suggestion chips from `NFL_SUGGEST`, position
-    filter; saved on-device in `sportshub:fantasy:nflboard`), and evergreen prep
-    tips. `renderFantasy` hides the baseball wrapper (`#fantasy-live`) and returns
+    filter; **each row's tier is an editable `<select>`** (`.bd-tier-sel`, v113)
+    that re-ranks the player and re-sorts the board; saved on-device in
+    `sportshub:fantasy:nflboard`), and evergreen prep
+    tips. Section order (v113): Team Research → My Draft Board → Prep Tips →
+    **Offseason Timeline (last)**. `renderFantasy` hides the baseball wrapper (`#fantasy-live`) and returns
     early for football; `injectJumpNav` now skips hidden headings so the hidden
     baseball sections don't produce dead chips. The **live** football league
     sections (matchup/standings/etc., which need the backend league + `catranks`)
