@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v117';
+const APP_VERSION = 'v118';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3773,31 +3773,94 @@ function heroFormChips(t, sport) {
   const items = t?.record?.items || [];
   const byType = (types) => items.find((r) => types.includes(String(r.type || '').toLowerCase()));
   const totalItem = byType(['total']) || items[0];
-  const stat = (it, names) => {
-    const s = (it?.stats || []).find((x) => names.includes(String(x.name || '').toLowerCase()));
+  const statObj = (names) => (totalItem?.stats || []).find((x) => names.includes(String(x.name || '').toLowerCase()));
+  const numOf = (names) => {
+    const s = statObj(names);
     if (!s) return null;
-    const v = s.displayValue != null ? s.displayValue : s.value;
-    return (v === '' || v == null) ? null : String(v);
+    const v = s.value != null ? Number(s.value) : parseFloat(s.displayValue);
+    return isNaN(v) ? null : v;
   };
   const chips = [];
-  const streak = stat(totalItem, ['streak']);
-  if (streak && streak !== '0') chips.push(['Streak', streak]);
+
+  // Streak — ESPN sometimes gives displayValue "W3"/"L2", sometimes a bare/signed
+  // number (positive = wins, negative = losses). Derive the W/L prefix either way.
+  const sk = statObj(['streak']);
+  if (sk) {
+    const dv = sk.displayValue != null ? String(sk.displayValue) : '';
+    let label = null;
+    if (/^[WL]\s*\d/i.test(dv)) label = dv.replace(/\s+/g, '').toUpperCase();
+    else {
+      const n = sk.value != null ? Number(sk.value) : parseFloat(dv);
+      if (!isNaN(n) && n !== 0) label = (n > 0 ? 'W' : 'L') + Math.abs(Math.round(n));
+    }
+    if (label) chips.push(['Streak', label]);
+  }
+
   const home = byType(['home'])?.summary;
   if (home) chips.push(['Home', home]);
   const away = (byType(['road', 'away']) || {}).summary;
   if (away) chips.push(['Away', away]);
   const l10 = (byType(['lastten', 'last10']) || {}).summary;
   if (l10) chips.push(['Last 10', l10]);
-  const diff = stat(totalItem, ['differential', 'pointdifferential', 'pointdiff', 'rundifferential']);
-  if (diff && diff !== '0') {
-    const n = parseFloat(diff);
-    const val = (!isNaN(n) && n > 0) ? `+${diff}` : diff;
-    chips.push([sport === 'mlb' ? 'Run Diff' : 'Pt Diff', val]);
+
+  // Run/Point differential — prefer a clean total from pointsFor − pointsAgainst.
+  // ESPN's `differential` is often a per-game AVERAGE (e.g. 0.2999…), so convert
+  // it to a season total using games played and round to a whole number.
+  const gp = (() => { const m = String(totalItem?.summary || '').match(/(\d+)\D+(\d+)/); return m ? (+m[1] + +m[2]) : null; })();
+  const pf = numOf(['pointsfor']);
+  const pa = numOf(['pointsagainst']);
+  let diffN = null;
+  if (pf != null && pa != null) {
+    diffN = pf - pa;
+  } else {
+    let d = numOf(['pointdifferential', 'pointdiff', 'differential', 'rundifferential', 'avgpointdifferential']);
+    if (d != null) diffN = (Math.abs(d) < 3 && gp) ? d * gp : d; // per-game avg → season total
   }
+  if (diffN != null) {
+    const r = Math.round(diffN);
+    if (r !== 0) chips.push([sport === 'mlb' ? 'Run Diff' : 'Pt Diff', (r > 0 ? '+' : '') + r]);
+  }
+
   if (!chips.length) return '';
   return '<div class="hero-chips">' + chips.map(([l, v]) =>
     `<div class="hero-chip"><span class="hc-v">${esc(String(v))}</span><span class="hc-l">${esc(l)}</span></div>`
   ).join('') + '</div>';
+}
+
+// Async companion to heroFormChips: fetch the team's schedule, find the most
+// recent COMPLETED game (within ~15 days so an offseason team doesn't surface a
+// months-old result), and inject a "Last · vs OPP  W 5-3" chip at the front of
+// the hero's chip row (creating the row if the record chips were empty).
+async function injectHeroLastGame(sport, path, teamId, heroSel) {
+  try {
+    const data = await safeJSON(`${SITE}/${path}/teams/${teamId}/schedule`, 3 * 3600000);
+    const now = Date.now();
+    const past = (data?.events || [])
+      .filter((e) => e.date)
+      .map((ev) => ({ ev, t: new Date(ev.date).getTime() }))
+      .filter((x) => x.t < now)
+      .sort((a, b) => b.t - a.t);
+    for (const { ev, t } of past) {
+      if (now - t > 15 * 86400000) break; // too stale (offseason)
+      const comp = ev.competitions?.[0] || {};
+      if (!comp.status?.type?.completed) continue;
+      const me = (comp.competitors || []).find((c) => String(c.team?.id) === String(teamId));
+      const opp = (comp.competitors || []).find((c) => String(c.team?.id) !== String(teamId));
+      if (!me) continue;
+      const win = me.winner === true;
+      const ms = me.score?.displayValue ?? me.score?.value ?? '';
+      const os = opp?.score?.displayValue ?? opp?.score?.value ?? '';
+      const home = me.homeAway === 'home';
+      const oppAbbr = opp?.team?.abbreviation || opp?.team?.shortDisplayName || 'OPP';
+      const chip = `<div class="hero-chip last"><span class="hc-v ${win ? 'w' : 'l'}">${win ? 'W' : 'L'} ${esc(String(ms))}-${esc(String(os))}</span><span class="hc-l">Last · ${home ? 'vs' : '@'} ${esc(oppAbbr)}</span></div>`;
+      const heroEl = $(heroSel);
+      if (!heroEl) return;
+      let wrap = heroEl.querySelector('.hero-chips');
+      if (!wrap) { heroEl.insertAdjacentHTML('beforeend', '<div class="hero-chips"></div>'); wrap = heroEl.querySelector('.hero-chips'); }
+      wrap.insertAdjacentHTML('afterbegin', chip);
+      return;
+    }
+  } catch (e) { /* schedule unreachable — hero still shows record chips */ }
 }
 
 async function renderEagles() {
@@ -3818,6 +3881,7 @@ async function renderEagles() {
   if (rec || standing) hero += `<div class="muted">${[rec ? `Record ${rec}` : '', standing].filter(Boolean).join(' • ')}</div>`;
   hero += heroFormChips(t, 'nfl');
   $('#eagles-hero').innerHTML = hero;
+  injectHeroLastGame('nfl', 'football/nfl', EAGLES.teamId, '#eagles-hero');
 
   // coaching staff
   $('#eagles-staff').innerHTML = EAGLES.staff
@@ -4112,6 +4176,7 @@ async function renderRedSox() {
   if (rec || standing) hero += `<div class="muted">${[rec ? `Record ${rec}` : '', standing].filter(Boolean).join(' • ')}</div>`;
   hero += heroFormChips(t, 'mlb');
   $('#redsox-hero').innerHTML = hero;
+  injectHeroLastGame('mlb', 'baseball/mlb', REDSOX.teamId, '#redsox-hero');
 
   $('#redsox-staff').innerHTML = `<div class="staff-card"><div class="role">Manager</div><div class="who">${esc(REDSOX.manager)}</div></div>`;
 

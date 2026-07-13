@@ -194,16 +194,24 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v117**.
+Current version as of this writing: **v118**.
 
-- **Team-hero quick-form chips** (`heroFormChips`, v117) — the Eagles + Red Sox
-  hero cards used to end with a "Next:" game line that just duplicated the
-  Next Game/Next Opponent section right below. That line is replaced by a row of
-  compact **form stat chips** (`.hero-chips`/`.hero-chip`) pulled from the ESPN
-  team object's `record.items`: current **Streak**, **Home**/**Away** split,
-  **Last 10** (MLB), and **Run/Point Diff** (from the total item's stats). Only
-  chips with data render, so a preseason 0-0 team just shows name + record +
-  standing (no bare/empty row). Shared by both team heroes.
+- **Team-hero quick-form chips** (`heroFormChips` + `injectHeroLastGame`, v117–v118)
+  — the Eagles + Red Sox hero cards used to end with a "Next:" game line that just
+  duplicated the Next Game/Next Opponent section right below. That line is replaced
+  by a row of compact **form stat chips** (`.hero-chips`/`.hero-chip`) pulled from
+  the ESPN team object's `record.items`: current **Streak**, **Home**/**Away**
+  split, **Last 10** (MLB), and **Run/Point Diff**, plus a **Last game** chip
+  (`W 5-3 · vs OPP`, W green / L red) injected async from the team schedule
+  (`injectHeroLastGame`, cached same URL as the Schedule section; skipped when the
+  last completed game is >15 days old so an offseason team shows nothing stale).
+  **v118 data fixes:** Streak derives its W/L prefix from the stat's signed `value`
+  when ESPN sends a bare number (so it's `L9`, not `9`); Run/Point Diff prefers
+  `pointsFor − pointsAgainst` and, when ESPN only gives the *per-game average*
+  `differential` (e.g. `0.2999…`), converts it to a rounded season total via games
+  played (so it reads `+28`, not `+0.2999999999999998`). Only chips with data
+  render, so a preseason 0-0 team just shows name + record + standing. Shared by
+  both team heroes.
 
 - **News summaries** (`summarize`, v110) — the in-app news popup (Home
   headlines, Eagles news, Team Research player modal) uses a real **extractive**

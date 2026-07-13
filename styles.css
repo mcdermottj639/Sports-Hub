@@ -117,7 +117,11 @@ main { max-width: 980px; margin: 0 auto; padding: 20px 16px 60px; }
   display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
 .hero-chip .hc-v { font-size: 17px; font-weight: 800; line-height: 1; color: var(--text); }
+.hero-chip .hc-v.w { color: var(--accent); }
+.hero-chip .hc-v.l { color: #d1493f; }
 .hero-chip .hc-l { font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
+.hero-chip.last { align-items: flex-start; }
+.hero-chip.last .hc-l { text-transform: none; letter-spacing: .2px; }
 :root[data-theme="light"] .hero-chip { background: rgba(0,0,0,.03); border-color: var(--line); }
 
 .games-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
