@@ -91,6 +91,16 @@ main { max-width: 980px; margin: 0 auto; padding: 20px 16px 60px; }
 }
 .featured-card::after { content: "🦅"; position: absolute; right: -10px; bottom: -18px; font-size: 120px; opacity: .08; }
 .featured-card.rs-hero::after { content: "⚾"; }
+
+/* Team tabs: playoff outlook card */
+.po-card { background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.07)); border-left: 4px solid var(--muted); border-radius: var(--radius); padding: 14px 16px; }
+.po-card.in { border-left-color: var(--accent); }
+.po-card.out { border-left-color: var(--gold); }
+.po-status { font-weight: 800; font-size: 16px; }
+.po-card.in .po-status { color: var(--accent); }
+.po-card.out .po-status { color: var(--gold); }
+.po-detail { color: var(--text); font-size: 13.5px; margin-top: 5px; line-height: 1.4; }
+.po-note { color: var(--muted); font-size: 11px; margin-top: 8px; }
 .featured-card h2 { margin: 0 0 4px; font-size: 22px; }
 .featured-line { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
 .featured-game {

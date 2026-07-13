@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v114';
+const APP_VERSION = 'v115';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -231,6 +231,88 @@ async function getStandings(sport) {
   try { rows = normStandings(await fetchJSON(`${CORE}/${path}/standings?level=3`, 5 * 60000)); } catch (_) {}
   if (!rows.length) { try { rows = normStandings(await fetchJSON(`${CORE}/${path}/standings`, 5 * 60000)); } catch (_) {} }
   return rows;
+}
+
+// --- team standings + playoff outlook (Eagles / Red Sox tabs) -------------
+const SEASON_GAMES = { nfl: 17, mlb: 162, nba: 82 };
+const WILD_CARDS = { nfl: 3, mlb: 3, nba: 6 };
+const pctOf = (r) => { const g = (r.wins || 0) + (r.losses || 0); return g ? r.wins / g : 0; };
+// Games a team (b) trails another (a); positive when a is ahead.
+const gamesBack = (a, b) => (((a.wins - b.wins) + (b.losses - a.losses)) / 2);
+const sameTeam = (n, target) => {
+  n = (n || '').toLowerCase(); target = (target || '').toLowerCase();
+  return !!n && !!target && (n === target || n.includes(target) || target.includes(n));
+};
+
+// Pace + standings based playoff picture (NOT official odds — labeled as such).
+function playoffOutlook(rows, teamName, sport) {
+  const me = rows.find((r) => sameTeam(r.team, teamName));
+  if (!me) return null;
+  const conf = me.league || me.division;
+  const confRows = rows.filter((r) => (r.league || r.division) === conf);
+  const byDiv = {};
+  confRows.forEach((r) => (byDiv[r.division] = byDiv[r.division] || []).push(r));
+  Object.values(byDiv).forEach((arr) => arr.sort((a, b) => pctOf(b) - pctOf(a)));
+  const leaders = Object.values(byDiv).map((a) => a[0]).sort((a, b) => pctOf(b) - pctOf(a));
+  const divLeader = (byDiv[me.division] || [])[0];
+  const isLeader = divLeader === me;
+  const wildPool = confRows.filter((r) => (byDiv[r.division] || [])[0] !== r).sort((a, b) => pctOf(b) - pctOf(a));
+  const wc = WILD_CARDS[sport] ?? 3;
+  const total = SEASON_GAMES[sport] || (me.wins + me.losses) || 1;
+  const gp = me.wins + me.losses;
+  const projW = Math.round(me.wins + pctOf(me) * Math.max(0, total - gp));
+  const projL = Math.max(0, total - projW);
+  const divGB = divLeader ? gamesBack(divLeader, me) : 0;
+  let madeIt, status, detail;
+  if (isLeader) {
+    madeIt = true;
+    status = `Leads the ${me.division}`;
+    detail = `${sport === 'nfl' ? `Projected #${leaders.indexOf(me) + 1} seed` : 'On track to win the division'} · ${projW}-${projL} pace`;
+  } else {
+    const wcRank = wildPool.indexOf(me) + 1;
+    madeIt = wcRank > 0 && wcRank <= wc;
+    if (madeIt) {
+      const firstOut = wildPool[wc];
+      const ga = firstOut ? gamesBack(me, firstOut) : null;
+      status = `In the field — Wild Card #${wcRank}`;
+      detail = `${ga != null ? `${ga.toFixed(1)} games ahead of the cut` : 'Holding a wild-card spot'} · ${projW}-${projL} pace`;
+    } else {
+      const cut = wildPool[wc - 1];
+      const gb = cut ? gamesBack(cut, me) : null;
+      status = 'Outside the playoff field';
+      detail = `${gb != null ? `${gb.toFixed(1)} back of the last wild card · ` : ''}${projW}-${projL} pace`;
+    }
+  }
+  return { madeIt, isLeader, status, detail, projW, projL, divGB, division: me.division };
+}
+
+async function renderStandingsBlock(sport, teamName, standSel, poSel) {
+  const standEl = $(standSel), poEl = $(poSel);
+  const rows = await getStandings(sport).catch(() => []);
+  if (!rows.length) {
+    if (standEl) standEl.innerHTML = '<div class="empty">Standings unavailable right now.</div>';
+    if (poEl) poEl.innerHTML = '<div class="empty">Playoff outlook appears once standings load.</div>';
+    return;
+  }
+  const me = rows.find((r) => sameTeam(r.team, teamName));
+  const div = me?.division || rows[0].division;
+  const divRows = rows.filter((r) => r.division === div).sort((a, b) => pctOf(b) - pctOf(a));
+  const leader = divRows[0];
+  if (standEl) {
+    const body = divRows.map((r) => {
+      const gb = gamesBack(leader, r);
+      const pct = pctOf(r).toFixed(3).replace(/^0/, '');
+      const logo = r.logo ? `<img class="tlogo" src="${esc(r.logo)}" alt="" onerror="this.style.display='none'">` : '';
+      return `<tr class="${sameTeam(r.team, teamName) ? 'fav' : ''}"><td>${logo}${esc(r.team)}</td><td class="num">${r.wins}</td><td class="num">${r.losses}</td><td class="num">${pct}</td><td class="num">${gb <= 0 ? '—' : gb.toFixed(1)}</td></tr>`;
+    }).join('');
+    standEl.innerHTML = `<div class="standings-group">${esc(div)}</div><table><tr><th>Team</th><th class="num">W</th><th class="num">L</th><th class="num">PCT</th><th class="num">GB</th></tr>${body}</table>`;
+  }
+  if (poEl) {
+    const o = playoffOutlook(rows, teamName, sport);
+    poEl.innerHTML = o
+      ? `<div class="po-card ${o.madeIt ? 'in' : 'out'}"><div class="po-status">${o.madeIt ? '✅' : '⚠️'} ${esc(o.status)}</div><div class="po-detail">${esc(o.detail)}</div><div class="po-note">Pace-based estimate from current standings — not official playoff odds.</div></div>`
+      : '<div class="empty">Playoff outlook unavailable.</div>';
+  }
 }
 
 // --- game helpers ---------------------------------------------------------
@@ -3737,7 +3819,7 @@ async function renderEagles() {
   }
 
   // quick-jump nav widgets (all visible — they wrap to multiple rows)
-  const navItems = [['sec-nextopp', 'Next Opp'], ['sec-news', 'News'], ['sec-stats', 'Stats'], ['sec-schedule', 'Schedule'], ['sec-depth', 'Depth'], ['sec-leaders', 'Leaders'], ['sec-numbers', 'Numbers'], ['sec-staff', 'Staff']];
+  const navItems = [['sec-nextopp', 'Next Opp'], ['sec-standings', 'Standings'], ['sec-playoff', 'Playoff'], ['sec-news', 'News'], ['sec-stats', 'Stats'], ['sec-schedule', 'Schedule'], ['sec-depth', 'Depth'], ['sec-leaders', 'Leaders'], ['sec-numbers', 'Numbers'], ['sec-staff', 'Staff']];
   const navEl = $('#eagles-nav');
   navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
   navEl.querySelectorAll('button').forEach((b) =>
@@ -3752,6 +3834,7 @@ async function renderEagles() {
   renderEaglesLeaders(idMap);
   renderEaglesSchedule();
   renderEaglesNextOpp(teamR.status === 'fulfilled' ? teamR.value.team : null);
+  renderStandingsBlock('nfl', (teamR.status === 'fulfilled' && teamR.value.team?.displayName) || 'Philadelphia Eagles', '#eagles-standings', '#eagles-playoff');
 }
 
 // Classify a position abbreviation into offense / defense / special teams.
@@ -4027,7 +4110,7 @@ async function renderRedSox() {
     newsEl.querySelectorAll('.news-item').forEach((it) => { it.onclick = () => openNewsSummary(articles[+it.dataset.news]); });
   }
 
-  const navItems = [['rs-nextgame', 'Next'], ['rs-news', 'News'], ['rs-stats', 'Stats'], ['rs-schedule', 'Schedule'], ['rs-roster', 'Roster'], ['rs-leaders', 'Leaders'], ['rs-numbers', 'Numbers'], ['rs-staff', 'Manager']];
+  const navItems = [['rs-nextgame', 'Next'], ['rs-standings', 'Standings'], ['rs-playoff', 'Playoff'], ['rs-news', 'News'], ['rs-stats', 'Stats'], ['rs-schedule', 'Schedule'], ['rs-roster', 'Roster'], ['rs-leaders', 'Leaders'], ['rs-numbers', 'Numbers'], ['rs-staff', 'Manager']];
   const navEl = $('#redsox-nav');
   navEl.innerHTML = navItems.map(([tg, l]) => `<button class="chip" data-target="${tg}">${l}</button>`).join('');
   navEl.querySelectorAll('button').forEach((b) => (b.onclick = () => { const elx = document.getElementById(b.dataset.target); if (elx?._accSet) elx._accSet(true); elx?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
@@ -4039,6 +4122,7 @@ async function renderRedSox() {
   renderRedSoxLeaders(idMap);
   renderRedSoxSchedule();
   renderRedSoxNextGame(t);
+  renderStandingsBlock('mlb', t?.displayName || 'Boston Red Sox', '#redsox-standings', '#redsox-playoff');
 }
 
 function renderRedSoxRoster(groups) {

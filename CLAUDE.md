@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v114**.
+Current version as of this writing: **v115**.
 
 - **News summaries** (`summarize`, v110) — the in-app news popup (Home
   headlines, Eagles news, Team Research player modal) uses a real **extractive**
@@ -289,7 +289,15 @@ Current version as of this writing: **v114**.
   statistics, ranked), Schedule & Results (windowed to last ~6 + next ~8 with a
   recent W/L trend), Roster (grouped by the roster's position groups), Team
   Leaders (`BBCORE` leaders), By the Numbers, Manager (Alex Cora, static). Curated
-  nav so `injectJumpNav` skips it (like Eagles). Reuses the Eagles CSS
+  nav so `injectJumpNav` skips it (like Eagles). **Standings + Playoff Outlook
+  (v115, on BOTH the Eagles and Red Sox tabs)** — `renderStandingsBlock(sport,
+  teamName, standSel, poSel)` renders the team's **division standings** table
+  (real ESPN `getStandings`, W/L/PCT/GB, team row highlighted) and a **Playoff
+  Outlook** card (`playoffOutlook`): a **pace-based** read (projected final record
+  from current win% over `SEASON_GAMES`, division-lead vs wild-card position with
+  games ahead/back of the cut, in/out of the field). Clearly labeled "not
+  official odds" — ESPN's free feed has no playoff-probability endpoint. Reuses
+  the Eagles CSS
   (`.stat-row`/`.leader-row`/`.sched-row`/`.depth-player`/`.opp-card`). NOTE:
   ESPN not reachable from the sandbox — verified structure/empty-states/no-errors;
   live MLB data verifies on device. The Red Sox are also the MLB `fav`
