@@ -308,7 +308,11 @@ Current version as of this writing: **v119**.
   `.featured-card.rs-hero::after`), curated jump-nav, Next Game, Latest News
   (tap → in-app summary), Team Stats & Rankings (batting+pitching from `BBCORE`
   statistics, ranked), Schedule & Results (windowed to last ~6 + next ~8 with a
-  recent W/L trend), Roster (grouped by the roster's position groups), Team
+  recent W/L trend), Roster (**pitching staff laid out as Starting Rotation →
+  Bullpen → Closer, then Catchers/Infielders/Outfielders/DH** — `renderRedSoxRoster`,
+  v120; pitcher roles from ESPN's position label, rotation ORDER + closer refined
+  via the season Games-Started / Saves leaders, a cache hit on the Leaders feed;
+  degrades to a single "Pitchers" group when no role data exists), Team
   Leaders (`BBCORE` leaders — the feed gives athletes as `$ref` only, so
   `renderRedSoxLeaders` resolves names from the roster map and **fetches any
   missing `$ref`**, v116, so rows don't fall back to "—"), By the Numbers, Manager

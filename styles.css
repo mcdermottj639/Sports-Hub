@@ -343,6 +343,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .staff-card .who { font-size: 16px; font-weight: 700; margin-top: 4px; }
 .depth-group { margin-bottom: 18px; }
 .depth-group h4 { margin: 0 0 8px; font-size: 13px; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; }
+.depth-group h4 .grp-n { color: var(--muted); font-weight: 700; font-size: 11px; letter-spacing: 0; }
 .depth-pos { margin-bottom: 10px; }
 .depth-pos .pos-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
 .depth-player { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: 999px; padding: 5px 11px; margin: 0 6px 6px 0; font-size: 13px; }

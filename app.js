@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v119';
+const APP_VERSION = 'v120';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -4237,7 +4237,7 @@ async function renderRedSox() {
 
   makeAccordion(document.getElementById('redsox'), '.section-title', 2);
 
-  renderRedSoxRoster(groups);
+  renderRedSoxRoster(allPlayers, idMap);
   renderRedSoxTeamStats();
   renderRedSoxLeaders(idMap);
   renderRedSoxSchedule();
@@ -4245,20 +4245,75 @@ async function renderRedSox() {
   renderStandingsBlock('mlb', t?.displayName || 'Boston Red Sox', '#redsox-standings', '#redsox-playoff');
 }
 
-function renderRedSoxRoster(groups) {
+// Roster laid out the way a baseball fan reads a staff: Starting Rotation (in
+// order) → Bullpen → Closer, then Catchers/Infielders/Outfielders/DH. Pitcher
+// roles come from ESPN's position label (Starting Pitcher / Relief Pitcher /
+// Closer); the rotation ORDER and the closer are refined with the season
+// Games-Started and Saves leaders (a cache hit — the Leaders section fetches the
+// same feed). Degrades gracefully: no role data → a single "Pitchers" group.
+async function renderRedSoxRoster(allPlayers, idMap) {
   const elx = $('#redsox-roster');
-  const chip = (a) => {
-    const pos = a.position?.abbreviation || '';
-    const age = a.age ? ` <span class="age">${a.age}y</span>` : '';
-    return `<span class="depth-player"><span class="jersey">${esc(pos || '—')}</span> ${esc(a.displayName || a.fullName || '')}${a.jersey ? ` #${esc(a.jersey)}` : ''}${age}</span>`;
+  if (!allPlayers || !allPlayers.length) { elx.innerHTML = '<div class="empty">Roster not available right now.</div>'; return; }
+
+  const posOf = (a) => {
+    const p = a.position || {};
+    return { abbr: String(p.abbreviation || '').toUpperCase(), name: String(p.displayName || p.name || '').toLowerCase() };
   };
-  const html = groups.map((grp) => {
-    const items = grp.items || grp.athletes || [];
-    if (!items.length) return '';
-    const p = grp.position;
-    const label = typeof p === 'string' ? p : (p?.displayName || p?.name || 'Players');
-    return `<div class="depth-group"><h4>${esc(label.charAt(0).toUpperCase() + label.slice(1))}</h4><div>${items.map(chip).join('')}</div></div>`;
-  }).join('');
+  const isPitcher = (a) => { const { abbr, name } = posOf(a); return ['P', 'SP', 'RP', 'CP', 'CL'].includes(abbr) || name.includes('pitch'); };
+  const isStarterPos = (a) => { const { abbr, name } = posOf(a); return abbr === 'SP' || name.includes('starting') || name.includes('starter'); };
+  const isCloserPos = (a) => { const { abbr, name } = posOf(a); return ['CP', 'CL'].includes(abbr) || name.includes('closer'); };
+
+  // Real rotation order (games started) + closer (saves) from the cached leaders feed.
+  let gsIds = [], closerId = null;
+  try {
+    const ld = await safeJSON(`${BBCORE}/seasons/${MLB_SEASON}/types/2/teams/${REDSOX.teamId}/leaders`, 6 * 3600000);
+    const cats = ld?.categories || [];
+    const gsCat = cats.find((c) => /games.?started|gamesstart/i.test(String(c.name || c.displayName || '')) || /^gs$/i.test(String(c.abbreviation || '')));
+    if (gsCat) gsIds = (gsCat.leaders || []).map((l) => refId(l.athlete?.$ref)).filter(Boolean);
+    const svCat = cats.find((c) => /^(sv|svo)$/i.test(String(c.abbreviation || '')) || /\bsaves?\b/i.test(String(c.name || c.displayName || '')));
+    if (svCat && (svCat.leaders || []).length) closerId = refId(svCat.leaders[0].athlete?.$ref);
+  } catch (e) { /* leaders unavailable — fall back to position labels only */ }
+  const gsIdx = {}; gsIds.forEach((id, i) => { if (id != null && gsIdx[id] == null) gsIdx[id] = i; });
+
+  const pitchers = allPlayers.filter(isPitcher);
+  const closer = pitchers.find((p) => String(p.id) === String(closerId)) || pitchers.find(isCloserPos) || null;
+  const starters = pitchers.filter((p) => p !== closer && (gsIdx[p.id] != null || isStarterPos(p)))
+    .sort((a, b) => (gsIdx[a.id] ?? 999) - (gsIdx[b.id] ?? 999));
+  const bullpen = pitchers.filter((p) => p !== closer && !starters.includes(p));
+
+  const posPlayers = allPlayers.filter((a) => !isPitcher(a));
+  const inSet = (a, set) => set.includes(posOf(a).abbr);
+  const catchers = posPlayers.filter((a) => posOf(a).abbr === 'C' || posOf(a).name.includes('catcher'));
+  const infield = posPlayers.filter((a) => inSet(a, ['1B', '2B', '3B', 'SS', 'IF', 'INF']) || /base|shortstop|infield/.test(posOf(a).name));
+  const outfield = posPlayers.filter((a) => inSet(a, ['LF', 'CF', 'RF', 'OF']) || posOf(a).name.includes('outfield'));
+  const dh = posPlayers.filter((a) => posOf(a).abbr === 'DH' || posOf(a).name.includes('designated'));
+  const used = new Set([...catchers, ...infield, ...outfield, ...dh]);
+  const other = posPlayers.filter((a) => !used.has(a));
+
+  const chip = (a, badge) => {
+    const j = badge != null ? badge : (posOf(a).abbr || '—');
+    const age = a.age ? ` <span class="age">${a.age}y</span>` : '';
+    return `<span class="depth-player"><span class="jersey">${esc(j)}</span> ${esc(a.displayName || a.fullName || '')}${a.jersey ? ` #${esc(a.jersey)}` : ''}${age}</span>`;
+  };
+  const group = (label, arr, opts = {}) => {
+    if (!arr.length) return '';
+    const body = arr.map((a, i) => chip(a, opts.number ? `SP${i + 1}` : (opts.badge != null ? opts.badge : undefined))).join('');
+    return `<div class="depth-group"><h4>${esc(label)} <span class="grp-n">${arr.length}</span></h4><div>${body}</div></div>`;
+  };
+
+  let html = '';
+  if (!starters.length && !closer) {
+    html += group('Pitchers', bullpen);
+  } else {
+    html += group('Starting Rotation', starters, { number: true });
+    html += group('Bullpen', bullpen);
+    if (closer) html += group('Closer', [closer], { badge: '🔒' });
+  }
+  html += group('Catchers', catchers);
+  html += group('Infielders', infield);
+  html += group('Outfielders', outfield);
+  html += group('Designated Hitter', dh);
+  html += group('Other', other);
   elx.innerHTML = html || '<div class="empty">Roster not available right now.</div>';
 }
 
