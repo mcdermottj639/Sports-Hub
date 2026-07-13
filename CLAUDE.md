@@ -194,7 +194,15 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v121**.
+Current version as of this writing: **v122**.
+
+- **Eagles/Red Sox hero parity** (v122) — both team heroes use the exact same
+  `heroFormChips` + `injectHeroLastGame`, so they show the identical six chips
+  (label differs only "Pt Diff" vs "Run Diff"). The Eagles just render fewer in
+  the NFL offseason (no current-season games → no streak/splits/diff/last game).
+  v122 also gates BOTH schedule chips (Last game + Last 10) on the same 15-day
+  recency of the most recent completed game, so an offseason team never shows a
+  stale partial subset (previously Last 10 had no recency gate).
 
 - **Team-hero quick-form chips** (`heroFormChips` + `injectHeroLastGame`, v117–v119)
   — the Eagles + Red Sox hero cards used to end with a "Next:" game line that just

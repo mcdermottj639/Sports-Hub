@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v121';
+const APP_VERSION = 'v122';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3852,6 +3852,10 @@ async function injectHeroLastGame(sport, path, teamId, heroSel) {
       .filter((x) => x.t < now && x.comp.status?.type?.completed)
       .sort((a, b) => b.t - a.t);
     if (!done.length) return;
+    // Skip ALL schedule chips (last game + last 10 together) when the most recent
+    // completed game is stale, so an offseason team never shows a partial/stale
+    // subset. Keeps the Eagles and Red Sox heroes behaving identically.
+    if (now - done[0].t > 15 * 86400000) return;
 
     const heroEl = $(heroSel);
     if (!heroEl) return;
@@ -3861,9 +3865,9 @@ async function injectHeroLastGame(sport, path, teamId, heroSel) {
       return w;
     };
 
-    // Last game (front) — only if recent enough to be relevant.
+    // Last game.
     const last = done[0];
-    if (now - last.t <= 15 * 86400000) {
+    {
       const me = (last.comp.competitors || []).find((c) => String(c.team?.id) === String(teamId));
       const opp = (last.comp.competitors || []).find((c) => String(c.team?.id) !== String(teamId));
       if (me) {
