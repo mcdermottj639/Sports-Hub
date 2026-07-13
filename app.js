@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v111';
+const APP_VERSION = 'v112';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1930,6 +1930,8 @@ const NFL_SUGGEST = {
   TE: ['Brock Bowers', 'Trey McBride', 'George Kittle', 'Sam LaPorta'],
 };
 const NFL_POS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST'];
+// Owner's league scoring (edit here if the league settings change).
+const NFL_SCORING = 'Half-PPR (0.5 per reception)';
 const daysUntil = (iso) => Math.ceil((new Date(iso + 'T12:00:00') - new Date()) / 86400000);
 
 function renderFantasyFootball() {
@@ -1966,6 +1968,7 @@ function renderFantasyFootball() {
     <div class="setup-card pp-hero">
       <div class="pp-kicker">🏈 NFL Fantasy — Preseason Prep</div>
       <div class="pp-count">${status}</div>
+      <div class="pp-scoring">🏆 League scoring: <b>${esc(NFL_SCORING)}</b></div>
       <div class="muted" style="margin-top:8px">Your live ESPN league — matchups, roster, standings — will sync here once the season starts and the league is connected. Until then, get your draft ready below.</div>
     </div>
 
@@ -1993,7 +1996,7 @@ function renderFantasyFootball() {
 
     <h2 class="section-title">Prep Tips</h2>
     <ul class="pp-tips">
-      <li>Know your <b>scoring</b> first — PPR lifts pass-catching backs and slot receivers; standard leans to volume RBs.</li>
+      <li>Your league is <b>half-PPR</b> (0.5/reception) — a middle ground: pass-catching backs and slot receivers get a modest bump, but volume and TDs still rule. Value receptions; don't over-chase them.</li>
       <li>Plan the early rounds as <b>tiers</b>, not exact names — your slot and position runs will move the board.</li>
       <li>Track <b>bye weeks</b> so you don't stack too many starters on the same week.</li>
       <li>Don't reach for <b>QB or TE</b> early unless it's a truly elite one — both are deep.</li>

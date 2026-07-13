@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v111**.
+Current version as of this writing: **v112**.
 
 - **News summaries** (`summarize`, v110) — the in-app news popup (Home
   headlines, Eagles news, Team Research player modal) uses a real **extractive**
@@ -491,6 +491,11 @@ Current version as of this writing: **v111**.
   - **Live-day auto-refresh** (`scheduleLiveRefresh`) — while any roster game is
     live AND the Fantasy tab is open, force-resyncs every 5 min (matches backend
     cache TTL); cleared/re-armed each render, stops when idle or tab inactive.
+  - **Owner's NFL fantasy league scoring = Half-PPR (0.5 per reception)**
+    (`NFL_SCORING`, v112) — shown in the Football prep hero and reflected in the
+    prep tips. Relevant when tuning the mock-draft board / any scoring-dependent
+    ranking, and for the live football league once wired. Edit `NFL_SCORING` if
+    the settings change.
   - **🏈 Football — Preseason Prep** (v99) — the Football chip now shows
     year-round. Until a live NFL league is wired up, selecting it renders a
     self-contained **preseason-prep view** (`renderFantasyFootball`,

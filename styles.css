@@ -632,6 +632,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .pp-hero { border-left: 4px solid var(--accent); }
 .pp-kicker { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); }
 .pp-count { font-size: 16px; font-weight: 700; margin-top: 8px; }
+.pp-scoring { margin-top: 10px; font-size: 13px; color: var(--text); background: var(--card-2); border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 8px; padding: 7px 11px; display: inline-block; }
 .pp-big { font-size: 30px; font-weight: 900; color: var(--accent); vertical-align: -3px; margin-right: 4px; font-variant-numeric: tabular-nums; }
 .tl-list { display: flex; flex-direction: column; gap: 6px; }
 .tl-row { display: grid; grid-template-columns: 58px 1fr auto; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.06)); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; }
