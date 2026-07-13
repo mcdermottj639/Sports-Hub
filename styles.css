@@ -677,6 +677,15 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .mk-pick-line { font-size: 13.5px; padding: 2px 0; font-weight: 600; }
 .mk-log { display: flex; flex-direction: column; gap: 4px; }
 .mk-log-row { font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--line, rgba(255,255,255,.05)); }
+/* completion: every pick with its value grade */
+.mk-picks { display: flex; flex-direction: column; }
+.mk-pick { display: grid; grid-template-columns: 68px 1fr auto; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line, rgba(255,255,255,.06)); }
+.mk-pk-slot { font-size: 11px; font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mk-pk-name { font-weight: 700; font-size: 14px; min-width: 0; }
+.mk-pk-val { font-weight: 900; font-size: 14px; font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
+.mk-pk-val.pos { color: var(--accent); }
+.mk-pk-val.neg { color: var(--live); }
+.mk-pk-val.zero, .mk-pk-val.na { color: var(--muted); }
 
 /* Fantasy: Team Research (projected offensive starters) */
 .tr-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }

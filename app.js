@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v105';
+const APP_VERSION = 'v106';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1909,7 +1909,6 @@ const daysUntil = (iso) => Math.ceil((new Date(iso + 'T12:00:00') - new Date()) 
 function renderFantasyFootball() {
   const box = $('#fantasy-football');
   if (!box) return;
-  if (fanState.mock) return renderMockDraft();
   const board = loadNflBoard();
   const filter = fanState.nflFilter || 'ALL';
   const kick = daysUntil(NFL_KICKOFF);
@@ -1965,13 +1964,6 @@ function renderFantasyFootball() {
     <div class="muted" style="font-size:12px;margin:12px 0 6px">Quick add — popular names to start (tap to add, then edit freely; not a ranking):</div>
     ${sugg}
 
-    <h2 class="section-title">Mock Draft</h2>
-    <div class="setup-card">
-      <p style="margin-top:0">Practice your draft against CPU GMs — snake order, a live best-available board, instant results.</p>
-      <button id="mock-start" class="fan-btn">🏈 Start Mock Draft</button>
-      <div class="muted" style="font-size:11px;margin-top:8px">Uses a built-in sample player board (~100 players) — for practice, not live ADP.</div>
-    </div>
-
     <h2 class="section-title">Prep Tips</h2>
     <ul class="pp-tips">
       <li>Know your <b>scoring</b> first — PPR lifts pass-catching backs and slot receivers; standard leans to volume RBs.</li>
@@ -1995,8 +1987,6 @@ function renderFantasyFootball() {
   box.querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => addPlayer(b.dataset.add, b.dataset.pos, 3)));
   const addBtn = box.querySelector('#bd-add');
   if (addBtn) addBtn.onclick = () => addPlayer(box.querySelector('#bd-name').value, box.querySelector('#bd-pos').value, Number(box.querySelector('#bd-tier').value) || 3);
-  const ms = box.querySelector('#mock-start');
-  if (ms) ms.onclick = () => { fanState.mock = { setup: true, teams: 12, slot: 6, rounds: 10 }; renderFantasyFootball(); };
   initTeamResearch();
 }
 
@@ -2390,6 +2380,16 @@ const mockDone = (m) => m.onClock >= m.teams * m.rounds;
 function mockStart(m) {
   m.userIdx = Math.max(0, Math.min(m.teams - 1, (m.slot || 1) - 1));
   m.pool = MOCK_POOL.slice();
+  // The sample board (~100 names) can be shorter than a deep draft needs
+  // (e.g. 12 teams × 10 rounds = 120 picks). Pad with generic depth players so
+  // the board never empties mid-draft. Filler carries rank ≥900 → shown as "–"
+  // and excluded from the draft grade.
+  const need = m.teams * m.rounds + 4;
+  const fillPos = ['WR', 'RB', 'WR', 'RB', 'TE', 'QB'];
+  for (let i = 0; m.pool.length < need; i++) {
+    const pos = fillPos[i % fillPos.length];
+    m.pool.push({ name: `Depth ${pos} ${Math.floor(i / fillPos.length) + 1}`, pos, team: 'FA', rank: 901 + i });
+  }
   m.rosters = Array.from({ length: m.teams }, () => []);
   m.picks = [];
   m.onClock = 0;
@@ -2412,8 +2412,10 @@ function mockGrade(m) {
   return { letter, diff };
 }
 
+// Lives in the About → Labs card (rendered into #labs-mock).
+function closeMockDraft() { fanState.mock = null; const b = $('#labs-mock'); if (b) b.innerHTML = ''; }
 function renderMockDraft() {
-  const box = $('#fantasy-football');
+  const box = $('#labs-mock');
   const m = fanState.mock;
   if (!box || !m) return;
 
@@ -2436,7 +2438,7 @@ function renderMockDraft() {
     box.querySelector('#mk-slot').onchange = (e) => { m.slot = Number(e.target.value); };
     box.querySelector('#mk-rounds').onchange = (e) => { m.rounds = Number(e.target.value); };
     box.querySelector('#mk-go').onclick = () => { m.slot = Number(box.querySelector('#mk-slot').value); m.rounds = Number(box.querySelector('#mk-rounds').value); mockStart(m); renderMockDraft(); };
-    box.querySelector('#mk-cancel').onclick = () => { fanState.mock = null; renderFantasyFootball(); };
+    box.querySelector('#mk-cancel').onclick = closeMockDraft;
     return;
   }
 
@@ -2460,19 +2462,31 @@ function renderMockDraft() {
 
   if (done) {
     const g = mockGrade(m);
+    // Every one of your picks, in draft order, with its value vs the slot it was
+    // taken (+ = fell to you past its board rank, − = a reach).
+    const myPicks = m.picks.filter((p) => p.teamIdx === m.userIdx).sort((a, b) => a.overall - b.overall);
+    const picksHTML = myPicks.map((pk) => {
+      const slot = pk.overall + 1;
+      const real = pk.player.rank < 900;
+      const val = real ? slot - pk.player.rank : null;
+      const cls = val == null ? 'na' : val > 0 ? 'pos' : val < 0 ? 'neg' : 'zero';
+      const txt = val == null ? '–' : (val > 0 ? '+' : '') + val;
+      return `<div class="mk-pick"><span class="mk-pk-slot">R${pk.round} · #${slot}</span><span class="mk-pk-name">${esc(pk.player.name)} <span class="mk-meta">${esc(pk.player.pos)}·${esc(pk.player.team || '')}</span></span><span class="mk-pk-val ${cls}">${txt}</span></div>`;
+    }).join('');
     box.innerHTML = `
       <div class="setup-card pp-hero"><div class="pp-kicker">🏈 Draft Complete</div>
         <div class="pp-count"><span class="pp-big">${g.letter}</span> your draft grade</div>
         <div class="muted" style="margin-top:6px">Value vs slot: ${g.diff >= 0 ? '+' : ''}${g.diff.toFixed(1)} per pick (positive = you landed players below where they went).</div>
       </div>
-      <h2 class="section-title">Your Team</h2>
-      <div class="mk-team">${teamHTML}</div>
+      <h2 class="section-title">Your Picks</h2>
+      <div class="mk-picks">${picksHTML}</div>
+      <div class="muted" style="font-size:11px;margin-top:6px"><b class="mk-pk-val pos">+</b> value (fell to you) · <b class="mk-pk-val neg">−</b> reach vs board rank</div>
       <div class="fan-actions">
         <button id="mk-new" class="fan-btn">New draft</button>
-        <button id="mk-exit" class="fan-btn ghost">Back to prep</button>
+        <button id="mk-exit" class="fan-btn ghost">Close</button>
       </div>`;
     box.querySelector('#mk-new').onclick = () => { fanState.mock = { setup: true, teams: m.teams, slot: m.slot, rounds: m.rounds }; renderMockDraft(); };
-    box.querySelector('#mk-exit').onclick = () => { fanState.mock = null; renderFantasyFootball(); };
+    box.querySelector('#mk-exit').onclick = closeMockDraft;
     return;
   }
 
@@ -2517,7 +2531,7 @@ function renderMockDraft() {
   searchEl.oninput = paint;
   box.querySelector('#mk-auto').onclick = () => { mockUserPick(m, mockCpuChoose(m)); renderMockDraft(); };
   box.querySelector('#mk-sim').onclick = () => { mockSimRest(m); renderMockDraft(); };
-  box.querySelector('#mk-exit').onclick = () => { fanState.mock = null; renderFantasyFootball(); };
+  box.querySelector('#mk-exit').onclick = closeMockDraft;
 }
 
 async function renderFantasy() {
@@ -3935,6 +3949,14 @@ function applyTheme(t) {
   }
 }
 applyTheme(effectiveTheme());
+
+// Labs: launch the fantasy mock draft (in the About → Labs card).
+$('#labs-mock-start')?.addEventListener('click', () => {
+  fanState.mock = { setup: true, teams: 12, slot: 6, rounds: 10 };
+  renderMockDraft();
+  $('#labs-mock')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
 $('#theme-toggle')?.addEventListener('click', () => {
   const next = effectiveTheme() === 'light' ? 'dark' : 'light';
   try { localStorage.setItem(THEME_KEY, next); } catch (e) {}

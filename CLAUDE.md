@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v105**.
+Current version as of this writing: **v106**.
 
 ## Testing reality
 
@@ -494,12 +494,18 @@ Current version as of this writing: **v105**.
     are still TODO — they'll branch on `cfg.football` when the NFL league is
     configured. The Labs rookie **Mock Draft Simulator** is a different thing (real
     NFL draft of incoming rookies).
-  - **🏈 Fantasy Mock Draft** (v100) — a client-side snake draft vs CPU GMs, in
-    the Football prep view (`renderMockDraft`, launched from the "Mock Draft"
-    card; state in `fanState.mock`, `.mk-*`/`.mock-*` CSS). Setup (teams/your
-    slot/rounds) → draft room (best-available board with position filter +
-    search, your team by position, recent-picks log, auto-pick / sim-rest / exit)
-    → completion screen with a **value-vs-slot draft grade** (`mockGrade`). CPU
+  - **🏈 Fantasy Mock Draft** (v100; **moved to About → Labs in v106**) — a
+    client-side snake draft vs CPU GMs. Launched from the Labs card
+    (`#labs-mock-start`) and rendered into `#labs-mock` (`renderMockDraft`;
+    `closeMockDraft` clears it; state in `fanState.mock`, `.mk-*`/`.mock-*` CSS).
+    Setup (teams/your slot/rounds; **defaults to 12 teams, slot 6**) → draft room
+    (best-available board with position filter + search, your team by position,
+    recent-picks log, auto-pick / sim-rest / exit) → completion screen that lists
+    **every one of your picks with its value grade** (round · overall slot, +/−
+    vs board rank) plus an overall **value-vs-slot grade** (`mockGrade`). The
+    sample board (~100) is **padded with generic "Depth" filler at `mockStart`**
+    to `teams×rounds` so the board never empties on a deep draft (filler carries
+    rank ≥900 → shown as "–", excluded from the grade). CPU
     uses a value model (`mockScore`/`mockCpuChoose`): tier-shaped rank value ×
     positional need (`MOCK_NEED` vs `MOCK_CAP`) × a per-pick reach/slide factor,
     with K/DST gated to the last two rounds — so drafts vary run-to-run and CPU
