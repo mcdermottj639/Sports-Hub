@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v106';
+const APP_VERSION = 'v107';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2485,8 +2485,9 @@ function renderMockDraft() {
         <button id="mk-new" class="fan-btn">New draft</button>
         <button id="mk-exit" class="fan-btn ghost">Close</button>
       </div>`;
-    box.querySelector('#mk-new').onclick = () => { fanState.mock = { setup: true, teams: m.teams, slot: m.slot, rounds: m.rounds }; renderMockDraft(); };
+    box.querySelector('#mk-new').onclick = () => { fanState.mock = { setup: true, teams: m.teams, slot: m.slot, rounds: m.rounds }; renderMockDraft(); box.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
     box.querySelector('#mk-exit').onclick = closeMockDraft;
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;
   }
 
@@ -3912,7 +3913,7 @@ function injectJumpNav(name) {
     (b.onclick = () => document.getElementById(b.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
 }
 
-const renderers = { home: renderHome, eagles: renderEagles, predictions: renderPredictions, fantasy: renderFantasy, about: () => {} };
+const renderers = { home: renderHome, eagles: renderEagles, predictions: renderPredictions, fantasy: renderFantasy, labs: () => {}, about: () => {} };
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => {

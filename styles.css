@@ -677,6 +677,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .mk-pick-line { font-size: 13.5px; padding: 2px 0; font-weight: 600; }
 .mk-log { display: flex; flex-direction: column; gap: 4px; }
 .mk-log-row { font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--line, rgba(255,255,255,.05)); }
+#labs-mock { scroll-margin-top: 110px; }
 /* completion: every pick with its value grade */
 .mk-picks { display: flex; flex-direction: column; }
 .mk-pick { display: grid; grid-template-columns: 68px 1fr auto; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line, rgba(255,255,255,.06)); }

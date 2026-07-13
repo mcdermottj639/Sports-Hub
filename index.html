@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=106" />
+  <link rel="stylesheet" href="styles.css?v=107" />
   <script>
     /* Set the theme before first paint to avoid a flash. Uses the saved
        preference if present, else follows the OS light/dark setting. */
@@ -44,6 +44,7 @@
     <button id="tab-eagles" data-tab="eagles" role="tab" aria-selected="false" aria-controls="eagles">🦅 Eagles</button>
     <button id="tab-predictions" data-tab="predictions" role="tab" aria-selected="false" aria-controls="predictions">🤖 AI Picks</button>
     <button id="tab-fantasy" data-tab="fantasy" role="tab" aria-selected="false" aria-controls="fantasy">Fantasy</button>
+    <button id="tab-labs" data-tab="labs" role="tab" aria-selected="false" aria-controls="labs">🧪 Labs</button>
     <button id="tab-about" data-tab="about" role="tab" aria-selected="false" aria-controls="about">About</button>
   </nav>
 
@@ -121,6 +122,17 @@
       </div>
     </section>
 
+    <section id="labs" class="tab-panel" role="tabpanel" aria-labelledby="tab-labs" tabindex="0">
+      <div class="setup-card">
+        <h2>🧪 Labs</h2>
+        <p class="muted">Experiments in progress — a testing ground for features that may land in the app.</p>
+        <p><a class="fan-btn" href="draft.html" style="display:inline-block;text-decoration:none">🏈 NFL Mock Draft Simulator →</a></p>
+        <p><a class="fan-btn" href="trivia.html" style="display:inline-block;text-decoration:none">🧠 Sports Trivia Lab →</a></p>
+        <p><button id="labs-mock-start" class="fan-btn" type="button" style="display:inline-block">🏟️ Fantasy Mock Draft (vs CPU)</button></p>
+      </div>
+      <div id="labs-mock"></div>
+    </section>
+
     <section id="about" class="tab-panel" role="tabpanel" aria-labelledby="tab-about" tabindex="0">
       <div class="setup-card">
         <h2>About Sports-Hub</h2>
@@ -131,14 +143,6 @@
         <pre><code>soccer: { ..., espnPath: 'soccer/fifa.world' }  // FIFA World Cup
 // eng.1 = Premier League · usa.1 = MLS · uefa.champions = UCL</code></pre>
         <div id="about-status" class="muted"></div>
-      </div>
-      <div class="setup-card">
-        <h3>🧪 Labs</h3>
-        <p class="muted">Experiments in progress — a testing ground for features that may land in the app.</p>
-        <p><a class="fan-btn" href="draft.html" style="display:inline-block;text-decoration:none">🏈 NFL Mock Draft Simulator →</a></p>
-        <p><a class="fan-btn" href="trivia.html" style="display:inline-block;text-decoration:none">🧠 Sports Trivia Lab →</a></p>
-        <p><button id="labs-mock-start" class="fan-btn" type="button" style="display:inline-block">🏟️ Fantasy Mock Draft (vs CPU)</button></p>
-        <div id="labs-mock"></div>
       </div>
     </section>
   </main>
@@ -155,6 +159,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=106" defer></script>
+  <script src="app.js?v=107" defer></script>
 </body>
 </html>

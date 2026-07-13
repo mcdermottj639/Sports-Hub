@@ -194,7 +194,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v106**.
+Current version as of this writing: **v107**.
 
 ## Testing reality
 
@@ -217,8 +217,11 @@ Current version as of this writing: **v106**.
 - `fetchJSON(url, ttl)` — in-memory cache by URL with TTL; 9s abort. All data goes through it.
 - `LEAGUES` — per-sport config (label, emoji, espnPath, `fav` favorite teams, type).
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
-- Tabs: Home, Eagles, AI Picks, Fantasy, About. `showTab()` +
-  `renderers{}` map drive rendering. (**Scores** and **Standings** tabs were
+- Tabs: Home, Eagles, AI Picks, Fantasy, **Labs**, About. `showTab()` +
+  `renderers{}` map drive rendering. (**Labs** — its own top-level tab as of
+  v107, holding the Labs experiments: the standalone `draft.html`/`trivia.html`
+  links plus the in-app **Fantasy Mock Draft** rendered into `#labs-mock`; its
+  renderer is a no-op since the content is static + launched on demand.) (**Scores** and **Standings** tabs were
   removed in v78 — the owner gets those better elsewhere; Home is now the daily
   full-slate overview. In v79 the Home slate was made view-only; **v89 reversed
   that** — cards open the detail modal again, since the modal now leads with
@@ -494,8 +497,9 @@ Current version as of this writing: **v106**.
     are still TODO — they'll branch on `cfg.football` when the NFL league is
     configured. The Labs rookie **Mock Draft Simulator** is a different thing (real
     NFL draft of incoming rookies).
-  - **🏈 Fantasy Mock Draft** (v100; **moved to About → Labs in v106**) — a
-    client-side snake draft vs CPU GMs. Launched from the Labs card
+  - **🏈 Fantasy Mock Draft** (v100; moved out of the Fantasy tab in v106; the
+    **Labs tab** became its own top-level tab in v107) — a client-side snake
+    draft vs CPU GMs. Launched from the Labs tab
     (`#labs-mock-start`) and rendered into `#labs-mock` (`renderMockDraft`;
     `closeMockDraft` clears it; state in `fanState.mock`, `.mk-*`/`.mock-*` CSS).
     Setup (teams/your slot/rounds; **defaults to 12 teams, slot 6**) → draft room
