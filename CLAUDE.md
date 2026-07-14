@@ -250,7 +250,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v122**.
+Current version as of this writing: **v123**.
+
+- **Playoff Predictor light-theme contrast** (v123) — `renderPlayoffs`' inline row
+  styles hardcoded dark-mode colors (near-white `#e8efed` team names, `rgba(255,255,255,…)`
+  borders/track) that were nearly invisible on the light theme's paper background. Switched
+  to theme vars (`var(--text)`, `var(--line)`, `var(--muted)`, `var(--accent)`), a
+  grey-on-both progress track (`rgba(128,128,128,.22)`), and a gold cut line/`you` highlight
+  that read in both themes. Dark mode is visually unchanged.
 
 - **Eagles/Red Sox hero parity** (v122) — both team heroes use the exact same
   `heroFormChips` + `injectHeroLastGame`, so they show the identical six chips

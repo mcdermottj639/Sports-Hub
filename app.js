@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v122';
+const APP_VERSION = 'v123';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3205,17 +3205,17 @@ function renderPlayoffs(sport) {
     const rec = `${t.wins ?? 0}-${t.losses ?? 0}${t.ties ? '-' + t.ties : ''}`;
     const o = t.playoffOdds;
     const col = oddColor(o);
-    const cut = i === slots ? 'border-top:2px dashed rgba(255,209,102,.55);' : '';
-    const bg = t.isMe ? 'background:rgba(58,210,159,.10);' : '';
-    return `<div style="${cut}${bg}display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.06)">
-        <div style="opacity:.6;font-size:.85em;text-align:center">${i + 1}</div>
+    const cut = i === slots ? 'border-top:2px dashed rgba(224,164,88,.7);' : '';
+    const bg = t.isMe ? 'background:rgba(58,210,159,.14);' : '';
+    return `<div style="${cut}${bg}display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line)">
+        <div style="color:var(--muted);font-size:.85em;text-align:center">${i + 1}</div>
         <div style="min-width:0">
-          <div style="font-weight:700;color:#e8efed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.team)}${t.isMe ? ' <span style="color:#3ad29f;font-size:.8em">you</span>' : ''}${tag(t)}</div>
-          <div style="height:5px;border-radius:3px;background:rgba(255,255,255,.08);margin-top:4px;overflow:hidden"><span style="display:block;height:100%;width:${Math.max(2, Math.round(o))}%;background:${col}"></span></div>
+          <div style="font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.team)}${t.isMe ? ' <span style="color:var(--accent);font-size:.8em">you</span>' : ''}${tag(t)}</div>
+          <div style="height:5px;border-radius:3px;background:rgba(128,128,128,.22);margin-top:4px;overflow:hidden"><span style="display:block;height:100%;width:${Math.max(2, Math.round(o))}%;background:${col}"></span></div>
         </div>
         <div style="text-align:right;min-width:92px">
           <div style="font-weight:800;color:${col}">${o}%</div>
-          <div style="opacity:.55;font-size:.78em">${rec} · proj ${t.projWins}</div>
+          <div style="color:var(--muted);font-size:.78em">${rec} · proj ${t.projWins}</div>
         </div>
       </div>`;
   }).join('');
@@ -3223,7 +3223,7 @@ function renderPlayoffs(sport) {
   const verdict = me ? `You: <b style="color:${oddColor(me.playoffOdds)}">${me.playoffOdds}% to make it</b> (proj seed ${me.avgSeed}). ` : '';
   box.innerHTML = `<h2 class="section-title">Playoff Predictor</h2>
     <div class="none" style="margin-bottom:8px">${verdict}${slots}-team playoff · ${wkLeft} ${wkLeft === 1 ? 'week' : 'weeks'} to go · ${(P.sims || 0).toLocaleString()} sims · ${model}. Dashed line = playoff cut.</div>
-    <div style="border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden">${rows}</div>`;
+    <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden">${rows}</div>`;
 }
 
 // Run any player list through the same recent-form engine the roster uses;
