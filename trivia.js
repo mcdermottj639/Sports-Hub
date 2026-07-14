@@ -9,6 +9,12 @@ const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// OpenTDB returns HTML-entity-encoded text (e.g. &quot;, &#039;). Decode via a
+// detached <textarea> (never inserted, so nothing executes); render still esc()s.
+const _decEl = document.createElement('textarea');
+const decodeHTML = (s) => { _decEl.innerHTML = String(s == null ? '' : s); return _decEl.value; };
+let pendingNotice = ''; // one-shot banner shown on the next quiz's first question
+
 // seeded PRNG so the Daily Challenge is identical for a given date
 function hashStr(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 function seededRng(seed) { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -169,6 +175,46 @@ function buildFromPool(pool, count, rng) {
   return order.map((i) => makeQuestion(pool[i], rng));
 }
 
+// difficulty → points + pill (curated bank uses d2 HARD / d3 ELITE; live OpenTDB
+// questions carry an easy/medium/hard `diff`, scored EASY 50 / MEDIUM 100 / HARD 150)
+function diffInfo(q) {
+  if (q.diff) {
+    if (q.diff === 'easy') return { base: 50, label: 'EASY', cls: 'd1' };
+    if (q.diff === 'hard') return { base: 150, label: 'HARD', cls: 'd3' };
+    return { base: 100, label: 'MEDIUM', cls: 'd2' };
+  }
+  return q.d === 3 ? { base: 150, label: 'ELITE', cls: 'd3' } : { base: 100, label: 'HARD', cls: 'd2' };
+}
+
+// --- live questions (OpenTDB, category 21 = Sports) -----------------------
+// Adapts an OpenTDB result to our internal question shape. Same {q, choices,
+// answer, cat, ex} contract as makeQuestion, plus diff/catName/emoji for display.
+function makeLiveQuestion(r) {
+  if (!r || !r.question || r.correct_answer == null || !Array.isArray(r.incorrect_answers) || !r.incorrect_answers.length) return null;
+  const a = decodeHTML(r.correct_answer);
+  const wrong = r.incorrect_answers.map(decodeHTML);
+  const choices = shuffleWith([a, ...wrong], rrng);
+  const catName = decodeHTML(r.category || 'Sports').replace(/^Sports:\s*/i, '');
+  return { q: decodeHTML(r.question), choices, answer: choices.indexOf(a), cat: 'live', catName, emoji: '🌍', diff: r.difficulty || 'medium', d: r.difficulty === 'hard' ? 3 : (r.difficulty === 'easy' ? 1 : 2), ex: '' };
+}
+
+// One fetch, no key, browser-direct (OpenTDB sends permissive CORS). Throws
+// 'rate' on the 1-req/5s limit, 'empty' on any other non-success.
+async function fetchOTDB(amount = 10) {
+  const url = `https://opentdb.com/api.php?amount=${amount}&category=21&type=multiple`;
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 9000);
+  let data;
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error('http');
+    data = await res.json();
+  } finally { clearTimeout(to); }
+  if (data && data.response_code === 5) throw new Error('rate');
+  if (!data || data.response_code !== 0 || !Array.isArray(data.results) || !data.results.length) throw new Error('empty');
+  return data.results;
+}
+
 // --- state ----------------------------------------------------------------
 let S = null; // {mode:'daily'|'cat', cat, qs:[], idx, score, streak, bestStreak, correct, picks:[], locked}
 
@@ -222,11 +268,17 @@ function showHome() {
         <span class="cat-name">Mixed</span>
         <span class="cat-meta">All ${Q.length} questions</span>
       </button>
+      <button class="cat-card live" data-live="1">
+        <span class="cat-live-badge">LIVE</span>
+        <span class="cat-emoji">🌍</span>
+        <span class="cat-name">Sports Mix</span>
+        <span class="cat-meta">Fresh from OpenTDB${best.live ? ` · best ${best.live.toLocaleString()}` : ''}</span>
+      </button>
     </div>
-    <p class="ds-note">${Q.length} hand-written questions across NFL, MLB, NBA and college. Facts were accurate as of the 2024–25 seasons. A sandbox to build on.</p>`;
+    <p class="ds-note">${Q.length} hand-written questions across NFL, MLB, NBA and college. Facts were accurate as of the 2024–25 seasons. 🌍 <b>Sports Mix</b> pulls fresh worldwide-sports questions live from <a href="https://opentdb.com" target="_blank" rel="noopener">OpenTDB</a> (CC BY-SA 4.0) — no key, straight to your browser. A sandbox to build on.</p>`;
 
   $('#daily-btn').onclick = startDaily;
-  home.querySelectorAll('.cat-card').forEach((b) => (b.onclick = () => startCategory(b.dataset.cat)));
+  home.querySelectorAll('.cat-card').forEach((b) => (b.onclick = () => (b.dataset.live ? startSportsMix() : startCategory(b.dataset.cat))));
 }
 
 // ==========================================================================
@@ -246,6 +298,39 @@ function startCategory(cat) {
   showQuiz();
 }
 
+// 🌍 Sports Mix — live worldwide-sports questions pulled from OpenTDB. Separate
+// from the curated NFL bank + deterministic Daily on purpose. Falls back to the
+// local Mixed set (with a note) if the API is unreachable / rate-limited.
+async function startSportsMix() {
+  showLoading('Pulling live questions from OpenTDB…');
+  let raws;
+  try {
+    raws = await fetchOTDB(10);
+  } catch (e) {
+    liveFallback(e && e.message === 'rate'
+      ? 'OpenTDB is rate-limiting (1 request / 5s) — playing the local bank instead. Try Sports Mix again in a few seconds.'
+      : 'Couldn’t reach OpenTDB right now — playing the local bank instead.');
+    return;
+  }
+  const qs = raws.map(makeLiveQuestion).filter(Boolean);
+  if (!qs.length) { liveFallback('OpenTDB returned no usable questions — playing the local bank instead.'); return; }
+  S = { mode: 'live', cat: 'live', qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false };
+  showQuiz();
+}
+function liveFallback(msg) { pendingNotice = msg; startCategory('mixed'); }
+
+function showLoading(msg) {
+  $('#home').hidden = true; $('#results').hidden = true;
+  const quiz = $('#quiz'); quiz.hidden = false;
+  quiz.innerHTML = `
+    <div class="q-card load-card">
+      <div class="load-dots"><span></span><span></span><span></span></div>
+      <div class="load-msg">${esc(msg)}</div>
+      <button id="load-cancel" class="ds-btn ghost small">✕ Cancel</button>
+    </div>`;
+  $('#load-cancel').onclick = showHome;
+}
+
 // ==========================================================================
 // QUIZ
 // ==========================================================================
@@ -256,7 +341,12 @@ function renderQuestion() {
   const total = S.qs.length;
   const pct = Math.round((S.idx / total) * 100);
   const mult = S.streak >= 5 ? 2 : S.streak >= 3 ? 1.5 : 1;
+  const tagEmoji = S.mode === 'daily' ? '🗓️' : S.mode === 'live' ? '🌍' : (CATS.find((c) => c.k === S.cat)?.emoji || '🎲');
+  const tagLabel = S.mode === 'daily' ? 'Daily Challenge' : S.mode === 'live' ? 'Sports Mix (live)' : catLabel(S.cat);
+  const di = diffInfo(q);
+  const notice = pendingNotice; pendingNotice = '';
   $('#quiz').innerHTML = `
+    ${notice ? `<div class="live-note">ℹ️ ${esc(notice)}</div>` : ''}
     <div class="q-top">
       <button id="q-quit" class="ds-btn ghost small">✕ Quit</button>
       <div class="q-progress"><div class="q-progress-fill" style="width:${pct}%"></div></div>
@@ -264,11 +354,11 @@ function renderQuestion() {
     </div>
     <div class="q-meta">
       <span class="q-count">Question ${S.idx + 1} / ${total}</span>
-      <span class="q-tag">${S.mode === 'daily' ? '🗓️ Daily' : CATS.find((c) => c.k === S.cat)?.emoji || '🎲'} ${S.mode === 'daily' ? 'Challenge' : catLabel(S.cat)}</span>
+      <span class="q-tag">${tagEmoji} ${tagLabel}</span>
       <span class="q-streak ${S.streak >= 3 ? 'hot' : ''}">🔥 ${S.streak}${mult > 1 ? ` · ${mult}×` : ''}</span>
     </div>
     <div class="q-card">
-      <div class="q-cat">${(CATS.find((c) => c.k === q.cat) || {}).emoji || ''} ${catLabel(q.cat)} <span class="q-diff d${q.d}">${q.d === 3 ? 'ELITE · 150' : 'HARD · 100'}</span></div>
+      <div class="q-cat">${q.emoji || (CATS.find((c) => c.k === q.cat) || {}).emoji || ''} ${esc(q.catName || catLabel(q.cat))} <span class="q-diff ${di.cls}">${di.label} · ${di.base}</span></div>
       <h2 class="q-text">${esc(q.q)}</h2>
       <div class="q-opts">${q.choices.map((ch, i) => `<button class="opt" data-i="${i}">${esc(ch)}</button>`).join('')}</div>
       <div id="q-feedback" class="q-feedback" hidden></div>
@@ -290,7 +380,7 @@ function answer(i) {
     S.bestStreak = Math.max(S.bestStreak, S.streak);
     S.correct++;
     const mult = S.streak >= 5 ? 2 : S.streak >= 3 ? 1.5 : 1;
-    const base = q.d === 3 ? 150 : 100; // elite questions are worth more
+    const base = diffInfo(q).base; // harder questions are worth more
     gained = Math.round(base * mult);
     S.score += gained;
   } else {
@@ -329,15 +419,15 @@ function showResults() {
   life.bestStreak = Math.max(life.bestStreak || 0, S.bestStreak);
   writeJSON(K_LIFE, life);
 
-  if (S.mode === 'cat') {
-    const best = readJSON(K_BEST, {});
-    if (!best[S.cat] || S.score > best[S.cat]) best[S.cat] = S.score;
-    writeJSON(K_BEST, best);
-  } else {
+  if (S.mode === 'daily') {
     const daily = readJSON(K_DAILY, {});
     const t = todayStr();
     if (!daily[t] || S.score > daily[t].score) daily[t] = { score: S.score, correct: S.correct, total: S.qs.length };
     writeJSON(K_DAILY, daily);
+  } else { // 'cat' and 'live' both track a per-key best
+    const best = readJSON(K_BEST, {});
+    if (!best[S.cat] || S.score > best[S.cat]) best[S.cat] = S.score;
+    writeJSON(K_BEST, best);
   }
 
   const acc = Math.round((S.correct / S.qs.length) * 100);
@@ -351,6 +441,7 @@ function showResults() {
       <div class="res-score">${S.score.toLocaleString()}<span>pts</span></div>
       <div class="res-line">${S.correct} / ${S.qs.length} correct · ${acc}% · best run 🔥 ${S.bestStreak}</div>
       ${S.mode === 'daily' ? `<div class="res-daily">🗓️ Daily Challenge logged for ${todayStr()} — 🔥 ${dailyStreak(readJSON(K_DAILY, {}))}-day streak</div>` : ''}
+      ${S.mode === 'live' ? `<div class="res-credit">🌍 Live questions via <a href="https://opentdb.com" target="_blank" rel="noopener">OpenTDB</a> · CC BY-SA 4.0</div>` : ''}
       <div class="res-actions">
         <button id="res-again" class="ds-btn primary">Play again</button>
         <button id="res-home" class="ds-btn">Back to categories</button>
@@ -367,7 +458,7 @@ function showResults() {
           </div>
         </div>`).join('')}
     </div>`;
-  $('#res-again').onclick = () => (S.mode === 'daily' ? startDaily() : startCategory(S.cat));
+  $('#res-again').onclick = () => (S.mode === 'daily' ? startDaily() : S.mode === 'live' ? startSportsMix() : startCategory(S.cat));
   $('#res-home').onclick = showHome;
 }
 

@@ -170,9 +170,24 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   given day. Also free-play by category (or Mixed). Scoring = base×streak multiplier
   (1.5× at 3, 2× at 5); results screen has a miss-by-miss review.
   Persists to `localStorage`: `trivialab:life` (lifetime played/accuracy/best run),
-  `trivialab:best` (per-category best score), `trivialab:daily` (per-date result →
+  `trivialab:best` (per-category best score, incl. key `live` for Sports Mix),
+  `trivialab:daily` (per-date result →
   day-streak). NFL-themed skin (`trivia.css`) over `styles.css` (`?v=81`). Standalone,
-  so NOT part of the `APP_VERSION`/`?v=` ritual. Add questions by editing `Q`.
+  so NOT part of the `APP_VERSION`/`?v=` ritual (but bump `trivia.css`/`trivia.js`
+  `?v=` in `trivia.html` on changes — currently **v3**). Add questions by editing `Q`.
+  **🌍 Sports Mix (live)** — a separate free-play tile (`startSportsMix`) that pulls
+  ~10 fresh questions from **OpenTDB** (`opentdb.com/api.php`, category 21 = Sports,
+  `type=multiple`) **live, browser-direct** — OpenTDB is one of the rare sources that
+  sends permissive CORS (`Access-Control-Allow-Origin: *`), no key, no backend. It is
+  deliberately kept OUT of the curated NFL bank and the deterministic Daily Challenge
+  (which must stay reproducible) — it's worldwide/general sports for variety.
+  `fetchOTDB` does one 9s-abort fetch and handles `response_code` (5 = 1-req/5s rate
+  limit → 'rate'); `makeLiveQuestion` HTML-entity-decodes the text (detached
+  `<textarea>` via `decodeHTML`, then still `esc()`d on render), shuffles
+  `incorrect_answers` into our `choices`, and maps easy/medium/hard → 50/100/150 pts
+  (`diffInfo`, new `d1` pill). On any failure it falls back to the local Mixed set
+  with a one-shot notice banner (`liveFallback`/`pendingNotice`), so it never looks
+  broken offline. Attribution (CC BY-SA 4.0) shows on the home note + live results.
 - `scriptable/` — optional iOS Home Screen widgets ([Scriptable](https://scriptable.app), JS).
   **Companion scripts, NOT part of the web app** — they don't deploy with Pages and
   don't affect `APP_VERSION`. `SportsHubFantasy.js` renders the fantasy matchup

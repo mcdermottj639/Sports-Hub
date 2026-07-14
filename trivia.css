@@ -60,9 +60,24 @@ main.ds-main { max-width: 780px; margin: 0 auto; padding: 18px 16px 60px; }
 .cat-card { background: var(--card); border: 1px solid var(--nfl-line); border-radius: 14px; padding: 16px 12px; cursor: pointer; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: transform .06s ease, border-color .15s; }
 .cat-card:hover { transform: translateY(-2px); border-color: var(--nfl-red); }
 .cat-card.mixed { background: linear-gradient(180deg, rgba(1,51,105,.35), var(--card)); }
+.cat-card.live { position: relative; background: linear-gradient(180deg, rgba(58,210,159,.16), var(--card)); }
+.cat-card.live:hover { border-color: var(--accent); }
+.cat-live-badge { position: absolute; top: 8px; right: 8px; font-size: 9px; font-weight: 900; letter-spacing: 1px; color: #032; background: var(--accent); padding: 2px 6px; border-radius: 999px; }
 .cat-emoji { font-size: 30px; }
 .cat-name { font-weight: 900; font-size: 15px; color: #fff; text-transform: uppercase; letter-spacing: .5px; }
 .cat-meta { font-size: 11px; color: var(--muted); }
+
+/* live-mode loading + notice */
+.load-card { text-align: center; }
+.load-msg { margin: 14px 0 18px; font-size: 15px; font-weight: 700; color: #fff; }
+.load-dots { display: inline-flex; gap: 7px; }
+.load-dots span { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: load-b 1s infinite ease-in-out; }
+.load-dots span:nth-child(2) { animation-delay: .15s; }
+.load-dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes load-b { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-6px); } }
+.live-note { background: rgba(1,51,105,.4); border: 1px solid var(--nfl-line); border-left: 3px solid var(--gold); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; color: #d7e0ea; line-height: 1.4; }
+.res-credit { margin-top: 10px; font-size: 12px; color: var(--muted); }
+.res-credit a { color: var(--accent); }
 
 /* quiz */
 .q-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
@@ -77,6 +92,7 @@ main.ds-main { max-width: 780px; margin: 0 auto; padding: 18px 16px 60px; }
 .q-card { background: var(--card); border: 1px solid var(--nfl-line); border-radius: 16px; padding: 20px; }
 .q-cat { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 800; margin-bottom: 8px; }
 .q-diff { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 10px; letter-spacing: .5px; }
+.q-diff.d1 { background: rgba(58,210,159,.18); color: #7fe6c2; }
 .q-diff.d2 { background: rgba(1,51,105,.5); color: #a9c6e6; }
 .q-diff.d3 { background: rgba(213,10,10,.2); color: #ff9a9a; }
 .q-text { font-size: 22px; font-weight: 800; color: #fff; margin: 0 0 18px; line-height: 1.3; }
