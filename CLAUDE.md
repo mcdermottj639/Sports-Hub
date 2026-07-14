@@ -250,7 +250,16 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v123**.
+Current version as of this writing: **v124**.
+
+- **Depth-chart Field view — defensive rows (v124)** — the Eagles depth chart's
+  Field formation view laid the defense out with corners + nickel jammed into the
+  same middle row as the linebackers (a 7-wide row). `FIELD_ROWS.defense` now reads
+  bottom→top as **3-4-4**: D-line on the bottom, the four linebackers
+  (WLB/LILB/RILB/SLB) in the middle, and the secondary on top with the **corners
+  flanking the safeties** (LCB … FS SS … RCB), `FIELD_ORDER` retuned so they sort
+  L→R. A **nickel back** (`NB`) sits in the secondary row, so ESPN nickel personnel
+  shows that row as 5 (base 3-4 shows a clean 4).
 
 - **Playoff Predictor light-theme contrast** (v123) — `renderPlayoffs`' inline row
   styles hardcoded dark-mode colors (near-white `#e8efed` team names, `rgba(255,255,255,…)`

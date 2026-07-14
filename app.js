@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v123';
+const APP_VERSION = 'v124';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3996,10 +3996,13 @@ function unitOf(pos) {
 // Field-view layout: rows top->bottom per unit, and L->R order within a row.
 const FIELD_ROWS = {
   offense: [['WR', 'TE', 'SLOT', 'SWR', 'LWR', 'RWR', 'FL', 'SE'], ['LT', 'LG', 'C', 'RG', 'RT', 'OL', 'OT', 'OG', 'G', 'T'], ['QB'], ['RB', 'FB', 'HB']],
-  defense: [['FS', 'SS', 'S', 'DB', 'SAF'], ['LCB', 'CB', 'RCB', 'NB', 'WLB', 'MLB', 'SLB', 'LB', 'ILB', 'OLB'], ['LDE', 'DE', 'DT', 'NT', 'DI', 'DL', 'RDE', 'EDGE', 'WDE', 'SDE']],
+  // Secondary on top (corners flanking the safeties, + any nickel back),
+  // linebackers in the middle, D-line on the bottom — a base 3-4-4 read
+  // (bottom→top) instead of a lopsided middle row of corners+LBs.
+  defense: [['LCB', 'CB', 'RCB', 'FS', 'SS', 'S', 'DB', 'SAF', 'NB'], ['WLB', 'MLB', 'SLB', 'LB', 'ILB', 'OLB', 'LILB', 'RILB'], ['LDE', 'DE', 'DT', 'NT', 'DI', 'DL', 'RDE', 'EDGE', 'WDE', 'SDE']],
   special: [['PK', 'K', 'P', 'H', 'LS', 'KR', 'PR', 'ST']],
 };
-const FIELD_ORDER = { LT: 1, LG: 2, C: 3, RG: 4, RT: 5, LCB: 0, CB: 4, RCB: 9, FS: 4, SS: 5, WLB: 3, MLB: 4, SLB: 5, LB: 4, LDE: 1, DE: 2, DT: 3, NT: 4, DI: 4, RDE: 9, EDGE: 2 };
+const FIELD_ORDER = { LT: 1, LG: 2, C: 3, RG: 4, RT: 5, LCB: 0, CB: 4, RCB: 9, FS: 4, SS: 5, NB: 7, WLB: 2, MLB: 4, SLB: 8, LB: 4, LILB: 4, RILB: 6, LDE: 1, DE: 2, DT: 3, NT: 4, DI: 4, RDE: 9, EDGE: 2 };
 const expandCount = (label) => { const u = label.toUpperCase(); if (/WR/.test(u)) return 3; if (/^CB$/.test(u)) return 2; if (/^LB$|^S$|^DL$|^EDGE$/.test(u)) return 2; return 1; };
 function rowIndex(unit, label) {
   const rows = FIELD_ROWS[unit] || FIELD_ROWS.offense;
