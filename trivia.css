@@ -64,6 +64,9 @@ main.ds-main { max-width: 780px; margin: 0 auto; padding: 18px 16px 60px; }
 .cat-card.live:hover { border-color: var(--accent); }
 .cat-card.iq { position: relative; background: linear-gradient(180deg, rgba(213,10,10,.16), var(--card)); }
 .cat-card.iq:hover { border-color: var(--nfl-red); }
+.cat-card.gk { position: relative; background: linear-gradient(180deg, rgba(160,120,255,.14), var(--card)); }
+.cat-card.gk:hover { border-color: #a078ff; }
+.cat-card.gk .cat-live-badge { background: #a078ff; color: #1a1030; }
 .cat-live-badge { position: absolute; top: 8px; right: 8px; font-size: 9px; font-weight: 900; letter-spacing: 1px; color: #032; background: var(--accent); padding: 2px 6px; border-radius: 999px; }
 .cat-live-badge.red { color: #fff; background: var(--nfl-red); }
 .cat-emoji { font-size: 30px; }
@@ -85,6 +88,8 @@ main.ds-main { max-width: 780px; margin: 0 auto; padding: 18px 16px 60px; }
 
 /* quiz */
 .q-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.q-top.endless { justify-content: space-between; }
+.q-answered { flex: 1; text-align: center; font-size: 12px; font-weight: 800; color: var(--muted); white-space: nowrap; }
 .q-progress { flex: 1; height: 8px; background: var(--card-2); border-radius: 999px; overflow: hidden; }
 .q-progress-fill { height: 100%; background: linear-gradient(90deg, var(--nfl-navy), var(--accent)); transition: width .3s ease; }
 .q-score { font-weight: 900; color: var(--gold); font-size: 14px; white-space: nowrap; }

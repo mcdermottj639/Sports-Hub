@@ -221,14 +221,16 @@ function classifyLive(text) {
 }
 
 // --- live pool cache (harvested from OpenTDB across visits) ----------------
-const K_OTDB = 'trivialab:otdb';        // { pool:[{h,question,correct_answer,incorrect_answers,difficulty,category,k}], ts }
+// Generic per-OpenTDB-category cache. Sports (21) also runs classifyLive to tag
+// questions into our sub-categories for the blend; other categories cache flat.
+const SPORTS_CAT = 21;
 const HARVEST_MIN_MS = 20000;           // don't re-fetch more than once per 20s
 const MAX_POOL = 800;
-const loadOTDB = () => readJSON(K_OTDB, { pool: [], ts: 0 });
-const saveOTDB = (c) => writeJSON(K_OTDB, c);
-const livePoolLen = () => (loadOTDB().pool || []).length;
+const otdbKey = (id) => (id === SPORTS_CAT ? 'trivialab:otdb' : `trivialab:otdb:${id}`);
+const loadCat = (id) => readJSON(otdbKey(id), { pool: [], ts: 0 });
+const saveCat = (id, c) => writeJSON(otdbKey(id), c);
 
-function mergeResults(cache, results) {
+function mergeResults(cache, results, classifyFn) {
   cache.pool = cache.pool || [];
   const seen = new Set(cache.pool.map((x) => x.h));
   for (const r of results) {
@@ -238,8 +240,8 @@ function mergeResults(cache, results) {
     seen.add(h);
     cache.pool.push({
       h, question: r.question, correct_answer: r.correct_answer, incorrect_answers: r.incorrect_answers,
-      difficulty: r.difficulty || 'medium', category: r.category || 'Sports',
-      k: classifyLive(decodeHTML(r.question) + ' ' + decodeHTML(r.correct_answer)),
+      difficulty: r.difficulty || 'medium', category: r.category || '',
+      k: classifyFn ? classifyFn(decodeHTML(r.question) + ' ' + decodeHTML(r.correct_answer)) : undefined,
     });
   }
   if (cache.pool.length > MAX_POOL) cache.pool = cache.pool.slice(-MAX_POOL);
@@ -248,29 +250,32 @@ function mergeResults(cache, results) {
 // One tokenless fetch of 50 (no key, browser-direct — OpenTDB sends permissive
 // CORS), deduped into the cache. Time-guarded unless force=true. Never throws;
 // sets cache.error ('rate'|'net'|'empty') so callers can message + fall back.
-async function harvestOTDB(force) {
-  const cache = loadOTDB();
+async function harvestCat(id, classifyFn, force) {
+  const cache = loadCat(id);
   cache.error = null;
   if (!force && cache.ts && Date.now() - cache.ts < HARVEST_MIN_MS) return cache;
   let data;
   try {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 9000);
-    const res = await fetch('https://opentdb.com/api.php?amount=50&category=21&type=multiple', { signal: ctrl.signal });
+    const res = await fetch(`https://opentdb.com/api.php?amount=50&category=${id}&type=multiple`, { signal: ctrl.signal });
     clearTimeout(to);
     if (!res.ok) { cache.error = 'net'; return cache; }
     data = await res.json();
   } catch (e) { cache.error = 'net'; return cache; }
   if (data && data.response_code === 5) { cache.error = 'rate'; return cache; }
   if (!data || data.response_code !== 0 || !Array.isArray(data.results) || !data.results.length) { cache.error = 'empty'; return cache; }
-  mergeResults(cache, data.results);
+  mergeResults(cache, data.results, classifyFn);
   cache.ts = Date.now();
-  saveOTDB(cache);
+  saveCat(id, cache);
   return cache;
 }
-// grow the pool in the background (guarded, no UI change)
+
+// sports wrappers (drive the per-category blend + 🌍 Sports Mix tile)
+const loadOTDB = () => loadCat(SPORTS_CAT);
+const harvestOTDB = (force) => harvestCat(SPORTS_CAT, classifyLive, force);
 const warmLiveBg = () => { harvestOTDB().catch(() => {}); };
-// live questions available for a category from the current cache
+const livePoolLen = () => (loadOTDB().pool || []).length;
 function liveForCategory(cat) {
   const pool = loadOTDB().pool || [];
   return cat === 'mixed' ? pool : pool.filter((x) => x.k === cat);
@@ -280,6 +285,17 @@ function liveCountsByCat() {
   for (const x of (loadOTDB().pool || [])) if (x.k) m[x.k] = (m[x.k] || 0) + 1;
   return m;
 }
+
+// --- non-sports live labs (OpenTDB's other categories, option 3) -----------
+const GK = [
+  { id: 9, key: 'gk', label: 'General', emoji: '🧠' },
+  { id: 11, key: 'film', label: 'Movies', emoji: '🎬' },
+  { id: 12, key: 'music', label: 'Music', emoji: '🎵' },
+  { id: 17, key: 'sci', label: 'Science', emoji: '🔬' },
+  { id: 22, key: 'geo', label: 'Geography', emoji: '🗺️' },
+  { id: 23, key: 'hist', label: 'History', emoji: '📜' },
+];
+const gkCount = (id) => (loadCat(id).pool || []).length;
 
 // --- state ----------------------------------------------------------------
 let S = null; // {mode:'daily'|'cat', cat, qs:[], idx, score, streak, bestStreak, correct, picks:[], locked}
@@ -350,10 +366,30 @@ function showHome() {
         <span class="cat-meta">Today’s real scores${best.liveiq ? ` · best ${best.liveiq.toLocaleString()}` : ''}</span>
       </button>
     </div>
-    <p class="ds-note">${Q.length} hand-written questions across NFL, MLB, NBA and college (accurate as of the 2024–25 seasons). Each category also blends in <b>🌍 live questions</b> pulled from <a href="https://opentdb.com" target="_blank" rel="noopener">OpenTDB</a> (CC BY-SA 4.0) — no key, straight to your browser — sorted into sports by keyword, so they're a casual bonus on top of the curated deep cuts. The pool grows as you play. <b>🔴 Sports IQ</b> is different — it builds a quiz on the fly from <b>real ESPN scores</b> of the last day's games, so it's never the same twice. A sandbox to build on.</p>`;
+    <p class="ds-note">Free play is <b>endless</b> — questions keep coming; tap <b>Finish &amp; save</b> whenever you want and your score, streak and accuracy are kept. ${Q.length} hand-written questions across NFL, MLB, NBA and college (accurate as of the 2024–25 seasons), each category also blending in <b>🌍 live questions</b> from <a href="https://opentdb.com" target="_blank" rel="noopener">OpenTDB</a> (CC BY-SA 4.0) — sorted into sports by keyword as a casual bonus. <b>🔴 Sports IQ</b> builds a quiz on the fly from <b>real ESPN games</b> (who won + which team a game's standout plays for), never the same twice.</p>
+
+    <h2 class="ds-h sec">Beyond sports · live from OpenTDB</h2>
+    <div class="cat-grid">
+      ${GK.map((g) => {
+        const n = gkCount(g.id);
+        const b = best[`gk:${g.id}`];
+        return `<button class="cat-card gk" data-gk="${g.id}">
+          <span class="cat-live-badge">LIVE</span>
+          <span class="cat-emoji">${g.emoji}</span>
+          <span class="cat-name">${g.label}</span>
+          <span class="cat-meta">${n ? `${n} loaded` : 'Tap to load'}${b ? ` · best ${b.toLocaleString()}` : ''}</span>
+        </button>`;
+      }).join('')}
+    </div>
+    <p class="ds-note">Non-sports categories, pulled live from OpenTDB (CC BY-SA 4.0). Casual difficulty — a change of pace from the deep-cut sports bank.</p>`;
 
   $('#daily-btn').onclick = startDaily;
-  home.querySelectorAll('.cat-card').forEach((b) => (b.onclick = () => (b.dataset.iq ? startLiveIQ() : b.dataset.live ? startSportsMix() : startCategory(b.dataset.cat))));
+  home.querySelectorAll('.cat-card').forEach((b) => (b.onclick = () => {
+    if (b.dataset.gk) return startGeneral(GK.find((g) => String(g.id) === b.dataset.gk));
+    if (b.dataset.iq) return startLiveIQ();
+    if (b.dataset.live) return startSportsMix();
+    return startCategory(b.dataset.cat);
+  }));
 }
 
 // ==========================================================================
@@ -365,27 +401,37 @@ function startDaily() {
   S = { mode: 'daily', cat: 'mixed', qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false };
   showQuiz();
 }
-const LIVE_BLEND = 4; // up to N live OpenTDB questions mixed into a category quiz
+// Free play is ENDLESS: build a fresh, fully-shuffled batch of ready questions
+// for a category (curated + any blended 🌍 live), reshuffled every refill.
+function batchForCategory(cat) {
+  const curated = cat === 'mixed' ? Q : Q.filter((x) => x.c === cat);
+  const readyC = curated.map((it) => makeQuestion(it, rrng));
+  const readyL = liveForCategory(cat).map(makeLiveQuestion).filter(Boolean);
+  return shuffleWith([...readyC, ...readyL], rrng);
+}
+// keep an endless session's queue topped up (no fixed length; stop when you stop)
+function extendQueue() {
+  if (!S || !S.endless || typeof S.refill !== 'function') return;
+  if (S.idx < S.qs.length - 2) return; // still have a buffer ahead
+  let batch = [];
+  try { batch = S.refill() || []; } catch (e) { batch = []; }
+  if (!batch.length) return;
+  const lastQ = S.qs.length ? S.qs[S.qs.length - 1].q : null;
+  if (batch.length > 1 && batch[0].q === lastQ) batch.push(batch.shift()); // avoid back-to-back repeat
+  S.qs.push(...batch);
+}
 
 function startCategory(cat) {
-  const curated = cat === 'mixed' ? Q : Q.filter((x) => x.c === cat);
-  const count = Math.min(cat === 'mixed' ? 12 : 10, curated.length);
-  let qs = buildFromPool(curated, count, rrng);
-  // blend in any cached live questions classified into this category (each stays
-  // visibly tagged 🌍 via makeLiveQuestion, so it's clear which are live)
-  const live = liveForCategory(cat);
-  if (live.length) {
-    const add = shuffleWith(live, rrng).slice(0, LIVE_BLEND).map(makeLiveQuestion).filter(Boolean);
-    if (add.length) qs = shuffleWith([...qs, ...add], rrng);
-  }
-  S = { mode: 'cat', cat, qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false };
-  warmLiveBg(); // keep growing the pool for next time
+  const qs = batchForCategory(cat);
+  S = { mode: 'cat', cat, qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false, endless: true, refill: () => batchForCategory(cat) };
+  warmLiveBg(); // keep growing the live pool for next time
+  extendQueue();
   showQuiz();
 }
 
 // 🌍 Sports Mix — the all-sports live bag from OpenTDB (any bucket incl. soccer/
-// cricket). Serves from the harvested cache; only hits the network when the pool
-// is thin. Falls back to the local Mixed set (with a note) on failure.
+// cricket). Endless; serves from the harvested cache, only hitting the network
+// when the pool is thin. Falls back to the local Mixed set (with a note).
 async function startSportsMix() {
   let cache = loadOTDB();
   if ((cache.pool || []).length < 10) {
@@ -393,9 +439,10 @@ async function startSportsMix() {
     cache = await harvestOTDB(true);
   }
   const pool = cache.pool || [];
-  const qs = shuffleWith(pool, rrng).slice(0, Math.min(12, pool.length)).map(makeLiveQuestion).filter(Boolean);
-  if (qs.length >= 5 || (qs.length && pool.length < 10)) {
-    S = { mode: 'live', cat: 'live', qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false };
+  const qs = shuffleWith(pool, rrng).map(makeLiveQuestion).filter(Boolean);
+  if (qs.length) {
+    S = { mode: 'live', cat: 'live', qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false, endless: true,
+      refill: () => { warmLiveBg(); return shuffleWith(loadOTDB().pool || [], rrng).map(makeLiveQuestion).filter(Boolean); } };
     warmLiveBg();
     showQuiz();
     return;
@@ -405,6 +452,27 @@ async function startSportsMix() {
     : 'Couldn’t reach OpenTDB right now — playing the local bank instead.');
 }
 function liveFallback(msg) { pendingNotice = msg; startCategory('mixed'); }
+
+// 🧠 Non-sports live lab — endless quiz from one of OpenTDB's other categories.
+async function startGeneral(gk) {
+  if (!gk) return;
+  const build = (raw) => { const q = makeLiveQuestion(raw); if (q) { q.emoji = gk.emoji; q.catName = gk.label; } return q; };
+  let cache = loadCat(gk.id);
+  if ((cache.pool || []).length < 10) {
+    showLoading(`Pulling ${gk.label} questions from OpenTDB…`);
+    cache = await harvestCat(gk.id, null, true);
+  }
+  const qs = shuffleWith(cache.pool || [], rrng).map(build).filter(Boolean);
+  if (qs.length) {
+    S = { mode: 'gk', cat: `gk:${gk.id}`, gk, qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false, endless: true,
+      refill: () => { harvestCat(gk.id, null).catch(() => {}); return shuffleWith(loadCat(gk.id).pool || [], rrng).map(build).filter(Boolean); } };
+    showQuiz();
+    return;
+  }
+  liveFallback(cache.error === 'rate'
+    ? 'OpenTDB is rate-limiting (1 request / 5s) — playing the local bank instead. Try again in a few seconds.'
+    : `Couldn’t load ${gk.label} from OpenTDB right now — playing the local bank instead.`);
+}
 
 // ==========================================================================
 // 🔴 LIVE SPORTS IQ — questions generated on the fly from ESPN's real scores
@@ -434,6 +502,25 @@ async function espnScoreboard(path, dates) {
   finally { clearTimeout(to); }
 }
 
+// pull each game's statistical leaders (they play for their competitor's team) —
+// these are the recognizable names, so "which team does X play for?" is fair.
+function extractPlayers(comp) {
+  const out = [];
+  try {
+    for (const c of comp.competitors) {
+      const teamName = (c.team || {}).displayName;
+      if (!teamName || !Array.isArray(c.leaders)) continue;
+      for (const cat of c.leaders) {
+        for (const l of (cat && cat.leaders) || []) {
+          const nm = l && l.athlete && l.athlete.displayName;
+          if (nm) out.push({ player: nm, team: teamName });
+        }
+      }
+    }
+  } catch (e) { /* leaders shape varies; skip silently */ }
+  return out;
+}
+
 // ESPN event → a flat, finished-game record (or null if not usable)
 function normGame(ev) {
   try {
@@ -447,11 +534,12 @@ function normGame(ev) {
     if (!n0 || !n1 || Number.isNaN(s0) || Number.isNaN(s1)) return null;
     const home = c0.homeAway === 'home' ? c0 : c1;
     const away = c0.homeAway === 'home' ? c1 : c0;
-    let winner = c0.winner ? n0 : c1.winner ? n1 : (s0 !== s1 ? (s0 > s1 ? n0 : n1) : null);
+    const winner = c0.winner ? n0 : c1.winner ? n1 : (s0 !== s1 ? (s0 > s1 ? n0 : n1) : null);
+    const dt = ev.date ? new Date(ev.date) : null;
+    const dateLabel = dt && !Number.isNaN(dt.getTime()) ? dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'recently';
     return {
-      t0: n0, t1: n1, s0, s1, total: s0 + s1, winner,
+      t0: n0, t1: n1, winner, dateLabel, players: extractPlayers(comp),
       home: (home.team || {}).displayName, away: (away.team || {}).displayName,
-      hs: parseInt(home.score, 10), as: parseInt(away.score, 10),
     };
   } catch (e) { return null; }
 }
@@ -464,46 +552,30 @@ function iqQ(q, correct, wrongs, diff) {
   const choices = shuffleWith([cs, ...uniqW], rrng);
   return { q, choices, answer: choices.indexOf(cs), cat: 'liveiq', catName: 'Live Sports IQ', emoji: '🔴', diff: diff || 'medium', ex: '' };
 }
-const uniqNums = (correct, cands) => { const out = []; for (const n of cands) { if (n >= 0 && n !== correct && !out.includes(n)) out.push(n); if (out.length === 3) break; } return out; };
 
+// Only real, answerable questions: who won (with the DATE), and which team a
+// game's standout plays for. No "guess the exact score/total" filler.
 function genFromGames(games, sp) {
   const qs = [];
   if (!games.length) return qs;
   const teams = [...new Set(games.flatMap((g) => [g.t0, g.t1]))];
+  if (teams.length < 4) return qs; // need enough teams for real distractors
+  const playerMap = new Map();
   for (const g of games) {
     if (g.winner) {
       const loser = g.winner === g.t0 ? g.t1 : g.t0;
       const w = [loser, ...shuffleWith(teams.filter((t) => t !== g.winner && t !== loser), rrng)].slice(0, 3);
-      const q = iqQ(`Who won this ${sp.label} game — ${g.away} @ ${g.home}?`, g.winner, w, 'easy');
+      const q = iqQ(`Who won on ${g.dateLabel} — ${g.away} @ ${g.home}?`, g.winner, w, 'easy');
       if (q) qs.push(q);
     }
-    { // combined total
-      const w = uniqNums(g.total, [g.total + 1, g.total - 1, g.total + 2, g.total - 2, g.total + 3]).map(String);
-      const q = iqQ(`How many total ${sp.unit} were scored — ${g.away} @ ${g.home}?`, String(g.total), w, 'medium');
-      if (q) qs.push(q);
-    }
-    { // exact final score
-      const correct = `${g.away} ${g.as}, ${g.home} ${g.hs}`;
-      const alts = [
-        `${g.away} ${g.as}, ${g.home} ${g.hs + 1}`,
-        `${g.away} ${g.as + 1}, ${g.home} ${g.hs}`,
-        `${g.away} ${Math.max(0, g.as - 1)}, ${g.home} ${g.hs}`,
-        `${g.away} ${g.hs}, ${g.home} ${g.as}`,
-      ];
-      const q = iqQ(`What was the final score — ${g.away} @ ${g.home}?`, correct, alts, 'hard');
-      if (q) qs.push(q);
-    }
+    for (const p of g.players || []) if (p.player && p.team && !playerMap.has(p.player)) playerMap.set(p.player, p.team);
   }
-  // highest-scoring team (only if there's a clear, unique leader)
-  const scores = games.flatMap((g) => [{ team: g.t0, s: g.s0 }, { team: g.t1, s: g.s1 }]);
-  if (teams.length >= 4 && scores.length) {
-    const max = Math.max(...scores.map((x) => x.s));
-    const atMax = scores.filter((x) => x.s === max);
-    if (atMax.length === 1) {
-      const w = shuffleWith(teams.filter((t) => t !== atMax[0].team), rrng).slice(0, 3);
-      const q = iqQ(`Which team put up the most ${sp.unit} (${max}) in a recent ${sp.label} game?`, atMax[0].team, w, 'hard');
-      if (q) qs.push(q);
-    }
+  for (const [player, team] of playerMap) {
+    const others = teams.filter((t) => t !== team);
+    if (others.length < 3) continue;
+    const w = shuffleWith(others, rrng).slice(0, 3);
+    const q = iqQ(`Which ${sp.label} team does ${player} play for?`, team, w, 'medium');
+    if (q) qs.push(q);
   }
   return qs;
 }
@@ -531,8 +603,8 @@ async function startLiveIQ() {
     liveFallback('Not enough live sports data right now (off-season / no finished games) — playing the local bank instead.');
     return;
   }
-  const qs = shuffleWith(pool, rrng).slice(0, 10);
-  S = { mode: 'liveiq', cat: 'liveiq', qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false };
+  S = { mode: 'liveiq', cat: 'liveiq', pool, qs: shuffleWith(pool, rrng), idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false, endless: true,
+    refill: () => shuffleWith(S.pool, rrng) };
   showQuiz();
 }
 
@@ -556,21 +628,29 @@ function showQuiz() { $('#home').hidden = true; $('#results').hidden = true; $('
 function renderQuestion() {
   const q = S.qs[S.idx];
   const total = S.qs.length;
+  const answered = S.picks.length;
   const pct = Math.round((S.idx / total) * 100);
   const mult = S.streak >= 5 ? 2 : S.streak >= 3 ? 1.5 : 1;
-  const tagEmoji = S.mode === 'daily' ? '🗓️' : S.mode === 'live' ? '🌍' : S.mode === 'liveiq' ? '🔴' : (CATS.find((c) => c.k === S.cat)?.emoji || '🎲');
-  const tagLabel = S.mode === 'daily' ? 'Daily Challenge' : S.mode === 'live' ? 'Sports Mix (live)' : S.mode === 'liveiq' ? 'Live Sports IQ' : catLabel(S.cat);
+  const tagEmoji = S.mode === 'daily' ? '🗓️' : S.mode === 'live' ? '🌍' : S.mode === 'liveiq' ? '🔴' : S.mode === 'gk' ? S.gk.emoji : (CATS.find((c) => c.k === S.cat)?.emoji || '🎲');
+  const tagLabel = S.mode === 'daily' ? 'Daily Challenge' : S.mode === 'live' ? 'Sports Mix (live)' : S.mode === 'liveiq' ? 'Live Sports IQ' : S.mode === 'gk' ? `${S.gk.label} (live)` : catLabel(S.cat);
   const di = diffInfo(q);
   const notice = pendingNotice; pendingNotice = '';
+  const topHtml = S.endless
+    ? `<div class="q-top endless">
+         <button id="q-finish" class="ds-btn ghost small">■ Finish &amp; save</button>
+         <div class="q-answered">${answered} answered</div>
+         <div class="q-score">${S.score.toLocaleString()} pts</div>
+       </div>`
+    : `<div class="q-top">
+         <button id="q-quit" class="ds-btn ghost small">✕ Quit</button>
+         <div class="q-progress"><div class="q-progress-fill" style="width:${pct}%"></div></div>
+         <div class="q-score">${S.score.toLocaleString()} pts</div>
+       </div>`;
   $('#quiz').innerHTML = `
     ${notice ? `<div class="live-note">ℹ️ ${esc(notice)}</div>` : ''}
-    <div class="q-top">
-      <button id="q-quit" class="ds-btn ghost small">✕ Quit</button>
-      <div class="q-progress"><div class="q-progress-fill" style="width:${pct}%"></div></div>
-      <div class="q-score">${S.score.toLocaleString()} pts</div>
-    </div>
+    ${topHtml}
     <div class="q-meta">
-      <span class="q-count">Question ${S.idx + 1} / ${total}</span>
+      <span class="q-count">${S.endless ? `Question ${answered + 1}` : `Question ${S.idx + 1} / ${total}`}</span>
       <span class="q-tag">${tagEmoji} ${tagLabel}</span>
       <span class="q-streak ${S.streak >= 3 ? 'hot' : ''}">🔥 ${S.streak}${mult > 1 ? ` · ${mult}×` : ''}</span>
     </div>
@@ -580,7 +660,8 @@ function renderQuestion() {
       <div class="q-opts">${q.choices.map((ch, i) => `<button class="opt" data-i="${i}">${esc(ch)}</button>`).join('')}</div>
       <div id="q-feedback" class="q-feedback" hidden></div>
     </div>`;
-  $('#q-quit').onclick = () => { if (confirm('Quit this quiz? Progress won’t be saved.')) showHome(); };
+  if (S.endless) $('#q-finish').onclick = finish;
+  else $('#q-quit').onclick = () => { if (confirm('Quit this quiz? Progress won’t be saved.')) showHome(); };
   $('#quiz').querySelectorAll('.opt').forEach((b) => (b.onclick = () => answer(+b.dataset.i)));
 }
 
@@ -613,7 +694,7 @@ function answer(i) {
   const fb = $('#q-feedback');
   fb.hidden = false;
   fb.className = 'q-feedback ' + (correct ? 'ok' : 'no');
-  const last = S.idx === S.qs.length - 1;
+  const last = !S.endless && S.idx === S.qs.length - 1;
   fb.innerHTML = `
     <div class="fb-line">${correct ? `✅ Correct <span class="fb-pts">+${gained}</span>` : `❌ Answer: <b>${esc(q.choices[q.answer])}</b>`}</div>
     ${q.ex ? `<div class="fb-ex">${esc(q.ex)}</div>` : ''}
@@ -622,32 +703,40 @@ function answer(i) {
 }
 
 function next() {
+  if (S.endless) {
+    S.idx++; S.locked = false; extendQueue();
+    if (S.idx >= S.qs.length) { showResults(); return; } // pool ran dry — save & end
+    renderQuestion();
+    return;
+  }
   if (S.idx < S.qs.length - 1) { S.idx++; S.locked = false; renderQuestion(); }
   else showResults();
 }
+function finish() { if (!S.picks.length) { showHome(); return; } showResults(); }
 
 // ==========================================================================
 // RESULTS
 // ==========================================================================
 function showResults() {
+  const answered = S.picks.length || 1; // endless: count what was actually answered
   // persist
   const life = readJSON(K_LIFE, { played: 0, correct: 0, total: 0, bestStreak: 0 });
-  life.played++; life.correct += S.correct; life.total += S.qs.length;
+  life.played++; life.correct += S.correct; life.total += answered;
   life.bestStreak = Math.max(life.bestStreak || 0, S.bestStreak);
   writeJSON(K_LIFE, life);
 
   if (S.mode === 'daily') {
     const daily = readJSON(K_DAILY, {});
     const t = todayStr();
-    if (!daily[t] || S.score > daily[t].score) daily[t] = { score: S.score, correct: S.correct, total: S.qs.length };
+    if (!daily[t] || S.score > daily[t].score) daily[t] = { score: S.score, correct: S.correct, total: answered };
     writeJSON(K_DAILY, daily);
-  } else { // 'cat' and 'live' both track a per-key best
+  } else { // every free-play mode tracks a per-key best score
     const best = readJSON(K_BEST, {});
     if (!best[S.cat] || S.score > best[S.cat]) best[S.cat] = S.score;
     writeJSON(K_BEST, best);
   }
 
-  const acc = Math.round((S.correct / S.qs.length) * 100);
+  const acc = Math.round((S.correct / answered) * 100);
   const grade = acc >= 90 ? '🏆 Hall of Famer' : acc >= 70 ? '⭐ Pro Bowler' : acc >= 50 ? '👍 Starter' : '🪑 Practice squad';
   $('#home').hidden = true; $('#quiz').hidden = true;
   const r = $('#results');
@@ -656,27 +745,30 @@ function showResults() {
     <div class="res-card">
       <div class="res-grade">${grade}</div>
       <div class="res-score">${S.score.toLocaleString()}<span>pts</span></div>
-      <div class="res-line">${S.correct} / ${S.qs.length} correct · ${acc}% · best run 🔥 ${S.bestStreak}</div>
+      <div class="res-line">${S.correct} / ${answered} correct · ${acc}% · best run 🔥 ${S.bestStreak}</div>
       ${S.mode === 'daily' ? `<div class="res-daily">🗓️ Daily Challenge logged for ${todayStr()} — 🔥 ${dailyStreak(readJSON(K_DAILY, {}))}-day streak</div>` : ''}
-      ${S.mode === 'live' ? `<div class="res-credit">🌍 Live questions via <a href="https://opentdb.com" target="_blank" rel="noopener">OpenTDB</a> · CC BY-SA 4.0</div>` : ''}
+      ${S.mode === 'live' || S.mode === 'gk' ? `<div class="res-credit">🌍 Live questions via <a href="https://opentdb.com" target="_blank" rel="noopener">OpenTDB</a> · CC BY-SA 4.0</div>` : ''}
       ${S.mode === 'liveiq' ? `<div class="res-credit">🔴 Generated from real ESPN scores</div>` : ''}
       <div class="res-actions">
         <button id="res-again" class="ds-btn primary">Play again</button>
         <button id="res-home" class="ds-btn">Back to categories</button>
       </div>
     </div>
-    <h3 class="ds-h sec">Review</h3>
+    <h3 class="ds-h sec">Review${S.picks.length > 40 ? ` · last 40 of ${S.picks.length}` : ''}</h3>
     <div class="review">
-      ${S.picks.map((p, i) => `
+      ${(S.picks.length > 40 ? S.picks.slice(-40) : S.picks).map((p, i, arr) => {
+        const num = S.picks.length - arr.length + i + 1;
+        return `
         <div class="rev-row ${p.right ? 'ok' : 'no'}">
-          <span class="rev-i">${i + 1}</span>
+          <span class="rev-i">${num}</span>
           <div class="rev-body">
             <div class="rev-q">${esc(p.q)}</div>
             <div class="rev-a">${p.right ? `✅ ${esc(p.correct)}` : `❌ You: ${esc(p.chosen)} · ✅ ${esc(p.correct)}`}</div>
           </div>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
     </div>`;
-  $('#res-again').onclick = () => (S.mode === 'daily' ? startDaily() : S.mode === 'live' ? startSportsMix() : S.mode === 'liveiq' ? startLiveIQ() : startCategory(S.cat));
+  $('#res-again').onclick = () => (S.mode === 'daily' ? startDaily() : S.mode === 'live' ? startSportsMix() : S.mode === 'liveiq' ? startLiveIQ() : S.mode === 'gk' ? startGeneral(S.gk) : startCategory(S.cat));
   $('#res-home').onclick = showHome;
 }
 

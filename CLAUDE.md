@@ -174,19 +174,35 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   `trivialab:daily` (per-date result →
   day-streak). NFL-themed skin (`trivia.css`) over `styles.css` (`?v=81`). Standalone,
   so NOT part of the `APP_VERSION`/`?v=` ritual (but bump `trivia.css`/`trivia.js`
-  `?v=` in `trivia.html` on changes — currently **v5**). Add questions by editing `Q`.
+  `?v=` in `trivia.html` on changes — currently **v6**). Add questions by editing `Q`.
+  **Free play is ENDLESS** (v6): every free-play mode (curated categories, Mixed,
+  Sports Mix, non-sports labs, Sports IQ) keeps serving questions forever — `S.endless`
+  + an `S.refill()` callback that `extendQueue()` calls to top up the queue; **only the
+  Daily Challenge stays a fixed 10**. The quiz header shows a **Finish & save** button +
+  "N answered" instead of a progress bar; stopping saves lifetime stats + per-key best
+  (results use `S.picks.length`, not queue length; review capped to last 40).
+  **🌍 Non-sports labs** (option 3): OpenTDB's other categories (General/Movies/Music/
+  Science/Geography/History, `GK` config) as their own endless tiles under a "Beyond
+  sports" section — same harvest/cache pipeline, generalized per-category
+  (`harvestCat(id, classifyFn)`, `loadCat`/`saveCat`, key `trivialab:otdb:{id}`; sports
+  stays key `trivialab:otdb` and runs `classifyLive` for the blend).
   **🔴 Live Sports IQ** (`startLiveIQ`, tile `data-iq`) — a bankless mode that
   **generates questions on the fly from real ESPN scores**. `buildLiveIQ` pulls the
   last ~day's finished games from the ESPN public scoreboard (`espnScoreboard`,
   `IQ_SPORTS` = mlb/nfl/nba, `?dates=` yesterday-today range, 9s abort, all parsing
   defensive via `normGame`) and `genFromGames` synthesizes MC questions with REAL
-  distractors: who won (easy), combined total (medium), exact final score (hard), and
-  the day's highest-scoring team when there's a unique leader (hard). Shuffles to 10;
-  mode `liveiq`, best tracked under `trivialab:best` key `liveiq`. If fewer than 5
-  questions can be built (off-season / ESPN unreachable — the July slate is basically
-  MLB-only) it falls back to the local Mixed set with a notice. No bank to maintain,
-  never the same twice. NOTE: sandbox can't reach ESPN, so structure/fallbacks were
-  verified but live generation must be checked on device.
+  distractors: **who won (with the game DATE)** and **which team a game's statistical
+  standout plays for** (`extractPlayers` reads each competitor's `leaders`, so the
+  names are recognizable). **The old "guess the exact score / combined total" number
+  questions were removed** (v6) — the owner (correctly) called them dumb/arbitrary and
+  they had no date. Endless (`refill` reshuffles the built pool); mode `liveiq`, best
+  under `trivialab:best` key `liveiq`. If fewer than 5 questions can be built
+  (off-season / ESPN unreachable — the July slate is basically MLB-only) it falls back
+  to the local Mixed set. NOTE: sandbox can't reach ESPN, so structure/fallbacks were
+  verified but live generation (esp. the `leaders` shape) must be checked on device.
+  Possible next step the owner floated: **historical stat leaders** ("who led the NFL
+  in passing yards in 2021") — needs ESPN's per-season core leaders endpoints
+  (athlete `$ref` resolution), NOT yet built, would need on-device verification.
   **🌍 Live questions from OpenTDB** (`opentdb.com/api.php`, category 21 = Sports,
   `type=multiple`) **live, browser-direct** — OpenTDB is one of the rare sources that
   sends permissive CORS (`Access-Control-Allow-Origin: *`), no key, no backend. Two ways
