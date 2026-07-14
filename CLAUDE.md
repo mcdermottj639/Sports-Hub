@@ -174,20 +174,33 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   `trivialab:daily` (per-date result →
   day-streak). NFL-themed skin (`trivia.css`) over `styles.css` (`?v=81`). Standalone,
   so NOT part of the `APP_VERSION`/`?v=` ritual (but bump `trivia.css`/`trivia.js`
-  `?v=` in `trivia.html` on changes — currently **v3**). Add questions by editing `Q`.
-  **🌍 Sports Mix (live)** — a separate free-play tile (`startSportsMix`) that pulls
-  ~10 fresh questions from **OpenTDB** (`opentdb.com/api.php`, category 21 = Sports,
+  `?v=` in `trivia.html` on changes — currently **v4**). Add questions by editing `Q`.
+  **🌍 Live questions from OpenTDB** (`opentdb.com/api.php`, category 21 = Sports,
   `type=multiple`) **live, browser-direct** — OpenTDB is one of the rare sources that
-  sends permissive CORS (`Access-Control-Allow-Origin: *`), no key, no backend. It is
-  deliberately kept OUT of the curated NFL bank and the deterministic Daily Challenge
-  (which must stay reproducible) — it's worldwide/general sports for variety.
-  `fetchOTDB` does one 9s-abort fetch and handles `response_code` (5 = 1-req/5s rate
-  limit → 'rate'); `makeLiveQuestion` HTML-entity-decodes the text (detached
-  `<textarea>` via `decodeHTML`, then still `esc()`d on render), shuffles
-  `incorrect_answers` into our `choices`, and maps easy/medium/hard → 50/100/150 pts
-  (`diffInfo`, new `d1` pill). On any failure it falls back to the local Mixed set
-  with a one-shot notice banner (`liveFallback`/`pendingNotice`), so it never looks
-  broken offline. Attribution (CC BY-SA 4.0) shows on the home note + live results.
+  sends permissive CORS (`Access-Control-Allow-Origin: *`), no key, no backend. Two ways
+  they surface, both kept OUT of the curated NFL bank and the deterministic Daily
+  Challenge (which must stay reproducible):
+    1. **Blended into each free-play category.** OpenTDB has ONE flat "Sports" bucket
+       (no per-sport tag), so `classifyLive(text)` best-effort keyword-routes each
+       question into our category keys (cfb/sb/eagles/draft/nfl/mlb/nba) or null. A
+       `harvestOTDB()` fetches 50 at a time (tokenless, 9s abort, `response_code`
+       handled: 5 = 1-req/5s rate limit) and **dedupes into a growing localStorage
+       cache** (`trivialab:otdb`, `MAX_POOL` 800, `HARVEST_MIN_MS` 20s time-guard) that
+       accumulates across visits (warmed once on boot + after each quiz via
+       `warmLiveBg`; boot re-renders home once if the pool grew). `startCategory` blends
+       up to `LIVE_BLEND` (4) matching live questions into the curated quiz — each stays
+       visibly tagged 🌍 (via `makeLiveQuestion`). Tiles show a `+N 🌍` pill
+       (`liveCountsByCat`). This is a **casual, fuzzy bonus** — small pool, some
+       misfiling — NOT curated depth; labeled as such in the home note.
+    2. **🌍 Sports Mix tile** (`startSportsMix`) — the all-sports bag (any bucket incl.
+       soccer/cricket). Serves ~12 from the cache, only hitting the network when the
+       pool is thin.
+  `makeLiveQuestion` HTML-entity-decodes text (detached `<textarea>` via `decodeHTML`,
+  then still `esc()`d on render), shuffles `incorrect_answers` into our `choices`, and
+  maps easy/medium/hard → 50/100/150 pts (`diffInfo`, `d1` pill). On any failure Sports
+  Mix falls back to the local Mixed set with a one-shot notice banner
+  (`liveFallback`/`pendingNotice`). `trivialab:best` key `live` holds the Sports Mix
+  best. Attribution (CC BY-SA 4.0) on the home note + live results.
 - `scriptable/` — optional iOS Home Screen widgets ([Scriptable](https://scriptable.app), JS).
   **Companion scripts, NOT part of the web app** — they don't deploy with Pages and
   don't affect `APP_VERSION`. `SportsHubFantasy.js` renders the fantasy matchup

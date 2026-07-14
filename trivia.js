@@ -198,21 +198,87 @@ function makeLiveQuestion(r) {
   return { q: decodeHTML(r.question), choices, answer: choices.indexOf(a), cat: 'live', catName, emoji: '🌍', diff: r.difficulty || 'medium', d: r.difficulty === 'hard' ? 3 : (r.difficulty === 'easy' ? 1 : 2), ex: '' };
 }
 
-// One fetch, no key, browser-direct (OpenTDB sends permissive CORS). Throws
-// 'rate' on the 1-req/5s limit, 'empty' on any other non-success.
-async function fetchOTDB(amount = 10) {
-  const url = `https://opentdb.com/api.php?amount=${amount}&category=21&type=multiple`;
-  const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 9000);
+// --- keyword classification -----------------------------------------------
+// OpenTDB has ONE flat "Sports" category (id 21) — no per-sport tag. So we
+// best-effort route each question into one of our category keys by keyword,
+// or null (non-American-sport → only shows in the 🌍 Sports Mix bag). This is
+// deliberately fuzzy: a small, casual pool, so treat it as a bonus, not depth.
+function classifyLive(text) {
+  const t = ' ' + String(text || '').toLowerCase() + ' ';
+  const has = (re) => re.test(t);
+  // College spans all college sports → its own bucket, checked first.
+  if (has(/\bncaa\b|college football|college basketball|heisman|collegiate/)) return 'cfb';
+  // American-football family
+  if (has(/\bnfl\b|super\s?bowl|quarterback|touchdown|gridiron|\bafc\b|\bnfc\b|american football/)) {
+    if (has(/super\s?bowl/)) return 'sb';
+    if (has(/philadelphia eagles|\beagles\b/)) return 'eagles';
+    if (has(/\bnfl draft\b|draft(ed|s)?\b/)) return 'draft';
+    return 'nfl';
+  }
+  if (has(/\bmlb\b|baseball|home run|world series|major league|\binnings?\b/)) return 'mlb';
+  if (has(/\bnba\b|basketball|slam dunk|\bthree-pointer\b/)) return 'nba';
+  return null;
+}
+
+// --- live pool cache (harvested from OpenTDB across visits) ----------------
+const K_OTDB = 'trivialab:otdb';        // { pool:[{h,question,correct_answer,incorrect_answers,difficulty,category,k}], ts }
+const HARVEST_MIN_MS = 20000;           // don't re-fetch more than once per 20s
+const MAX_POOL = 800;
+const loadOTDB = () => readJSON(K_OTDB, { pool: [], ts: 0 });
+const saveOTDB = (c) => writeJSON(K_OTDB, c);
+const livePoolLen = () => (loadOTDB().pool || []).length;
+
+function mergeResults(cache, results) {
+  cache.pool = cache.pool || [];
+  const seen = new Set(cache.pool.map((x) => x.h));
+  for (const r of results) {
+    if (!r || !r.question || r.correct_answer == null || !Array.isArray(r.incorrect_answers) || !r.incorrect_answers.length) continue;
+    const h = hashStr(r.question);
+    if (seen.has(h)) continue;
+    seen.add(h);
+    cache.pool.push({
+      h, question: r.question, correct_answer: r.correct_answer, incorrect_answers: r.incorrect_answers,
+      difficulty: r.difficulty || 'medium', category: r.category || 'Sports',
+      k: classifyLive(decodeHTML(r.question) + ' ' + decodeHTML(r.correct_answer)),
+    });
+  }
+  if (cache.pool.length > MAX_POOL) cache.pool = cache.pool.slice(-MAX_POOL);
+}
+
+// One tokenless fetch of 50 (no key, browser-direct — OpenTDB sends permissive
+// CORS), deduped into the cache. Time-guarded unless force=true. Never throws;
+// sets cache.error ('rate'|'net'|'empty') so callers can message + fall back.
+async function harvestOTDB(force) {
+  const cache = loadOTDB();
+  cache.error = null;
+  if (!force && cache.ts && Date.now() - cache.ts < HARVEST_MIN_MS) return cache;
   let data;
   try {
-    const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) throw new Error('http');
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 9000);
+    const res = await fetch('https://opentdb.com/api.php?amount=50&category=21&type=multiple', { signal: ctrl.signal });
+    clearTimeout(to);
+    if (!res.ok) { cache.error = 'net'; return cache; }
     data = await res.json();
-  } finally { clearTimeout(to); }
-  if (data && data.response_code === 5) throw new Error('rate');
-  if (!data || data.response_code !== 0 || !Array.isArray(data.results) || !data.results.length) throw new Error('empty');
-  return data.results;
+  } catch (e) { cache.error = 'net'; return cache; }
+  if (data && data.response_code === 5) { cache.error = 'rate'; return cache; }
+  if (!data || data.response_code !== 0 || !Array.isArray(data.results) || !data.results.length) { cache.error = 'empty'; return cache; }
+  mergeResults(cache, data.results);
+  cache.ts = Date.now();
+  saveOTDB(cache);
+  return cache;
+}
+// grow the pool in the background (guarded, no UI change)
+const warmLiveBg = () => { harvestOTDB().catch(() => {}); };
+// live questions available for a category from the current cache
+function liveForCategory(cat) {
+  const pool = loadOTDB().pool || [];
+  return cat === 'mixed' ? pool : pool.filter((x) => x.k === cat);
+}
+function liveCountsByCat() {
+  const m = {};
+  for (const x of (loadOTDB().pool || [])) if (x.k) m[x.k] = (m[x.k] || 0) + 1;
+  return m;
 }
 
 // --- state ----------------------------------------------------------------
@@ -230,6 +296,8 @@ function showHome() {
   const life = readJSON(K_LIFE, { played: 0, correct: 0, total: 0, bestStreak: 0 });
   const best = readJSON(K_BEST, {});
   const daily = readJSON(K_DAILY, {});
+  const liveCounts = liveCountsByCat();
+  const livePool = livePoolLen();
   const acc = life.total ? Math.round((life.correct / life.total) * 100) : 0;
   const streak = dailyStreak(daily);
   const today = todayStr();
@@ -257,25 +325,26 @@ function showHome() {
       ${CATS.map((c) => {
         const n = Q.filter((x) => x.c === c.k).length;
         const b = best[c.k];
+        const lc = liveCounts[c.k] || 0;
         return `<button class="cat-card" data-cat="${c.k}">
           <span class="cat-emoji">${c.emoji}</span>
           <span class="cat-name">${c.label}</span>
-          <span class="cat-meta">${n} questions${b ? ` · best ${b.toLocaleString()}` : ''}</span>
+          <span class="cat-meta">${n} questions${lc ? ` <span class="cat-live-pill">+${lc} 🌍</span>` : ''}${b ? ` · best ${b.toLocaleString()}` : ''}</span>
         </button>`;
       }).join('')}
       <button class="cat-card mixed" data-cat="mixed">
         <span class="cat-emoji">🎲</span>
         <span class="cat-name">Mixed</span>
-        <span class="cat-meta">All ${Q.length} questions</span>
+        <span class="cat-meta">All ${Q.length} questions${livePool ? ` <span class="cat-live-pill">+${livePool} 🌍</span>` : ''}</span>
       </button>
       <button class="cat-card live" data-live="1">
         <span class="cat-live-badge">LIVE</span>
         <span class="cat-emoji">🌍</span>
         <span class="cat-name">Sports Mix</span>
-        <span class="cat-meta">Fresh from OpenTDB${best.live ? ` · best ${best.live.toLocaleString()}` : ''}</span>
+        <span class="cat-meta">${livePool ? `${livePool} loaded` : 'Fresh from OpenTDB'}${best.live ? ` · best ${best.live.toLocaleString()}` : ''}</span>
       </button>
     </div>
-    <p class="ds-note">${Q.length} hand-written questions across NFL, MLB, NBA and college. Facts were accurate as of the 2024–25 seasons. 🌍 <b>Sports Mix</b> pulls fresh worldwide-sports questions live from <a href="https://opentdb.com" target="_blank" rel="noopener">OpenTDB</a> (CC BY-SA 4.0) — no key, straight to your browser. A sandbox to build on.</p>`;
+    <p class="ds-note">${Q.length} hand-written questions across NFL, MLB, NBA and college (accurate as of the 2024–25 seasons). Each category also blends in <b>🌍 live questions</b> pulled from <a href="https://opentdb.com" target="_blank" rel="noopener">OpenTDB</a> (CC BY-SA 4.0) — no key, straight to your browser — sorted into sports by keyword, so they're a casual bonus on top of the curated deep cuts. The pool grows as you play. A sandbox to build on.</p>`;
 
   $('#daily-btn').onclick = startDaily;
   home.querySelectorAll('.cat-card').forEach((b) => (b.onclick = () => (b.dataset.live ? startSportsMix() : startCategory(b.dataset.cat))));
@@ -290,32 +359,44 @@ function startDaily() {
   S = { mode: 'daily', cat: 'mixed', qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false };
   showQuiz();
 }
+const LIVE_BLEND = 4; // up to N live OpenTDB questions mixed into a category quiz
+
 function startCategory(cat) {
-  const pool = cat === 'mixed' ? Q : Q.filter((x) => x.c === cat);
-  const count = Math.min(cat === 'mixed' ? 12 : 10, pool.length);
-  const qs = buildFromPool(pool, count, rrng);
+  const curated = cat === 'mixed' ? Q : Q.filter((x) => x.c === cat);
+  const count = Math.min(cat === 'mixed' ? 12 : 10, curated.length);
+  let qs = buildFromPool(curated, count, rrng);
+  // blend in any cached live questions classified into this category (each stays
+  // visibly tagged 🌍 via makeLiveQuestion, so it's clear which are live)
+  const live = liveForCategory(cat);
+  if (live.length) {
+    const add = shuffleWith(live, rrng).slice(0, LIVE_BLEND).map(makeLiveQuestion).filter(Boolean);
+    if (add.length) qs = shuffleWith([...qs, ...add], rrng);
+  }
   S = { mode: 'cat', cat, qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false };
+  warmLiveBg(); // keep growing the pool for next time
   showQuiz();
 }
 
-// 🌍 Sports Mix — live worldwide-sports questions pulled from OpenTDB. Separate
-// from the curated NFL bank + deterministic Daily on purpose. Falls back to the
-// local Mixed set (with a note) if the API is unreachable / rate-limited.
+// 🌍 Sports Mix — the all-sports live bag from OpenTDB (any bucket incl. soccer/
+// cricket). Serves from the harvested cache; only hits the network when the pool
+// is thin. Falls back to the local Mixed set (with a note) on failure.
 async function startSportsMix() {
-  showLoading('Pulling live questions from OpenTDB…');
-  let raws;
-  try {
-    raws = await fetchOTDB(10);
-  } catch (e) {
-    liveFallback(e && e.message === 'rate'
-      ? 'OpenTDB is rate-limiting (1 request / 5s) — playing the local bank instead. Try Sports Mix again in a few seconds.'
-      : 'Couldn’t reach OpenTDB right now — playing the local bank instead.');
+  let cache = loadOTDB();
+  if ((cache.pool || []).length < 10) {
+    showLoading('Pulling live questions from OpenTDB…');
+    cache = await harvestOTDB(true);
+  }
+  const pool = cache.pool || [];
+  const qs = shuffleWith(pool, rrng).slice(0, Math.min(12, pool.length)).map(makeLiveQuestion).filter(Boolean);
+  if (qs.length >= 5 || (qs.length && pool.length < 10)) {
+    S = { mode: 'live', cat: 'live', qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false };
+    warmLiveBg();
+    showQuiz();
     return;
   }
-  const qs = raws.map(makeLiveQuestion).filter(Boolean);
-  if (!qs.length) { liveFallback('OpenTDB returned no usable questions — playing the local bank instead.'); return; }
-  S = { mode: 'live', cat: 'live', qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false };
-  showQuiz();
+  liveFallback(cache.error === 'rate'
+    ? 'OpenTDB is rate-limiting (1 request / 5s) — playing the local bank instead. Try again in a few seconds.'
+    : 'Couldn’t reach OpenTDB right now — playing the local bank instead.');
 }
 function liveFallback(msg) { pendingNotice = msg; startCategory('mixed'); }
 
@@ -464,3 +545,9 @@ function showResults() {
 
 // --- boot -----------------------------------------------------------------
 showHome();
+// Warm the live pool in the background; if it grew and we're still on the home
+// screen, re-render so the "+N 🌍" counts appear. One-shot, so no render loop.
+(function warmLiveOnce() {
+  const before = livePoolLen();
+  harvestOTDB().then(() => { if (livePoolLen() > before && !$('#home').hidden) showHome(); }).catch(() => {});
+})();

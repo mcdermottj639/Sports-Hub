@@ -66,6 +66,7 @@ main.ds-main { max-width: 780px; margin: 0 auto; padding: 18px 16px 60px; }
 .cat-emoji { font-size: 30px; }
 .cat-name { font-weight: 900; font-size: 15px; color: #fff; text-transform: uppercase; letter-spacing: .5px; }
 .cat-meta { font-size: 11px; color: var(--muted); }
+.cat-live-pill { display: inline-block; background: rgba(58,210,159,.16); color: var(--accent); font-weight: 800; padding: 1px 5px; border-radius: 999px; white-space: nowrap; }
 
 /* live-mode loading + notice */
 .load-card { text-align: center; }
