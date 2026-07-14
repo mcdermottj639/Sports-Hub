@@ -174,7 +174,19 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   `trivialab:daily` (per-date result →
   day-streak). NFL-themed skin (`trivia.css`) over `styles.css` (`?v=81`). Standalone,
   so NOT part of the `APP_VERSION`/`?v=` ritual (but bump `trivia.css`/`trivia.js`
-  `?v=` in `trivia.html` on changes — currently **v4**). Add questions by editing `Q`.
+  `?v=` in `trivia.html` on changes — currently **v5**). Add questions by editing `Q`.
+  **🔴 Live Sports IQ** (`startLiveIQ`, tile `data-iq`) — a bankless mode that
+  **generates questions on the fly from real ESPN scores**. `buildLiveIQ` pulls the
+  last ~day's finished games from the ESPN public scoreboard (`espnScoreboard`,
+  `IQ_SPORTS` = mlb/nfl/nba, `?dates=` yesterday-today range, 9s abort, all parsing
+  defensive via `normGame`) and `genFromGames` synthesizes MC questions with REAL
+  distractors: who won (easy), combined total (medium), exact final score (hard), and
+  the day's highest-scoring team when there's a unique leader (hard). Shuffles to 10;
+  mode `liveiq`, best tracked under `trivialab:best` key `liveiq`. If fewer than 5
+  questions can be built (off-season / ESPN unreachable — the July slate is basically
+  MLB-only) it falls back to the local Mixed set with a notice. No bank to maintain,
+  never the same twice. NOTE: sandbox can't reach ESPN, so structure/fallbacks were
+  verified but live generation must be checked on device.
   **🌍 Live questions from OpenTDB** (`opentdb.com/api.php`, category 21 = Sports,
   `type=multiple`) **live, browser-direct** — OpenTDB is one of the rare sources that
   sends permissive CORS (`Access-Control-Allow-Origin: *`), no key, no backend. Two ways

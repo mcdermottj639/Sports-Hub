@@ -343,11 +343,17 @@ function showHome() {
         <span class="cat-name">Sports Mix</span>
         <span class="cat-meta">${livePool ? `${livePool} loaded` : 'Fresh from OpenTDB'}${best.live ? ` · best ${best.live.toLocaleString()}` : ''}</span>
       </button>
+      <button class="cat-card iq" data-iq="1">
+        <span class="cat-live-badge red">● LIVE</span>
+        <span class="cat-emoji">🔴</span>
+        <span class="cat-name">Sports IQ</span>
+        <span class="cat-meta">Today’s real scores${best.liveiq ? ` · best ${best.liveiq.toLocaleString()}` : ''}</span>
+      </button>
     </div>
-    <p class="ds-note">${Q.length} hand-written questions across NFL, MLB, NBA and college (accurate as of the 2024–25 seasons). Each category also blends in <b>🌍 live questions</b> pulled from <a href="https://opentdb.com" target="_blank" rel="noopener">OpenTDB</a> (CC BY-SA 4.0) — no key, straight to your browser — sorted into sports by keyword, so they're a casual bonus on top of the curated deep cuts. The pool grows as you play. A sandbox to build on.</p>`;
+    <p class="ds-note">${Q.length} hand-written questions across NFL, MLB, NBA and college (accurate as of the 2024–25 seasons). Each category also blends in <b>🌍 live questions</b> pulled from <a href="https://opentdb.com" target="_blank" rel="noopener">OpenTDB</a> (CC BY-SA 4.0) — no key, straight to your browser — sorted into sports by keyword, so they're a casual bonus on top of the curated deep cuts. The pool grows as you play. <b>🔴 Sports IQ</b> is different — it builds a quiz on the fly from <b>real ESPN scores</b> of the last day's games, so it's never the same twice. A sandbox to build on.</p>`;
 
   $('#daily-btn').onclick = startDaily;
-  home.querySelectorAll('.cat-card').forEach((b) => (b.onclick = () => (b.dataset.live ? startSportsMix() : startCategory(b.dataset.cat))));
+  home.querySelectorAll('.cat-card').forEach((b) => (b.onclick = () => (b.dataset.iq ? startLiveIQ() : b.dataset.live ? startSportsMix() : startCategory(b.dataset.cat))));
 }
 
 // ==========================================================================
@@ -400,6 +406,136 @@ async function startSportsMix() {
 }
 function liveFallback(msg) { pendingNotice = msg; startCategory('mixed'); }
 
+// ==========================================================================
+// 🔴 LIVE SPORTS IQ — questions generated on the fly from ESPN's real scores
+// ==========================================================================
+// No question bank: we read recent finished games straight from ESPN's public
+// scoreboard feeds (permissive CORS, same as the main app) and synthesize MC
+// questions with real distractors. Always fresh, self-maintaining. All parsing
+// is defensive — a generator that can't build a clean question just skips it.
+const ESPN_SITE = 'https://site.api.espn.com/apis/site/v2/sports';
+const IQ_SPORTS = [
+  { path: 'baseball/mlb', label: 'MLB', unit: 'runs' },
+  { path: 'football/nfl', label: 'NFL', unit: 'points' },
+  { path: 'basketball/nba', label: 'NBA', unit: 'points' },
+];
+const ymd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+
+async function espnScoreboard(path, dates) {
+  const url = `${ESPN_SITE}/${path}/scoreboard${dates ? `?dates=${dates}` : ''}`;
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 9000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) return [];
+    const d = await res.json();
+    return Array.isArray(d.events) ? d.events : [];
+  } catch (e) { return []; }
+  finally { clearTimeout(to); }
+}
+
+// ESPN event → a flat, finished-game record (or null if not usable)
+function normGame(ev) {
+  try {
+    const comp = ev && ev.competitions && ev.competitions[0];
+    if (!comp || !Array.isArray(comp.competitors) || comp.competitors.length !== 2) return null;
+    const st = (comp.status || ev.status || {}).type || {};
+    if (!(st.completed || st.state === 'post')) return null;
+    const c0 = comp.competitors[0], c1 = comp.competitors[1];
+    const n0 = (c0.team || {}).displayName, n1 = (c1.team || {}).displayName;
+    const s0 = parseInt(c0.score, 10), s1 = parseInt(c1.score, 10);
+    if (!n0 || !n1 || Number.isNaN(s0) || Number.isNaN(s1)) return null;
+    const home = c0.homeAway === 'home' ? c0 : c1;
+    const away = c0.homeAway === 'home' ? c1 : c0;
+    let winner = c0.winner ? n0 : c1.winner ? n1 : (s0 !== s1 ? (s0 > s1 ? n0 : n1) : null);
+    return {
+      t0: n0, t1: n1, s0, s1, total: s0 + s1, winner,
+      home: (home.team || {}).displayName, away: (away.team || {}).displayName,
+      hs: parseInt(home.score, 10), as: parseInt(away.score, 10),
+    };
+  } catch (e) { return null; }
+}
+
+// build one Live-IQ question in our internal shape (or null if <3 distractors)
+function iqQ(q, correct, wrongs, diff) {
+  const cs = String(correct);
+  const uniqW = [...new Set(wrongs.map(String).filter((w) => w && w !== cs))].slice(0, 3);
+  if (uniqW.length < 3) return null;
+  const choices = shuffleWith([cs, ...uniqW], rrng);
+  return { q, choices, answer: choices.indexOf(cs), cat: 'liveiq', catName: 'Live Sports IQ', emoji: '🔴', diff: diff || 'medium', ex: '' };
+}
+const uniqNums = (correct, cands) => { const out = []; for (const n of cands) { if (n >= 0 && n !== correct && !out.includes(n)) out.push(n); if (out.length === 3) break; } return out; };
+
+function genFromGames(games, sp) {
+  const qs = [];
+  if (!games.length) return qs;
+  const teams = [...new Set(games.flatMap((g) => [g.t0, g.t1]))];
+  for (const g of games) {
+    if (g.winner) {
+      const loser = g.winner === g.t0 ? g.t1 : g.t0;
+      const w = [loser, ...shuffleWith(teams.filter((t) => t !== g.winner && t !== loser), rrng)].slice(0, 3);
+      const q = iqQ(`Who won this ${sp.label} game — ${g.away} @ ${g.home}?`, g.winner, w, 'easy');
+      if (q) qs.push(q);
+    }
+    { // combined total
+      const w = uniqNums(g.total, [g.total + 1, g.total - 1, g.total + 2, g.total - 2, g.total + 3]).map(String);
+      const q = iqQ(`How many total ${sp.unit} were scored — ${g.away} @ ${g.home}?`, String(g.total), w, 'medium');
+      if (q) qs.push(q);
+    }
+    { // exact final score
+      const correct = `${g.away} ${g.as}, ${g.home} ${g.hs}`;
+      const alts = [
+        `${g.away} ${g.as}, ${g.home} ${g.hs + 1}`,
+        `${g.away} ${g.as + 1}, ${g.home} ${g.hs}`,
+        `${g.away} ${Math.max(0, g.as - 1)}, ${g.home} ${g.hs}`,
+        `${g.away} ${g.hs}, ${g.home} ${g.as}`,
+      ];
+      const q = iqQ(`What was the final score — ${g.away} @ ${g.home}?`, correct, alts, 'hard');
+      if (q) qs.push(q);
+    }
+  }
+  // highest-scoring team (only if there's a clear, unique leader)
+  const scores = games.flatMap((g) => [{ team: g.t0, s: g.s0 }, { team: g.t1, s: g.s1 }]);
+  if (teams.length >= 4 && scores.length) {
+    const max = Math.max(...scores.map((x) => x.s));
+    const atMax = scores.filter((x) => x.s === max);
+    if (atMax.length === 1) {
+      const w = shuffleWith(teams.filter((t) => t !== atMax[0].team), rrng).slice(0, 3);
+      const q = iqQ(`Which team put up the most ${sp.unit} (${max}) in a recent ${sp.label} game?`, atMax[0].team, w, 'hard');
+      if (q) qs.push(q);
+    }
+  }
+  return qs;
+}
+
+async function buildLiveIQ() {
+  const today = new Date();
+  const yest = new Date(); yest.setDate(today.getDate() - 1);
+  const range = `${ymd(yest)}-${ymd(today)}`;
+  const packs = await Promise.all(IQ_SPORTS.map((sp) =>
+    espnScoreboard(sp.path, range).then((evs) => ({ sp, evs })).catch(() => ({ sp, evs: [] }))));
+  const out = [];
+  for (const { sp, evs } of packs) {
+    const games = evs.map(normGame).filter(Boolean);
+    out.push(...genFromGames(games, sp));
+  }
+  return out.filter(Boolean);
+}
+
+// 🔴 Live Sports IQ — real scores from the last day, turned into a quiz.
+async function startLiveIQ() {
+  showLoading('Reading today’s real scores from ESPN…');
+  let pool = [];
+  try { pool = await buildLiveIQ(); } catch (e) { pool = []; }
+  if (pool.length < 5) {
+    liveFallback('Not enough live sports data right now (off-season / no finished games) — playing the local bank instead.');
+    return;
+  }
+  const qs = shuffleWith(pool, rrng).slice(0, 10);
+  S = { mode: 'liveiq', cat: 'liveiq', qs, idx: 0, score: 0, streak: 0, bestStreak: 0, correct: 0, picks: [], locked: false };
+  showQuiz();
+}
+
 function showLoading(msg) {
   $('#home').hidden = true; $('#results').hidden = true;
   const quiz = $('#quiz'); quiz.hidden = false;
@@ -422,8 +558,8 @@ function renderQuestion() {
   const total = S.qs.length;
   const pct = Math.round((S.idx / total) * 100);
   const mult = S.streak >= 5 ? 2 : S.streak >= 3 ? 1.5 : 1;
-  const tagEmoji = S.mode === 'daily' ? '🗓️' : S.mode === 'live' ? '🌍' : (CATS.find((c) => c.k === S.cat)?.emoji || '🎲');
-  const tagLabel = S.mode === 'daily' ? 'Daily Challenge' : S.mode === 'live' ? 'Sports Mix (live)' : catLabel(S.cat);
+  const tagEmoji = S.mode === 'daily' ? '🗓️' : S.mode === 'live' ? '🌍' : S.mode === 'liveiq' ? '🔴' : (CATS.find((c) => c.k === S.cat)?.emoji || '🎲');
+  const tagLabel = S.mode === 'daily' ? 'Daily Challenge' : S.mode === 'live' ? 'Sports Mix (live)' : S.mode === 'liveiq' ? 'Live Sports IQ' : catLabel(S.cat);
   const di = diffInfo(q);
   const notice = pendingNotice; pendingNotice = '';
   $('#quiz').innerHTML = `
@@ -523,6 +659,7 @@ function showResults() {
       <div class="res-line">${S.correct} / ${S.qs.length} correct · ${acc}% · best run 🔥 ${S.bestStreak}</div>
       ${S.mode === 'daily' ? `<div class="res-daily">🗓️ Daily Challenge logged for ${todayStr()} — 🔥 ${dailyStreak(readJSON(K_DAILY, {}))}-day streak</div>` : ''}
       ${S.mode === 'live' ? `<div class="res-credit">🌍 Live questions via <a href="https://opentdb.com" target="_blank" rel="noopener">OpenTDB</a> · CC BY-SA 4.0</div>` : ''}
+      ${S.mode === 'liveiq' ? `<div class="res-credit">🔴 Generated from real ESPN scores</div>` : ''}
       <div class="res-actions">
         <button id="res-again" class="ds-btn primary">Play again</button>
         <button id="res-home" class="ds-btn">Back to categories</button>
@@ -539,7 +676,7 @@ function showResults() {
           </div>
         </div>`).join('')}
     </div>`;
-  $('#res-again').onclick = () => (S.mode === 'daily' ? startDaily() : S.mode === 'live' ? startSportsMix() : startCategory(S.cat));
+  $('#res-again').onclick = () => (S.mode === 'daily' ? startDaily() : S.mode === 'live' ? startSportsMix() : S.mode === 'liveiq' ? startLiveIQ() : startCategory(S.cat));
   $('#res-home').onclick = showHome;
 }
 
