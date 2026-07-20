@@ -12,8 +12,8 @@ Guidance for Claude (and humans) working on this repo. Read this first.
 ## What this is
 
 **Sports-Hub** is a personal, multi-sport web app for the owner (a Philadelphia
-Eagles superfan; also follows Red Sox, NFL, MLB, NBA, FIFA World Cup soccer, and
-golf). It's a **pure static browser app** — HTML/CSS/vanilla JS, no build step,
+Eagles superfan; also follows Red Sox, NFL, MLB, NBA, and golf). It's a **pure
+static browser app** — HTML/CSS/vanilla JS, no build step,
 no framework, no backend, no API keys. It ships from this repo via **GitHub
 Pages** and runs entirely in the user's browser.
 
@@ -250,7 +250,20 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v124**.
+Current version as of this writing: **v125**.
+
+- **Removed the World Cup / soccer entirely (v125)** — the 2026 FIFA World Cup is
+  over, so the whole soccer league was pulled out (owner request). Gone: the
+  `soccer` entry in `LEAGUES`/`SEASON_MONTHS`/`BASE_ORDER`; the Home **World Cup
+  Bracket** (`#home-wc`, `renderWCBracket`, `WC_ROUNDS`, `wcRoundOf`/`wcMatchObj`/
+  `wcMatchHTML`/`wcWinSide`/`wcTeamObj`/`etYmd`, and all `.wc-*` bracket CSS —
+  the wild-card `.wc-in`/`tr.wc-cut` classes are unrelated and stay); the soccer
+  live panel (`soccerSituation` + `.poss-*` CSS); the neutral-site "vs" logic and
+  `WC_HOSTS`/`isWorldCupHost`; and every soccer entry in the model/odds constants
+  (`PD_SCALE`, `TOT_EDGE_MIN`, `TOTALS`) and the soccer branch in `predictGame`
+  and `matchupLabel`. About-tab + README + `<meta>` copy updated to "NFL, NBA and
+  MLB". Since soccer here only ever meant the World Cup, nothing soccer-related
+  remains — re-add a `LEAGUES.soccer` entry to bring a competition back.
 
 - **Depth-chart Field view — defensive rows (v124)** — the Eagles depth chart's
   Field formation view laid the defense out with corners + nickel jammed into the
@@ -321,8 +334,9 @@ Current version as of this writing: **v124**.
   `/{path}/scoreboard`, `/summary?event=`, `/teams`, `/{id}/roster`,
   `/{id}/schedule`, `/news`, `/standings?level=3`, athlete gamelogs, team
   statistics/leaders/depthcharts.
-  Sport paths: `football/nfl`, `baseball/mlb`, `basketball/nba`,
-  `soccer/fifa.world`, `golf/pga`.
+  Sport paths: `football/nfl`, `baseball/mlb`, `basketball/nba`, `golf/pga`.
+  (Soccer / FIFA World Cup was removed in v125 once the 2026 Cup ended — the app
+  no longer tracks any soccer competition.)
 - `fetchJSON(url, ttl)` — in-memory cache by URL with TTL; 9s abort. All data goes through it.
 - `LEAGUES` — per-sport config (label, emoji, espnPath, `fav` favorite teams, type).
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
@@ -369,20 +383,13 @@ Current version as of this writing: **v124**.
   **view-only top-5 leaderboard** inline (no modal). (The old cross-league "Live"
   section was removed in v68; the Scores-tab ⚡ Model-edge badges that briefly
   lived here in v78 were dropped in v79 to keep the slate a clean scan — edges
-  still live on the AI Picks tab.) **🏆 World Cup Bracket (v82)** — a knockout
-  bracket below Today's Games (`#home-wc`, `renderWCBracket`, `.wc-*` CSS): one
-  ranged scoreboard call covers the whole 2026 knockout window (`WC_ROUNDS`,
-  Jun 28 – Jul 19 ET), games are bucketed into rounds by ESPN's round note when
-  present else by date window (`wcRoundOf`), and rendered as a horizontally
-  swipeable column per round (R32 → R16 → QF → SF → 3rd → Final) that
-  auto-scrolls to the current round. View-only match cards show score / pens /
-  live status (winner via ESPN's `winner` flag, falling back to score then
-  shootout), TV for upcoming games, dashed TBD slots for unset matchups, and a
-  fav highlight (USA). A 🏆 Bracket chip is appended to the Home jump-nav once
-  loaded. Renders only while `LEAGUES.soccer` points at `fifa.world` AND
-  knockout fixtures exist — the section hides itself (`#home-wc:empty`) after
-  the tournament or if ESPN is unreachable, so nothing needs removing when the
-  Cup ends (the dead code can be cleaned up later).
+  still live on the AI Picks tab.) (A **🏆 World Cup Bracket** lived below Today's
+  Games from v82 until the 2026 Cup ended; **v125 removed it and the entire soccer
+  league** — the bracket, its `#home-wc`/`renderWCBracket`/`WC_ROUNDS`/`.wc-*`
+  code, the soccer live-situation panel, and every soccer branch in the model /
+  odds constants. Soccer here only ever meant the World Cup, so nothing
+  soccer-related remains. Re-add a `soccer` entry to `LEAGUES` if a future
+  competition should be tracked.)
 - **Red Sox tab** (⚾, v114) — an MLB deep-dive mirroring the Eagles tab
   (`renderRedSox` + `renderRedSox*` sub-renderers; `REDSOX={teamId:2}`, ESPN MLB
   id for BOS): hero (record/standing/next game, ⚾ watermark via
@@ -514,8 +521,8 @@ Current version as of this writing: **v124**.
     not a proprietary feed.
 - **Game detail modal** (`renderGameDetail`) — **section order (v92):**
   **🔴 Live Situation** on top *when the game is live* (MLB bases diamond +
-  count/outs/pitcher/batter; NFL field-position bar w/ red zone; soccer
-  possession + shots; others last play), then **Betting Odds** (model-vs-market
+  count/outs/pitcher/batter; NFL field-position bar w/ red zone; others last
+  play), then **Betting Odds** (model-vs-market
   compare), then the **📊 Game Report** (passed into `renderGameDetail` as its
   own `report` arg — split out of `extra` so it can be positioned), then **AI
   Pick** + factor breakdown, then the sport extras (starters/hitters/key
@@ -713,9 +720,6 @@ Current version as of this writing: **v124**.
     connection — the sandbox can't reach ESPN, so the team list + depth data were
     NOT testable here (structure + the modal were verified with seeded data);
     verify live on device.
-- **World Cup neutral sites** — soccer games get **no home-field edge** in the
-  model except host nations (USA/Mexico/Canada via `isWorldCupHost`); neutral games
-  read "vs" not "@" in the modal.
 - **AI record persistence** — every pick is stashed in `localStorage`
   (`sportshub:pending`) and **auto-graded** against final results on app load
   (`gradePending`), so the all-time + vs-line tallies (`sportshub:aitally`) keep

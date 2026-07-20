@@ -1,6 +1,6 @@
 # 🏟️ Sports-Hub
 
-A personal multi-sport hub — **NFL (Go Birds 🦅), NBA, MLB, and Soccer** — with live scores, standings, and a prediction game. **Runs entirely in the browser**, just like a static site: no server, no login, no API key.
+A personal multi-sport hub — **NFL (Go Birds 🦅), NBA, and MLB** — with live scores, standings, and a prediction game. **Runs entirely in the browser**, just like a static site: no server, no login, no API key.
 
 **Live:** https://mcdermottj639.github.io/Sports-Hub/
 
@@ -17,14 +17,7 @@ Live data comes from **ESPN's free public sports feed**, fetched directly in the
 
 ## Make it yours
 
-Edit the `LEAGUES` block at the top of [`app.js`](app.js):
-
-```js
-soccer: { ..., espnPath: 'soccer/eng.1' }  // eng.1 = Premier League
-// usa.1 = MLS · esp.1 = La Liga · uefa.champions = UCL · fifa.world = World Cup
-```
-
-Change the `fav` arrays to highlight your teams anywhere they appear.
+Edit the `LEAGUES` block at the top of [`app.js`](app.js) to add a league or change the `espnPath`. Change the `fav` arrays to highlight your teams anywhere they appear.
 
 ## Run locally
 

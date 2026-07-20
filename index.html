@@ -7,11 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Sports-Hub" />
   <title>Sports-Hub</title>
-  <meta name="description" content="Personal multi-sport hub — a daily overview of NFL, NBA, MLB and Soccer, plus AI picks." />
+  <meta name="description" content="Personal multi-sport hub — a daily overview of NFL, NBA and MLB, plus AI picks." />
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=124" />
+  <link rel="stylesheet" href="styles.css?v=125" />
   <script>
     /* Set the theme before first paint to avoid a flash. Uses the saved
        preference if present, else follows the OS light/dark setting. */
@@ -56,7 +56,6 @@
       <div id="featured" class="featured-card">Loading your teams…</div>
       <h2 class="section-title">Today’s Games</h2>
       <div id="home-games" class="games-grid"></div>
-      <div id="home-wc"></div>
     </section>
 
     <section id="eagles" class="tab-panel" role="tabpanel" aria-labelledby="tab-eagles" tabindex="0">
@@ -166,12 +165,10 @@
     <section id="about" class="tab-panel" role="tabpanel" aria-labelledby="tab-about" tabindex="0">
       <div class="setup-card">
         <h2>About Sports-Hub</h2>
-        <p>A personal hub for <strong>NFL 🦅, NBA, MLB and Soccer</strong> — a daily overview of every game, an Eagles deep-dive, an AI prediction game, and fantasy tracking, all in your browser.</p>
+        <p>A personal hub for <strong>NFL 🦅, NBA and MLB</strong> — a daily overview of every game, an Eagles deep-dive, an AI prediction game, and fantasy tracking, all in your browser.</p>
         <p class="muted">Live data comes from ESPN’s free public sports feed, fetched directly in your browser. No login, no API key, nothing to configure.</p>
         <h3>Make it yours</h3>
-        <p>Soccer is set to the <strong>FIFA World Cup</strong>. Edit the <code>LEAGUES</code> block near the top of <code>app.js</code> to change favorite teams or the competition:</p>
-        <pre><code>soccer: { ..., espnPath: 'soccer/fifa.world' }  // FIFA World Cup
-// eng.1 = Premier League · usa.1 = MLS · uefa.champions = UCL</code></pre>
+        <p>Edit the <code>LEAGUES</code> block near the top of <code>app.js</code> to change favorite teams or add a league.</p>
         <div id="about-status" class="muted"></div>
       </div>
     </section>
@@ -189,6 +186,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=124" defer></script>
+  <script src="app.js?v=125" defer></script>
 </body>
 </html>

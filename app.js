@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v124';
+const APP_VERSION = 'v125';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -13,7 +13,6 @@ const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
   mlb:    { label: 'MLB',    emoji: '⚾', espnPath: 'baseball/mlb',    fav: ['Boston Red Sox'], type: 'team' },
   nba:    { label: 'NBA',    emoji: '🏀', espnPath: 'basketball/nba', fav: [], type: 'team' },
-  soccer: { label: 'World Cup', emoji: '🌎', espnPath: 'soccer/fifa.world', fav: ['USA'], type: 'team' }, // FIFA World Cup
   golf:   { label: 'Golf',   emoji: '⛳', espnPath: 'golf/pga', fav: [], type: 'golf' },
 };
 const FEATURED = { sport: 'nfl', name: 'Philadelphia Eagles' };
@@ -21,9 +20,9 @@ const FEATURED = { sport: 'nfl', name: 'Philadelphia Eagles' };
 // Roughly which months each sport is active, used to sort in-season first.
 const SEASON_MONTHS = {
   nfl: [8, 9, 10, 11, 0, 1], mlb: [2, 3, 4, 5, 6, 7, 8, 9], nba: [9, 10, 11, 0, 1, 2, 3, 4, 5],
-  soccer: [5, 6], golf: [0, 1, 2, 3, 4, 5, 6, 7],
+  golf: [0, 1, 2, 3, 4, 5, 6, 7],
 };
-const BASE_ORDER = ['nfl', 'mlb', 'nba', 'soccer', 'golf'];
+const BASE_ORDER = ['nfl', 'mlb', 'nba', 'golf'];
 function sortedSports(opts = {}) {
   const m = new Date().getMonth();
   let list = Object.keys(LEAGUES);
@@ -98,7 +97,7 @@ const timeAgo = (date) => {
   const days = Math.round(h / 24); return days === 1 ? 'yesterday' : `${days}d ago`;
 };
 // Pre-game label: ESPN sometimes returns a generic "Scheduled"/"TBD" string
-// instead of a kickoff time (common for soccer), so fall back to the time.
+// instead of a start time, so fall back to the time.
 const scheduledLabel = (g) => {
   const t = (g.statusText || '').trim();
   if (t && !/scheduled|tbd|pre[- ]?game/i.test(t)) return t;
@@ -225,8 +224,8 @@ function trackLines(sport, games) {
 }
 async function getStandings(sport) {
   const path = LEAGUES[sport].espnPath;
-  // level=3 asks ESPN to nest by division (MLB East/Central/West, NFL divisions,
-  // soccer groups). Fall back to the default grouping if that comes back empty.
+  // level=3 asks ESPN to nest by division (MLB East/Central/West, NFL
+  // divisions). Fall back to the default grouping if that comes back empty.
   let rows = [];
   try { rows = normStandings(await fetchJSON(`${CORE}/${path}/standings?level=3`, 5 * 60000)); } catch (_) {}
   if (!rows.length) { try { rows = normStandings(await fetchJSON(`${CORE}/${path}/standings`, 5 * 60000)); } catch (_) {} }
@@ -340,18 +339,13 @@ const byStatus = (s) => (a, b) => {
 };
 function winnerName(g) {
   if (gameState(g) !== 'final') return null;
-  // ESPN's winner flag first — it's the only truth when the score ends level
-  // but someone still advanced (World Cup knockouts decided on penalties).
+  // ESPN's winner flag first — the surest signal, then fall back to the score.
   if (g.home.winner && !g.away.winner) return g.home.name;
   if (g.away.winner && !g.home.winner) return g.away.name;
   if (g.home.score == null || g.away.score == null) return null;
   if (g.home.score === g.away.score) return 'TIE';
   return g.home.score > g.away.score ? g.home.name : g.away.name;
 }
-// 2026 World Cup hosts — the only soccer sides with a true home field; every
-// other World Cup game is on a neutral pitch, so home/away carries no edge.
-const WC_HOSTS = ['usa', 'united states', 'united states of america', 'mexico', 'canada'];
-const isWorldCupHost = (name) => WC_HOSTS.includes((name || '').trim().toLowerCase());
 const favSet = (sport) => (LEAGUES[sport].fav || []).map((t) => t.toLowerCase());
 const isFav = (sport, g) =>
   favSet(sport).includes((g.home.name || '').toLowerCase()) || favSet(sport).includes((g.away.name || '').toLowerCase());
@@ -598,9 +592,6 @@ function oddsSectionHTML(info, awayAbbr, homeAbbr, pred) {
 // falling back to the scoreboard situation carried on the game object.
 function liveSituationHTML(sport, data, comp, g) {
   const sit = data.situation || comp.situation || g?.situation;
-  // soccer's live detail comes from the boxscore (possession/shots), not a
-  // `situation` object — so handle it before the early bail below.
-  if (sport === 'soccer') return soccerSituation(sit, data, comp);
   if (!sit) return '';
   if (sport === 'mlb') {
     const on1 = !!sit.onFirst, on2 = !!sit.onSecond, on3 = !!sit.onThird;
@@ -654,44 +645,6 @@ function footballSituation(sit, comp) {
     ${last ? `<div class="sit-last">Last play: ${last}</div>` : ''}`;
 }
 
-// Soccer: possession split bar + shots, falling back to the last play. Stats
-// can live on the boxscore team or the scoreboard competitor, so check both.
-function soccerSituation(sit, data, comp) {
-  const teams = data.boxscore?.teams || [];
-  const cs = comp.competitors || [];
-  const last = sit?.lastPlay?.text;
-  const findStat = (sources, keys) => {
-    for (const src of sources) {
-      for (const s of (src?.statistics || [])) {
-        const n = `${s.name || ''} ${s.abbreviation || ''} ${s.label || ''}`.toLowerCase();
-        if (keys.some((k) => n.includes(k))) return s.displayValue ?? s.value;
-      }
-    }
-    return null;
-  };
-  const side = (ha) => [teams.find((t) => (t.homeAway || '') === ha), cs.find((c) => c.homeAway === ha)].filter(Boolean);
-  const aS = side('away'), hS = side('home');
-  const aAbbr = cs.find((c) => c.homeAway === 'away')?.team?.abbreviation || 'Away';
-  const hAbbr = cs.find((c) => c.homeAway === 'home')?.team?.abbreviation || 'Home';
-  const aPos = parseFloat(findStat(aS, ['possession']));
-  const hPos = parseFloat(findStat(hS, ['possession']));
-  const aShots = findStat(aS, ['totalshots', 'shots']);
-  const hShots = findStat(hS, ['totalshots', 'shots']);
-  const aOn = findStat(aS, ['shotson', 'ontarget']);
-  const hOn = findStat(hS, ['shotson', 'ontarget']);
-  let html = '';
-  if (!isNaN(aPos) && !isNaN(hPos)) {
-    html += `<div class="poss-head"><span>${aAbbr} ${aPos.toFixed(0)}%</span><span>Possession</span><span>${hPos.toFixed(0)}% ${hAbbr}</span></div>
-      <div class="poss-bar"><span class="poss-a" style="width:${clamp(aPos, 0, 100)}%"></span></div>`;
-  }
-  if (aShots != null && hShots != null) {
-    html += `<div class="sit-mu">Shots: <b>${aShots}</b>${aOn != null ? ` (${aOn} on)` : ''} — <b>${hShots}</b>${hOn != null ? ` (${hOn} on)` : ''}</div>`;
-  }
-  if (last) html += `<div class="sit-last">Last play: ${last}</div>`;
-  if (!html) html = '<div class="sit-last">Match underway — live stats updating.</div>';
-  return `<div class="md-section-title acc-open">🔴 Live Situation</div>${html}`;
-}
-
 function renderGameDetail(sport, data, pred, extra, g, report) {
   const comp = data.header?.competitions?.[0] || data.competitions?.[0] || {};
   const cs = comp.competitors || [];
@@ -706,10 +659,7 @@ function renderGameDetail(sport, data, pred, extra, g, report) {
   };
   const st = comp.status?.type || {};
   const live = st.state === 'in';
-  // neutral-site World Cup games read "vs" rather than away @ home
-  const neutral = sport === 'soccer' && !isWorldCupHost(home.team?.displayName || home.team?.name);
-  const sep = neutral ? 'vs' : '@';
-  let html = `<div class="md-head">${teamCell(away)}<div style="color:var(--muted);font-weight:700">${sep}</div>${teamCell(home)}</div>
+  let html = `<div class="md-head">${teamCell(away)}<div style="color:var(--muted);font-weight:700">@</div>${teamCell(home)}</div>
     <div class="md-status ${live ? 'live' : ''}">${st.detail || st.shortDetail || ''}</div>`;
 
   // Order: 🔴 Live Situation on top when the game is live (most timely), then
@@ -792,9 +742,6 @@ const DEMO = {
   mlb: [{ id: 'd3', date: new Date().toISOString(), state: 'in', statusText: 'Top 6',
     home: { name: 'Philadelphia Phillies', abbr: 'PHI', logo: null, score: 4 },
     away: { name: 'Atlanta Braves', abbr: 'ATL', logo: null, score: 3 } }],
-  soccer: [{ id: 'd4', date: new Date().toISOString(), state: 'pre', statusText: 'Tomorrow',
-    home: { name: 'Arsenal', abbr: 'ARS', logo: null, score: null },
-    away: { name: 'Manchester City', abbr: 'MCI', logo: null, score: null } }],
 };
 
 // --- HOME -----------------------------------------------------------------
@@ -832,7 +779,6 @@ async function renderHome() {
   $('#featured').innerHTML = html;
   renderHomeByLeague($('#home-games'), games);
   renderHomeHeadline();
-  renderWCBracket();
 }
 
 // Top 3 sports headlines up top, numbered 1-2-3 so they scan left to right.
@@ -943,134 +889,6 @@ async function addGolfHomeSection(addSection) {
   addSection('home-golf', '⛳ Golf', [card]);
 }
 
-// --- WORLD CUP KNOCKOUT BRACKET (Home) -------------------------------------
-// One ranged scoreboard call covers the whole knockout window, then games are
-// bucketed into rounds — by ESPN's round note when present, else by date
-// (the 2026 knockout schedule below). Rounds with games still TBD get dashed
-// placeholder slots so the full bracket shape is always visible.
-const WC_ROUNDS = [
-  { key: 'r32',   label: 'Round of 32',   from: '20260628', to: '20260703', size: 16, when: 'Jun 28 – Jul 3' },
-  { key: 'r16',   label: 'Round of 16',   from: '20260704', to: '20260707', size: 8,  when: 'Jul 4–7' },
-  { key: 'qf',    label: 'Quarterfinals', from: '20260708', to: '20260712', size: 4,  when: 'Jul 9–11' },
-  { key: 'sf',    label: 'Semifinals',    from: '20260713', to: '20260716', size: 2,  when: 'Jul 14–15' },
-  { key: 'third', label: 'Third Place',   from: '20260717', to: '20260718', size: 1,  when: 'Jul 18' },
-  { key: 'final', label: 'Final',         from: '20260719', to: '20260720', size: 1,  when: 'Jul 19' },
-];
-const etYmd = (iso) => {
-  const d = new Date(iso);
-  if (isNaN(d)) return '';
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d).replace(/-/g, '');
-};
-function wcRoundOf(ev) {
-  // Prefer ESPN's own round label (scoreboard notes / headline) when it's there.
-  const note = `${(ev.competitions?.[0]?.notes || []).map((n) => n.headline || '').join(' ')} ${ev.season?.slug || ''}`.toLowerCase();
-  if (/round of 32/.test(note)) return 'r32';
-  if (/round of 16/.test(note)) return 'r16';
-  if (/quarter/.test(note)) return 'qf';
-  if (/semi/.test(note)) return 'sf';
-  if (/third/.test(note)) return 'third';
-  if (/\bfinal\b/.test(note)) return 'final';
-  const d = etYmd(ev.date);
-  const r = WC_ROUNDS.find((x) => d >= x.from && d <= x.to);
-  return r ? r.key : null;
-}
-function wcTeamObj(c) {
-  const t = c?.team || {};
-  return {
-    name: t.shortDisplayName || t.displayName || t.name || 'TBD',
-    full: t.displayName || t.name || '',
-    abbr: t.abbreviation || '',
-    logo: t.logo || t.logos?.[0]?.href || null,
-    score: c?.score != null && c.score !== '' ? Number(c.score) : null,
-    pens: c?.shootoutScore != null && c.shootoutScore !== '' ? Number(c.shootoutScore) : null,
-    winner: c?.winner === true,
-  };
-}
-function wcMatchObj(ev) {
-  const comp = ev.competitions?.[0] || {};
-  const cs = comp.competitors || [];
-  const st = ev.status?.type || comp.status?.type || {};
-  return {
-    date: ev.date,
-    state: st.state, // 'pre' | 'in' | 'post'
-    statusText: st.shortDetail || st.detail || st.description || '',
-    home: wcTeamObj(cs.find((c) => c.homeAway === 'home') || cs[0]),
-    away: wcTeamObj(cs.find((c) => c.homeAway === 'away') || cs[1]),
-    tv: tvFor(comp),
-  };
-}
-// Which side won a finished knockout game — ESPN's winner flag first, then
-// score, then the penalty shootout.
-function wcWinSide(m) {
-  if (m.state !== 'post') return null;
-  if (m.home.winner) return 'home';
-  if (m.away.winner) return 'away';
-  if (m.home.score == null || m.away.score == null) return null;
-  if (m.home.score !== m.away.score) return m.home.score > m.away.score ? 'home' : 'away';
-  if (m.home.pens != null && m.away.pens != null && m.home.pens !== m.away.pens) return m.home.pens > m.away.pens ? 'home' : 'away';
-  return null;
-}
-function wcMatchHTML(m) {
-  const live = m.state === 'in';
-  const win = wcWinSide(m);
-  const isFavT = (t) => favSet('soccer').includes((t.full || t.name || '').toLowerCase()) || favSet('soccer').includes((t.abbr || '').toLowerCase());
-  const d = new Date(m.date);
-  const pre = isNaN(d) ? '' : `${d.toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' })} · ${fmtTime(d)}`;
-  const status = live ? (m.statusText || 'LIVE')
-    : m.state === 'post' ? `FINAL${m.home.pens != null || m.away.pens != null ? ' · PENS' : ''}`
-    : pre || scheduledLabel({ statusText: m.statusText, date: m.date });
-  const row = (t, side) => {
-    const w = win === side, out = win && !w;
-    const score = m.state === 'pre' ? '' : `${t.score ?? '–'}${t.pens != null ? ` <span class="wc-pens">(${t.pens})</span>` : ''}`;
-    return `<div class="wc-team ${w ? 'winner' : ''} ${out ? 'out' : ''}">${logoHTML(t)}<span class="wc-name" title="${esc(t.full)}">${esc(t.name)}</span><span class="wc-score">${score}</span></div>`;
-  };
-  return `<div class="wc-match ${live ? 'live' : ''} ${isFavT(m.home) || isFavT(m.away) ? 'fav' : ''}">
-    <div class="wc-status"><span class="${live ? 'live' : ''}">${esc(status)}</span>${m.state === 'pre' && m.tv ? `<span>📺 ${esc(m.tv)}</span>` : ''}</div>
-    ${row(m.away, 'away')}${row(m.home, 'home')}</div>`;
-}
-async function renderWCBracket() {
-  const box = $('#home-wc');
-  if (!box) return;
-  box.innerHTML = '';
-  if (LEAGUES.soccer.espnPath !== 'soccer/fifa.world') return;
-  let events = [];
-  try {
-    const j = await fetchJSON(`${SITE}/${LEAGUES.soccer.espnPath}/scoreboard?dates=${WC_ROUNDS[0].from}-${WC_ROUNDS[WC_ROUNDS.length - 1].to}&limit=120`, 60000);
-    events = j.events || [];
-  } catch (_) { return; } // ESPN unreachable → just no bracket section
-  const rounds = WC_ROUNDS.map((r) => ({ ...r, games: [] }));
-  events.forEach((ev) => {
-    const r = rounds.find((x) => x.key === wcRoundOf(ev));
-    if (r) r.games.push(wcMatchObj(ev));
-  });
-  if (!rounds.some((r) => r.games.length)) return; // nothing knockout yet → hide
-  rounds.forEach((r) => r.games.sort((a, b) => new Date(a.date) - new Date(b.date)));
-
-  // "Current" round = the first one that isn't fully finished; scroll to it.
-  const current = rounds.find((r) => r.games.length < r.size || r.games.some((g) => g.state !== 'post')) || rounds[rounds.length - 1];
-  const cols = rounds.map((r) => {
-    const slots = r.games.map(wcMatchHTML);
-    while (slots.length < r.size) slots.push(`<div class="wc-match tbd"><div class="wc-status"><span>${esc(r.when)}</span></div><div class="wc-team"><span class="logo placeholder">?</span><span class="wc-name">TBD</span></div><div class="wc-team"><span class="logo placeholder">?</span><span class="wc-name">TBD</span></div></div>`);
-    return `<div class="wc-round ${r.key === current.key ? 'current' : ''}" data-round="${r.key}">
-      <div class="wc-round-head"><span>${r.label}</span><span class="wc-round-when">${esc(r.when)}</span></div>${slots.join('')}</div>`;
-  }).join('');
-  box.innerHTML = `<h2 class="section-title" id="home-wc-title">🏆 World Cup Bracket</h2>
-    <div class="wc-bracket">${cols}</div>
-    <div class="wc-hint muted">Swipe for earlier / later rounds →</div>`;
-  const wrap = box.querySelector('.wc-bracket');
-  const cur = wrap.querySelector('.wc-round.current');
-  if (cur) wrap.scrollLeft = Math.max(0, cur.offsetLeft - wrap.offsetLeft - 12);
-
-  // add a jump chip for the bracket to the Home league nav
-  const nav = $('#home-games .jump-nav');
-  if (nav && !nav.querySelector('[data-wc]')) {
-    const b = el('button', 'chip', '🏆 Bracket');
-    b.dataset.wc = '1';
-    b.onclick = () => $('#home-wc-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    nav.appendChild(b);
-  }
-}
-
 // --- SCORES ---------------------------------------------------------------
 function buildChips(container, current, onPick, sports) {
   container.innerHTML = '';
@@ -1093,7 +911,7 @@ async function getGolfEvent() {
 // log-odds, so every pick comes with an explainable breakdown.
 const logistic = (z) => 1 / (1 + Math.exp(-z));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const PD_SCALE = { nfl: 7, nba: 6, mlb: 1.3, soccer: 1.0 }; // typical per-game margin
+const PD_SCALE = { nfl: 7, nba: 6, mlb: 1.3 }; // typical per-game margin
 
 async function teamProfile(sport, teamId) {
   if (!teamId) return null;
@@ -1311,12 +1129,7 @@ async function predictGame(sport, g) {
     add('Record', 1.1 * (hf.winPct - af.winPct), `${(hf.winPct * 100).toFixed(0)}% vs ${(af.winPct * 100).toFixed(0)}% win`);
     add('Scoring margin', 0.9 * clamp((hf.pdpg - af.pdpg) / scale, -3, 3), `${hf.pdpg >= 0 ? '+' : ''}${hf.pdpg.toFixed(1)} vs ${af.pdpg >= 0 ? '+' : ''}${af.pdpg.toFixed(1)} per game`);
     add('Recent form', 0.4 * clamp((hf.form - af.form) / scale, -3, 3), `last 5: ${hf.form >= 0 ? '+' : ''}${hf.form.toFixed(1)} vs ${af.form >= 0 ? '+' : ''}${af.form.toFixed(1)}`);
-    if (sport === 'soccer') {
-      // World Cup is played on neutral fields, so there's no real home edge —
-      // except the host nations (USA, Mexico, Canada in 2026) actually playing
-      // at home. Everyone else: no home/road advantage either way.
-      if (isWorldCupHost(g.home.name)) add('Host nation', 0.30, `${g.home.name} at home`);
-    } else if (hf.homeWP != null && af.roadWP != null) {
+    if (hf.homeWP != null && af.roadWP != null) {
       // A 3-1 home record says almost nothing — blend the split with the
       // generic home edge until both sides have ~10 games of sample.
       const shrink = clamp(Math.min(hf.homeGP ?? 0, af.roadGP ?? 0) / 10, 0, 1);
@@ -1538,7 +1351,7 @@ function tallyDetails() {
   return { total: entries.length, buckets, sports, week, totals, recent: recent.slice(0, 15) };
 }
 const matchupLabel = (sport, g) =>
-  `${g.away.abbr || g.away.name} ${sport === 'soccer' ? 'vs' : '@'} ${g.home.abbr || g.home.name}`;
+  `${g.away.abbr || g.away.name} @ ${g.home.abbr || g.home.name}`;
 
 // Pending picks: every prediction is stashed so the running record keeps
 // building even if you're not on the AI Picks tab when a game ends. On load
@@ -1697,7 +1510,7 @@ async function renderPredictions() {
   // — coin-flip disagreements against a -110 line are noise, not signal.
   const MIN_EDGE_GAP = 5;
   // Totals edge: model's projected total vs the posted O/U, sport-scaled floor.
-  const TOT_EDGE_MIN = { mlb: 1.0, nba: 6, nfl: 4, soccer: 0.6 };
+  const TOT_EDGE_MIN = { mlb: 1.0, nba: 6, nfl: 4 };
   const rows = playable.map((g, i) => {
     const p = preds[i];
     const info = p ? normOdds(g.odds, g.home.name, g.away.name) : null;
@@ -1810,7 +1623,7 @@ async function renderPredictions() {
 // "Trends to pay attention to" — team form/scoring pulled from cached profiles,
 // plus MLB starting-pitcher and hot-hitter props. Fills the space under the
 // edges so AI Picks is useful even on a day with no edges.
-const TOTALS = { mlb: [7.5, 9.5, 'runs'], nba: [216, 233, 'pts'], nfl: [40.5, 48.5, 'pts'], soccer: [1.8, 3.2, 'goals'] };
+const TOTALS = { mlb: [7.5, 9.5, 'runs'], nba: [216, 233, 'pts'], nfl: [40.5, 48.5, 'pts'] };
 async function renderAiTrends(container, sport, games, rows) {
   if (!games.length) return;
   // unique teams in today's slate
