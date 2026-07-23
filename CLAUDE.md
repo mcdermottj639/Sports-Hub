@@ -250,7 +250,36 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v125**.
+Current version as of this writing: **v126**.
+
+- **MLB model retune + record export (v126)** — the AI Picks model was weighted
+  like a football/team-strength model, which fits baseball poorly (pitching
+  dominates, home edge is tiny, season record barely predicts one game). Changes,
+  all MLB-only (NFL/NBA untouched — they use `MODEL_W.default`):
+  - New per-sport weight table **`MODEL_W`** (near `PD_SCALE`) read in
+    `predictGame` as `w`. MLB weights vs the old shared values: **Record 1.1→0.6**
+    (weak game-level signal, was double-counting with scoring margin), **Home edge
+    0.28→0.12** (real MLB home win rate ~52–53%; the old value implied ~57%),
+    **Home/road split 1.0→0.7**; Scoring margin/Recent form weights unchanged but
+    **`PD_SCALE.mlb` 1.3→2.2** so a big run-differential gap no longer rockets a
+    game to ~80%. All three `add('Home field', …)` spots + the limited-data branch
+    now use `w.homeEdge`.
+  - **Starting pitching weighted up** in `matchupFactor` (MLB is pitcher-driven):
+    `Starting pitcher` factor **0.24→0.42**, `SP recent form` **0.12→0.18**,
+    `Lineup OPS` **0.18→0.20**. A real ERA edge now outweighs the home tick.
+  - **Pitcher-aware projected total** — `projTotal` was purely the four teams'
+    season scoring rates (ignored who's pitching, so two aces still projected a
+    league-average total → junk totals edges). `matchupFactor` now returns
+    `starters:{hERA,aERA}`; `predictGame` nudges the MLB total by
+    `((hERA−AVG)+(aERA−AVG))×0.6` (each starter ~0.6 run of the 9 innings), anchor
+    `MLB_AVG_ERA=4.10`, clamped 4–20.
+  - **📋 Record export** — the Model Report Card (`reportCard`) gained a "Copy my
+    record data" button that copies the raw `sportshub:aitally` JSON to the
+    clipboard (falls back to a reveal-and-select `<textarea>` if the clipboard API
+    is blocked). This is how the on-device graded record gets off the phone for
+    calibration analysis — localStorage never leaves the device otherwise.
+  NOTE: weights are a principled first pass, not fit to data — the export button
+  is step one of a data-driven retune. Verify pick behavior on device.
 
 - **Removed the World Cup / soccer entirely (v125)** — the 2026 FIFA World Cup is
   over, so the whole soccer league was pulled out (owner request). Gone: the

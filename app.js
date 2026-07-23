@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v125';
+const APP_VERSION = 'v126';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -911,7 +911,17 @@ async function getGolfEvent() {
 // log-odds, so every pick comes with an explainable breakdown.
 const logistic = (z) => 1 / (1 + Math.exp(-z));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const PD_SCALE = { nfl: 7, nba: 6, mlb: 1.3 }; // typical per-game margin
+const PD_SCALE = { nfl: 7, nba: 6, mlb: 2.2 }; // typical per-game margin used to scale run/point differential
+// Per-sport factor weights (log-odds toward the stronger side). Baseball is
+// pitching-dominant with a tiny home edge (~52-53% home win rate), so it can't
+// share football's team-strength weights — record/home are damped here and the
+// starting-pitcher matchup (weighted up in matchupFactor) carries the load.
+const MODEL_W = {
+  mlb:     { record: 0.6, margin: 0.9, form: 0.4, split: 0.7, homeEdge: 0.12 },
+  default: { record: 1.1, margin: 0.9, form: 0.4, split: 1.0, homeEdge: 0.28 },
+};
+// Rough league-average starter ERA — the anchor for the pitcher-aware total.
+const MLB_AVG_ERA = 4.10;
 
 async function teamProfile(sport, teamId) {
   if (!teamId) return null;
@@ -1078,6 +1088,7 @@ async function starterForm(athleteId) {
 // + display notes.
 async function matchupFactor(sport, g) {
   const notes = [], factors = [];
+  let starters = null; // { hERA, aERA } — surfaced so predictGame can price the total
   if (sport === 'mlb') {
     const hp = g.home.probables?.[0], ap = g.away.probables?.[0];
     const hn = hp?.athlete?.displayName || hp?.athlete?.shortName;
@@ -1089,22 +1100,25 @@ async function matchupFactor(sport, g) {
       const aWHIP = statVal(ap?.statistics, ['WHIP', 'walksHitsPerInningPitched']);
       const fmt = (era, whip) => [era != null ? `${era} ERA` : '', whip != null ? `${whip} WHIP` : ''].filter(Boolean).join(', ');
       notes.push(`SP: ${hn}${fmt(hERA, hWHIP) ? ` (${fmt(hERA, hWHIP)})` : ''} vs ${an}${fmt(aERA, aWHIP) ? ` (${fmt(aERA, aWHIP)})` : ''}`);
+      starters = { hERA, aERA }; // for the pitcher-aware projected total
       const parts = [];
       if (hERA != null && aERA != null) parts.push(clamp((aERA - hERA) / 1.5, -2, 2)); // lower ERA = home edge
       if (hWHIP != null && aWHIP != null) parts.push(clamp((aWHIP - hWHIP) / 0.25, -2, 2)); // lower WHIP = home edge
-      if (parts.length) factors.push({ label: 'Starting pitcher', c: 0.24 * (parts.reduce((s, v) => s + v, 0) / parts.length), detail: 'ERA/WHIP edge' });
-      // recent form on top of the season line (half the season-stat weight)
+      // Starting pitching is the dominant driver of an MLB game — weighted up
+      // (0.24 → 0.42) so a real ERA edge outweighs the standard home tick.
+      if (parts.length) factors.push({ label: 'Starting pitcher', c: 0.42 * (parts.reduce((s, v) => s + v, 0) / parts.length), detail: 'ERA/WHIP edge' });
+      // recent form on top of the season line (about half the season-stat weight)
       const [hForm, aForm] = await Promise.all([starterForm(hp?.athlete?.id), starterForm(ap?.athlete?.id)]);
       if (hForm && aForm) {
         notes.push(`SP form (L3): ${hn} ${hForm.era.toFixed(2)} ERA vs ${an} ${aForm.era.toFixed(2)} ERA`);
         const fparts = [clamp((aForm.era - hForm.era) / 2.0, -2, 2), clamp((aForm.whip - hForm.whip) / 0.35, -2, 2)];
-        factors.push({ label: 'SP recent form', c: 0.12 * (fparts.reduce((s, v) => s + v, 0) / fparts.length), detail: `L3 starts: ${hForm.era.toFixed(2)} vs ${aForm.era.toFixed(2)} ERA` });
+        factors.push({ label: 'SP recent form', c: 0.18 * (fparts.reduce((s, v) => s + v, 0) / fparts.length), detail: `L3 starts: ${hForm.era.toFixed(2)} vs ${aForm.era.toFixed(2)} ERA` });
       }
     }
     const [hOPS, aOPS] = await Promise.all([teamOPS(g.home.id), teamOPS(g.away.id)]);
     if (hOPS != null && aOPS != null) {
       notes.push(`Team OPS: ${ops3(hOPS)} vs ${ops3(aOPS)}`);
-      factors.push({ label: 'Lineup OPS', c: 0.18 * clamp((hOPS - aOPS) / 0.05, -2, 2), detail: `${ops3(hOPS)} vs ${ops3(aOPS)}` }); // higher OPS = home edge
+      factors.push({ label: 'Lineup OPS', c: 0.20 * clamp((hOPS - aOPS) / 0.05, -2, 2), detail: `${ops3(hOPS)} vs ${ops3(aOPS)}` }); // higher OPS = home edge
     }
   } else {
     const key = (lead) => {
@@ -1115,34 +1129,35 @@ async function matchupFactor(sport, g) {
     const h = key(g.home.leaders), a = key(g.away.leaders);
     if (h && a) notes.push(`${sport === 'nfl' ? 'QB' : 'Leader'}: ${h.name} (${h.val}) vs ${a.name} (${a.val})`);
   }
-  return { factors, notes };
+  return { factors, notes, starters };
 }
 
 async function predictGame(sport, g) {
   const [hf, af] = await Promise.all([teamProfile(sport, g.home.id), teamProfile(sport, g.away.id)]);
   const scale = PD_SCALE[sport] || 5;
+  const w = MODEL_W[sport] || MODEL_W.default;
   const factors = []; // { label, c (log-odds toward home), detail }
   let z = 0;
   const add = (label, c, detail) => { if (c && isFinite(c)) { z += c; factors.push({ label, c, detail }); } };
 
   if (hf && af) {
-    add('Record', 1.1 * (hf.winPct - af.winPct), `${(hf.winPct * 100).toFixed(0)}% vs ${(af.winPct * 100).toFixed(0)}% win`);
-    add('Scoring margin', 0.9 * clamp((hf.pdpg - af.pdpg) / scale, -3, 3), `${hf.pdpg >= 0 ? '+' : ''}${hf.pdpg.toFixed(1)} vs ${af.pdpg >= 0 ? '+' : ''}${af.pdpg.toFixed(1)} per game`);
-    add('Recent form', 0.4 * clamp((hf.form - af.form) / scale, -3, 3), `last 5: ${hf.form >= 0 ? '+' : ''}${hf.form.toFixed(1)} vs ${af.form >= 0 ? '+' : ''}${af.form.toFixed(1)}`);
+    add('Record', w.record * (hf.winPct - af.winPct), `${(hf.winPct * 100).toFixed(0)}% vs ${(af.winPct * 100).toFixed(0)}% win`);
+    add('Scoring margin', w.margin * clamp((hf.pdpg - af.pdpg) / scale, -3, 3), `${hf.pdpg >= 0 ? '+' : ''}${hf.pdpg.toFixed(1)} vs ${af.pdpg >= 0 ? '+' : ''}${af.pdpg.toFixed(1)} per game`);
+    add('Recent form', w.form * clamp((hf.form - af.form) / scale, -3, 3), `last 5: ${hf.form >= 0 ? '+' : ''}${hf.form.toFixed(1)} vs ${af.form >= 0 ? '+' : ''}${af.form.toFixed(1)}`);
     if (hf.homeWP != null && af.roadWP != null) {
       // A 3-1 home record says almost nothing — blend the split with the
       // generic home edge until both sides have ~10 games of sample.
       const shrink = clamp(Math.min(hf.homeGP ?? 0, af.roadGP ?? 0) / 10, 0, 1);
-      add('Home/road split', 1.0 * shrink * (hf.homeWP - af.roadWP),
+      add('Home/road split', w.split * shrink * (hf.homeWP - af.roadWP),
         `home ${(hf.homeWP * 100).toFixed(0)}% vs road ${(af.roadWP * 100).toFixed(0)}%${shrink < 1 ? ' (small sample, damped)' : ''}`);
-      if (shrink < 1) add('Home field', 0.28 * (1 - shrink), 'standard home edge');
-    } else { add('Home field', 0.28, 'standard home edge'); }
+      if (shrink < 1) add('Home field', w.homeEdge * (1 - shrink), 'standard home edge');
+    } else { add('Home field', w.homeEdge, 'standard home edge'); }
     const day = 86400000;
     const hr = g.date && hf.lastDate ? clamp(Math.round((new Date(g.date) - new Date(hf.lastDate)) / day), 0, 10) : null;
     const ar = g.date && af.lastDate ? clamp(Math.round((new Date(g.date) - new Date(af.lastDate)) / day), 0, 10) : null;
     if (hr != null && ar != null && hr !== ar) add('Rest', 0.05 * clamp(hr - ar, -5, 5), `${hr}d vs ${ar}d rest`);
   } else {
-    add('Home field', 0.3, 'limited data — home edge only');
+    add('Home field', w.homeEdge, 'limited data — home edge only');
   }
 
   // player matchup (starting pitchers ERA/WHIP, team OPS, QBs)
@@ -1160,10 +1175,18 @@ async function predictGame(sport, g) {
     const pts = Math.abs(z) > 1e-6 ? (f.c / z) * edge : 0; // toward home if positive
     return { label: f.label, detail: f.detail, favor: f.c >= 0 ? g.home.name : g.away.name, pct: Math.abs(pts) };
   }).filter((b) => b.pct >= 0.1).sort((a, b) => b.pct - a.pct);
-  // Projected game total: average of the two teams' combined-scoring rates —
-  // compared against the posted O/U for totals edges.
-  const projTotal = hf && af && hf.ppg != null && af.ppg != null
+  // Projected game total: baseline is the two teams' combined-scoring rates,
+  // then — for MLB — nudged by the starting pitchers vs league-average ERA, so
+  // two aces project a low total instead of the teams' season average. Each
+  // starter's ERA gap carries ~0.6 of a run into the total (their share of the
+  // 9 innings), clamped to a sane range.
+  let projTotal = hf && af && hf.ppg != null && af.ppg != null
     ? (hf.ppg + hf.papg + af.ppg + af.papg) / 2 : null;
+  if (sport === 'mlb' && projTotal != null && mu.starters
+      && mu.starters.hERA != null && mu.starters.aERA != null) {
+    const adj = ((mu.starters.hERA - MLB_AVG_ERA) + (mu.starters.aERA - MLB_AVG_ERA)) * 0.6;
+    projTotal = clamp(projTotal + adj, 4, 20);
+  }
   return { winner, conf, homePick, probHome: pHome, projTotal, breakdown, notes: mu.notes, thin: !(hf && af) };
 }
 
@@ -1448,6 +1471,9 @@ function reportCard(det) {
       ${tRow ? `<div class="rep-sec">Totals</div>${tRow}` : ''}
       ${recent ? `<div class="rep-sec">Recent picks (⚡ = against the line · 🎯 = totals)</div>${recent}` : ''}
       ${!bRows && !recent ? '<div class="ai-why" style="padding:6px 0">Detail builds as new picks grade — earlier picks only counted toward the totals.</div>' : ''}
+      <button class="rep-export" type="button" style="margin-top:12px;width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit;cursor:pointer">📋 Copy my record data</button>
+      <textarea class="rep-export-ta" readonly hidden style="width:100%;height:90px;margin-top:6px;font:12px/1.4 monospace;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px;box-sizing:border-box"></textarea>
+      <div class="ai-why" style="margin-top:4px">Exports your graded picks so they can be analyzed for model tuning. Nothing leaves your device on its own.</div>
     </div>`;
   const head = box.querySelector('.ai-report-head'), body = box.querySelector('.ai-report-body');
   head.onclick = () => {
@@ -1455,6 +1481,19 @@ function reportCard(det) {
     body.hidden = !open;
     head.classList.toggle('open', open);
     head.setAttribute('aria-expanded', String(open));
+  };
+  const exp = box.querySelector('.rep-export'), ta = box.querySelector('.rep-export-ta');
+  if (exp) exp.onclick = async () => {
+    const data = localStorage.getItem(TALLY_KEY) || '{}';
+    let ok = false;
+    try { await navigator.clipboard.writeText(data); ok = true; } catch (_) {}
+    if (ok) {
+      exp.textContent = '✓ Copied — paste it to Claude';
+    } else { // clipboard blocked (some PWA contexts): reveal for manual select
+      ta.value = data; ta.hidden = false; ta.focus(); ta.select();
+      exp.textContent = 'Select all in the box below & copy';
+    }
+    setTimeout(() => { exp.textContent = '📋 Copy my record data'; }, 4000);
   };
   return box;
 }
