@@ -250,7 +250,23 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v126**.
+Current version as of this writing: **v127**.
+
+- **MLB confidence cap — calibration fix (v127)** — the owner exported their
+  graded `sportshub:aitally` and it showed the model was badly overconfident on
+  MLB: its 80–84% confidence bucket won only ~22% (2-7), its 90%+ bucket ~73%,
+  and it repeatedly called games 92% (Dodgers/Braves) that lost. Straight-up MLB
+  was ~54% (51-44) and the vs-line record 7-11 (39%, under the 52.4% break-even).
+  A single MLB game tops out ~65–70% even best-vs-worst, so `predictGame`'s final
+  `conf` clamp is now per-sport via **`CONF_CAP`** (`{ mlb: 72, default: 92 }`,
+  near `MLB_AVG_ERA`) — MLB confidence can no longer exceed 72%. This is the
+  honesty guardrail on top of the v126 reweight (which is the actual mechanism
+  fix — it compresses the underlying `probHome`, so it also thins the false
+  edges). NOTE: the cap only changes the *stated* confidence + report-card
+  buckets; edge detection keys off raw `probHome`/`marketGap`, so it's the v126
+  reweight, not this cap, that changes which games qualify as edges. Re-export
+  the record after ~2 weeks of post-v126 games to measure the reweight's effect
+  on fresh data before tuning weights further (don't refit on the pre-v126 sample).
 
 - **MLB model retune + record export (v126)** — the AI Picks model was weighted
   like a football/team-strength model, which fits baseball poorly (pitching

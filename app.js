@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v126';
+const APP_VERSION = 'v127';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -922,6 +922,11 @@ const MODEL_W = {
 };
 // Rough league-average starter ERA — the anchor for the pitcher-aware total.
 const MLB_AVG_ERA = 4.10;
+// Per-sport confidence ceiling. Graded results showed the model's 80-92% MLB
+// picks were wildly overconfident (its 80-84% bucket won ~22%, its 90%+ bucket
+// only ~73%) — a single baseball game tops out around 65-70% even best-vs-worst,
+// so MLB confidence is capped well below the football/basketball ceiling.
+const CONF_CAP = { mlb: 72, default: 92 };
 
 async function teamProfile(sport, teamId) {
   if (!teamId) return null;
@@ -1167,7 +1172,7 @@ async function predictGame(sport, g) {
   const pHome = logistic(z);
   const homePick = pHome >= 0.5;
   const winner = homePick ? g.home : g.away;
-  const conf = clamp(Math.round((homePick ? pHome : 1 - pHome) * 100), 50, 92);
+  const conf = clamp(Math.round((homePick ? pHome : 1 - pHome) * 100), 50, CONF_CAP[sport] || CONF_CAP.default);
   // Calibrated attribution: split the actual edge over 50% across factors in
   // proportion to each factor's log-odds, so the parts add up to the pick.
   const edge = (pHome - 0.5) * 100; // home edge in points (can be negative)
