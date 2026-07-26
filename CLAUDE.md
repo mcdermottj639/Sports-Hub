@@ -255,7 +255,28 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v130**.
+Current version as of this writing: **v131**.
+
+- **Fantasy Mock Draft — keeper support + owner's league preset (v131)** — the
+  Labs Fantasy Mock Draft now models a **keeper league**. New `MOCK_KEEPERS`
+  (`[{name,round,pos,team}]`) + `mockUserOverallInRound(m, round)`: kept players
+  are pulled off the board (no CPU can draft them) and **auto-fill the user's pick
+  in the round they cost** (keep-the-round format), so the user forfeits that
+  round's pick. Wired through `mockAssign` (new `keeper` flag), `mockAdvance`/
+  `mockSimRest` (auto-place at the user's keeper slots), `mockStart` (builds
+  `m.keeperAt` overall→player map; keepers whose round exceeds the draft length
+  are pre-rostered), and `mockGrade` (keepers excluded from the value grade).
+  Setup screen has a **Use my keepers** toggle + a note; kept players show a
+  **🔒 kept** tag on the roster and "🔒 kept" (no value) on the completion Picks
+  list. The launch default is now **12 teams / slot 10 / 15 rounds** with the
+  owner's keepers on: **Trey McBride (R7)** + **Kyren Williams (R6)**. Only the
+  user's keepers are modeled (other teams draft the full board — labeled as such).
+  Also added ~17 real deep names to `MOCK_POOL_RAW` (handcuffs/rookies/fliers) so
+  rounds 8–11 aren't filler — incl. **Blake Corum** (Kyren's handcuff) placed at
+  ~rank 113 (≈ round 10) so he's targetable at the slot-10 user's R9 (#106) / R10
+  (#111) picks. NOTE: the added names use consensus-style ranks (sandbox can't
+  reach ESPN); the backend `/api/fantasy/football/rankings` endpoint is the
+  live-ADP source for the separate auto-filled Draft Board.
 
 - **Fix: Draft Board auto-fill bled into the Baseball view (v130)** — v128's
   auto-fill trigger in `renderFantasyFootball` did
@@ -769,7 +790,8 @@ Current version as of this writing: **v130**.
     draft vs CPU GMs. Launched from the Labs tab
     (`#labs-mock-start`) and rendered into `#labs-mock` (`renderMockDraft`;
     `closeMockDraft` clears it; state in `fanState.mock`, `.mk-*`/`.mock-*` CSS).
-    Setup (teams/your slot/rounds; **defaults to 12 teams, slot 6**) → draft room
+    Setup (teams/your slot/rounds + a **keeper toggle**; **defaults to 12 teams,
+    slot 10, 15 rounds** with the owner's keepers on — see the v131 note) → draft room
     (best-available board with position filter + search, your team by position,
     recent-picks log, auto-pick / sim-rest / exit) → completion screen that lists
     **every one of your picks with its value grade** (round · overall slot, +/−

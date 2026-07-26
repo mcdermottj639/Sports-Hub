@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v130';
+const APP_VERSION = 'v131';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2423,6 +2423,23 @@ Colston Loveland|TE|CHI
 Dak Prescott|QB|DAL
 Brock Purdy|QB|SF
 Chris Olave|WR|NO
+Quinshon Judkins|RB|CLE
+Cam Skattebo|RB|NYG
+Dalton Kincaid|TE|BUF
+Jayden Reed|WR|GB
+Keenan Allen|WR|LAC
+Tank Bigsby|RB|JAX
+Josh Downs|WR|IND
+Tyjae Spears|RB|TEN
+Marvin Mims Jr.|WR|DEN
+Braelon Allen|RB|NYJ
+Rashid Shaheed|WR|NO
+Trey Benson|RB|ARI
+Blake Corum|RB|LAR
+Jaylen Wright|RB|MIA
+Isaac Guerendo|RB|SF
+Justin Herbert|QB|LAC
+Jordan Love|QB|GB
 Brandon Aubrey|K|DAL
 Jake Bates|K|DET
 Cameron Dicker|K|LAC
@@ -2437,6 +2454,20 @@ const MOCK_POOL = MOCK_POOL_RAW.trim().split('\n').map((l, i) => {
   return { name, pos, team, rank: i + 1 };
 });
 const MOCK_CAP = { QB: 2, RB: 6, WR: 7, TE: 2, K: 1, DST: 1, FLEX: 9 };
+
+// Owner's 2-keeper league: kept players cost the round they're kept in, so the
+// user forfeits their pick in that round and the keeper fills it. Edit here if
+// the keepers change. (Kyren's handcuff Blake Corum is on the board to target.)
+const MOCK_KEEPERS = [
+  { name: 'Trey McBride', round: 7, pos: 'TE', team: 'ARI' },
+  { name: 'Kyren Williams', round: 6, pos: 'RB', team: 'LAR' },
+];
+// The user's 0-based overall pick number in a given (1-based) snake round.
+function mockUserOverallInRound(m, round) {
+  const rnd = round - 1;
+  const pos = rnd % 2 === 0 ? m.userIdx : m.teams - 1 - m.userIdx;
+  return rnd * m.teams + pos;
+}
 
 const mockTeamOnClock = (overall, teams) => {
   const rnd = Math.floor(overall / teams);
@@ -2476,17 +2507,25 @@ function mockCpuChoose(m) {
   return best || m.pool.find((p) => (counts[p.pos] || 0) < (MOCK_CAP[p.pos] || 9)) || m.pool[0];
 }
 
-function mockAssign(m, teamIdx, player) {
+function mockAssign(m, teamIdx, player, keeper) {
   m.pool = m.pool.filter((p) => p !== player);
-  m.picks.push({ overall: m.onClock, round: Math.floor(m.onClock / m.teams) + 1, teamIdx, player });
+  m.picks.push({ overall: m.onClock, round: Math.floor(m.onClock / m.teams) + 1, teamIdx, player, keeper: !!keeper });
   m.rosters[teamIdx].push(player);
   m.onClock++;
 }
-// Auto-run CPU picks until it's the user's turn (or the draft is done).
+// Auto-run CPU picks until it's the user's turn (or the draft is done). The
+// user's keeper rounds auto-fill with the kept player instead of stopping.
 function mockAdvance(m) {
   const total = m.teams * m.rounds;
-  while (m.onClock < total && mockTeamOnClock(m.onClock, m.teams) !== m.userIdx) {
-    mockAssign(m, mockTeamOnClock(m.onClock, m.teams), mockCpuChoose(m));
+  while (m.onClock < total) {
+    const t = mockTeamOnClock(m.onClock, m.teams);
+    if (t === m.userIdx) {
+      const kept = m.keeperAt && m.keeperAt[m.onClock];
+      if (!kept) break; // real user pick — hand control back
+      mockAssign(m, m.userIdx, kept, true);
+      continue;
+    }
+    mockAssign(m, t, mockCpuChoose(m));
   }
 }
 const mockDone = (m) => m.onClock >= m.teams * m.rounds;
@@ -2494,6 +2533,18 @@ const mockDone = (m) => m.onClock >= m.teams * m.rounds;
 function mockStart(m) {
   m.userIdx = Math.max(0, Math.min(m.teams - 1, (m.slot || 1) - 1));
   m.pool = MOCK_POOL.slice();
+  // Keepers: pull each kept player off the board (so no CPU can draft them) and
+  // schedule them to fill the user's pick in the round they cost. Any keeper
+  // whose round is beyond the draft length is simply pre-rostered up front.
+  m.keeperAt = {};
+  (m.keepers || []).forEach((k) => {
+    let pl = m.pool.find((p) => p.name.toLowerCase() === (k.name || '').toLowerCase());
+    if (pl) m.pool = m.pool.filter((p) => p !== pl);
+    else pl = { name: k.name, pos: k.pos || 'FLEX', team: k.team || '', rank: 900 };
+    pl._keeper = true;
+    if (k.round <= (m.rounds || 0)) m.keeperAt[mockUserOverallInRound(m, k.round)] = pl;
+    else k._pre = pl; // round beyond draft — roster it at start
+  });
   // The sample board (~100 names) can be shorter than a deep draft needs
   // (e.g. 12 teams × 10 rounds = 120 picks). Pad with generic depth players so
   // the board never empties mid-draft. Filler carries rank ≥900 → shown as "–"
@@ -2508,6 +2559,8 @@ function mockStart(m) {
   m.picks = [];
   m.onClock = 0;
   m.setup = false;
+  // Keepers whose round is beyond the draft length: just put them on the roster.
+  (m.keepers || []).forEach((k) => { if (k._pre) { m.rosters[m.userIdx].push(k._pre); delete k._pre; } });
   mockAdvance(m);
 }
 function mockUserPick(m, player) { mockAssign(m, m.userIdx, player); mockAdvance(m); }
@@ -2515,11 +2568,13 @@ function mockSimRest(m) {
   const total = m.teams * m.rounds;
   while (m.onClock < total) {
     const t = mockTeamOnClock(m.onClock, m.teams);
-    mockAssign(m, t, mockCpuChoose(m));
+    const kept = t === m.userIdx && m.keeperAt && m.keeperAt[m.onClock];
+    mockAssign(m, t, kept || mockCpuChoose(m), !!kept);
   }
 }
 function mockGrade(m) {
-  const mine = m.picks.filter((p) => p.teamIdx === m.userIdx && p.player.rank < 900);
+  // Keepers aren't draft decisions, so they don't count toward the value grade.
+  const mine = m.picks.filter((p) => p.teamIdx === m.userIdx && !p.keeper && p.player.rank < 900);
   if (!mine.length) return { letter: '—', diff: 0 };
   const diff = mine.reduce((s, p) => s + ((p.overall + 1) - p.player.rank), 0) / mine.length;
   const letter = diff >= 8 ? 'A+' : diff >= 5 ? 'A' : diff >= 2 ? 'B+' : diff >= -1 ? 'B' : diff >= -4 ? 'C' : diff >= -8 ? 'D' : 'F';
@@ -2541,7 +2596,9 @@ function renderMockDraft() {
       <div class="setup-card">
         <div class="mock-setrow"><label>Teams</label><select id="mk-teams">${[8, 10, 12, 14].map((n) => `<option value="${n}"${n === m.teams ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
         <div class="mock-setrow"><label>Your pick</label><select id="mk-slot">${slotOpts()}</select></div>
-        <div class="mock-setrow"><label>Rounds</label><select id="mk-rounds">${[6, 8, 10, 12, 15].map((n) => `<option value="${n}"${n === m.rounds ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
+        <div class="mock-setrow"><label>Rounds</label><select id="mk-rounds">${[8, 10, 12, 15].map((n) => `<option value="${n}"${n === m.rounds ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
+        <div class="mock-setrow"><label>Keepers</label><label class="mk-keep-toggle"><input type="checkbox" id="mk-keepers"${(m.keepers || []).length ? ' checked' : ''}> Use mine</label></div>
+        ${MOCK_KEEPERS.length ? `<div class="muted" style="font-size:11.5px;margin-top:2px">Keeping <b>${MOCK_KEEPERS.map((k) => `${esc(k.name)} (R${k.round})`).join('</b>, <b>')}</b>. Those rounds are auto-filled with your keeper; other teams draft the full board (their keepers aren't simulated).</div>` : ''}
         <div class="fan-actions">
           <button id="mk-go" class="fan-btn">Start draft</button>
           <button id="mk-cancel" class="fan-btn ghost">Cancel</button>
@@ -2551,7 +2608,13 @@ function renderMockDraft() {
     teamsSel.onchange = () => { m.teams = Number(teamsSel.value); if (m.slot > m.teams) m.slot = m.teams; renderMockDraft(); };
     box.querySelector('#mk-slot').onchange = (e) => { m.slot = Number(e.target.value); };
     box.querySelector('#mk-rounds').onchange = (e) => { m.rounds = Number(e.target.value); };
-    box.querySelector('#mk-go').onclick = () => { m.slot = Number(box.querySelector('#mk-slot').value); m.rounds = Number(box.querySelector('#mk-rounds').value); mockStart(m); renderMockDraft(); };
+    box.querySelector('#mk-go').onclick = () => {
+      m.slot = Number(box.querySelector('#mk-slot').value);
+      m.rounds = Number(box.querySelector('#mk-rounds').value);
+      m.keepers = box.querySelector('#mk-keepers').checked ? MOCK_KEEPERS.map((k) => ({ ...k })) : [];
+      mockStart(m);
+      renderMockDraft();
+    };
     box.querySelector('#mk-cancel').onclick = closeMockDraft;
     return;
   }
@@ -2567,7 +2630,7 @@ function renderMockDraft() {
   const teamHTML = posOrder.map((pos) => {
     const list = mine.filter((p) => p.pos === pos);
     if (!list.length) return '';
-    return `<div class="pos-h">${pos}</div>` + list.map((p) => `<div class="mk-pick-line">${esc(p.name)} <span class="mk-meta">${esc(p.team || '')}</span></div>`).join('');
+    return `<div class="pos-h">${pos}</div>` + list.map((p) => `<div class="mk-pick-line">${esc(p.name)} <span class="mk-meta">${esc(p.team || '')}${p._keeper ? ' · 🔒 kept' : ''}</span></div>`).join('');
   }).join('') || '<div class="muted">No picks yet.</div>';
 
   // Recent picks log (last 8)
@@ -2582,9 +2645,9 @@ function renderMockDraft() {
     const picksHTML = myPicks.map((pk) => {
       const slot = pk.overall + 1;
       const real = pk.player.rank < 900;
-      const val = real ? slot - pk.player.rank : null;
-      const cls = val == null ? 'na' : val > 0 ? 'pos' : val < 0 ? 'neg' : 'zero';
-      const txt = val == null ? '–' : (val > 0 ? '+' : '') + val;
+      const val = pk.keeper ? null : (real ? slot - pk.player.rank : null);
+      const cls = pk.keeper ? 'na' : val == null ? 'na' : val > 0 ? 'pos' : val < 0 ? 'neg' : 'zero';
+      const txt = pk.keeper ? '🔒 kept' : val == null ? '–' : (val > 0 ? '+' : '') + val;
       return `<div class="mk-pick"><span class="mk-pk-slot">R${pk.round} · #${slot}</span><span class="mk-pk-name">${esc(pk.player.name)} <span class="mk-meta">${esc(pk.player.pos)}·${esc(pk.player.team || '')}</span></span><span class="mk-pk-val ${cls}">${txt}</span></div>`;
     }).join('');
     box.innerHTML = `
@@ -2599,7 +2662,7 @@ function renderMockDraft() {
         <button id="mk-new" class="fan-btn">New draft</button>
         <button id="mk-exit" class="fan-btn ghost">Close</button>
       </div>`;
-    box.querySelector('#mk-new').onclick = () => { fanState.mock = { setup: true, teams: m.teams, slot: m.slot, rounds: m.rounds }; renderMockDraft(); box.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    box.querySelector('#mk-new').onclick = () => { fanState.mock = { setup: true, teams: m.teams, slot: m.slot, rounds: m.rounds, keepers: m.keepers }; renderMockDraft(); box.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
     box.querySelector('#mk-exit').onclick = closeMockDraft;
     box.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;
@@ -4438,7 +4501,7 @@ applyTheme(effectiveTheme());
 
 // Labs: launch the fantasy mock draft (in the About → Labs card).
 $('#labs-mock-start')?.addEventListener('click', () => {
-  fanState.mock = { setup: true, teams: 12, slot: 6, rounds: 10 };
+  fanState.mock = { setup: true, teams: 12, slot: 10, rounds: 15, keepers: MOCK_KEEPERS.map((k) => ({ ...k })) };
   renderMockDraft();
   $('#labs-mock')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
