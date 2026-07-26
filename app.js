@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v129';
+const APP_VERSION = 'v130';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1942,7 +1942,10 @@ function renderFantasyFootball() {
   // re-render. Guarded so re-renders (filter/tier taps) don't re-fetch.
   if (!board.length && !fanState.nflRankTried) {
     fanState.nflRankTried = true;
-    autoFillNflBoard().then((r) => { if (r.ok) renderFantasyFootball(); });
+    // Re-render ONLY if we're still on the Football sub-view — this resolves
+    // async (network + fallback), and without the guard a late resolution would
+    // repaint football content over the baseball view the user switched to.
+    autoFillNflBoard().then((r) => { if (r.ok && fanState.sport === 'football') renderFantasyFootball(); });
   }
   const kick = daysUntil(NFL_KICKOFF);
   const status = kick > 0

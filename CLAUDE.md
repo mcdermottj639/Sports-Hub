@@ -255,7 +255,23 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v129**.
+Current version as of this writing: **v130**.
+
+- **Fix: Draft Board auto-fill bled into the Baseball view (v130)** — v128's
+  auto-fill trigger in `renderFantasyFootball` did
+  `autoFillNflBoard().then(() => renderFantasyFootball())` with **no sport guard**.
+  Because it resolves async (backend fetch up to 9s, then fallback), if you left
+  the Football sub-view for **Baseball** before it resolved, the deferred `.then`
+  re-rendered football content back into `#fantasy-football` — repainting the
+  football section headings (Team Research / My Draft Board / Prep Tips /
+  Offseason Timeline) over the baseball view and hijacking the shared
+  `injectJumpNav` chip row (baseball's Waiver Wire / League Analyzer / matchup
+  chips got replaced by football ones). Fixed by guarding the deferred re-render
+  with `fanState.sport === 'football'`. (Separately: the live-league sections —
+  matchup, waivers, opponent, standings, playoffs — render blank whenever the
+  Railway backend league sync is unavailable, e.g. expired ESPN
+  `espn_s2`/`SWID` cookies or a cold redeploy; Snapshot + Roster still show from
+  the local roster. That's backend/cookies, not this bug.)
 
 - **Draft Board auto-fill fallback (v129)** — v128's ⚡ auto-fill added nobody on
   device: it depended entirely on the backend `/api/fantasy/football/rankings`, so
