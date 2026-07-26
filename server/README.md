@@ -69,6 +69,7 @@ uvicorn main:app --reload
 | `GET /api/fantasy/{sport}/catranks` | Per-team season category totals + league rank (powers the opponent comparison) |
 | `GET /api/fantasy/{sport}/playoffs` | Monte-Carlo playoff odds (`?slots=6&sims=10000`) from season category strength |
 | `GET /api/draft/prospects` | Real NFL draft class as a ranked prospect board (`?year=2025&limit=260`) for the Labs mock-draft sim. Pulled from ESPN's public core API server-side (the browser can't read it directly) and cached for `DRAFT_TTL_SECONDS` (default 24h). Uses only the Python stdlib — no extra dependency. |
+| `GET /api/fantasy/football/rankings` | Real ESPN fantasy **draft rankings**, positionally tiered (`?year=2026&limit=150&scoring=PPR`) for the Fantasy tab's auto-filled "My Draft Board". Cookie-less server-side pull of ESPN's fantasy game API (the browser can't read it directly), prior-season fallback, cached for `RANKINGS_TTL_SECONDS` (default 12h). Stdlib-only. |
 | `GET /api/refresh` | Clear the cache, re-pull from ESPN |
 
 `{sport}` is `football` or `baseball`.

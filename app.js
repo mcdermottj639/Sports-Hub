@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v127';
+const APP_VERSION = 'v128';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1862,8 +1862,34 @@ function playerLine(p, entries) {
 // Everything here is client-side (no backend league needed): a kickoff
 // countdown, an offseason timeline, and a personal draft board saved on-device.
 const NFLBOARD_KEY = 'sportshub:fantasy:nflboard';
+const NFLRANK_META_KEY = 'sportshub:fantasy:nflboard:src';
 const loadNflBoard = () => { try { return JSON.parse(localStorage.getItem(NFLBOARD_KEY)) || []; } catch (_) { return []; } };
 const saveNflBoard = (list) => { try { localStorage.setItem(NFLBOARD_KEY, JSON.stringify(list)); } catch (_) {} };
+const loadNflRankMeta = () => { try { return JSON.parse(localStorage.getItem(NFLRANK_META_KEY)) || null; } catch (_) { return null; } };
+
+// Pull ESPN's REAL fantasy draft rankings (positionally tiered) via the backend
+// — the browser can't read ESPN's fantasy game API directly (not CORS-open), so
+// this is the only way to auto-generate the board. Merges into the on-device
+// board WITHOUT clobbering the user's own picks/tiers. Returns a status object.
+async function autoFillNflBoard() {
+  let data;
+  try { data = await fetchJSON(`${FANTASY_API}/api/fantasy/football/rankings?year=2026&limit=150`, 12 * 60 * 60000); }
+  catch (_) { return { ok: false, msg: 'ESPN rankings unavailable right now — add players manually below.' }; }
+  const players = (data && data.players) || [];
+  if (!players.length) return { ok: false, msg: 'ESPN rankings unavailable right now — add players manually below.' };
+  const board = loadNflBoard();
+  const have = new Set(board.map((p) => (p.name || '').toLowerCase()));
+  let added = 0;
+  players.forEach((p) => {
+    if (!p.name || !NFL_POS.includes(p.pos) || have.has(p.name.toLowerCase())) return;
+    board.push({ name: p.name, pos: p.pos, tier: Math.min(5, Math.max(1, p.tier || 3)) });
+    have.add(p.name.toLowerCase());
+    added++;
+  });
+  saveNflBoard(board);
+  try { localStorage.setItem(NFLRANK_META_KEY, JSON.stringify({ at: Date.now(), scoring: data.scoring, year: data.year })); } catch (_) {}
+  return { ok: true, added };
+}
 
 // 2026 NFL calendar (expected). Kickoff is the Week-1 Thursday nighter.
 const NFL_KICKOFF = '2026-09-10';
@@ -1893,6 +1919,12 @@ function renderFantasyFootball() {
   if (!box) return;
   const board = loadNflBoard();
   const filter = fanState.nflFilter || 'ALL';
+  // First open with an empty board: pull ESPN's real draft rankings once, then
+  // re-render. Guarded so re-renders (filter/tier taps) don't re-fetch.
+  if (!board.length && !fanState.nflRankTried) {
+    fanState.nflRankTried = true;
+    autoFillNflBoard().then((r) => { if (r.ok) renderFantasyFootball(); });
+  }
   const kick = daysUntil(NFL_KICKOFF);
   const status = kick > 0
     ? `<span class="pp-big">${kick}</span> day${kick === 1 ? '' : 's'} until Week 1 kickoff`
@@ -1912,6 +1944,10 @@ function renderFantasyFootball() {
     ? shown.map((p) => `<div class="bd-row"><select class="bd-tier-sel t${p.tier}" data-name="${esc(p.name)}" aria-label="Tier for ${esc(p.name)}">${[1, 2, 3, 4, 5].map((t) => `<option value="${t}"${t === p.tier ? ' selected' : ''}>T${t}</option>`).join('')}</select><span class="bd-name">${esc(p.name)}</span><span class="bd-pos">${esc(p.pos)}</span><button class="bd-rm" data-name="${esc(p.name)}" aria-label="Remove ${esc(p.name)}">×</button></div>`).join('')
     : '<div class="muted" style="padding:8px 2px">No targets yet — add players below, or tap a suggestion.</div>';
 
+  const rMeta = loadNflRankMeta();
+  const rankNote = rMeta
+    ? `Ranked from ESPN's real ${esc(rMeta.scoring || 'PPR')} draft ranks (${esc(rMeta.year || '')}). Tiers are editable — tap to add any missing names.`
+    : "Tap to pre-fill the board from ESPN's real fantasy draft ranks (then edit tiers freely).";
   const filterChips = ['ALL', 'QB', 'RB', 'WR', 'TE'].map((f) =>
     `<button class="chip${f === filter ? ' active' : ''}" data-filter="${f}">${f === 'ALL' ? 'All' : f}</button>`).join('');
   const sugg = Object.entries(NFL_SUGGEST).map(([pos, names]) =>
@@ -1933,6 +1969,10 @@ function renderFantasyFootball() {
     <div id="tr-content" class="tr-content"></div>
 
     <h2 class="section-title">My Draft Board</h2>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <button id="bd-autofill" class="fan-btn">⚡ Auto-fill ESPN rankings</button>
+      <span id="bd-rank-note" class="muted" style="font-size:11.5px">${rankNote}</span>
+    </div>
     <div class="chips" style="margin-bottom:10px">${filterChips}</div>
     <div class="bd-list">${boardHTML}</div>
     <div class="muted" style="font-size:11px;margin:4px 0 0">Tap a player's <b>tier</b> dropdown to re-rank them; the board re-sorts by position then tier.</div>
@@ -1977,6 +2017,15 @@ function renderFantasyFootball() {
   box.querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => addPlayer(b.dataset.add, b.dataset.pos, 3)));
   const addBtn = box.querySelector('#bd-add');
   if (addBtn) addBtn.onclick = () => addPlayer(box.querySelector('#bd-name').value, box.querySelector('#bd-pos').value, Number(box.querySelector('#bd-tier').value) || 3);
+  const afBtn = box.querySelector('#bd-autofill');
+  if (afBtn) afBtn.onclick = async () => {
+    afBtn.disabled = true; afBtn.textContent = '⚡ Loading…';
+    const r = await autoFillNflBoard();
+    if (r.ok) { renderFantasyFootball(); return; } // re-render rebuilds the button
+    const note = box.querySelector('#bd-rank-note');
+    if (note) note.textContent = r.msg;
+    afBtn.disabled = false; afBtn.textContent = '⚡ Auto-fill ESPN rankings';
+  };
   initTeamResearch();
 }
 

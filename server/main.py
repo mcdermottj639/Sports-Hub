@@ -32,7 +32,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b7-splits2"
+SERVER_VERSION = "b8-fflranks"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -805,6 +805,108 @@ def draft_prospects(year: int = 2026, limit: int = 260):
 
 
 # =============================================================================
+# Fantasy football draft rankings (powers the Fantasy tab's "My Draft Board")
+# -----------------------------------------------------------------------------
+# The browser can't read ESPN's fantasy game API (it's not CORS-open), so the
+# in-app draft board had no ranking source — it was manual-only. This pulls
+# ESPN's real fantasy player draft ranks server-side (cookie-less public read)
+# and hands the frontend a positionally-tiered board it can pre-fill.
+# =============================================================================
+FFL_PLAYERS = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{year}/players"
+# ESPN fantasy defaultPositionId -> our board buckets.
+FFL_POS = {1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "DST"}
+RANKINGS_TTL_SECONDS = int(os.getenv("RANKINGS_TTL_SECONDS", "43200"))  # 12h
+_RANKINGS_CACHE: dict = {}  # (year, scoring) -> {"ts": float, "data": {...}}
+# Position-rank -> tier cutoffs (applied within each position, best few = T1).
+_TIER_CUTS = [(4, 1), (10, 2), (20, 3), (32, 4)]
+
+
+def _ffl_tier(posrank: int) -> int:
+    for cut, tier in _TIER_CUTS:
+        if posrank <= cut:
+            return tier
+    return 5
+
+
+def _fetch_ffl_rankings(year: int, scoring: str, limit: int):
+    """Top `limit` fantasy players by ESPN draft rank, tiered per position."""
+    filt = _json.dumps({
+        "players": {
+            "limit": max(limit, 200),
+            "sortDraftRanks": {"sortPriority": 100, "sortAsc": True, "value": scoring},
+        }
+    })
+    req = urllib.request.Request(
+        f"{FFL_PLAYERS.format(year=year)}?scoringPeriodId=0&view=kona_player_info",
+        headers={
+            "User-Agent": "Mozilla/5.0 SportsHub",
+            "Accept": "application/json",
+            "x-fantasy-filter": filt,
+        },
+    )
+    with urllib.request.urlopen(req, timeout=12) as r:
+        raw = _json.loads(r.read().decode("utf-8"))
+    # Response is a list of player wrappers (kona_player_info) — be tolerant of
+    # either {"player": {...}} wrappers or bare player objects.
+    items = raw.get("players", raw) if isinstance(raw, dict) else raw
+    rows = []
+    for it in (items or []):
+        pl = it.get("player", it) if isinstance(it, dict) else {}
+        pos = FFL_POS.get(pl.get("defaultPositionId"))
+        name = pl.get("fullName") or pl.get("displayName")
+        if not pos or not name:
+            continue
+        ranks = pl.get("draftRanksByRankType") or {}
+        node = ranks.get(scoring) or ranks.get("STANDARD") or {}
+        rank = node.get("rank")
+        if not isinstance(rank, (int, float)) or rank <= 0:
+            continue
+        adp = (pl.get("ownership") or {}).get("averageDraftPosition")
+        rows.append({"name": name, "pos": pos, "rank": rank,
+                     "adp": round(adp, 1) if isinstance(adp, (int, float)) and adp > 0 else None})
+    rows.sort(key=lambda r: r["rank"])
+    posseen: dict = {}
+    out = []
+    for i, r in enumerate(rows[:limit]):
+        posseen[r["pos"]] = posseen.get(r["pos"], 0) + 1
+        out.append({"name": r["name"], "pos": r["pos"], "tier": _ffl_tier(posseen[r["pos"]]),
+                    "overall": i + 1, "adp": r["adp"]})
+    return out
+
+
+@app.get("/api/fantasy/football/rankings")
+def fantasy_football_rankings(year: int = 2026, limit: int = 150, scoring: str = "PPR"):
+    """Real ESPN fantasy football draft rankings as a positionally-tiered board
+    for the in-app "My Draft Board". Falls back to the previous season if the
+    requested year has no ranks posted yet. Cached in-process for a long TTL."""
+    scoring = scoring.upper()
+    if scoring not in ("PPR", "STANDARD"):
+        scoring = "PPR"
+    limit = max(20, min(limit, 300))
+    key = (year, scoring)
+    now = time.time()
+    hit = _RANKINGS_CACHE.get(key)
+    if hit and now - hit["ts"] < RANKINGS_TTL_SECONDS and hit["data"].get("players"):
+        return hit["data"]
+    players, used_year, err = [], year, None
+    for yr in (year, year - 1):
+        try:
+            players = _fetch_ffl_rankings(yr, scoring, limit)
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}"
+            players = []
+        if len(players) >= 24:
+            used_year = yr
+            break
+    if len(players) < 24:
+        raise HTTPException(502, f"Rankings fetch failed or empty: {err or 'too few players'}")
+    data = {"year": used_year, "scoring": scoring, "count": len(players),
+            "source": "espn", "players": players}
+    _RANKINGS_CACHE[key] = {"ts": now, "data": data}
+    return data
+
+
+# =============================================================================
 # Betting intel (powers the frontend "Game Report" view)
 # -----------------------------------------------------------------------------
 # Two sources, both impossible from the browser:
@@ -1094,5 +1196,6 @@ def refresh():
     """Drop the cached League objects so the next call re-pulls from ESPN."""
     _build_league.cache_clear()
     _DRAFT_CACHE.clear()
+    _RANKINGS_CACHE.clear()
     _VSIN_CACHE.clear()
     return {"ok": True, "cleared": True}

@@ -43,7 +43,12 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > ranked board **plus that year's real round-1 pick order** for the Labs
 > mock-draft sim — pulled from ESPN's core API server-side since the browser
 > can't read it; **defaults to `year=2026`**, the most recent draft; cached
-> `DRAFT_TTL_SECONDS`/24h, stdlib-only), `/api/betting/{sport}/report`
+> `DRAFT_TTL_SECONDS`/24h, stdlib-only), `/api/fantasy/football/rankings`
+> (real ESPN fantasy **draft ranks**, positionally tiered — powers the Fantasy
+> tab's auto-filled "My Draft Board"; cookie-less server-side pull of ESPN's
+> fantasy game API the browser can't read, `year=2026`/`scoring=PPR` defaults,
+> prior-season fallback, cached `RANKINGS_TTL_SECONDS`/12h, stdlib-only),
+> `/api/betting/{sport}/report`
 > (mlb/nfl/nba; powers the v88 **Game Report** view — bundles (a) **DraftKings
 > betting splits scraped from VSiN's public page** (`_vsin_splits`, stdlib
 > `_TableGrab` HTML-table parser, tries several URLs, cached
@@ -250,7 +255,28 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v127**.
+Current version as of this writing: **v128**.
+
+- **Auto-filled fantasy Draft Board (v128, backend `b8-fflranks`)** — the Fantasy
+  → Football "My Draft Board" used to be manual-only: you typed every name and set
+  every tier yourself, because the browser can't read ESPN's fantasy game API
+  (not CORS-open) so there was no ranking source. Added backend endpoint
+  **`/api/fantasy/football/rankings?year=&limit=&scoring=`** (`fantasy_football_rankings`
+  in `main.py`) — a cookie-less server-side pull of ESPN's REAL fantasy draft ranks
+  (`lm-api-reads.fantasy.espn.com/.../players` + `x-fantasy-filter` sorting by
+  `sortDraftRanks`), mapped to our board buckets (`FFL_POS`) and **tiered per
+  position** (`_ffl_tier`: best few at a position = T1, then T2…T5). Defaults
+  `year=2026`, `scoring=PPR` (closest ESPN rank type to the owner's half-PPR), falls
+  back to the prior season if the requested year has no ranks yet, cached
+  `RANKINGS_TTL_SECONDS`/12h (also cleared by `/api/refresh`). Frontend
+  (`autoFillNflBoard` in `app.js`): the board **auto-fills once** when it's empty
+  (guarded by `fanState.nflRankTried` so re-renders don't re-fetch) and there's a
+  **⚡ Auto-fill ESPN rankings** button + source note (`sportshub:fantasy:nflboard:src`).
+  The merge is **non-destructive** — it only adds names you don't already have and
+  never overwrites tiers you've edited; if the backend is unreachable the board stays
+  manual with an honest note. NOTE: sandbox can't reach ESPN's fantasy API, so the
+  endpoint's response shape (kona_player_info `player.draftRanksByRankType` /
+  `defaultPositionId`) was coded defensively but must be verified live on device.
 
 - **MLB confidence cap — calibration fix (v127)** — the owner exported their
   graded `sportshub:aitally` and it showed the model was badly overconfident on
@@ -691,7 +717,14 @@ Current version as of this writing: **v127**.
     name/pos/tier, quick-add suggestion chips from `NFL_SUGGEST`, position
     filter; **each row's tier is an editable `<select>`** (`.bd-tier-sel`, v113)
     that re-ranks the player and re-sorts the board; saved on-device in
-    `sportshub:fantasy:nflboard`), and evergreen prep
+    `sportshub:fantasy:nflboard`). **v128: auto-filled from real ESPN fantasy
+    draft ranks** — `autoFillNflBoard` pulls the backend
+    `/api/fantasy/football/rankings` (positionally tiered) and fills the board
+    once when it's empty (guard `fanState.nflRankTried`), plus a **⚡ Auto-fill
+    ESPN rankings** button + source note (`sportshub:fantasy:nflboard:src`). The
+    merge is **non-destructive** (adds only missing names, never overwrites your
+    edited tiers); backend down → board stays manual with an honest note. And
+    evergreen prep
     tips. Section order (v113): Team Research → My Draft Board → Prep Tips →
     **Offseason Timeline (last)**. `renderFantasy` hides the baseball wrapper (`#fantasy-live`) and returns
     early for football; `injectJumpNav` now skips hidden headings so the hidden
