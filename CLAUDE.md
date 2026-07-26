@@ -255,7 +255,22 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v128**.
+Current version as of this writing: **v129**.
+
+- **Draft Board auto-fill fallback (v129)** — v128's ⚡ auto-fill added nobody on
+  device: it depended entirely on the backend `/api/fantasy/football/rankings`, so
+  a backend hiccup (Railway not yet redeployed to `b8-fflranks`, or an ESPN
+  fantasy-API parse miss — neither testable from the sandbox) meant an empty result
+  and no players. Fixed by giving `autoFillNflBoard` a **client-side fallback**: it
+  still prefers ESPN's live ranks via the backend, but when that's unreachable/empty
+  it fills from the maintained fantasy `MOCK_POOL` (the ~100-player board already
+  used by the Labs Fantasy Mock Draft), tiered per position by `nflTierFor` (mirrors
+  the backend's `_ffl_tier`). So auto-fill **never comes up empty** now. The source
+  is recorded (`sportshub:fantasy:nflboard:src` `source: 'espn'|'builtin'`) and the
+  board's note says which was used ("built-in ranked board (ESPN live ranks weren't
+  reachable)" vs "ESPN's real fantasy draft ranks"). Merge is still non-destructive.
+  The backend endpoint remains the preferred/fresh source once Railway has the
+  `b8-fflranks` build live (confirm via `/api/health` → `version`).
 
 - **Auto-filled fantasy Draft Board (v128, backend `b8-fflranks`)** — the Fantasy
   → Football "My Draft Board" used to be manual-only: you typed every name and set

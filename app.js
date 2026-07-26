@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v128';
+const APP_VERSION = 'v129';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1867,16 +1867,32 @@ const loadNflBoard = () => { try { return JSON.parse(localStorage.getItem(NFLBOA
 const saveNflBoard = (list) => { try { localStorage.setItem(NFLBOARD_KEY, JSON.stringify(list)); } catch (_) {} };
 const loadNflRankMeta = () => { try { return JSON.parse(localStorage.getItem(NFLRANK_META_KEY)) || null; } catch (_) { return null; } };
 
-// Pull ESPN's REAL fantasy draft rankings (positionally tiered) via the backend
-// — the browser can't read ESPN's fantasy game API directly (not CORS-open), so
-// this is the only way to auto-generate the board. Merges into the on-device
-// board WITHOUT clobbering the user's own picks/tiers. Returns a status object.
+// Position-rank -> tier (best few at a position = T1). Mirrors the backend's
+// _ffl_tier so the built-in fallback and the live ranks tier the same way.
+const nflTierFor = (posrank) => (posrank <= 4 ? 1 : posrank <= 10 ? 2 : posrank <= 20 ? 3 : posrank <= 32 ? 4 : 5);
+
+// Built-in fallback board: reuse the maintained fantasy MOCK_POOL (already
+// ranked, with positions) so auto-fill ALWAYS populates a real board even when
+// the backend is down / not yet deployed. Tiered per position.
+function nflFallbackRanks() {
+  const seen = {};
+  return MOCK_POOL.filter((p) => NFL_POS.includes(p.pos)).map((p) => {
+    seen[p.pos] = (seen[p.pos] || 0) + 1;
+    return { name: p.name, pos: p.pos, tier: nflTierFor(seen[p.pos]) };
+  });
+}
+
+// Fill the board from real fantasy draft rankings. Prefers ESPN's live ranks
+// (via the backend — the browser can't read ESPN's fantasy API directly), and
+// falls back to the built-in board when the backend is unreachable, so it never
+// comes up empty. Merges WITHOUT clobbering the user's own picks/edited tiers.
 async function autoFillNflBoard() {
-  let data;
-  try { data = await fetchJSON(`${FANTASY_API}/api/fantasy/football/rankings?year=2026&limit=150`, 12 * 60 * 60000); }
-  catch (_) { return { ok: false, msg: 'ESPN rankings unavailable right now — add players manually below.' }; }
-  const players = (data && data.players) || [];
-  if (!players.length) return { ok: false, msg: 'ESPN rankings unavailable right now — add players manually below.' };
+  let players = null, source = 'espn';
+  try {
+    const data = await fetchJSON(`${FANTASY_API}/api/fantasy/football/rankings?year=2026&limit=150`, 12 * 60 * 60000);
+    if (data && Array.isArray(data.players) && data.players.length) players = data.players;
+  } catch (_) {}
+  if (!players) { players = nflFallbackRanks(); source = 'builtin'; }
   const board = loadNflBoard();
   const have = new Set(board.map((p) => (p.name || '').toLowerCase()));
   let added = 0;
@@ -1886,9 +1902,12 @@ async function autoFillNflBoard() {
     have.add(p.name.toLowerCase());
     added++;
   });
-  saveNflBoard(board);
-  try { localStorage.setItem(NFLRANK_META_KEY, JSON.stringify({ at: Date.now(), scoring: data.scoring, year: data.year })); } catch (_) {}
-  return { ok: true, added };
+  if (added) {
+    saveNflBoard(board);
+    try { localStorage.setItem(NFLRANK_META_KEY, JSON.stringify({ at: Date.now(), source })); } catch (_) {}
+    return { ok: true, added, source };
+  }
+  return { ok: false, added: 0, source, msg: 'Every ranked player is already on your board.' };
 }
 
 // 2026 NFL calendar (expected). Kickoff is the Week-1 Thursday nighter.
@@ -1945,9 +1964,11 @@ function renderFantasyFootball() {
     : '<div class="muted" style="padding:8px 2px">No targets yet — add players below, or tap a suggestion.</div>';
 
   const rMeta = loadNflRankMeta();
-  const rankNote = rMeta
-    ? `Ranked from ESPN's real ${esc(rMeta.scoring || 'PPR')} draft ranks (${esc(rMeta.year || '')}). Tiers are editable — tap to add any missing names.`
-    : "Tap to pre-fill the board from ESPN's real fantasy draft ranks (then edit tiers freely).";
+  const rankNote = !rMeta
+    ? "Tap to pre-fill the board from real fantasy draft ranks (then edit tiers freely)."
+    : (rMeta.source === 'builtin'
+      ? "Pre-filled from a built-in ranked board (ESPN live ranks weren't reachable). Tiers are editable — tap to add any missing names."
+      : "Ranked from ESPN's real fantasy draft ranks. Tiers are editable — tap to add any missing names.");
   const filterChips = ['ALL', 'QB', 'RB', 'WR', 'TE'].map((f) =>
     `<button class="chip${f === filter ? ' active' : ''}" data-filter="${f}">${f === 'ALL' ? 'All' : f}</button>`).join('');
   const sugg = Object.entries(NFL_SUGGEST).map(([pos, names]) =>
