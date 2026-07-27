@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v131';
+const APP_VERSION = 'v132';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1929,6 +1929,17 @@ const NFL_SUGGEST = {
   TE: ['Brock Bowers', 'Trey McBride', 'George Kittle', 'Sam LaPorta'],
 };
 const NFL_POS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST'];
+// Owner's 12-team half-PPR turn plan for picks 1.10 + 2.15 (keepers: McBride TE
+// + Kyren RB, so TE is set and one RB is locked — lean WR unless an elite RB
+// falls). Consensus targets; editable here. Powers the 🎯 Draft-Turn Plan card
+// and its one-tap "add to my board" (tier = draft priority).
+const TURN_PLAN = [
+  { label: '1.10 · Tier 1 — snap it if it falls', tier: 1, players: [{ n: 'Puka Nacua', p: 'WR' }, { n: 'Malik Nabers', p: 'WR' }, { n: 'Nico Collins', p: 'WR' }] },
+  { label: '1.10 · Tier 2 WR — your likely pick', tier: 2, players: [{ n: 'Brian Thomas Jr.', p: 'WR' }, { n: 'A.J. Brown', p: 'WR' }, { n: 'Drake London', p: 'WR' }] },
+  { label: '1.10 · Elite RB — take over WR if here', tier: 2, players: [{ n: 'Ashton Jeanty', p: 'RB' }, { n: "De'Von Achane", p: 'RB' }] },
+  { label: '2.15 · RB (if you went WR at 1.10)', tier: 3, players: [{ n: 'Josh Jacobs', p: 'RB' }, { n: 'Bucky Irving', p: 'RB' }, { n: 'Chase Brown', p: 'RB' }, { n: 'Kenneth Walker III', p: 'RB' }, { n: 'James Cook', p: 'RB' }, { n: 'Breece Hall', p: 'RB' }] },
+  { label: '2.15 · WR (if you went RB at 1.10)', tier: 3, players: [{ n: 'Ladd McConkey', p: 'WR' }, { n: 'Tee Higgins', p: 'WR' }, { n: 'Jaxon Smith-Njigba', p: 'WR' }, { n: 'Garrett Wilson', p: 'WR' }] },
+];
 // Owner's league scoring (edit here if the league settings change).
 const NFL_SCORING = 'Half-PPR (0.5 per reception)';
 const daysUntil = (iso) => Math.ceil((new Date(iso + 'T12:00:00') - new Date()) / 86400000);
@@ -1978,6 +1989,16 @@ function renderFantasyFootball() {
     `<div class="pp-sugg-row"><span class="pp-sugg-pos">${pos}</span>${names.map((n) =>
       `<button class="chip sm" data-add="${esc(n)}" data-pos="${pos}">${esc(n)}</button>`).join('')}</div>`).join('');
 
+  // 🎯 Draft-Turn Plan — a fixed reference for the 1.10/2.15 turn (inline styles
+  // so it always renders regardless of stylesheet state — see the v74 note).
+  const tierColor = { 1: '#3ad29f', 2: '#d9b341', 3: '#8fb0ff' };
+  const turnPlanHTML = TURN_PLAN.map((g) => `
+    <div style="margin:8px 0">
+      <div style="font-size:12px;font-weight:700;color:${tierColor[g.tier] || 'var(--muted)'};margin-bottom:5px">${esc(g.label)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${g.players.map((pl) =>
+        `<span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-size:12.5px;background:var(--card)"><b>${esc(pl.n)}</b><span style="color:var(--muted);font-size:11px">${esc(pl.p)}</span></span>`).join('')}</div>
+    </div>`).join('');
+
   box.innerHTML = `
     <div class="setup-card pp-hero">
       <div class="pp-kicker">🏈 NFL Fantasy — Preseason Prep</div>
@@ -1991,6 +2012,13 @@ function renderFantasyFootball() {
     <div class="tr-bar"><label for="tr-team">Team</label><select id="tr-team"><option>Loading teams…</option></select></div>
     <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Projected offensive fantasy starters from the latest depth chart (QB · RB · WR · TE). Tap a player for more info.</div>
     <div id="tr-content" class="tr-content"></div>
+
+    <h2 class="section-title">🎯 Draft-Turn Plan</h2>
+    <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Your <b>1.10 + 2.15</b> turn (12-team half-PPR). TE is set (McBride) and you have Kyren at RB, so <b>lean WR — unless an elite RB falls</b>. Leave the turn with 1 WR + 1 RB.</div>
+    <div class="setup-card" style="padding:12px 14px">${turnPlanHTML}
+      <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;font-size:11.5px;color:var(--muted)">Later: 🔒 grab <b>Blake Corum</b> (Kyren's handcuff) at your <b>R9 (#106) / R10 (#111)</b>. Don't reach for QB/TE early — you're set at TE and QB is deep.</div>
+      <div style="margin-top:10px"><button id="tp-add" class="fan-btn">⭐ Add these targets to my board</button> <span id="tp-note" class="muted" style="font-size:11.5px"></span></div>
+    </div>
 
     <h2 class="section-title">My Draft Board</h2>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
@@ -2049,6 +2077,22 @@ function renderFantasyFootball() {
     const note = box.querySelector('#bd-rank-note');
     if (note) note.textContent = r.msg;
     afBtn.disabled = false; afBtn.textContent = '⚡ Auto-fill ESPN rankings';
+  };
+  // Merge the turn-plan targets into the editable board (non-destructive; tier =
+  // draft priority). WR/RB only — no TE (you're keeping McBride).
+  const tpBtn = box.querySelector('#tp-add');
+  if (tpBtn) tpBtn.onclick = () => {
+    const list = loadNflBoard();
+    const have = new Set(list.map((p) => (p.name || '').toLowerCase()));
+    let added = 0;
+    TURN_PLAN.forEach((g) => g.players.forEach((pl) => {
+      if (have.has(pl.n.toLowerCase())) return;
+      list.push({ name: pl.n, pos: pl.p, tier: g.tier });
+      have.add(pl.n.toLowerCase());
+      added++;
+    }));
+    if (added) { saveNflBoard(list); renderFantasyFootball(); }
+    else { const n = box.querySelector('#tp-note'); if (n) n.textContent = 'All turn targets are already on your board.'; }
   };
   initTeamResearch();
 }

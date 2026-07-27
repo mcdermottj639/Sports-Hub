@@ -255,7 +255,18 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v131**.
+Current version as of this writing: **v132**.
+
+- **🎯 Draft-Turn Plan card (v132)** — a fixed, read-only cheat-sheet in the
+  Fantasy → Football view (between Team Research and My Draft Board) for the
+  owner's 1.10 + 2.15 turn (12-team half-PPR, keepers McBride TE + Kyren RB → WR-lean
+  unless an elite RB falls). Driven by a `TURN_PLAN` const (tiered target groups,
+  each `{label, tier, players:[{n,p}]}`); rendered as color-coded tier rows of
+  player pills with **inline styles** (per the v74 visibility lesson). Includes a
+  Blake Corum reminder (R9 #106 / R10 #111) and a **⭐ Add these targets to my
+  board** button (`#tp-add`) that non-destructively merges the turn players into
+  the editable `sportshub:fantasy:nflboard` (tier = draft priority; WR/RB only, no
+  TE). Consensus targets, edit `TURN_PLAN` to change.
 
 - **Fantasy Mock Draft — keeper support + owner's league preset (v131)** — the
   Labs Fantasy Mock Draft now models a **keeper league**. New `MOCK_KEEPERS`
