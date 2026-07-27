@@ -255,7 +255,20 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v132**.
+Current version as of this writing: **v133**.
+
+- **"League sync offline" notice (v133)** — when the fantasy backend is
+  unreachable (`leagueConfig`'s `/api/health` fetch throws → `fanState.backendDown`),
+  the baseball live-league area no longer just renders blank. `renderLeagueHeader`
+  shows an explicit ⚠️ notice (matchup/waivers/standings/opponent can't load; roster
+  + snapshot still work from the saved team) instead of an empty `#fantasy-league`.
+  Context: the owner's **Railway free trial expired**, so the backend
+  (`sports-hub-production.up.railway.app`) is **down** — `/api/health` returns
+  Railway's "train has not arrived" 404 and the service shows offline (Redeploy
+  greyed out = account capped). Bringing it back needs the **Hobby plan (~$5/mo)**
+  or a migration to another host (e.g. Render free tier, with cold-starts). Until
+  then the app runs on its fallbacks: draft board uses the built-in ranked board,
+  live-league sections show this notice.
 
 - **🎯 Draft-Turn Plan card (v132)** — a fixed, read-only cheat-sheet in the
   Fantasy → Football view (between Team Research and My Draft Board) for the

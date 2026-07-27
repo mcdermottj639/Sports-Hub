@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v132';
+const APP_VERSION = 'v133';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2961,8 +2961,8 @@ const proTeamToFull = (ab) => MLB_ABBR2FULL[(ab || '').toUpperCase()] || '';
 // Which sports have a real league wired up on the backend (from /api/health).
 async function leagueConfig() {
   if (fanState.cfg) return fanState.cfg;
-  try { fanState.cfg = (await fetchJSON(`${FANTASY_API}/api/health`, 300000)).configured || {}; }
-  catch (_) { fanState.cfg = {}; }
+  try { fanState.cfg = (await fetchJSON(`${FANTASY_API}/api/health`, 300000)).configured || {}; fanState.backendDown = false; }
+  catch (_) { fanState.cfg = {}; fanState.backendDown = true; }
   return fanState.cfg;
 }
 
@@ -3008,7 +3008,14 @@ function renderLeagueHeader(sport) {
   const box = $('#fantasy-league');
   if (!box) return;
   const L = (fanState.league || {})[sport];
-  if (!L) { box.innerHTML = ''; return; }
+  if (!L) {
+    // Backend confirmed unreachable → say so, instead of leaving the live-league
+    // sections blank (which reads as broken). Roster + Snapshot still work locally.
+    box.innerHTML = fanState.backendDown
+      ? `<div class="lg-card"><div style="font-size:12.5px;line-height:1.55;color:var(--muted)">⚠️ <b style="color:var(--text)">Live league sync is offline.</b> The fantasy backend isn't reachable right now, so this week's <b>matchup, waivers, standings &amp; opponent</b> can't load. Your <b>roster and snapshot</b> below still work from your saved team.</div></div>`
+      : '';
+    return;
+  }
   const r = L.record || {};
   const rec = [r.wins, r.losses, r.ties].every((x) => x == null) ? ''
     : `${r.wins ?? 0}-${r.losses ?? 0}${r.ties ? '-' + r.ties : ''}`;
