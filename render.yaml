@@ -1,0 +1,44 @@
+# Render Blueprint — free-tier host for the Sports-Hub fantasy backend.
+# The same FastAPI app that ran on Railway (server/main.py). Deploy via
+# Render → "New +" → "Blueprint" → pick this repo. Render reads this file,
+# creates the service, and PROMPTS you for the secret env vars below
+# (sync:false = not stored in the repo). See server/RENDER.md for the steps.
+#
+# NOTE: the free plan spins the service down after ~15 min idle, so the first
+# request after a nap cold-starts (~30-60s) before it answers. That's the only
+# tradeoff vs Railway; the app waits for it and falls back if it can't wake.
+services:
+  - type: web
+    name: sports-hub-fantasy-api
+    runtime: python
+    plan: free
+    rootDir: server
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      # Pin Python (Render ignores runtime.txt; it reads this or .python-version).
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      # --- secrets: Render prompts for these at deploy time, never committed ---
+      - key: ESPN_S2
+        sync: false
+      - key: SWID
+        sync: false
+      # --- baseball league (your real values; safe to keep here, not secret) ---
+      - key: BASEBALL_LEAGUE_ID
+        value: "42353353"
+      - key: BASEBALL_YEAR
+        value: "2026"
+      - key: BASEBALL_TEAM_ID
+        value: "2"
+      # --- who may read the API (your GitHub Pages site) ---
+      - key: ALLOW_ORIGINS
+        value: "https://mcdermottj639.github.io"
+      # --- football league: fill these in Render when your NFL league is set ---
+      # - key: FOOTBALL_LEAGUE_ID
+      #   sync: false
+      # - key: FOOTBALL_YEAR
+      #   value: "2026"
+      # - key: FOOTBALL_TEAM_ID
+      #   sync: false

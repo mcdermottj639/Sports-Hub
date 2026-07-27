@@ -1,13 +1,18 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v133';
+const APP_VERSION = 'v134';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
 // reachable, the Fantasy tab loads the real roster/matchup from here; when not,
 // it falls back to the locally-saved/manual roster. See server/ in the repo.
-const FANTASY_API = 'https://sports-hub-production.up.railway.app';
+// Backend base URL. Now hosted on Render's free tier (was Railway, whose trial
+// expired). Override without a code push by setting localStorage 'sportshub:api'
+// (handy if your Render service name — and thus URL — differs).
+const FANTASY_API = (() => {
+  try { return localStorage.getItem('sportshub:api'); } catch (_) { return null; }
+})() || 'https://sports-hub-fantasy-api.onrender.com';
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
@@ -61,11 +66,14 @@ const el = (tag, cls, html) => {
 const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC_MAP[c]);
 const cache = new Map();
-async function fetchJSON(url, ttl = 60000) {
+async function fetchJSON(url, ttl = 60000, timeoutMs) {
   const hit = cache.get(url);
   if (hit && Date.now() < hit.exp) return hit.data;
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 9000);
+  // Backend (Render free tier) can cold-start ~30-60s after idle, so give it a
+  // long leash; ESPN's direct feeds stay snappy at 9s.
+  const ms = timeoutMs || (url.startsWith(FANTASY_API) ? 45000 : 9000);
+  const t = setTimeout(() => ctrl.abort(), ms);
   try {
     const res = await fetch(url, { signal: ctrl.signal });
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -2757,13 +2765,11 @@ function renderMockDraft() {
 }
 
 async function renderFantasy() {
-  // Which sports have a real league wired up. Football only appears once its
-  // ESPN league is configured on the backend (i.e. in-season) — until then the
-  // chip is hidden so the tab never shows a hollow football view.
-  const cfg = await leagueConfig();
   // Baseball has a live category league; Football is shown year-round for
   // preseason prep (its live-league sections will come once an NFL league is
-  // wired up and in season).
+  // wired up and in season). NOTE: we do NOT hit the backend here — the health
+  // check is deferred to the baseball branch so the Football prep view (and the
+  // sport chips) render instantly even when the free backend is cold-starting.
   const sports = [['baseball', '⚾ Baseball'], ['football', '🏈 Football']];
   if (!sports.some(([s]) => s === fanState.sport)) fanState.sport = 'baseball';
 
@@ -2788,6 +2794,10 @@ async function renderFantasy() {
   }
   if (liveWrap) liveWrap.style.display = '';
   if (fbBox) fbBox.innerHTML = '';
+
+  // Baseball needs the backend league — check it now (long timeout so a Render
+  // cold-start is awaited rather than instantly falling back to "offline").
+  const cfg = await leagueConfig();
 
   const leagueKey = fanState.sport === 'baseball' ? 'mlb' : 'nfl';
   let games = [];
@@ -3011,9 +3021,16 @@ function renderLeagueHeader(sport) {
   if (!L) {
     // Backend confirmed unreachable → say so, instead of leaving the live-league
     // sections blank (which reads as broken). Roster + Snapshot still work locally.
+    // The free host cold-starts, so offer a wake-and-retry that waits it out.
     box.innerHTML = fanState.backendDown
-      ? `<div class="lg-card"><div style="font-size:12.5px;line-height:1.55;color:var(--muted)">⚠️ <b style="color:var(--text)">Live league sync is offline.</b> The fantasy backend isn't reachable right now, so this week's <b>matchup, waivers, standings &amp; opponent</b> can't load. Your <b>roster and snapshot</b> below still work from your saved team.</div></div>`
+      ? `<div class="lg-card"><div style="font-size:12.5px;line-height:1.55;color:var(--muted)">⚠️ <b style="color:var(--text)">Live league sync is offline.</b> The fantasy backend isn't reachable right now, so this week's <b>matchup, waivers, standings &amp; opponent</b> can't load. Your <b>roster and snapshot</b> below still work from your saved team.</div><button id="lg-wake" class="fan-btn ghost" style="margin-top:8px">🔄 Wake backend &amp; retry</button></div>`
       : '';
+    const wb = $('#lg-wake');
+    if (wb) wb.onclick = async () => {
+      wb.textContent = '🔄 Waking… (can take a minute)'; wb.disabled = true;
+      fanState.cfg = null; fanState.synced = {}; fanState.forceSync = true;
+      await renderFantasy();
+    };
     return;
   }
   const r = L.record || {};

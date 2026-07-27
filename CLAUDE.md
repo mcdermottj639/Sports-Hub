@@ -23,18 +23,23 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > The owner evolved past pure-static for ONE capability: syncing their **real
 > ESPN fantasy leagues**, which is impossible client-side (private-league
 > endpoints are CORS- and cookie-gated). `server/` is a small **Python FastAPI**
-> service wrapping the `cwendt94/espn-api` library, deployed on **Railway** free
-> tier at **`https://sports-hub-production.up.railway.app`** (set in `app.js` as
-> `FANTASY_API`). ⚠️ **Railway deploy gotcha:** Railway auto-deploys the
-> **"Branch connected to production"** set in the service's Settings → Source —
-> this MUST be **`main`** (root directory `server`). It was once mis-set to an old
-> `claude/*` feature branch, so pushes to `main` silently never deployed and new
-> endpoints 404'd while old ones kept serving. After any backend change, confirm
-> the live build via `GET /api/health` → `version` (`SERVER_VERSION` in
-> `main.py`, bump it on backend changes). Config (league IDs, ESPN
-> `espn_s2`/`SWID` cookies, team id) lives
-> ONLY in Railway env vars — never in the repo; see `server/.env.example` +
-> `server/README.md`. Endpoints: `/api/health`, `/api/fantasy/{sport}/roster`,
+> service wrapping the `cwendt94/espn-api` library. **HOST (v134): Render free
+> tier** — `render.yaml` blueprint at the repo root, service
+> `sports-hub-fantasy-api`, URL **`https://sports-hub-fantasy-api.onrender.com`**
+> (set in `app.js` as `FANTASY_API`, overridable via localStorage `sportshub:api`);
+> see **`server/RENDER.md`** for the deploy steps. ⚠️ **Render free-tier cold
+> start:** the service sleeps after ~15 min idle and takes ~30–60s to wake, so the
+> frontend uses a 45s timeout on backend calls, defers the health check off the
+> Football view, and shows a "🔄 Wake backend & retry" button (see v134). The
+> service isn't live until the owner runs the RENDER.md steps (create Blueprint +
+> paste `ESPN_S2`/`SWID`). **(History: was on Railway free tier at
+> `sports-hub-production.up.railway.app` until its trial expired in v134 — that URL
+> is dead. The old Railway "Branch connected to production must be `main`" gotcha no
+> longer applies.)** After any backend change, confirm the live build via
+> `GET /api/health` → `version` (`SERVER_VERSION` in `main.py`, bump it on backend
+> changes). Config (league IDs, ESPN `espn_s2`/`SWID` cookies, team id) lives ONLY
+> in the host's env vars — never in the repo; see `server/.env.example`,
+> `render.yaml` + `server/README.md`. Endpoints: `/api/health`, `/api/fantasy/{sport}/roster`,
 > `/api/fantasy/{sport}/matchup`, `/api/fantasy/{sport}/standings`,
 > `/api/fantasy/{sport}/opponent`, `/api/fantasy/{sport}/freeagents`,
 > `/api/fantasy/{sport}/catranks` (per-team season category totals + league rank,
@@ -255,7 +260,26 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v133**.
+Current version as of this writing: **v134**.
+
+- **Backend host → Render free tier (v134)** — the **Railway trial expired**
+  (deploys greyed out), so the backend was migrated OFF Railway. Added a repo-root
+  **`render.yaml`** blueprint (service `sports-hub-fantasy-api`, root dir `server`,
+  `plan: free`, same `uvicorn main:app` start, `healthCheckPath: /api/health`,
+  `PYTHON_VERSION 3.12.7`, ESPN cookies as `sync:false` secrets, baseball league
+  values inline) + `server/.python-version` (Render ignores `runtime.txt`) +
+  `server/RENDER.md` (3-step deploy). Frontend: **`FANTASY_API`** now defaults to
+  **`https://sports-hub-fantasy-api.onrender.com`** with a **localStorage override**
+  (`sportshub:api`) so the URL can change without a code push. Render's free plan
+  **cold-starts** (~30–60s after ~15 min idle), so: `fetchJSON` gained a 3rd
+  `timeoutMs` arg and auto-uses **45s** for any `FANTASY_API` URL (ESPN stays 9s);
+  `renderFantasy` **defers the `/api/health` check to the baseball branch** (Football
+  prep view + sport chips render instantly, never waiting on a cold backend); and the
+  v133 offline notice gained a **🔄 Wake backend & retry** button that clears the
+  cfg cache and re-syncs (waits out the cold start). NOTE: the Render service isn't
+  live until the owner runs the `server/RENDER.md` steps (create Blueprint, paste
+  `ESPN_S2`/`SWID`); until then the app runs on fallbacks. The old Railway URL
+  (`sports-hub-production.up.railway.app`) is dead.
 
 - **"League sync offline" notice (v133)** — when the fantasy backend is
   unreachable (`leagueConfig`'s `/api/health` fetch throws → `fanState.backendDown`),
