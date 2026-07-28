@@ -260,7 +260,38 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v135**.
+Current version as of this writing: **v137**.
+
+- **Football live view — 4 manager tools (v137)** — `renderFootballLive` (now
+  async) gained the football analogs of the baseball live tools, all in the live
+  view (only renders when `cfg.football === true`, so dormant/zero-risk until the
+  NFL league is configured):
+  - **Live Win-Probability** (`footballWinProb`) — P(win the week) from
+    projected-or-actual point totals + how many players are still to play (more
+    left → more variance; logistic on the margin/sd). Shown in the This Week card
+    with a colored bar. Heir to baseball's `matchupWinProb`. Estimate, labeled.
+  - **Start/Sit optimizer** (`startSitAdvice`) — flags bench players who
+    out-project a startable starter at the same slot (incl. a FLEX swap for
+    RB/WR/TE), top upgrades by projected gain. "✅ optimal" when none.
+  - **Bye & Injury radar** — `nflWeekGames()` pulls ESPN's FREE public NFL
+    scoreboard (dateless = current week) keyed by team abbrev; starters whose
+    proTeam is absent = **bye**, injuryStatus ≠ active = flagged. Shows a
+    ⚠️ Lineup Alerts card + a per-player game chip (`@OPP Sun 1:00` / BYE) on
+    every roster row. Works even if the fantasy backend is asleep (ESPN-direct).
+  - **Opponent Scouting** (`nflBucket` + `sumB`) — your projected points vs the
+    opponent's **by position** (QB/RB/WR/TE/K/DST) with a total row, green = your
+    edge. The points/position analog of baseball's "How You Stack Up". Uses the
+    `/opponent` lineup.
+  NOTE: still no NFL league at build time + sandbox can't reach ESPN — the
+  feature logic was unit-smoke-tested (win%, start/sit incl. FLEX, scouting,
+  empty states) but the espn-api shapes must be verified on device once live.
+
+- **Fantasy category display order (v136)** — the category-league screens (How
+  You Stack Up `renderOpponent`, matchup scoreboard `renderMatchup`) showed
+  categories in ESPN's raw scoring-config order, which interleaves hitting and
+  pitching. Added `CAT_ORDER` + `orderCats()` so they read as ALL hitting first
+  (R, HR, RBI, OPS, SB, …) then ALL pitching (counting QS/SV/K, then ratios
+  ERA/WHIP).
 
 - **Live football league view (v135)** — the Fantasy → Football tab now shows a
   real **points-based H2H live view** when an NFL league is configured on the
