@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v135';
+const APP_VERSION = 'v136';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3191,13 +3191,24 @@ function fmtCat(cat, v) {
 }
 
 // Live category-by-category matchup scoreboard (H2H categories leagues).
+// Canonical display order for category-league stats: ALL hitting first
+// (R, HR, RBI, OPS, SB, then other bat cats), then ALL pitching (counting:
+// QS/SV/K, then ratios: ERA/WHIP). ESPN sends them in scoring-config order,
+// which interleaves the two — this regroups them the way you'd read a box.
+const CAT_ORDER = {
+  R: 1, HR: 2, RBI: 3, OPS: 4, SB: 5, AVG: 6, OBP: 7, SLG: 8, H: 9, TB: 10, '2B': 11, '3B': 12, BB: 13, CS: 14, SO: 15,
+  W: 30, QS: 31, SV: 32, SVHD: 33, HD: 34, K: 35, 'K/9': 36, ERA: 40, WHIP: 41, 'K/BB': 42,
+};
+const catRank = (c) => { const k = String(c || '').toUpperCase(); return CAT_ORDER[k] != null ? CAT_ORDER[k] : 25; };
+const orderCats = (cats) => (cats || []).slice().sort((a, b) => catRank(a) - catRank(b));
+
 function renderMatchup(sport) {
   const box = $('#fantasy-matchup');
   if (!box) return;
   const m = ((fanState.league || {})[sport] || {}).matchup;
   if (!m || !m.me || !m.categories || !m.categories.length) { box.innerHTML = ''; return; }
   const won = m.me.catsWon ?? 0, lost = m.opponent.catsWon ?? 0, tied = m.tied ?? 0;
-  const cats = m.categories.map((c) => {
+  const cats = m.categories.slice().sort((a, b) => catRank(a.cat) - catRank(b.cat)).map((c) => {
     const cls = c.result === 'WIN' ? 'win' : c.result === 'LOSS' ? 'loss' : 'tie';
     return `<div class="cat ${cls}"><div class="cat-name">${esc(c.cat)}</div>
       <div class="cat-vals"><b>${fmtCat(c.cat, c.me)}</b><span>${fmtCat(c.cat, c.opp)}</span></div></div>`;
@@ -3593,7 +3604,7 @@ function renderOpponent(sport) {
   if (!me || !opp) { box.innerHTML = ''; return; }
 
   let win = 0, lose = 0, tie = 0;
-  const rows = C.categories.map((cat) => {
+  const rows = orderCats(C.categories).map((cat) => {
     const mc = (me.cats || {})[cat], oc = (opp.cats || {})[cat];
     const mr = mc ? mc.rank : null, or_ = oc ? oc.rank : null;
     // Lower rank wins. Missing data → no verdict for that row.
