@@ -260,7 +260,31 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v134**.
+Current version as of this writing: **v135**.
+
+- **Live football league view (v135)** — the Fantasy → Football tab now shows a
+  real **points-based H2H live view** when an NFL league is configured on the
+  backend (`health` → `configured.football === true`), not just the draft-prep
+  tools. New `renderFootballLive()` (into `#fantasy-football`) renders: a **weekly
+  points matchup** (my score vs opponent, projected pre-kickoff via the roster's
+  summed `projected`, a lead/trail verdict + bar), **standings** (reuses the
+  generic `/standings` payload — W-L, streak, power), **roster** grouped
+  starters/bench with weekly/projected points + injury flags (from a new
+  `rosterFull` stash on `fanState.league.football` = the backend `/roster`
+  player dicts), and a **waiver wire** (top `/freeagents`). Football is
+  points-scoring, so it deliberately does NOT reuse baseball's category renderers
+  (matchup categories, projection, catranks opponent, playoffs) — and
+  `syncFromLeague` now **skips `/catranks` + `/playoffs` for football** (baseball-
+  only endpoints). `renderFantasy`'s football branch: if `cfg.football` and
+  `fanState.footballView !== 'prep'` → sync + live view; else the prep view (with
+  a lazy `leagueConfig()` upgrade so prep still paints instantly). Toggle between
+  them via **"🏈 Draft board & prep tools →"** (live→prep) and **"← Back to live
+  league"** (prep→live, shown only when configured). NOTE: **no NFL league existed
+  at build time and the sandbox can't reach ESPN**, so the espn-api football
+  shapes (box-score `home_score`/points, `player.points`/`projected`) were coded
+  defensively but **must be verified on device once the league is live**. To turn
+  it on: add `FOOTBALL_LEAGUE_ID`/`FOOTBALL_TEAM_ID`/`FOOTBALL_YEAR` in Render (see
+  the commented block in `render.yaml`) → `/api/health` flips `football:true`.
 
 - **Backend host → Render free tier (v134)** — the **Railway trial expired**
   (deploys greyed out), so the backend was migrated OFF Railway. Added a repo-root
@@ -829,10 +853,10 @@ Current version as of this writing: **v134**.
     **Offseason Timeline (last)**. `renderFantasy` hides the baseball wrapper (`#fantasy-live`) and returns
     early for football; `injectJumpNav` now skips hidden headings so the hidden
     baseball sections don't produce dead chips. The **live** football league
-    sections (matchup/standings/etc., which need the backend league + `catranks`)
-    are still TODO — they'll branch on `cfg.football` when the NFL league is
-    configured. The Labs rookie **Mock Draft Simulator** is a different thing (real
-    NFL draft of incoming rookies).
+    view (points-based matchup/standings/roster/waivers) is **built as of v135**
+    (`renderFootballLive`) and shows when `cfg.football === true`; this prep view
+    is the pre-league / "Draft Tools" mode (toggle between them). The Labs rookie
+    **Mock Draft Simulator** is a different thing (real NFL draft of incoming rookies).
   - **🏈 Fantasy Mock Draft** (v100; moved out of the Fantasy tab in v106; the
     **Labs tab** became its own top-level tab in v107) — a client-side snake
     draft vs CPU GMs. Launched from the Labs tab

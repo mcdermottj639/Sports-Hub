@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v134';
+const APP_VERSION = 'v135';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2007,12 +2007,14 @@ function renderFantasyFootball() {
         `<span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-size:12.5px;background:var(--card)"><b>${esc(pl.n)}</b><span style="color:var(--muted);font-size:11px">${esc(pl.p)}</span></span>`).join('')}</div>
     </div>`).join('');
 
+  const liveOn = !!(fanState.cfg && fanState.cfg.football);
   box.innerHTML = `
+    ${liveOn ? '<div style="margin-bottom:10px"><button id="pp-live" class="fan-btn ghost">← Back to live league</button></div>' : ''}
     <div class="setup-card pp-hero">
-      <div class="pp-kicker">🏈 NFL Fantasy — Preseason Prep</div>
+      <div class="pp-kicker">🏈 NFL Fantasy — ${liveOn ? 'Draft Tools' : 'Preseason Prep'}</div>
       <div class="pp-count">${status}</div>
       <div class="pp-scoring">🏆 League scoring: <b>${esc(NFL_SCORING)}</b></div>
-      <div class="muted" style="margin-top:8px">Your live ESPN league — matchups, roster, standings — will sync here once the season starts and the league is connected. Until then, get your draft ready below.</div>
+      <div class="muted" style="margin-top:8px">${liveOn ? 'Your live league is connected — tap “Back to live league” for matchups, standings & roster. These draft tools stay here year-round.' : 'Your live ESPN league — matchups, roster, standings — will sync here once the season starts and the league is connected. Until then, get your draft ready below.'}</div>
     </div>
 
     <h2 class="section-title">Team Research</h2>
@@ -2102,6 +2104,8 @@ function renderFantasyFootball() {
     if (added) { saveNflBoard(list); renderFantasyFootball(); }
     else { const n = box.querySelector('#tp-note'); if (n) n.textContent = 'All turn targets are already on your board.'; }
   };
+  const liveBtn = box.querySelector('#pp-live');
+  if (liveBtn) liveBtn.onclick = () => { fanState.footballView = 'live'; renderFantasy(); };
   initTeamResearch();
 }
 
@@ -2788,8 +2792,26 @@ async function renderFantasy() {
   const fbBox = $('#fantasy-football');
   if (fanState.sport === 'football') {
     if (liveWrap) liveWrap.style.display = 'none';
+    const cfg = fanState.cfg;
+    // Live NFL league configured on the backend → show the points-based live
+    // view (unless the user opened the draft-prep tools). Otherwise the prep view.
+    if (cfg && cfg.football && fanState.footballView !== 'prep') {
+      fanState.synced = fanState.synced || {};
+      if (!fanState.synced.football || fanState.forceSync) {
+        await syncFromLeague('football', !!fanState.forceSync);
+        fanState.synced.football = true;
+        fanState.forceSync = false;
+      }
+      renderFootballLive();
+      return;
+    }
     renderFantasyFootball();
     injectJumpNav('fantasy');
+    // Haven't checked config yet? Learn it, and upgrade to the live view if a
+    // league exists (deferred so the prep view still paints instantly).
+    if (cfg === undefined) leagueConfig().then((c) => {
+      if (c.football && fanState.sport === 'football' && fanState.footballView !== 'prep') renderFantasy();
+    });
     return;
   }
   if (liveWrap) liveWrap.style.display = '';
@@ -2996,7 +3018,7 @@ async function syncFromLeague(sport, force = false) {
       slot: p.lineupSlot || p.pos || 'BE',
       pos: p.pos || '',
       status: p.status || 'active',
-      team: sport === 'baseball' ? proTeamToFull(p.proTeam) : '',
+      team: sport === 'baseball' ? proTeamToFull(p.proTeam) : (p.proTeam || ''),
     }));
     if (!roster.length) return false;
     saveRoster(sport, roster);
@@ -3005,10 +3027,13 @@ async function syncFromLeague(sport, force = false) {
     try { standings = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/standings${q()}`, 60000); } catch (_) {}
     try { freeAgents = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/freeagents${q('size=40')}`, 300000); } catch (_) {}
     try { opponent = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/opponent${q()}`, 60000); } catch (_) {}
-    try { catranks = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/catranks${q()}`, 60000); } catch (_) {}
-    try { playoffs = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/playoffs${q('slots=6')}`, 60000); } catch (_) {}
+    // catranks/playoffs are category-league (baseball) concepts — skip for football.
+    if (sport === 'baseball') {
+      try { catranks = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/catranks${q()}`, 60000); } catch (_) {}
+      try { playoffs = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/playoffs${q('slots=6')}`, 60000); } catch (_) {}
+    }
     fanState.league = fanState.league || {};
-    fanState.league[sport] = { team: data.team, record: data.record, matchup, standings, freeAgents, opponent, catranks, playoffs, syncedAt: Date.now() };
+    fanState.league[sport] = { team: data.team, record: data.record, rosterFull: data.roster || [], matchup, standings, freeAgents, opponent, catranks, playoffs, syncedAt: Date.now() };
     return true;
   } catch (_) { return false; }
 }
@@ -3045,6 +3070,113 @@ function renderLeagueHeader(sport) {
     </div>`;
   const btn = $('#lg-resync');
   if (btn) btn.onclick = async () => { btn.textContent = '🔄 Refreshing…'; fanState.forceSync = true; await renderFantasy(); };
+}
+
+// --- Live football league view (points H2H) --------------------------------
+// Rendered into #fantasy-football when an NFL league is configured on the
+// backend (health → configured.football). Football is POINTS-based (not
+// categories like baseball), so it's its own compact view: a weekly points
+// matchup, standings, roster with weekly/projected points, and top waiver adds.
+// All fields are read defensively (the shapes come from espn-api's football
+// League, which couldn't be tested here — no league existed at build time).
+const NFL_SLOT_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'RB/WR', 'WR/TE', 'D/ST', 'DST', 'K'];
+const fpts = (v) => (v == null || v === '' || Number.isNaN(Number(v))) ? null : Math.round(Number(v) * 10) / 10;
+
+function renderFootballLive() {
+  const box = $('#fantasy-football');
+  if (!box) return;
+  const L = (fanState.league || {}).football || {};
+  const r = L.record || {};
+  const rec = [r.wins, r.losses, r.ties].every((x) => x == null) ? ''
+    : `${r.wins ?? 0}-${r.losses ?? 0}${r.ties ? '-' + r.ties : ''}`;
+  const synced = L.syncedAt ? (Date.now() - L.syncedAt < 60000 ? 'synced just now' : `synced ${timeAgo(L.syncedAt)}`) : '';
+
+  const full = L.rosterFull || [];
+  const starters = full.filter((p) => (p.status || '') === 'active');
+  const projFor = (list) => { let s = 0, any = false; list.forEach((p) => { const v = fpts(p.projected); if (v != null) { s += v; any = true; } }); return any ? Math.round(s * 10) / 10 : null; };
+
+  // --- This week's matchup (points) ---
+  const M = L.matchup || null;
+  let matchupHTML;
+  if (M && M.me) {
+    const meScore = fpts(M.me.score);
+    const opScore = fpts(M.opponent && M.opponent.score);
+    const meVal = meScore != null ? meScore : projFor(starters);
+    const opVal = opScore;
+    const live = meScore != null && (meScore > 0 || (opScore || 0) > 0);
+    const verdict = (meVal != null && opVal != null)
+      ? (meVal > opVal ? '<span style="color:var(--accent);font-weight:700">Leading</span>'
+        : meVal < opVal ? '<span style="color:#e2564d;font-weight:700">Trailing</span>' : 'Tied')
+      : (live ? '' : 'Not started');
+    const pct = (meVal != null && opVal != null && (meVal + opVal) > 0) ? Math.round(100 * meVal / (meVal + opVal)) : 50;
+    const row = (name, val) => `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <span class="lg-name">${esc(name || '')}</span><span style="font-weight:800;font-size:20px">${val != null ? val : '–'}</span></div>`;
+    matchupHTML = `<div class="lg-card">
+        ${row(M.me.team || 'My Team', meVal)}
+        <div style="height:8px;border-radius:999px;background:rgba(128,128,128,.22);overflow:hidden;margin:8px 0"><div style="height:100%;width:${pct}%;background:var(--accent)"></div></div>
+        ${row((M.opponent && M.opponent.team) || 'Opponent', opVal)}
+        <div class="muted" style="font-size:12px;margin-top:8px">${verdict}${meScore == null ? ' · projected' : ' · live / final'}${synced ? ' · ' + synced : ''}</div>
+        <button id="fbl-resync" class="fan-btn ghost" style="margin-top:8px">🔄 Refresh from ESPN</button>
+      </div>`;
+  } else {
+    matchupHTML = `<div class="lg-card"><div class="muted">No matchup posted this week yet.${rec ? ' Season record: ' + rec + '.' : ''}</div><button id="fbl-resync" class="fan-btn ghost" style="margin-top:8px">🔄 Refresh from ESPN</button></div>`;
+  }
+
+  // --- Standings ---
+  const teams = ((L.standings || {}).teams) || [];
+  const standHTML = teams.length ? `<div class="lg-card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="text-align:left;color:var(--muted)"><th style="padding:4px 6px;font-weight:600">Team</th><th style="font-weight:600">W-L</th><th style="font-weight:600">Strk</th><th style="text-align:right;padding-right:6px;font-weight:600">Pwr</th></tr></thead>
+      <tbody>${teams.map((t) => `<tr style="border-top:1px solid var(--line)${t.isMe ? ';background:rgba(58,210,159,.10)' : ''}">
+        <td style="padding:5px 6px;font-weight:${t.isMe ? '700' : '400'}">${esc(t.team || '')}</td>
+        <td>${t.wins ?? 0}-${t.losses ?? 0}${t.ties ? '-' + t.ties : ''}</td>
+        <td class="muted">${esc(t.streak || '')}</td>
+        <td style="text-align:right;padding-right:6px">${t.powerScore ?? '–'}</td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="lg-card"><div class="muted">Standings will show once the league syncs.</div></div>';
+
+  // --- Roster (starters + bench, with weekly/projected points) ---
+  const posRank = (p) => { const i = NFL_SLOT_ORDER.indexOf((p.lineupSlot || p.pos || '').toUpperCase()); return i < 0 ? 90 : i; };
+  const bench = full.filter((p) => (p.status || '') !== 'active');
+  const rosterRow = (p) => {
+    const pts = fpts(p.points), proj = fpts(p.projected);
+    const inj = (p.injuryStatus && !/ACTIVE|NORMAL/i.test(p.injuryStatus)) ? ` <span style="color:#e2564d;font-size:10px">${esc(p.injuryStatus)}</span>` : '';
+    const val = pts != null ? `<b>${pts}</b>` : (proj != null ? `${proj} <span class="muted" style="font-size:10px">proj</span>` : '–');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 2px;border-top:1px solid var(--line)">
+        <span><b style="font-size:10.5px;color:var(--muted);display:inline-block;min-width:34px">${esc(p.lineupSlot || p.pos || '')}</b> ${esc(p.name)}${inj} <span class="muted" style="font-size:11px">${esc(p.proTeam || '')}</span></span>
+        <span style="font-size:12px">${val}</span></div>`;
+  };
+  const rosterHTML = full.length
+    ? `<div class="lg-card"><div style="font-size:11px;font-weight:700;color:var(--accent);margin:2px 0 4px">STARTERS</div>${starters.slice().sort((a, b) => posRank(a) - posRank(b)).map(rosterRow).join('')}${bench.length ? `<div style="font-size:11px;font-weight:700;color:var(--muted);margin:10px 0 4px">BENCH</div>${bench.map(rosterRow).join('')}` : ''}</div>`
+    : '<div class="lg-card"><div class="muted">Roster will show once the league syncs.</div></div>';
+
+  // --- Waiver wire (top available) ---
+  const fas = ((L.freeAgents || {}).players) || [];
+  const waiverHTML = fas.length
+    ? `<div class="lg-card">${fas.slice(0, 12).map((p) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 2px;border-top:1px solid var(--line)">
+        <span>${esc(p.name)} <span class="muted" style="font-size:11px">${esc(p.pos || '')}${p.proTeam ? ' · ' + esc(p.proTeam) : ''}</span></span>
+        <span class="muted" style="font-size:12px">${fpts(p.projected) != null ? fpts(p.projected) + ' proj' : (p.owned != null ? Math.round(p.owned) + '% own' : '')}</span></div>`).join('')}</div>`
+    : '<div class="lg-card"><div class="muted">Top available players will show once the league syncs.</div></div>';
+
+  box.innerHTML = `
+    <div class="setup-card pp-hero">
+      <div class="pp-kicker">🏈 ${esc(L.team || 'My Team')}${rec ? ' · ' + rec : ''}</div>
+      <div class="muted" style="margin-top:4px">Live ESPN football league — points scoring (${esc(NFL_SCORING)}).</div>
+    </div>
+    <h2 class="section-title">This Week</h2>
+    ${matchupHTML}
+    <h2 class="section-title">Standings</h2>
+    ${standHTML}
+    <h2 class="section-title">My Roster</h2>
+    ${rosterHTML}
+    <h2 class="section-title">Waiver Wire</h2>
+    ${waiverHTML}
+    <div style="margin-top:12px"><button id="fbl-prep" class="fan-btn ghost">🏈 Draft board & prep tools →</button></div>
+    <div class="muted" style="font-size:11px;margin-top:6px">Live league view — first pass; verify against ESPN once your season is underway.</div>`;
+
+  const rs = box.querySelector('#fbl-resync');
+  if (rs) rs.onclick = async () => { rs.textContent = '🔄 Refreshing…'; rs.disabled = true; fanState.synced = fanState.synced || {}; fanState.synced.football = false; fanState.forceSync = true; await renderFantasy(); };
+  const pp = box.querySelector('#fbl-prep');
+  if (pp) pp.onclick = () => { fanState.footballView = 'prep'; renderFantasy(); };
+  injectJumpNav('fantasy');
 }
 
 // Format a category value (ERA/WHIP → 2dp, rate stats → .XXX, counting → int).
