@@ -260,7 +260,56 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v137**.
+Current version as of this writing: **v138**.
+
+- **AI model: look-ahead fix + data-fitted calibration (v138)** — the owner
+  exported a month of graded picks (289 entries; 119 pregame MLB side picks with
+  confidence). Four changes, all MLB-only except the first:
+  - **🚨 Look-ahead leakage (the real bug).** `teamProfile` built each team's
+    profile from **every completed game on its schedule**, with no cutoff at the
+    game being predicted. So any game that was already final when the tab
+    rendered it fed its own result — and every later game — into the prediction
+    that then got graded (`renderPredictions` grades finals inline at the
+    `recordResult` call). Records built that way flatter the model. `teamProfile`
+    and `starterForm` now take a `beforeDate` and count only games/starts that
+    finished strictly before the predicted game; `predictGame` passes `g.date`.
+    The season-trends caller (line ~1684) omits the arg and is unchanged. NOTE:
+    `teamOPS` and the probables' season ERA/WHIP are still whatever ESPN serves
+    *today* — those feeds can't be rewound, so grading a several-day-old date
+    still has minor leakage through them. Picks stashed pregame by `recordPick`
+    (the normal path) were always clean.
+  - **`MODEL_SHRINK` (calibration).** The exported record showed stated
+    confidence was ~2x too wide: 70%+ picks won 63%, the 80–84% bucket won 22%,
+    and the Brier score (.2553) was *worse than saying "52%" every game* (.2465)
+    — i.e. the confidence number carried negative information. The factor sum
+    `z` is now shrunk toward even money before the logistic (`mlb: 0.5`,
+    `default: 1` so NFL/NBA are untouched). Max-likelihood shrink was 0.26 with
+    a 90% bootstrap CI to 0.54; **0.5 is deliberately the least-correcting end**
+    of that range. Brier improves .2553 → .2382. The shrink is monotonic, so it
+    **does not change which side is picked** — the straight-up record is
+    identical. It fixes (a) honest confidence and (b) **edge sizing**, since
+    `marketGap` is measured off `probHome`: inflated probabilities were
+    manufacturing edges that went **10-12 (45.5%) against the line**, under the
+    52.4% break-even. Expect far fewer ⚡ edges — that's the point.
+    `CONF_CAP.mlb` (72) stays as a backstop but now rarely binds.
+  - **Park factors for totals.** Totals picks skewed **OVER 17 of 23** — the
+    signature of a park-blind projection built from season scoring averages
+    (it priced Coors like Oracle). Added static `MLB_PARK` (3-yr run factors,
+    100 = neutral) applied at `PARK_WEIGHT` 0.7, because the teams' season rates
+    already bake in ~a quarter of the home park's effect. Swing is ~1.25 runs
+    across the 30 parks. `TOT_EDGE_MIN.mlb` raised 1.0 → 1.5 (park alone can't
+    trigger an edge).
+  - **Report Card shows calibration.** Confidence buckets went 50–54/55–59/
+    60–64/65–69/70+ (the old three collapsed the post-shrink range), and each
+    row now reads `W-L → actual% (gap vs claimed)` — green within 6 pts, red
+    when overconfident, "thin" under 10 graded picks. Entries with no stored
+    confidence are counted (`det.legacy`) and called out: 130 of the owner's 289
+    entries had no meta and won 72.3% vs 59.3% for the labeled pregame sample,
+    inflating the all-time headline.
+  NOT done: **bullpen quality**, the biggest remaining MLB input gap (~1/3 of
+  innings, currently zero model weight). It needs an ESPN team-pitching split
+  the sandbox can't reach, so it wasn't shipped blind — next step, verify the
+  feed shape on device first.
 
 - **Football live view — 4 manager tools (v137)** — `renderFootballLive` (now
   async) gained the football analogs of the baseball live tools, all in the live

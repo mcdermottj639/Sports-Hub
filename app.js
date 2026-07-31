@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v137';
+const APP_VERSION = 'v138';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -930,19 +930,51 @@ const MODEL_W = {
 };
 // Rough league-average starter ERA — the anchor for the pitcher-aware total.
 const MLB_AVG_ERA = 4.10;
+// Log-odds shrink applied to the combined factor score before it becomes a
+// probability (v138). Fit against the owner's first graded month (119 pregame
+// MLB picks): the model's stated confidence was ~2x too wide — its 70%+ picks
+// won 63%, its 80-84% bucket won 22%, and its Brier score (.2553) was WORSE
+// than blindly saying "52% every game" (.2465). Maximum-likelihood shrink was
+// 0.26; the 90% bootstrap CI ran to 0.54, so 0.5 is deliberately the
+// conservative (least-correcting) end of that range. This does NOT change WHICH
+// side is picked — the shrink is monotonic, so the straight-up record is
+// untouched. What it fixes is (a) honest confidence and (b) edge sizing, since
+// marketGap is measured off probHome: inflated probabilities were manufacturing
+// "edges" that went 10-12 against the line.
+const MODEL_SHRINK = { mlb: 0.5, default: 1 };
+// Park run environment, 100 = neutral (3-year public run factors, rounded).
+// Static by design — no endpoint needed, and parks move slowly.
+const MLB_PARK = {
+  COL: 113, CIN: 106, BOS: 106, KC: 104, ARI: 103, PHI: 103, BAL: 103, TEX: 103,
+  ATL: 102, CHW: 101, WSH: 101, LAA: 101, TOR: 101, HOU: 101, CHC: 100, MIN: 100,
+  NYY: 100, STL: 99, PIT: 99, MIL: 99, CLE: 98, LAD: 97, NYM: 97, TB: 96,
+  DET: 96, ATH: 95, SD: 95, MIA: 95, SF: 93, SEA: 92,
+};
+// The projected total is built from both teams' season scoring rates, which
+// already bake in ~a quarter of this park's effect (the home team plays half
+// its games here). So the factor is applied at partial strength, not in full.
+const PARK_WEIGHT = 0.7;
 // Per-sport confidence ceiling. Graded results showed the model's 80-92% MLB
 // picks were wildly overconfident (its 80-84% bucket won ~22%, its 90%+ bucket
 // only ~73%) — a single baseball game tops out around 65-70% even best-vs-worst,
 // so MLB confidence is capped well below the football/basketball ceiling.
 const CONF_CAP = { mlb: 72, default: 92 };
 
-async function teamProfile(sport, teamId) {
+// beforeDate (v138): when profiling for a PREDICTION, only games that finished
+// strictly before the predicted game may count. Without it a game that's
+// already final fed its own result (and every later game) back into the model
+// that then graded it — the record looked far better than the model's true
+// forward accuracy. Omit the arg for display uses (season trends), where the
+// full schedule is what you want.
+async function teamProfile(sport, teamId, beforeDate) {
   if (!teamId) return null;
   const path = LEAGUES[sport].espnPath;
   const data = await fetchJSON(`${SITE}/${path}/teams/${teamId}/schedule`, 3 * 3600000).catch(() => null);
+  const cut = beforeDate ? new Date(beforeDate).getTime() : null;
   const games = [];
   (data?.events || []).forEach((ev) => {
     const comp = ev.competitions?.[0]; if (!comp?.status?.type?.completed) return;
+    if (cut != null) { const t = new Date(ev.date).getTime(); if (!(t < cut)) return; }
     const me = (comp.competitors || []).find((c) => String(c.team?.id) === String(teamId));
     const opp = (comp.competitors || []).find((c) => String(c.team?.id) !== String(teamId));
     const ms = Number(me?.score?.value ?? me?.score?.displayValue);
@@ -1079,11 +1111,15 @@ function startersHTML(g) {
 // Probable starter's recent form: last 3 starts aggregated from the gamelog
 // (a 4.20-season-ERA arm on a three-gem heater is a different bet). Needs a
 // real recent sample (12+ outs) or it stays silent.
-async function starterForm(athleteId) {
+async function starterForm(athleteId, beforeDate) {
   if (!athleteId) return null;
   const games = await athleteGamelog('mlb', athleteId).catch(() => null);
   if (!games || !games.length) return null;
-  const recent = games.filter((g) => g.date && !isNaN(g.date)).sort((a, b) => b.date - a.date).slice(0, 3);
+  // Same look-ahead guard as teamProfile: a start that happened after the game
+  // being predicted can't inform that prediction (v138).
+  const cut = beforeDate ? new Date(beforeDate).getTime() : null;
+  const recent = games.filter((g) => g.date && !isNaN(g.date) && (cut == null || Number(g.date) < cut))
+    .sort((a, b) => b.date - a.date).slice(0, 3);
   let er = 0, o = 0, bb = 0, h = 0;
   recent.forEach((g) => {
     const d = g.dict;
@@ -1121,7 +1157,7 @@ async function matchupFactor(sport, g) {
       // (0.24 → 0.42) so a real ERA edge outweighs the standard home tick.
       if (parts.length) factors.push({ label: 'Starting pitcher', c: 0.42 * (parts.reduce((s, v) => s + v, 0) / parts.length), detail: 'ERA/WHIP edge' });
       // recent form on top of the season line (about half the season-stat weight)
-      const [hForm, aForm] = await Promise.all([starterForm(hp?.athlete?.id), starterForm(ap?.athlete?.id)]);
+      const [hForm, aForm] = await Promise.all([starterForm(hp?.athlete?.id, g.date), starterForm(ap?.athlete?.id, g.date)]);
       if (hForm && aForm) {
         notes.push(`SP form (L3): ${hn} ${hForm.era.toFixed(2)} ERA vs ${an} ${aForm.era.toFixed(2)} ERA`);
         const fparts = [clamp((aForm.era - hForm.era) / 2.0, -2, 2), clamp((aForm.whip - hForm.whip) / 0.35, -2, 2)];
@@ -1146,7 +1182,7 @@ async function matchupFactor(sport, g) {
 }
 
 async function predictGame(sport, g) {
-  const [hf, af] = await Promise.all([teamProfile(sport, g.home.id), teamProfile(sport, g.away.id)]);
+  const [hf, af] = await Promise.all([teamProfile(sport, g.home.id, g.date), teamProfile(sport, g.away.id, g.date)]);
   const scale = PD_SCALE[sport] || 5;
   const w = MODEL_W[sport] || MODEL_W.default;
   const factors = []; // { label, c (log-odds toward home), detail }
@@ -1177,7 +1213,10 @@ async function predictGame(sport, g) {
   const mu = await matchupFactor(sport, g);
   mu.factors.forEach((f) => add(f.label, f.c, f.detail));
 
-  const pHome = logistic(z);
+  // Calibration shrink (see MODEL_SHRINK): the raw factor sum is systematically
+  // too confident, so pull it toward even money before it becomes a probability.
+  const zc = z * (MODEL_SHRINK[sport] ?? MODEL_SHRINK.default);
+  const pHome = logistic(zc);
   const homePick = pHome >= 0.5;
   const winner = homePick ? g.home : g.away;
   const conf = clamp(Math.round((homePick ? pHome : 1 - pHome) * 100), 50, CONF_CAP[sport] || CONF_CAP.default);
@@ -1195,10 +1234,17 @@ async function predictGame(sport, g) {
   // 9 innings), clamped to a sane range.
   let projTotal = hf && af && hf.ppg != null && af.ppg != null
     ? (hf.ppg + hf.papg + af.ppg + af.papg) / 2 : null;
-  if (sport === 'mlb' && projTotal != null && mu.starters
-      && mu.starters.hERA != null && mu.starters.aERA != null) {
-    const adj = ((mu.starters.hERA - MLB_AVG_ERA) + (mu.starters.aERA - MLB_AVG_ERA)) * 0.6;
-    projTotal = clamp(projTotal + adj, 4, 20);
+  if (sport === 'mlb' && projTotal != null) {
+    if (mu.starters && mu.starters.hERA != null && mu.starters.aERA != null) {
+      const adj = ((mu.starters.hERA - MLB_AVG_ERA) + (mu.starters.aERA - MLB_AVG_ERA)) * 0.6;
+      projTotal += adj;
+    }
+    // Park (v138): the first month of graded totals picked OVER 17 times in 23,
+    // a directional skew that a park-blind season-average total will produce —
+    // it prices a game at Coors the same as one at Oracle or T-Mobile.
+    const pf = MLB_PARK[(g.home.abbr || '').toUpperCase()];
+    if (pf) projTotal *= 1 + ((pf / 100) - 1) * PARK_WEIGHT;
+    projTotal = clamp(projTotal, 4, 20);
   }
   return { winner, conf, homePick, probHome: pHome, projTotal, breakdown, notes: mu.notes, thin: !(hf && af) };
 }
@@ -1368,9 +1414,20 @@ function tallyStats() {
 // 7 days, plus the most recent graded picks (entries with v83+ meta only).
 function tallyDetails() {
   const entries = Object.values(getTally());
-  const bucketOf = (cf) => (cf >= 70 ? '70%+' : cf >= 60 ? '60–69%' : '50–59%');
+  // Finer buckets than v83's three (v138): after the calibration shrink almost
+  // every MLB pick lands between 50 and 72, so "50–59 / 60–69 / 70+" collapsed
+  // the whole range into two rows and hid the miscalibration.
+  const bucketOf = (cf) => (cf >= 70 ? '70%+' : cf >= 65 ? '65–69%' : cf >= 60 ? '60–64%' : cf >= 55 ? '55–59%' : '50–54%');
   const buckets = {}, sports = {};
-  const bump = (o, k, win) => { const r = (o[k] = o[k] || { w: 0, n: 0 }); r.n++; if (win) r.w++; };
+  // cfSum tracks what the model CLAIMED, so each bucket can show claimed vs
+  // actual — the gap is the number that says whether to trust a "70%" pick.
+  const bump = (o, k, win, cf) => {
+    const r = (o[k] = o[k] || { w: 0, n: 0, cfSum: 0 });
+    r.n++; if (win) r.w++; if (cf != null) r.cfSum += cf;
+  };
+  // Entries with no stored confidence (pre-v83, or picks graded before the meta
+  // existed) can't be calibrated and shouldn't quietly pad the headline record.
+  let legacy = 0;
   const weekCut = Number(ymd(new Date(Date.now() - 7 * 86400000)));
   const week = { w: 0, n: 0 };
   const totals = { w: 0, n: 0 };
@@ -1378,13 +1435,13 @@ function tallyDetails() {
   entries.forEach((r) => {
     const win = !!r.c;
     if (r.t) { totals.n++; if (win) totals.w++; if (r.p) recent.push(r); return; } // O/U picks: own record, but in history
-    if (r.cf != null) bump(buckets, bucketOf(r.cf), win);
+    if (r.cf != null) bump(buckets, bucketOf(r.cf), win, r.cf); else legacy++;
     if (r.s) bump(sports, r.s, win);
     if (r.d != null && Number(r.d) >= weekCut) { week.n++; if (win) week.w++; }
     if (r.p) recent.push(r);
   });
   recent.sort((a, b) => Number(b.d || 0) - Number(a.d || 0));
-  return { total: entries.length, buckets, sports, week, totals, recent: recent.slice(0, 15) };
+  return { total: entries.length, buckets, sports, week, totals, legacy, recent: recent.slice(0, 15) };
 }
 const matchupLabel = (sport, g) =>
   `${g.away.abbr || g.away.name} @ ${g.home.abbr || g.home.name}`;
@@ -1463,8 +1520,22 @@ function reportCard(det) {
   const box = el('div', 'ai-report');
   const pct = (r) => (r.n ? ` (${Math.round((r.w / r.n) * 100)}%)` : '');
   const row = (l, r) => `<div class="rep-row"><span class="rep-l">${l}</span><span class="rep-v">${r.w}-${r.n - r.w}${pct(r)}</span></div>`;
-  const bRows = ['50–59%', '60–69%', '70%+'].filter((k) => det.buckets[k])
-    .map((k) => row(`${k} confidence`, det.buckets[k])).join('');
+  // Each confidence row shows what the model claimed vs what actually happened.
+  // A "70%" bucket that wins 55% isn't a good pick reported badly — it's the
+  // model lying about how sure it is, and the gap is the thing worth watching.
+  const calRow = (k, r) => {
+    if (!r.n) return '';
+    const act = Math.round((r.w / r.n) * 100);
+    const said = r.cfSum ? Math.round(r.cfSum / r.n) : null;
+    const gap = said == null ? null : act - said;
+    // Under ~10 graded picks a bucket is noise — show it, but don't dress it up.
+    const tag = r.n < 10 ? '<span class="rep-cf">thin</span>'
+      : gap == null ? ''
+      : `<span class="rep-cf" style="color:${Math.abs(gap) <= 6 ? 'var(--accent)' : gap < 0 ? '#e56b6b' : 'var(--gold)'}">${gap > 0 ? '+' : ''}${gap}</span>`;
+    return `<div class="rep-row"><span class="rep-l">${k} confidence</span><span class="rep-v">${r.w}-${r.n - r.w} → ${act}% ${tag}</span></div>`;
+  };
+  const bRows = ['50–54%', '55–59%', '60–64%', '65–69%', '70%+'].filter((k) => det.buckets[k])
+    .map((k) => calRow(k, det.buckets[k])).join('');
   const sRows = Object.entries(det.sports)
     .sort((a, b) => b[1].n - a[1].n)
     .map(([s, r]) => row(`${LEAGUES[s]?.emoji || ''} ${LEAGUES[s]?.label || s}`, r)).join('');
@@ -1479,7 +1550,9 @@ function reportCard(det) {
   box.innerHTML = `
     <button class="ai-report-head" aria-expanded="false">📜 Model Report Card${week}<span class="sec-chev">▸</span></button>
     <div class="ai-report-body" hidden>
-      ${bRows ? `<div class="rep-sec">By confidence</div>${bRows}` : ''}
+      ${bRows ? `<div class="rep-sec">By confidence (→ actual, vs claimed)</div>${bRows}
+        <div class="ai-why" style="padding:4px 0 2px">Green = the model's confidence matched reality within 6 points. Red = it was overconfident.</div>` : ''}
+      ${det.legacy ? `<div class="ai-why" style="padding:2px 0">${det.legacy} older graded pick${det.legacy === 1 ? '' : 's'} stored no confidence, so ${det.legacy === 1 ? 'it counts' : 'they count'} toward the all-time record but can't be calibrated.</div>` : ''}
       ${sRows ? `<div class="rep-sec">By sport</div>${sRows}` : ''}
       ${tRow ? `<div class="rep-sec">Totals</div>${tRow}` : ''}
       ${recent ? `<div class="rep-sec">Recent picks (⚡ = against the line · 🎯 = totals)</div>${recent}` : ''}
@@ -1562,7 +1635,9 @@ async function renderPredictions() {
   // — coin-flip disagreements against a -110 line are noise, not signal.
   const MIN_EDGE_GAP = 5;
   // Totals edge: model's projected total vs the posted O/U, sport-scaled floor.
-  const TOT_EDGE_MIN = { mlb: 1.0, nba: 6, nfl: 4 };
+  // MLB raised 1.0 → 1.5 (v138): at 1.0 the model fired 23 totals picks in a
+  // month and went 13-10 — near coin-flip volume off a season-average total.
+  const TOT_EDGE_MIN = { mlb: 1.5, nba: 6, nfl: 4 };
   const rows = playable.map((g, i) => {
     const p = preds[i];
     const info = p ? normOdds(g.odds, g.home.name, g.away.name) : null;
