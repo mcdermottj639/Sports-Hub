@@ -736,6 +736,11 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .pl-bk { color: var(--muted); font-size: 12px; }
 .pl-bv { font-weight: 700; font-size: 13px; text-align: right; }
 .pl-inj { margin-bottom: 12px; background: rgba(255,209,102,.12); border: 1px solid rgba(255,209,102,.35); color: var(--gold); border-radius: 8px; padding: 8px 11px; font-size: 12.5px; font-weight: 700; }
+/* Draft-Turn Plan: collapsible round rows (layout is inline — see v74 note) */
+.tp-r > summary::-webkit-details-marker { display: none; }
+.tp-r .tp-chev { transition: transform .15s ease; }
+.tp-r[open] .tp-chev { transform: rotate(90deg); }
+
 /* Player modal: live health status card + auto-generated 2026 outlook */
 .pl-health { border-radius: 10px; padding: 10px 12px; margin-bottom: 4px; border: 1px solid var(--line, rgba(255,255,255,.08)); background: var(--card); }
 .pl-health.out { border-color: rgba(230,57,70,.45); background: rgba(230,57,70,.08); }

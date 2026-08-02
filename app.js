@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v139';
+const APP_VERSION = 'v140';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2012,16 +2012,58 @@ const NFL_SUGGEST = {
   TE: ['Brock Bowers', 'Trey McBride', 'George Kittle', 'Sam LaPorta'],
 };
 const NFL_POS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST'];
-// Owner's 12-team half-PPR turn plan for picks 1.10 + 2.15 (keepers: McBride TE
-// + Kyren RB, so TE is set and one RB is locked — lean WR unless an elite RB
-// falls). Consensus targets; editable here. Powers the 🎯 Draft-Turn Plan card
-// and its one-tap "add to my board" (tier = draft priority).
-const TURN_PLAN = [
-  { label: '1.10 · Tier 1 — snap it if it falls', tier: 1, players: [{ n: 'Puka Nacua', p: 'WR' }, { n: 'Malik Nabers', p: 'WR' }, { n: 'Nico Collins', p: 'WR' }] },
-  { label: '1.10 · Tier 2 WR — your likely pick', tier: 2, players: [{ n: 'Brian Thomas Jr.', p: 'WR' }, { n: 'A.J. Brown', p: 'WR' }, { n: 'Drake London', p: 'WR' }] },
-  { label: '1.10 · Elite RB — take over WR if here', tier: 2, players: [{ n: 'Ashton Jeanty', p: 'RB' }, { n: "De'Von Achane", p: 'RB' }] },
-  { label: '2.15 · RB (if you went WR at 1.10)', tier: 3, players: [{ n: 'Josh Jacobs', p: 'RB' }, { n: 'Bucky Irving', p: 'RB' }, { n: 'Chase Brown', p: 'RB' }, { n: 'Kenneth Walker III', p: 'RB' }, { n: 'James Cook', p: 'RB' }, { n: 'Breece Hall', p: 'RB' }] },
-  { label: '2.15 · WR (if you went RB at 1.10)', tier: 3, players: [{ n: 'Ladd McConkey', p: 'WR' }, { n: 'Tee Higgins', p: 'WR' }, { n: 'Jaxon Smith-Njigba', p: 'WR' }, { n: 'Garrett Wilson', p: 'WR' }] },
+// Owner's 🎯 Draft-Turn Plan: 12-team half-PPR snake from slot 10, keepers
+// Trey McBride (costs R7 · #82) and Kyren Williams (costs R6 · #63). One entry
+// per round R1–R10 — `pick` is the overall pick number, `tag` the one-line
+// summary on the collapsed row, `groups` the tiered target lists (tier = board
+// priority for the ⭐ merge), `keeper` rows render locked. Targets are
+// consensus-style and aligned with the app's built-in ranked board (rank ≈
+// pick number); edit here as the offseason moves.
+const TURN_ROUNDS = [
+  { r: 1, pick: '#10', tag: 'WR — unless an elite RB falls', note: 'TE is set (McBride) and Kyren locks one RB spot, so lean WR. Take the RB only if a top one is somehow still up.', groups: [
+    { label: 'Tier 1 — snap it if it falls', tier: 1, players: [{ n: 'Puka Nacua', p: 'WR' }, { n: 'Malik Nabers', p: 'WR' }, { n: 'Nico Collins', p: 'WR' }] },
+    { label: 'Tier 2 WR — your likely pick', tier: 2, players: [{ n: 'Brian Thomas Jr.', p: 'WR' }, { n: 'A.J. Brown', p: 'WR' }, { n: 'Drake London', p: 'WR' }] },
+    { label: 'Elite RB — take over WR if here', tier: 2, players: [{ n: 'Ashton Jeanty', p: 'RB' }, { n: "De'Von Achane", p: 'RB' }] },
+  ] },
+  { r: 2, pick: '#15', tag: 'the other half of the turn', note: 'Leave the 1-2 turn with 1 WR + 1 RB.', groups: [
+    { label: 'RB (if you went WR at 1.10)', tier: 3, players: [{ n: 'Josh Jacobs', p: 'RB' }, { n: 'Bucky Irving', p: 'RB' }, { n: 'Chase Brown', p: 'RB' }, { n: 'Kenneth Walker III', p: 'RB' }, { n: 'James Cook', p: 'RB' }, { n: 'Breece Hall', p: 'RB' }] },
+    { label: 'WR (if you went RB at 1.10)', tier: 3, players: [{ n: 'Ladd McConkey', p: 'WR' }, { n: 'Tee Higgins', p: 'WR' }, { n: 'Jaxon Smith-Njigba', p: 'WR' }, { n: 'Garrett Wilson', p: 'WR' }] },
+  ] },
+  { r: 3, pick: '#34', tag: 'best WR/RB still on the board', note: 'By the end of R3 you want 2 WR + 1 RB (or 2 RB + 1 WR) next to Kyren.', groups: [
+    { label: 'RB2 — if the turn went all-WR', tier: 3, players: [{ n: 'James Cook', p: 'RB' }, { n: 'Kenneth Walker III', p: 'RB' }, { n: 'Breece Hall', p: 'RB' }] },
+    { label: 'WR value sliding out of round 2', tier: 3, players: [{ n: 'Marvin Harrison Jr.', p: 'WR' }, { n: 'Terry McLaurin', p: 'WR' }, { n: 'DK Metcalf', p: 'WR' }, { n: 'Mike Evans', p: 'WR' }] },
+  ] },
+  { r: 4, pick: '#39', tag: 'WR/RB — or a sliding elite QB', note: 'QB is deep, so no reaching — but #39 is fair value if one of the big four is still up.', groups: [
+    { label: 'Elite QB — only if one falls to you', tier: 3, players: [{ n: 'Josh Allen', p: 'QB' }, { n: 'Lamar Jackson', p: 'QB' }, { n: 'Jayden Daniels', p: 'QB' }, { n: 'Jalen Hurts', p: 'QB' }] },
+    { label: 'Otherwise best WR/RB', tier: 3, players: [{ n: 'Rashee Rice', p: 'WR' }, { n: 'Jaylen Waddle', p: 'WR' }, { n: 'Omarion Hampton', p: 'RB' }, { n: 'Alvin Kamara', p: 'RB' }] },
+  ] },
+  { r: 5, pick: '#58', tag: 'flex depth before the keeper gap', note: 'Last pick before R6–R7 go to your keepers — take the best flex-caliber body.', groups: [
+    { label: 'RB — committee leads with upside', tier: 4, players: [{ n: 'Chuba Hubbard', p: 'RB' }, { n: 'TreVeyon Henderson', p: 'RB' }, { n: 'James Conner', p: 'RB' }, { n: 'Aaron Jones', p: 'RB' }] },
+    { label: 'WR4 with a path to more', tier: 4, players: [{ n: 'Jameson Williams', p: 'WR' }, { n: 'Tetairoa McMillan', p: 'WR' }, { n: 'Calvin Ridley', p: 'WR' }] },
+  ] },
+  { r: 6, pick: '#63', keeper: 'Kyren Williams', kpos: 'RB' },
+  { r: 7, pick: '#82', keeper: 'Trey McBride', kpos: 'TE' },
+  { r: 8, pick: '#87', tag: 'your QB1 window', note: 'If no elite QB fell at R4, this is the sweet spot — the second QB tier is still whole here.', groups: [
+    { label: 'QB1 targets', tier: 4, players: [{ n: 'Bo Nix', p: 'QB' }, { n: 'Baker Mayfield', p: 'QB' }, { n: 'Caleb Williams', p: 'QB' }, { n: 'Kyler Murray', p: 'QB' }] },
+    { label: 'Or best RB/WR if a QB run beat you to it', tier: 4, players: [{ n: 'Jaylen Warren', p: 'RB' }, { n: 'Keon Coleman', p: 'WR' }, { n: 'Ricky Pearsall', p: 'WR' }] },
+  ] },
+  { r: 9, pick: '#106', tag: '🔒 Corum + upside swings', note: "Blake Corum (Kyren's handcuff) here or at #111 — don't let another manager beat you to him.", groups: [
+    { label: 'The handcuff', tier: 4, players: [{ n: 'Blake Corum', p: 'RB' }] },
+    { label: 'Upside if you wait on Corum one round', tier: 4, players: [{ n: 'Quinshon Judkins', p: 'RB' }, { n: 'Cam Skattebo', p: 'RB' }, { n: 'Chris Olave', p: 'WR' }, { n: 'Jayden Reed', p: 'WR' }] },
+  ] },
+  { r: 10, pick: '#111', tag: 'Corum last call / best dart', note: 'Whichever of Corum / the R9 upside group is left.', groups: [
+    { label: 'Corum — last call if you waited', tier: 4, players: [{ n: 'Blake Corum', p: 'RB' }] },
+    { label: 'Best dart on the board', tier: 5, players: [{ n: 'Braelon Allen', p: 'RB' }, { n: 'Trey Benson', p: 'RB' }, { n: 'Rashid Shaheed', p: 'WR' }, { n: 'Josh Downs', p: 'WR' }] },
+  ] },
+];
+// R11+ (picks #130 · #135 · #154 · #159 · #178) — late-round sleeper pools, not
+// per-round: draft whoever's left by group priority. K/DST stay out of the ⭐
+// board merge.
+const TURN_SLEEPERS = [
+  { label: '🧢 Handcuff lottery tickets — bell-cow upside one injury away', tier: 5, players: [{ n: 'Jaylen Wright', p: 'RB' }, { n: 'Isaac Guerendo', p: 'RB' }, { n: 'Tank Bigsby', p: 'RB' }, { n: 'Tyjae Spears', p: 'RB' }] },
+  { label: '🚀 Big-play WR darts', tier: 5, players: [{ n: 'Marvin Mims Jr.', p: 'WR' }, { n: 'Jauan Jennings', p: 'WR' }, { n: 'Keenan Allen', p: 'WR' }] },
+  { label: '🧊 QB2 / bye-week cover — only in the final rounds', tier: 5, players: [{ n: 'Justin Herbert', p: 'QB' }, { n: 'Jordan Love', p: 'QB' }, { n: 'Justin Fields', p: 'QB' }] },
+  { label: '🦵 K & 🛡 DST — your last two picks, never earlier', tier: 5, players: [{ n: 'Brandon Aubrey', p: 'K' }, { n: 'Jake Bates', p: 'K' }, { n: 'Eagles D/ST', p: 'DST' }, { n: 'Broncos D/ST', p: 'DST' }] },
 ];
 // Owner's league scoring (edit here if the league settings change).
 const NFL_SCORING = 'Half-PPR (0.5 per reception)';
@@ -2072,15 +2114,45 @@ function renderFantasyFootball() {
     `<div class="pp-sugg-row"><span class="pp-sugg-pos">${pos}</span>${names.map((n) =>
       `<button class="chip sm" data-add="${esc(n)}" data-pos="${pos}">${esc(n)}</button>`).join('')}</div>`).join('');
 
-  // 🎯 Draft-Turn Plan — a fixed reference for the 1.10/2.15 turn (inline styles
-  // so it always renders regardless of stylesheet state — see the v74 note).
-  const tierColor = { 1: '#3ad29f', 2: '#d9b341', 3: '#8fb0ff' };
-  const turnPlanHTML = TURN_PLAN.map((g) => `
+  // 🎯 Draft-Turn Plan — round-by-round plan, each round a collapsed
+  // tap-to-expand <details> row (native, no JS wiring; inline styles so it
+  // always renders regardless of stylesheet state — see the v74 note).
+  const tierColor = { 1: '#3ad29f', 2: '#d9b341', 3: '#8fb0ff', 4: '#c9a2e8', 5: '#9fb3c8' };
+  const tpGroup = (g) => `
     <div style="margin:8px 0">
       <div style="font-size:12px;font-weight:700;color:${tierColor[g.tier] || 'var(--muted)'};margin-bottom:5px">${esc(g.label)}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">${g.players.map((pl) =>
         `<span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-size:12.5px;background:var(--card)"><b>${esc(pl.n)}</b><span style="color:var(--muted);font-size:11px">${esc(pl.p)}</span></span>`).join('')}</div>
-    </div>`).join('');
+    </div>`;
+  const tpSummary = (left, pick, tag) => `
+    <summary class="tp-sum" style="display:flex;align-items:center;gap:8px;padding:11px 12px;cursor:pointer;list-style:none;min-height:44px;box-sizing:border-box">
+      <b style="font-size:13px;flex:none">${left}</b>
+      <span style="color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums;flex:none">${esc(pick)}</span>
+      <span style="flex:1;font-size:12.5px;font-weight:700;min-width:0">${esc(tag)}</span>
+      <span class="tp-chev" style="color:var(--muted);flex:none">▸</span></summary>`;
+  const turnPlanHTML = TURN_ROUNDS.map((rd) => {
+    if (rd.keeper) return `
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;margin:6px 0;border:1px dashed var(--line);border-radius:10px;font-size:12.5px;background:var(--card)">
+        <b style="font-size:13px;flex:none">R${rd.r}</b>
+        <span style="color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums;flex:none">${esc(rd.pick)}</span>
+        <span style="flex:1;min-width:0">🔒 Keeper — <b>${esc(rd.keeper)}</b> <span style="color:var(--muted);font-size:11px">${esc(rd.kpos)}</span></span>
+      </div>`;
+    return `
+      <details class="tp-r" style="margin:6px 0;border:1px solid var(--line);border-radius:10px;background:var(--card)">
+        ${tpSummary('R' + rd.r, rd.pick, rd.tag)}
+        <div style="padding:0 12px 10px">
+          ${rd.note ? `<div style="font-size:11.5px;color:var(--muted)">${esc(rd.note)}</div>` : ''}
+          ${rd.groups.map(tpGroup).join('')}
+        </div>
+      </details>`;
+  }).join('') + `
+      <details class="tp-r" style="margin:6px 0;border:1px solid var(--line);border-radius:10px;background:var(--card)">
+        ${tpSummary('R11+', '#130+', '😴 late-round sleepers')}
+        <div style="padding:0 12px 10px">
+          <div style="font-size:11.5px;color:var(--muted)">Picks #130 · #135 · #154 · #159 · #178 — draft whoever's left, in group order.</div>
+          ${TURN_SLEEPERS.map(tpGroup).join('')}
+        </div>
+      </details>`;
 
   const liveOn = !!(fanState.cfg && fanState.cfg.football);
   box.innerHTML = `
@@ -2099,9 +2171,8 @@ function renderFantasyFootball() {
     <div id="tr-content" class="tr-content"></div>
 
     <h2 class="section-title">🎯 Draft-Turn Plan</h2>
-    <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Your <b>1.10 + 2.15</b> turn (12-team half-PPR). TE is set (McBride) and you have Kyren at RB, so <b>lean WR — unless an elite RB falls</b>. Leave the turn with 1 WR + 1 RB.</div>
+    <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Your full draft from <b>slot 10</b> (12-team half-PPR snake; keepers <b>Kyren R6</b> + <b>McBride R7</b>). Tap a round to expand its targets — R11+ is the sleeper pool.</div>
     <div class="setup-card" style="padding:12px 14px">${turnPlanHTML}
-      <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px;font-size:11.5px;color:var(--muted)">Later: 🔒 grab <b>Blake Corum</b> (Kyren's handcuff) at your <b>R9 (#106) / R10 (#111)</b>. Don't reach for QB/TE early — you're set at TE and QB is deep.</div>
       <div style="margin-top:10px"><button id="tp-add" class="fan-btn">⭐ Add these targets to my board</button> <span id="tp-note" class="muted" style="font-size:11.5px"></span></div>
     </div>
 
@@ -2163,14 +2234,17 @@ function renderFantasyFootball() {
     if (note) note.textContent = r.msg;
     afBtn.disabled = false; afBtn.textContent = '⚡ Auto-fill ESPN rankings';
   };
-  // Merge the turn-plan targets into the editable board (non-destructive; tier =
-  // draft priority). WR/RB only — no TE (you're keeping McBride).
+  // Merge every round's targets + the sleeper pool into the editable board
+  // (non-destructive; tier = draft priority). Skips K/DST (board noise) and the
+  // keepers (already rostered).
   const tpBtn = box.querySelector('#tp-add');
   if (tpBtn) tpBtn.onclick = () => {
     const list = loadNflBoard();
     const have = new Set(list.map((p) => (p.name || '').toLowerCase()));
     let added = 0;
-    TURN_PLAN.forEach((g) => g.players.forEach((pl) => {
+    const groups = TURN_ROUNDS.flatMap((rd) => rd.groups || []).concat(TURN_SLEEPERS);
+    groups.forEach((g) => g.players.forEach((pl) => {
+      if (pl.p === 'K' || pl.p === 'DST') return;
       if (have.has(pl.n.toLowerCase())) return;
       list.push({ name: pl.n, pos: pl.p, tier: g.tier });
       have.add(pl.n.toLowerCase());

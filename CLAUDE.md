@@ -260,7 +260,23 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v139**.
+Current version as of this writing: **v140**.
+
+- **Draft-Turn Plan → full 10-round plan + sleepers (v140)** — the 🎯 card
+  (Fantasy → Football) grew from the fixed 1.10/2.15 turn into the owner's
+  whole draft. `TURN_PLAN` was replaced by **`TURN_ROUNDS`** (one entry per
+  round R1–R10: `pick` = overall pick # from slot 10 in the 12-team snake —
+  #10/#15/#34/#39/#58/#63/#82/#87/#106/#111 — plus `tag` collapsed-row
+  summary, `note`, tiered `groups`; the R6/R7 entries are `keeper` rows
+  rendered locked for Kyren/McBride) and **`TURN_SLEEPERS`** (R11+ pool:
+  handcuffs / WR darts / QB2 / K+DST, picks #130–#178). Each round renders as
+  a **collapsed native `<details>` row** (tap to expand; inline-styled per the
+  v74 lesson; tiny `.tp-r` CSS just hides the webkit marker + rotates the
+  chevron). Targets align with the built-in `MOCK_POOL_RAW` ranks (rank ≈
+  pick). The ⭐ "Add these targets to my board" merge now walks all round
+  groups + sleepers (still non-destructive; skips K/DST and dupes; tier =
+  group tier). The old "Later: grab Blake Corum…" footer is gone — Corum is
+  now the R9/R10 group itself. Edit `TURN_ROUNDS`/`TURN_SLEEPERS` to update.
 
 - **Player modal: live Health Status + 2026 Outlook (v139)** — the Team
   Research player modal (`openPlayerModal`) gained two cards above Latest News:
