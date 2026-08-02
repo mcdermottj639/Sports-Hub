@@ -260,7 +260,26 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v140**.
+Current version as of this writing: **v141**.
+
+- **Draft-Turn Plan retuned to verified Aug-2026 reality (v141)** — this CCR
+  session CAN web-search (WebFetch/curl are proxy-blocked; ESPN still
+  unreachable), so the v140 targets were checked against live sources and
+  re-curated. Verified 2026-offseason facts baked into `TURN_ROUNDS`/
+  `TURN_SLEEPERS` + `MOCK_POOL_RAW`: **Jeremiyah Love** (Notre Dame RB) went
+  **#3 overall to the Cardinals**, ~ADP 16 → headline R2 target;
+  **Jadarian Price** rookie RB → **Seahawks**, ~R5 ADP with a lead-back path
+  (Walker left, Charbonnet hurt) → R5 target; **Kenneth Walker III** (Super
+  Bowl LX MVP) signed **KC** 3yr/$43M; **Kyler Murray** benched → released by
+  ARI → **MIN** 1-yr (pulled from the R8 QB group, now a QB2 sleeper);
+  **Mike Evans → SF** 3yr; Aaron Jones re-upped MIN; **Malik Nabers**
+  (ACL 9/2025, ~31–46 ADP) is the R3 buy-zone swing; consensus top-6 now
+  Bijan/Chase/JSN/Puka/Gibbs/ARSB (JSN + JT moved up in `MOCK_POOL_RAW`,
+  Nabers down, Love/Price inserted); **Ricky Pearsall** (knee, season in
+  doubt) and **Isaac Guerendo** (PUP pec) dropped from the plan; Corum-as-
+  Kyren's-handcuff CONFIRMED on the 2026 Rams depth chart; rookie sleeper
+  fliers Carnell Tate (TEN) + Zachariah Branch added. Team-label fixes in the
+  pool: KW3→KC, Murray→MIN, Bigsby→PHI (2025 trade), Evans→SF.
 
 - **Draft-Turn Plan → full 10-round plan + sleepers (v140)** — the 🎯 card
   (Fantasy → Football) grew from the fixed 1.10/2.15 turn into the owner's
