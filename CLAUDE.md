@@ -260,7 +260,34 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v138**.
+Current version as of this writing: **v139**.
+
+- **Player modal: live Health Status + 2026 Outlook (v139)** — the Team
+  Research player modal (`openPlayerModal`) gained two cards above Latest News:
+  - **Health Status** (`athleteHealth`/`healthCardHTML`, `.pl-health`/`.pl-h-*`
+    CSS) — replaces the old one-line `🩹 Out` banner (`.pl-inj` markup dropped;
+    its CSS kept, vestigial). Paints instantly from the roster feed's injury
+    object, then refreshes live from ESPN's **common-v3 athlete card**
+    (`WEBAPI` = `site.web.api.espn.com/apis/common/v3/sports`, 15-min TTL) which
+    carries richer injuries: status + body part/detail/side + expected return
+    date + the written beat-report comment (`longComment`/`shortComment`).
+    Card is severity-colored (`healthSev`: ok/warn/out) with a source line
+    ("live from ESPN" / "from team roster · checking…" / "(live check
+    unreachable)" on fetch failure). Healthy = ✅ Active, "No injuries
+    reported." Date-only strings anchored to noon (`fmtHDate`) so return dates
+    don't shift a day.
+  - **2026 Outlook** (`outlook2026`, `.pl-outlook`/`.pl-o-note`) — a ≤3-sentence
+    auto-generated blurb from: depth-chart role (`fanState.researchRole`, now
+    stashed per athlete in `paintResearch` — starter flag / depth / slots /
+    steal-odds pct), age curve per position, rookie status, live health
+    severity, and the news signal. Re-renders alongside the live health refresh
+    (guarded by `body.dataset.aid` so a re-opened modal for another player
+    isn't overwritten). Clearly labeled auto-generated, not a scouting report.
+  NOTE: sandbox can't reach ESPN — the common-v3 injury shape (`athlete.injuries`
+  with `details`/`longComment`) was coded defensively and smoke-tested with
+  seeded data; verify the live shape on device. If `site.web.api.espn.com`
+  ever refuses browser CORS, the card just stays on the roster read with the
+  honest "live check unreachable" label.
 
 - **AI model: look-ahead fix + data-fitted calibration (v138)** — the owner
   exported a month of graded picks (289 entries; 119 pregame MLB side picks with

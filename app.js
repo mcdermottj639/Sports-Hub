@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v138';
+const APP_VERSION = 'v139';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2371,6 +2371,7 @@ function stealOdds(pos, depth, starters, backup) {
 
 function paintResearch(c, data) {
   if (data.error) { c.innerHTML = '<div class="muted">Depth chart unavailable for this team right now.</div>'; return; }
+  fanState.researchRole = fanState.researchRole || {}; // per-athlete depth-chart role, read by the player modal's 2026 outlook
   const order = ['QB', 'RB', 'WR', 'TE'];
   const POSNAME = { QB: 'Quarterback', RB: 'Running Back', WR: 'Wide Receiver', TE: 'Tight End' };
   const avatar = (a) => a.headshot?.href
@@ -2396,7 +2397,10 @@ function paintResearch(c, data) {
     const backups = data.groups[pos].slice(n, n + 3);
     const starterDown = starters.some((s) => nwOf(s) && nwOf(s).signal === 'downgrade');
     return `<div class="tr-pos"><div class="tr-pos-h">${POSNAME[pos]}</div>`
-      + starters.map((a) => row(a, true, null, nwOf(a))).join('')
+      + starters.map((a) => {
+        fanState.researchRole[a.id] = { pos, starter: true, slots: n };
+        return row(a, true, null, nwOf(a));
+      }).join('')
       + backups.map((a, i) => {
         const o = stealOdds(pos, i + 1, starters, a);
         const nw = nwOf(a);
@@ -2405,6 +2409,7 @@ function paintResearch(c, data) {
         if (nw && nw.signal === 'promote') { pct = Math.max(pct, i === 0 ? 66 : 46); note = 'beat buzz: first-team reps'; }
         pct = Math.min(94, pct);
         const cls = pct >= 45 ? 'hi' : pct >= 22 ? 'mid' : 'lo';
+        fanState.researchRole[a.id] = { pos, starter: false, depth: i + 1, slots: n, pct };
         return row(a, false, { pct, note, cls }, nw);
       }).join('')
       + '</div>';
@@ -2414,11 +2419,85 @@ function paintResearch(c, data) {
   c.querySelectorAll('.tr-player').forEach((b) => (b.onclick = () => openPlayerModal(b.dataset.aid)));
 }
 
+// --- Player health (live) + 2026 outlook -----------------------------------
+// ESPN's common-v3 athlete card carries much richer injury objects than the
+// roster feed: status + body part/detail/side + an expected return date + a
+// written beat-report comment. Same CORS-open ESPN family as SITE. The modal
+// paints instantly from the roster injury, then this refreshes it live;
+// unreachable → the roster read stands, honestly labeled.
+const WEBAPI = 'https://site.web.api.espn.com/apis/common/v3/sports';
+async function athleteHealth(aid) {
+  const r = await fetchJSON(`${WEBAPI}/football/nfl/athletes/${aid}`, 15 * 60000);
+  const ath = r?.athlete || r || {};
+  const list = (ath.injuries || []).filter((i) => i && (i.status || i.longComment || i.shortComment));
+  if (!list.length) return { status: 'Active', healthy: true, checked: true };
+  const i = list[0]; // newest first
+  const d = i.details || {};
+  const side = d.side && !/not specified/i.test(d.side) ? ` (${d.side.toLowerCase()})` : '';
+  return {
+    status: i.status || 'Injured',
+    healthy: false,
+    type: d.type ? d.type + side : '',
+    detail: d.detail && d.detail !== d.type ? d.detail : '',
+    comment: i.longComment || i.shortComment || '',
+    date: i.date || '',
+    returnDate: d.returnDate || '',
+    checked: true,
+  };
+}
+// Date-only strings ("2026-10-01") parse as UTC midnight and can shift a day
+// locally — anchor them to noon before formatting.
+const fmtHDate = (s) => {
+  if (!s) return '';
+  const dt = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + 'T12:00' : s);
+  return isNaN(dt) ? '' : dt.toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
+const healthSev = (h) => (h.healthy ? 0 : (injSeverity(h.status) || 1));
+function healthCardHTML(h) {
+  const sev = healthSev(h);
+  const cls = sev >= 3 ? 'out' : sev >= 1 ? 'warn' : 'ok';
+  const icon = sev >= 3 ? '🩹' : sev >= 1 ? '⚠️' : '✅';
+  const src = h.checked ? 'live from ESPN' : h.failed ? 'from team roster (live check unreachable)' : 'from team roster · checking latest…';
+  const meta = [h.returnDate ? 'Est. return ' + fmtHDate(h.returnDate) : '', h.date ? 'reported ' + fmtHDate(h.date) : '', src].filter(Boolean).join(' · ');
+  return `<div class="pl-health ${cls}">
+    <div class="pl-h-top"><span class="pl-h-pill">${icon} ${esc(h.status || 'Active')}</span>${h.type ? `<span class="pl-h-type">${esc(h.type)}${h.detail ? ' — ' + esc(h.detail) : ''}</span>` : ''}</div>
+    ${h.comment ? `<div class="pl-h-desc">${esc(h.comment)}</div>` : (sev === 0 ? '<div class="pl-h-desc">No injuries reported.</div>' : '')}
+    <div class="pl-h-meta">${esc(meta)}</div>
+  </div>`;
+}
+// Short auto-generated 2026 fantasy read: depth-chart role + age curve +
+// health + news signal. A heuristic, clearly labeled — not a scouting report.
+function outlook2026(a, role, sev, nw) {
+  const pos = (role?.pos || a.position?.abbreviation || '').toUpperCase();
+  const posName = { QB: 'quarterback', RB: 'running back', WR: 'receiver', TE: 'tight end' }[pos] || 'the position';
+  const age = a.age, exp = a.experience?.years;
+  const s = [];
+  if (role && !role.starter) {
+    const slot = (role.slots || 1) + (role.depth || 1);
+    if (role.pct >= 45) s.push(`Sits ${pos}${slot} on the depth chart but is one injury from a lead role — we estimate a ${role.pct}% shot at starter duties in 2026.`);
+    else s.push(`Sits ${pos}${slot} on the depth chart (~${role.pct}% shot at the starting job by our estimate) — a watch-list name for 2026 unless the picture changes.`);
+  } else if (role?.starter) {
+    s.push(`Projected 2026 starter at ${posName} on the latest depth chart.`);
+  }
+  if (exp === 0) s.push('Rookie season ahead, so the range of outcomes is wide — early-season usage will tell the story.');
+  else if (pos === 'RB' && age >= 29) s.push(`Age ${age} is real risk at running back — production at the position tends to fall off fast.`);
+  else if (pos === 'WR' && age >= 31) s.push(`At ${age}, on the back side of the age curve for a receiver.`);
+  else if (pos === 'TE' && age >= 32) s.push(`At ${age}, on the back side of the age curve at tight end.`);
+  else if (pos === 'QB' && age >= 37) s.push(`At ${age}, age is the thing to watch — though quarterbacks tend to age gracefully.`);
+  else if (age && ((pos === 'RB' && age <= 26) || (pos === 'WR' && age <= 28) || (pos === 'TE' && age <= 29) || (pos === 'QB' && age <= 33))) s.push(`At ${age}, squarely in the prime window for ${posName}.`);
+  if (sev >= 3) s.push('The current injury designation is the swing factor — confirm the recovery timeline before investing a pick.');
+  else if (sev >= 1) s.push('Carrying an injury tag — worth monitoring, not necessarily disqualifying.');
+  if (nw?.signal === 'promote') s.push('Recent team news points the right way on the role — see the headline below.');
+  else if (nw?.signal === 'downgrade') s.push('Recent team news is a red flag — read the latest headline below.');
+  return s.slice(0, 3).join(' ') || `In the mix at ${posName} for 2026.`;
+}
+
 async function openPlayerModal(aid) {
   const a = (fanState.researchAthletes || {})[aid];
   modal().classList.remove('hidden');
   const body = $('#modal-body');
   if (!a) { body.innerHTML = '<div class="muted" style="padding:20px">Player info unavailable.</div>'; return; }
+  body.dataset.aid = String(aid);
   const head = a.headshot?.href;
   const exp = a.experience?.years;
   const bio = [
@@ -2430,6 +2509,16 @@ async function openPlayerModal(aid) {
     ['Experience', exp != null ? (exp === 0 ? 'Rookie' : exp + ' yrs') : null],
   ].filter(([, v]) => v != null && v !== '');
   const inj = a.injuries?.find((i) => i.status && i.status !== 'Active');
+  const rosterH = inj ? {
+    status: inj.status,
+    healthy: false,
+    type: inj.details?.type || '',
+    detail: inj.details?.detail && inj.details.detail !== inj.details.type ? inj.details.detail : '',
+    comment: inj.longComment || inj.shortComment || '',
+    date: inj.date || '',
+    returnDate: inj.details?.returnDate || '',
+  } : { status: 'Active', healthy: true };
+  const role = (fanState.researchRole || {})[aid];
   const nw = (fanState.researchNews || {})[aid];
   // Canonical ESPN player URL (id + name slug) — the slugged URL universal-links
   // into the ESPN app, whereas a bare /id/N redirects and falls back to a browser.
@@ -2442,7 +2531,11 @@ async function openPlayerModal(aid) {
       <div><div class="pl-name">${esc(a.displayName)}</div>
       <div class="pl-sub">${esc([a.position?.abbreviation, a.jersey ? '#' + a.jersey : ''].filter(Boolean).join(' · '))}</div></div>
     </div>
-    ${inj ? `<div class="pl-inj">🩹 ${esc(inj.status)}${inj.details?.type ? ' — ' + esc(inj.details.type) : ''}</div>` : ''}
+    <div class="md-section-title">Health Status</div>
+    <div id="pl-health">${healthCardHTML(rosterH)}</div>
+    <div class="md-section-title">2026 Outlook</div>
+    <div class="pl-outlook"><span id="pl-outlook">${esc(outlook2026(a, role, healthSev(rosterH), nw))}</span>
+      <div class="pl-o-note">Auto-generated from the depth chart, age &amp; injury data — not a scouting report.</div></div>
     ${nw ? `<div class="md-section-title">Latest News</div><button class="pl-news-card" id="pl-news-open" type="button"><div class="pl-news-h">${esc(nw.headline)}</div><div class="pl-news-w">${nwWhen ? esc(nwWhen) + ' · ' : ''}tap for in-app summary</div></button>` : ''}
     <div class="pl-bio">${bio.map(([k, v]) => `<div class="pl-b"><span class="pl-bk">${k}</span><span class="pl-bv">${esc(String(v))}</span></div>`).join('')}</div>
     <a class="fan-btn" href="${espn}" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;text-decoration:none">Full profile &amp; stats on ESPN ↗</a>`;
@@ -2450,6 +2543,15 @@ async function openPlayerModal(aid) {
     const btn = body.querySelector('#pl-news-open');
     if (btn) btn.onclick = () => openNewsSummary(nw.article, () => openPlayerModal(aid));
   }
+  // Live health refresh — only touch the DOM if this modal still shows this player.
+  const repaint = (h) => {
+    if (body.dataset.aid !== String(aid)) return;
+    const box = body.querySelector('#pl-health');
+    if (box) box.innerHTML = healthCardHTML(h);
+    const o = body.querySelector('#pl-outlook');
+    if (o) o.textContent = outlook2026(a, role, healthSev(h), nw);
+  };
+  athleteHealth(aid).then(repaint).catch(() => repaint({ ...rosterH, failed: true }));
 }
 
 // --- Fantasy: NFL mock draft (client-side snake draft vs CPU GMs) ----------

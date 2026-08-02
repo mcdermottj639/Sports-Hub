@@ -736,6 +736,21 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .pl-bk { color: var(--muted); font-size: 12px; }
 .pl-bv { font-weight: 700; font-size: 13px; text-align: right; }
 .pl-inj { margin-bottom: 12px; background: rgba(255,209,102,.12); border: 1px solid rgba(255,209,102,.35); color: var(--gold); border-radius: 8px; padding: 8px 11px; font-size: 12.5px; font-weight: 700; }
+/* Player modal: live health status card + auto-generated 2026 outlook */
+.pl-health { border-radius: 10px; padding: 10px 12px; margin-bottom: 4px; border: 1px solid var(--line, rgba(255,255,255,.08)); background: var(--card); }
+.pl-health.out { border-color: rgba(230,57,70,.45); background: rgba(230,57,70,.08); }
+.pl-health.warn { border-color: rgba(255,209,102,.45); background: rgba(255,209,102,.08); }
+.pl-health.ok { border-color: rgba(58,210,159,.35); background: rgba(58,210,159,.06); }
+.pl-h-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pl-h-pill { font-weight: 800; font-size: 13.5px; }
+.pl-health.out .pl-h-pill { color: var(--live); }
+.pl-health.warn .pl-h-pill { color: var(--gold); }
+.pl-health.ok .pl-h-pill { color: var(--accent); }
+.pl-h-type { font-weight: 700; font-size: 12.5px; }
+.pl-h-desc { font-size: 12.5px; line-height: 1.55; margin-top: 6px; }
+.pl-h-meta { font-size: 10.5px; color: var(--muted); font-weight: 700; margin-top: 6px; text-transform: uppercase; letter-spacing: .3px; }
+.pl-outlook { background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 10px; padding: 10px 12px; margin-bottom: 4px; font-size: 13px; line-height: 1.55; }
+.pl-o-note { font-size: 10.5px; color: var(--muted); font-weight: 700; margin-top: 7px; }
 
 /* ==========================================================================
    LIGHT MODE — "Editorial / Premium" theme (Design 3).
