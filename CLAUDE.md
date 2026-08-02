@@ -260,7 +260,24 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v141**.
+Current version as of this writing: **v142**.
+
+- **Keeper flip: Drake Maye (R11) in, Kyren (R6) out (v142)** — the owner
+  decided (after a value comparison: Maye ~ADP 52 / consensus QB2-3 kept at
+  pick #130 = ~78 picks of surplus, vs Kyren ~ADP 24-31 kept at #63 = ~35).
+  **League keepers are now Trey McBride (R7 · #82) + Drake Maye (R11 · #130);
+  Kyren Williams goes back into the draft pool.** `TURN_ROUNDS` re-planned for
+  the scenario: R1 elite-RB group promoted (roster starts with zero RBs), R2
+  Love/Jeanty marked near-mandatory, R3 leads RB2, **R4's "elite QB if one
+  slides" group is gone and R8's QB1 window replaced** (never draft a QB —
+  Maye is the keeper), **R6 #63 is a live pick again** ("bonus pick — Kyren's
+  old slot"), R9 drops the Corum-handcuff framing (he handcuffs a Kyren the
+  owner no longer rosters; kept as a dart), **R10 handcuff re-pointed to Trey
+  Benson** (ARI — the handcuff for a 2.15 Jeremiyah Love pick), R11 renders as
+  the locked Maye keeper row, sleepers header now R12+ (#135+), and the QB2
+  sleeper group is reframed as optional Maye insurance. `MOCK_KEEPERS` updated
+  to McBride R7 + Maye R11 (launch default unchanged otherwise) and
+  `Drake Maye|QB|NE` added to `MOCK_POOL_RAW` (~rank 52).
 
 - **Draft-Turn Plan retuned to verified Aug-2026 reality (v141)** — this CCR
   session CAN web-search (WebFetch/curl are proxy-blocked; ESPN still

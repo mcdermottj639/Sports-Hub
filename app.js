@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v141';
+const APP_VERSION = 'v142';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2013,59 +2013,62 @@ const NFL_SUGGEST = {
 };
 const NFL_POS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST'];
 // Owner's 🎯 Draft-Turn Plan: 12-team half-PPR snake from slot 10, keepers
-// Trey McBride (costs R7 · #82) and Kyren Williams (costs R6 · #63). One entry
-// per round R1–R10 — `pick` is the overall pick number, `tag` the one-line
+// Trey McBride (costs R7 · #82) and Drake Maye (costs R11 · #130 — an ~ADP-52
+// consensus QB2/3 for an 11th; Kyren is NOT kept, so R6 is live). One entry
+// per round R1–R11 — `pick` is the overall pick number, `tag` the one-line
 // summary on the collapsed row, `groups` the tiered target lists (tier = board
 // priority for the ⭐ merge), `keeper` rows render locked. Targets are
 // consensus-style and aligned with the app's built-in ranked board (rank ≈
 // pick number); edit here as the offseason moves.
 const TURN_ROUNDS = [
-  { r: 1, pick: '#10', tag: 'WR — or snap a top-6 slider', note: 'TE is set (McBride) and Kyren locks one RB spot, so lean WR. The consensus top-6 is Bijan/Chase/JSN/Puka/Gibbs/ARSB — snap any of them that slides.', groups: [
+  { r: 1, pick: '#10', tag: 'best of the board — RB now in play', note: 'QB (Maye) and TE (McBride) are locked, but with Kyren no longer kept you start with ZERO running backs — so the elite RBs are just as live as WR here. Snap any top-6 slider either way.', groups: [
     { label: 'Snap it if it falls (top-6 talents)', tier: 1, players: [{ n: 'Jaxon Smith-Njigba', p: 'WR' }, { n: 'Puka Nacua', p: 'WR' }, { n: 'Amon-Ra St. Brown', p: 'WR' }] },
-    { label: 'Your likely WR pick at #10', tier: 2, players: [{ n: 'CeeDee Lamb', p: 'WR' }, { n: 'Nico Collins', p: 'WR' }, { n: 'Drake London', p: 'WR' }] },
-    { label: 'Elite RB — take over WR if here', tier: 2, players: [{ n: "De'Von Achane", p: 'RB' }, { n: 'Jonathan Taylor', p: 'RB' }, { n: 'Christian McCaffrey', p: 'RB' }, { n: 'James Cook', p: 'RB' }] },
+    { label: 'Elite RB — a real option now', tier: 2, players: [{ n: "De'Von Achane", p: 'RB' }, { n: 'Jonathan Taylor', p: 'RB' }, { n: 'Christian McCaffrey', p: 'RB' }, { n: 'James Cook', p: 'RB' }] },
+    { label: 'WR if the elite RBs are gone', tier: 2, players: [{ n: 'CeeDee Lamb', p: 'WR' }, { n: 'Nico Collins', p: 'WR' }, { n: 'Drake London', p: 'WR' }] },
   ] },
-  { r: 2, pick: '#15', tag: '🆕 Love/Jeanty land right here', note: 'Rookie Jeremiyah Love (Cardinals, #3 overall pick) and Ashton Jeanty both sit ~ADP 16 — one should be on the board at #15. Leave the turn with 1 WR + 1 RB.', groups: [
-    { label: 'RB at your pick (if you went WR at 1.10)', tier: 2, players: [{ n: 'Jeremiyah Love', p: 'RB' }, { n: 'Ashton Jeanty', p: 'RB' }, { n: 'Kenneth Walker III', p: 'RB' }, { n: 'Josh Jacobs', p: 'RB' }] },
-    { label: 'WR (if you went RB at 1.10)', tier: 3, players: [{ n: 'Brian Thomas Jr.', p: 'WR' }, { n: 'Ladd McConkey', p: 'WR' }, { n: 'Tee Higgins', p: 'WR' }, { n: 'Garrett Wilson', p: 'WR' }] },
+  { r: 2, pick: '#15', tag: '🆕 Love/Jeanty — near-mandatory RB', note: 'With no Kyren, do NOT leave this turn without at least one RB. Rookie Jeremiyah Love (Cardinals, #3 overall pick) and Ashton Jeanty both sit ~ADP 16 — one should be on the board at #15.', groups: [
+    { label: 'RB at your pick', tier: 2, players: [{ n: 'Jeremiyah Love', p: 'RB' }, { n: 'Ashton Jeanty', p: 'RB' }, { n: 'Kenneth Walker III', p: 'RB' }, { n: 'Josh Jacobs', p: 'RB' }] },
+    { label: 'WR — only if you took an RB at 1.10', tier: 3, players: [{ n: 'Brian Thomas Jr.', p: 'WR' }, { n: 'Ladd McConkey', p: 'WR' }, { n: 'Tee Higgins', p: 'WR' }, { n: 'Garrett Wilson', p: 'WR' }] },
   ] },
-  { r: 3, pick: '#34', tag: 'Nabers discount — or safe WR2/RB2', note: 'Nabers (ACL, Sept 2025, expected back around Week 1) has slid to ~31–46 ADP — #34 is the buy zone if you can stomach a slow start.', groups: [
-    { label: 'High-upside swing', tier: 3, players: [{ n: 'Malik Nabers', p: 'WR' }] },
+  { r: 3, pick: '#34', tag: 'RB2 — or the Nabers discount', note: 'Aim to leave R3 with 2 RB + 1 WR — your QB is already rostered, so every early pick goes to RB/WR. Nabers (ACL, Sept 2025) at ~31–46 ADP is the WR swing if the backfield is settled.', groups: [
+    { label: 'RB — round out the backfield', tier: 3, players: [{ n: 'Bucky Irving', p: 'RB' }, { n: 'Chase Brown', p: 'RB' }, { n: 'Breece Hall', p: 'RB' }] },
+    { label: 'High-upside WR swing', tier: 3, players: [{ n: 'Malik Nabers', p: 'WR' }] },
     { label: 'Safer WR2', tier: 3, players: [{ n: 'A.J. Brown', p: 'WR' }, { n: 'DK Metcalf', p: 'WR' }, { n: 'Mike Evans', p: 'WR' }, { n: 'Terry McLaurin', p: 'WR' }] },
-    { label: 'RB2 — if the turn went all-WR', tier: 3, players: [{ n: 'Bucky Irving', p: 'RB' }, { n: 'Chase Brown', p: 'RB' }, { n: 'Breece Hall', p: 'RB' }] },
   ] },
-  { r: 4, pick: '#39', tag: 'WR/RB — or a sliding elite QB', note: 'QB is deep, so no reaching — but #39 is fair value if one of the big four is still up.', groups: [
-    { label: 'Elite QB — only if one falls to you', tier: 3, players: [{ n: 'Josh Allen', p: 'QB' }, { n: 'Lamar Jackson', p: 'QB' }, { n: 'Jayden Daniels', p: 'QB' }, { n: 'Jalen Hurts', p: 'QB' }] },
-    { label: 'Otherwise best WR/RB', tier: 3, players: [{ n: 'Rashee Rice', p: 'WR' }, { n: 'Jaylen Waddle', p: 'WR' }, { n: 'Omarion Hampton', p: 'RB' }, { n: 'Marvin Harrison Jr.', p: 'WR' }] },
+  { r: 4, pick: '#39', tag: 'all WR/RB — no QB, ever', note: 'The old "elite QB if one slides" rule is dead — Maye is your R11 keeper. Let someone else spend here on Allen/Lamar while you stack RB/WR.', groups: [
+    { label: 'Best WR on the board', tier: 3, players: [{ n: 'Rashee Rice', p: 'WR' }, { n: 'Jaylen Waddle', p: 'WR' }, { n: 'Marvin Harrison Jr.', p: 'WR' }] },
+    { label: 'RB depth', tier: 3, players: [{ n: 'Omarion Hampton', p: 'RB' }, { n: 'TreVeyon Henderson', p: 'RB' }] },
   ] },
-  { r: 5, pick: '#58', tag: '🆕 the Jadarian Price window', note: "Rookie Jadarian Price (Seahawks) goes ~R5 with a real path to Seattle's lead job — Walker left for KC and Charbonnet is coming off a knee injury. Prime target before the keeper gap.", groups: [
+  { r: 5, pick: '#58', tag: '🆕 the Jadarian Price window', note: "Rookie Jadarian Price (Seahawks) goes ~R5 with a real path to Seattle's lead job — Walker left for KC and Charbonnet is coming off a knee injury.", groups: [
     { label: 'The rookie with a lead-back path', tier: 3, players: [{ n: 'Jadarian Price', p: 'RB' }] },
-    { label: 'RB depth — proven vets', tier: 4, players: [{ n: 'Chuba Hubbard', p: 'RB' }, { n: 'TreVeyon Henderson', p: 'RB' }, { n: 'James Conner', p: 'RB' }, { n: 'Aaron Jones', p: 'RB' }] },
+    { label: 'RB depth — proven vets', tier: 4, players: [{ n: 'Chuba Hubbard', p: 'RB' }, { n: 'James Conner', p: 'RB' }, { n: 'Aaron Jones', p: 'RB' }] },
     { label: 'WR4 with a path to more', tier: 4, players: [{ n: 'Jameson Williams', p: 'WR' }, { n: 'Tetairoa McMillan', p: 'WR' }, { n: 'Calvin Ridley', p: 'WR' }] },
   ] },
-  { r: 6, pick: '#63', keeper: 'Kyren Williams', kpos: 'RB' },
+  { r: 6, pick: '#63', tag: 'bonus pick — Kyren’s old slot', note: 'This pick is live again now that Kyren isn’t kept — more RB/WR volume, or whoever slid from the R5 lists.', groups: [
+    { label: 'RB volume swings', tier: 4, players: [{ n: 'RJ Harvey', p: 'RB' }, { n: 'Tony Pollard', p: 'RB' }, { n: 'David Montgomery', p: 'RB' }] },
+    { label: 'WR upside', tier: 4, players: [{ n: 'Travis Hunter', p: 'WR' }, { n: 'Xavier Worthy', p: 'WR' }, { n: 'Jordan Addison', p: 'WR' }] },
+  ] },
   { r: 7, pick: '#82', keeper: 'Trey McBride', kpos: 'TE' },
-  { r: 8, pick: '#87', tag: 'your QB1 window', note: "If no elite QB fell at R4, take your QB1 here — the second tier is still whole. (Kyler's off this list: benched, then released by Arizona; he's a Vikings flier now.)", groups: [
-    { label: 'QB1 targets', tier: 4, players: [{ n: 'Bo Nix', p: 'QB' }, { n: 'Baker Mayfield', p: 'QB' }, { n: 'Justin Herbert', p: 'QB' }, { n: 'Caleb Williams', p: 'QB' }] },
-    { label: 'Or best RB/WR if a QB run beat you to it', tier: 4, players: [{ n: 'Jaylen Warren', p: 'RB' }, { n: 'Keon Coleman', p: 'WR' }, { n: 'Chris Olave', p: 'WR' }] },
+  { r: 8, pick: '#87', tag: 'skip the QB run — stack RB/WR', note: 'This used to be your QB1 window. Others will spend R8–R10 chasing Nix/Baker/Herbert — you have Maye for an 11th. Take the best RB/WR they pass over.', groups: [
+    { label: 'Best available RB/WR', tier: 4, players: [{ n: 'Jaylen Warren', p: 'RB' }, { n: 'Keon Coleman', p: 'WR' }, { n: 'Chris Olave', p: 'WR' }] },
   ] },
-  { r: 9, pick: '#106', tag: '🔒 Corum + rehab discounts', note: "Corum here or at #111 — still Kyren's clear handcuff on the 2026 depth chart. Judkins (ankle/fibula, Dec) and Skattebo (ankle, cleared) are big talents at an injury discount.", groups: [
-    { label: 'The handcuff', tier: 4, players: [{ n: 'Blake Corum', p: 'RB' }] },
-    { label: 'Upside if you wait on Corum one round', tier: 4, players: [{ n: 'Quinshon Judkins', p: 'RB' }, { n: 'Cam Skattebo', p: 'RB' }, { n: 'Jayden Reed', p: 'WR' }, { n: 'Josh Downs', p: 'WR' }] },
+  { r: 9, pick: '#106', tag: 'rehab discounts + upside', note: 'Judkins (ankle/fibula, Dec) and Skattebo (ankle, cleared) are big talents at an injury discount. Corum is no longer YOUR handcuff — he backs up a Kyren you didn’t keep — but he’s still a value/trade chip if he slides.', groups: [
+    { label: 'Upside swings', tier: 4, players: [{ n: 'Quinshon Judkins', p: 'RB' }, { n: 'Cam Skattebo', p: 'RB' }, { n: 'Jayden Reed', p: 'WR' }, { n: 'Josh Downs', p: 'WR' }] },
   ] },
-  { r: 10, pick: '#111', tag: 'Corum last call / best dart', note: 'Whichever of Corum / the R9 upside group is left. Benson now backs up rookie Jeremiyah Love in Arizona.', groups: [
-    { label: 'Corum — last call if you waited', tier: 4, players: [{ n: 'Blake Corum', p: 'RB' }] },
-    { label: 'Best dart on the board', tier: 5, players: [{ n: 'Braelon Allen', p: 'RB' }, { n: 'Trey Benson', p: 'RB' }, { n: 'Rashid Shaheed', p: 'WR' }, { n: 'Marvin Mims Jr.', p: 'WR' }] },
+  { r: 10, pick: '#111', tag: 'handcuff your RB1 + darts', note: 'If you took Jeremiyah Love at 2.15, Trey Benson (ARI) is now YOUR handcuff — grab him here. Otherwise best dart standing.', groups: [
+    { label: 'Your handcuff (if you drafted Love)', tier: 4, players: [{ n: 'Trey Benson', p: 'RB' }] },
+    { label: 'Best dart on the board', tier: 5, players: [{ n: 'Braelon Allen', p: 'RB' }, { n: 'Blake Corum', p: 'RB' }, { n: 'Rashid Shaheed', p: 'WR' }, { n: 'Marvin Mims Jr.', p: 'WR' }] },
   ] },
+  { r: 11, pick: '#130', keeper: 'Drake Maye', kpos: 'QB' },
 ];
-// R11+ (picks #130 · #135 · #154 · #159 · #178) — late-round sleeper pools, not
+// R12+ (picks #135 · #154 · #159 · #178) — late-round sleeper pools, not
 // per-round: draft whoever's left by group priority. K/DST stay out of the ⭐
 // board merge. Deliberately skipped: Ricky Pearsall (knee — 2026 season in
 // doubt) and Isaac Guerendo (PUP, pec).
 const TURN_SLEEPERS = [
   { label: '🧢 Handcuff lottery tickets — bell-cow upside one injury away', tier: 5, players: [{ n: 'Jaylen Wright', p: 'RB' }, { n: 'Tank Bigsby', p: 'RB' }, { n: 'Tyjae Spears', p: 'RB' }] },
   { label: '🚀 WR darts & rookie fliers', tier: 5, players: [{ n: 'Carnell Tate', p: 'WR' }, { n: 'Zachariah Branch', p: 'WR' }, { n: 'Jauan Jennings', p: 'WR' }] },
-  { label: '🧊 QB2 / bye-week cover — only in the final rounds', tier: 5, players: [{ n: 'Kyler Murray', p: 'QB' }, { n: 'Jordan Love', p: 'QB' }, { n: 'Dak Prescott', p: 'QB' }] },
+  { label: '🧊 Maye insurance — one cheap QB2 at the very end, or just stream', tier: 5, players: [{ n: 'Kyler Murray', p: 'QB' }, { n: 'Jordan Love', p: 'QB' }, { n: 'Dak Prescott', p: 'QB' }] },
   { label: '🦵 K & 🛡 DST — your last two picks, never earlier', tier: 5, players: [{ n: 'Brandon Aubrey', p: 'K' }, { n: 'Jake Bates', p: 'K' }, { n: 'Eagles D/ST', p: 'DST' }, { n: 'Broncos D/ST', p: 'DST' }] },
 ];
 // Owner's league scoring (edit here if the league settings change).
@@ -2150,9 +2153,9 @@ function renderFantasyFootball() {
       </details>`;
   }).join('') + `
       <details class="tp-r" style="margin:6px 0;border:1px solid var(--line);border-radius:10px;background:var(--card)">
-        ${tpSummary('R11+', '#130+', '😴 late-round sleepers')}
+        ${tpSummary('R12+', '#135+', '😴 late-round sleepers')}
         <div style="padding:0 12px 10px">
-          <div style="font-size:11.5px;color:var(--muted)">Picks #130 · #135 · #154 · #159 · #178 — draft whoever's left, in group order.</div>
+          <div style="font-size:11.5px;color:var(--muted)">Picks #135 · #154 · #159 · #178 (R11 #130 goes to your Maye keeper) — draft whoever's left, in group order.</div>
           ${TURN_SLEEPERS.map(tpGroup).join('')}
         </div>
       </details>`;
@@ -2174,7 +2177,7 @@ function renderFantasyFootball() {
     <div id="tr-content" class="tr-content"></div>
 
     <h2 class="section-title">🎯 Draft-Turn Plan</h2>
-    <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Your full draft from <b>slot 10</b> (12-team half-PPR snake; keepers <b>Kyren R6</b> + <b>McBride R7</b>). Tap a round to expand its targets — R11+ is the sleeper pool.</div>
+    <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Your full draft from <b>slot 10</b> (12-team half-PPR snake; keepers <b>McBride R7</b> + <b>Maye R11</b> — Kyren goes back in the pool). Tap a round to expand its targets — R12+ is the sleeper pool.</div>
     <div class="setup-card" style="padding:12px 14px">${turnPlanHTML}
       <div style="margin-top:10px"><button id="tp-add" class="fan-btn">⭐ Add these targets to my board</button> <span id="tp-note" class="muted" style="font-size:11.5px"></span></div>
     </div>
@@ -2685,6 +2688,7 @@ Zay Flowers|WR|BAL
 DeVonta Smith|WR|PHI
 Chuba Hubbard|RB|CAR
 TreVeyon Henderson|RB|NE
+Drake Maye|QB|NE
 Sam LaPorta|TE|DET
 James Conner|RB|ARI
 Aaron Jones|RB|MIN
@@ -2769,10 +2773,11 @@ const MOCK_CAP = { QB: 2, RB: 6, WR: 7, TE: 2, K: 1, DST: 1, FLEX: 9 };
 
 // Owner's 2-keeper league: kept players cost the round they're kept in, so the
 // user forfeits their pick in that round and the keeper fills it. Edit here if
-// the keepers change. (Kyren's handcuff Blake Corum is on the board to target.)
+// the keepers change. (2026: Maye in the 11th replaced Kyren in the 6th — an
+// ~ADP-52 QB for pick #130; Kyren went back into the draft pool.)
 const MOCK_KEEPERS = [
   { name: 'Trey McBride', round: 7, pos: 'TE', team: 'ARI' },
-  { name: 'Kyren Williams', round: 6, pos: 'RB', team: 'LAR' },
+  { name: 'Drake Maye', round: 11, pos: 'QB', team: 'NE' },
 ];
 // The user's 0-based overall pick number in a given (1-based) snake round.
 function mockUserOverallInRound(m, round) {
