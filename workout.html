@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#7a2418" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Workout Lab" />
+  <title>Workout Lab — Sports-Hub Labs</title>
+  <meta name="description" content="A 3-day training split — chest &amp; triceps, back &amp; biceps, legs &amp; shoulders — with guided sessions, rest timers and load tracking." />
+  <link rel="icon" type="image/png" href="favicon.png?v=9" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
+  <link rel="stylesheet" href="styles.css?v=143" />
+  <link rel="stylesheet" href="workout.css?v=1" />
+  <script>
+    /* Match the app: set the theme before first paint so there's no flash. */
+    (function () {
+      try {
+        var t = localStorage.getItem('sportshub:theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body class="ds-body wk-body">
+  <header class="ds-top wk-top">
+    <div class="ds-brand">
+      <span class="ds-shield">🏋️</span>
+      <h1>Workout Lab<small>Sports-Hub Labs</small></h1>
+    </div>
+    <a class="ds-back" href="index.html">← Back to Sports-Hub</a>
+  </header>
+
+  <main class="ds-main">
+    <section id="home" hidden></section>
+    <section id="plan" hidden></section>
+    <section id="session" hidden></section>
+    <section id="coverage" hidden></section>
+    <section id="history" hidden></section>
+    <section id="summary" hidden></section>
+  </main>
+
+  <script src="workout.js?v=1" defer></script>
+</body>
+</html>

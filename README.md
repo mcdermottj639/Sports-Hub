@@ -10,6 +10,7 @@ A personal multi-sport hub — **NFL (Go Birds 🦅), NBA, and MLB** — with li
 - **Scores** — browse any sport's slate for any date.
 - **Standings** — division/conference tables, your teams highlighted.
 - **Predictions** — pick winners of upcoming games; they grade automatically once final. Picks save in your browser.
+- **🧪 Labs** — standalone experiments: an NFL mock draft simulator, a sports trivia lab, a fantasy mock draft, and a **Workout Lab** (a 3-day training split with guided sessions, rest timers and load tracking).
 
 ## How it works
 

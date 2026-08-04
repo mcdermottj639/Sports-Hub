@@ -239,6 +239,37 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   Mix falls back to the local Mixed set with a one-shot notice banner
   (`liveFallback`/`pendingNotice`). `trivialab:best` key `live` holds the Sports Mix
   best. Attribution (CC BY-SA 4.0) on the home note + live results.
+- `workout.html` / `workout.css` / `workout.js` — **🏋️ Labs: Workout Lab**, a standalone
+  page (linked from the Labs tab, alongside the draft sim and trivia lab). Self-contained,
+  no backend, no ESPN — it's the owner's **3-day training split** (Day 1 chest & triceps,
+  Day 2 back & biceps, Day 3 legs & shoulders), built from the 30-minute dumbbell/kettlebell
+  format they wrote for chest day: short warm-up → 3 timed blocks (superset / superset /
+  circuit) → cooldown. Data lives in one `PLAN` const (`{k,n,sub,emoji,color,mins,focus,
+  intro,warmup[],blocks[],cooldown[]}`; block = `{id,name,mins,style,rounds,rest,note,gap,
+  why,ex[]}`; exercise = `{n,reps,load,cue,alts[]}`) plus `ADDONS` (Conditioning /
+  Core Blitz / Mobility / Neck & Grip — optional standalone modules). **Edit `PLAN` to
+  change the program; nothing else needs to move.**
+  - **Gap-fix blocks** — a 3-day split leaves real holes, so each day ends with a short
+    block (`gap:true`, rendered gold with a "Why this is here" note) covering what the
+    split misses: **Day 1 → core/abs**, **Day 2 → grip, forearms & spinal erectors**,
+    **Day 3 → calves & anti-rotation core**. Two more gaps are fixed inside normal blocks
+    — the **RDL** (hamstrings/glutes) and the **lateral raise** (side delts) headline
+    Day 3 Block B — and rear delts show up in three places. The `COVERAGE` const drives a
+    **Muscle coverage map** screen listing every major muscle as `ok` / `fix` / `note`
+    (`note` = deliberately optional: neck, cardio).
+  - **Guided session** — one block per screen with tappable set chips, a per-exercise
+    weight field, a rest timer (auto-starts on a set tap, WebAudio beep + `navigator.vibrate`
+    at zero), elapsed clock, block dots, and Prev/Next. Finishing writes a session log and
+    stashes each load so the next time that day comes around the row reads
+    "Last time: 45 lb". Summary screen shows duration, sets and rough tonnage
+    (weight × sets × rep-range midpoint — approximate, labeled).
+  - localStorage: `workoutlab:log` (sessions), `workoutlab:last` (load per exercise id,
+    `day.blockIdN`), `workoutlab:prefs` (`unit` lb/kg, `autoRest`, `sound`).
+  - Themed via the shared `styles.css` vars **and** the `<head>` theme script, so unlike
+    `draft.html`/`trivia.html` it renders correctly in BOTH light and dark. Standalone, so
+    NOT part of the `APP_VERSION`/`?v=` ritual — but bump `workout.css`/`workout.js` `?v=`
+    in `workout.html` on changes (currently **v1**), and its `styles.css?v=` (now 143) if
+    you change shared CSS it leans on.
 - `scriptable/` — optional iOS Home Screen widgets ([Scriptable](https://scriptable.app), JS).
   **Companion scripts, NOT part of the web app** — they don't deploy with Pages and
   don't affect `APP_VERSION`. `SportsHubFantasy.js` renders the fantasy matchup
@@ -260,7 +291,20 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v142**.
+Current version as of this writing: **v143**.
+
+- **🏋️ Workout Lab (v143)** — a new standalone Labs page (`workout.html`/`.css`/`.js`,
+  linked from the Labs tab) holding the owner's 3-day training split. Built from the
+  chest-day session they wrote, kept in the same 30-minute block format, and extended to
+  all three days. See the `workout.*` entry in **Files** for the data model and features.
+  The design decision worth remembering: rather than adding a 4th day for the muscles a
+  3-day split misses (core, calves, hamstrings, side/rear delts, grip, erectors), each day
+  ends with a short **gap-fix block** and two gaps were folded into Day 3's main work —
+  so it stays three sessions of ~33 min. The **Coverage map** screen is the in-app answer
+  to "what body parts did I miss?". No ESPN, no backend, so it was fully verifiable in the
+  sandbox — the whole flow (plan → session → set logging → summary → history → "last time"
+  prefill) was driven end-to-end in headless Chromium in both themes, no console errors.
+  The app itself only changed by one link in the Labs tab + the version bump.
 
 - **Keeper flip: Drake Maye (R11) in, Kyren (R6) out (v142)** — the owner
   decided (after a value comparison: Maye ~ADP 52 / consensus QB2-3 kept at
@@ -696,8 +740,8 @@ Current version as of this writing: **v142**.
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
 - Tabs: Home, Eagles, **Red Sox**, AI Picks, Fantasy, **Labs**, About. `showTab()` +
   `renderers{}` map drive rendering. (**Labs** — its own top-level tab as of
-  v107, holding the Labs experiments: the standalone `draft.html`/`trivia.html`
-  links plus the in-app **Fantasy Mock Draft** rendered into `#labs-mock`; its
+  v107, holding the Labs experiments: the standalone `draft.html`/`trivia.html`/
+  `workout.html` links plus the in-app **Fantasy Mock Draft** rendered into `#labs-mock`; its
   renderer is a no-op since the content is static + launched on demand.) (**Scores** and **Standings** tabs were
   removed in v78 — the owner gets those better elsewhere; Home is now the daily
   full-slate overview. In v79 the Home slate was made view-only; **v89 reversed
