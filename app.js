@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v143';
+const APP_VERSION = 'v144';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2071,6 +2071,34 @@ const TURN_SLEEPERS = [
   { label: '🧊 Maye insurance — one cheap QB2 at the very end, or just stream', tier: 5, players: [{ n: 'Kyler Murray', p: 'QB' }, { n: 'Jordan Love', p: 'QB' }, { n: 'Dak Prescott', p: 'QB' }] },
   { label: '🦵 K & 🛡 DST — your last two picks, never earlier', tier: 5, players: [{ n: 'Brandon Aubrey', p: 'K' }, { n: 'Jake Bates', p: 'K' }, { n: 'Eagles D/ST', p: 'DST' }, { n: 'Broncos D/ST', p: 'DST' }] },
 ];
+// 💰 Contract Angle — players whose 2026 contract situation is a reason to
+// target them: either just signed/re-signed for big money (team commitment =
+// locked-in role and volume) or in a contract year playing for the next deal.
+// Curated from verified Aug-2026 reporting (web-checked like the v141 plan
+// facts); `deal` is the one-line why, `tier` feeds the ⭐ board merge. Edit
+// here as extensions get signed — a contract-year guy who gets paid moves up
+// to the `paid` group.
+const CONTRACT_WATCH = [
+  { key: 'paid', label: '💰 Just paid — big new money, locked-in role', color: '#3ad29f',
+    note: 'A big signing is the team telling you its plans: guaranteed money buys guaranteed touches. These deals all closed this offseason.',
+    players: [
+      { n: 'Jaxon Smith-Njigba', p: 'WR', tier: 1, deal: '4yr/$168.6M extension (SEA) — highest-paid WR in NFL history' },
+      { n: "De'Von Achane", p: 'RB', tier: 2, deal: 'Extended — Miami named him one of three "pillars" to build around' },
+      { n: 'Kenneth Walker III', p: 'RB', tier: 2, deal: '3yr/$43M with the Chiefs, fresh off the Super Bowl LX MVP' },
+      { n: 'Mike Evans', p: 'WR', tier: 3, deal: '3yr deal in San Francisco — a real target-earner move at 32' },
+      { n: 'Aaron Jones', p: 'RB', tier: 4, deal: 'Re-upped in Minnesota — committee, but the trusted half of it' },
+      { n: 'Alec Pierce', p: 'WR', tier: 5, deal: 'Re-signed IND 4yr/$114M ($84M gtd) — paid like a true WR1' },
+    ] },
+  { key: 'year', label: '🔥 Contract year — playing for the next deal', color: '#d9b341',
+    note: 'Final-year guys with no extension done. The incentive is obvious — and their teams will feed them to see what they have before paying.',
+    players: [
+      { n: 'Puka Nacua', p: 'WR', tier: 1, deal: 'Last year of a Day-3 rookie deal ($1.2M cap hit), no extension yet' },
+      { n: 'Chase Brown', p: 'RB', tier: 3, deal: 'Unextended in CIN — 22 TDs the last two years, tag talk looming' },
+      { n: 'Rashee Rice', p: 'WR', tier: 3, deal: 'Final rookie year; KC has said no extension before the season' },
+      { n: 'Sam LaPorta', p: 'TE', tier: 4, deal: 'Final year of his rookie deal — elite per-route numbers when healthy' },
+      { n: 'Kyler Murray', p: 'QB', tier: 5, deal: '1-yr prove-it in Minnesota after the ARI release' },
+    ] },
+];
 // Owner's league scoring (edit here if the league settings change).
 const NFL_SCORING = 'Half-PPR (0.5 per reception)';
 const daysUntil = (iso) => Math.ceil((new Date(iso + 'T12:00:00') - new Date()) / 86400000);
@@ -2160,6 +2188,20 @@ function renderFantasyFootball() {
         </div>
       </details>`;
 
+  // 💰 Contract Angle — one row per player (name · pos · the deal detail),
+  // grouped paid vs contract-year. Inline styles per the v74 lesson.
+  const contractHTML = CONTRACT_WATCH.map((g) => `
+    <div style="margin:10px 0 14px">
+      <div style="font-size:12.5px;font-weight:700;color:${g.color};margin-bottom:3px">${esc(g.label)}</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:7px">${esc(g.note)}</div>
+      ${g.players.map((pl) => `
+        <div style="display:flex;align-items:baseline;gap:8px;padding:7px 10px;margin:4px 0;border:1px solid var(--line);border-radius:10px;background:var(--card);flex-wrap:wrap">
+          <b style="font-size:13px;flex:none">${esc(pl.n)}</b>
+          <span style="color:var(--muted);font-size:11px;flex:none">${esc(pl.p)}</span>
+          <span style="flex:1;min-width:180px;font-size:11.5px;color:var(--muted)">${esc(pl.deal)}</span>
+        </div>`).join('')}
+    </div>`).join('');
+
   const liveOn = !!(fanState.cfg && fanState.cfg.football);
   box.innerHTML = `
     ${liveOn ? '<div style="margin-bottom:10px"><button id="pp-live" class="fan-btn ghost">← Back to live league</button></div>' : ''}
@@ -2180,6 +2222,12 @@ function renderFantasyFootball() {
     <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Your full draft from <b>slot 10</b> (12-team half-PPR snake; keepers <b>McBride R7</b> + <b>Maye R11</b> — Kyren goes back in the pool). Tap a round to expand its targets — R12+ is the sleeper pool.</div>
     <div class="setup-card" style="padding:12px 14px">${turnPlanHTML}
       <div style="margin-top:10px"><button id="tp-add" class="fan-btn">⭐ Add these targets to my board</button> <span id="tp-note" class="muted" style="font-size:11.5px"></span></div>
+    </div>
+
+    <h2 class="section-title">💰 Contract Angle</h2>
+    <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Follow the money: guys who just got <b>paid big</b> (the team is committing volume) and guys in a <b>contract year</b> with everything to play for. Verified this offseason — an extension moves a player up a group.</div>
+    <div class="setup-card" style="padding:12px 14px">${contractHTML}
+      <div style="margin-top:4px"><button id="cw-add" class="fan-btn">⭐ Add contract targets to my board</button> <span id="cw-note" class="muted" style="font-size:11.5px"></span></div>
     </div>
 
     <h2 class="section-title">My Draft Board</h2>
@@ -2258,6 +2306,22 @@ function renderFantasyFootball() {
     }));
     if (added) { saveNflBoard(list); renderFantasyFootball(); }
     else { const n = box.querySelector('#tp-note'); if (n) n.textContent = 'All turn targets are already on your board.'; }
+  };
+  // Same non-destructive merge for the 💰 Contract Angle names (tier comes
+  // from each player's entry; skips anyone already on the board).
+  const cwBtn = box.querySelector('#cw-add');
+  if (cwBtn) cwBtn.onclick = () => {
+    const list = loadNflBoard();
+    const have = new Set(list.map((p) => (p.name || '').toLowerCase()));
+    let added = 0;
+    CONTRACT_WATCH.forEach((g) => g.players.forEach((pl) => {
+      if (have.has(pl.n.toLowerCase())) return;
+      list.push({ name: pl.n, pos: pl.p, tier: pl.tier });
+      have.add(pl.n.toLowerCase());
+      added++;
+    }));
+    if (added) { saveNflBoard(list); renderFantasyFootball(); }
+    else { const n = box.querySelector('#cw-note'); if (n) n.textContent = 'All contract targets are already on your board.'; }
   };
   const liveBtn = box.querySelector('#pp-live');
   if (liveBtn) liveBtn.onclick = () => { fanState.footballView = 'live'; renderFantasy(); };

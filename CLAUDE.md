@@ -291,7 +291,23 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v143**.
+Current version as of this writing: **v144**.
+
+- **💰 Contract Angle card (v144)** — the Fantasy → Football prep view gained a
+  contract-status targeting section (between the Draft-Turn Plan and My Draft
+  Board): players to target because they either **just signed/re-signed for big
+  money** (team commitment = locked-in volume) or are in a **contract year**
+  playing for the next deal. Driven by the `CONTRACT_WATCH` const (two groups
+  `paid`/`year`, each player `{n, p, tier, deal}` with a one-line verified deal
+  note); rendered with inline styles (v74 lesson) plus a **⭐ Add contract
+  targets to my board** button (`#cw-add`) doing the same non-destructive merge
+  as the turn plan's (tier from the player entry). Facts web-verified this
+  session (Aug 2026), same method as v141: paid = JSN 4yr/$168.6M (record WR
+  deal), Achane extended (a MIA "pillar"), KW3→KC 3/$43M, Evans→SF, Jones
+  re-upped MIN, Pierce re-signed IND 4/$114M; contract-year = Nacua (Day-3 deal,
+  unextended), Chase Brown (CIN tag talk), Rashee Rice (KC won't extend
+  pre-season), LaPorta (final rookie year), Murray (1-yr MIN). **Maintenance:
+  when a contract-year guy signs an extension, move him to the `paid` group.**
 
 - **🏋️ Workout Lab (v143)** — a new standalone Labs page (`workout.html`/`.css`/`.js`,
   linked from the Labs tab) holding the owner's 3-day training split. Built from the
