@@ -263,12 +263,31 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     stashes each load so the next time that day comes around the row reads
     "Last time: 45 lb". Summary screen shows duration, sets and rough tonnage
     (weight × sets × rep-range midpoint — approximate, labeled).
+  - **Exercise visuals (wk v2)** — every exercise row shows a small **stick-figure
+    "how it looks" diagram**: inline SVG (no image assets), 1–2 frames reading
+    start → finish with an arrow, figure strokes in `currentColor` (so both themes
+    work free) and weights/bars/bands in the lab accent. Data: the `VIS` const
+    (~45 hand-drawn poses; frame primitives `['h',x,y]` head / `['p',…]` limb
+    polyline / `['e',…]` accent equipment line / `['d'|'k',x,y]` dumbbell/kettlebell
+    / `['o',x,y,r]` accent circle / `['g',…]` ground-wall line, in a 95×96 box,
+    ground y=84) + the ORDERED `VIS_MATCH` regex table keying exercise NAMES to
+    poses (specific before generic: rear-delt before flye, wrist curl before curl…).
+    `visFor(name)` → `visSVG(vis)`. Always visible on block exercises (plan +
+    session); warm-up/cooldown lists tuck theirs in a "👁 Show me" `<details>`.
+    A home-screen chip (`#vis-toggle`, pref `vis`) turns them all off. Add a new
+    exercise to `PLAN` → add/reuse a `VIS` entry + matcher.
+  - **Time tracking (wk v2)** — per-day workout time is now surfaced (duration was
+    always logged in `workoutlab:log` `dur`): a **Time this wk** tile in the (now
+    5-tile) home stat strip, a "⏱ N min trained today" line on the finish summary
+    (sums multiple sessions that day), and a **⏱ Time trained** card atop History —
+    this-week / last-week / avg-session totals + a 14-day minutes-per-day bar chart
+    (`timeChartHTML`, `.wk-tchart`/`.wk-time-tots` CSS, today's bar highlighted).
   - localStorage: `workoutlab:log` (sessions), `workoutlab:last` (load per exercise id,
-    `day.blockIdN`), `workoutlab:prefs` (`unit` lb/kg, `autoRest`, `sound`).
+    `day.blockIdN`), `workoutlab:prefs` (`unit` lb/kg, `autoRest`, `sound`, `vis`).
   - Themed via the shared `styles.css` vars **and** the `<head>` theme script, so unlike
     `draft.html`/`trivia.html` it renders correctly in BOTH light and dark. Standalone, so
     NOT part of the `APP_VERSION`/`?v=` ritual — but bump `workout.css`/`workout.js` `?v=`
-    in `workout.html` on changes (currently **v1**), and its `styles.css?v=` (now 143) if
+    in `workout.html` on changes (currently **v2**), and its `styles.css?v=` (now 143) if
     you change shared CSS it leans on.
 - `scriptable/` — optional iOS Home Screen widgets ([Scriptable](https://scriptable.app), JS).
   **Companion scripts, NOT part of the web app** — they don't deploy with Pages and

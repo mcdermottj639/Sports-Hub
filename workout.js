@@ -46,7 +46,7 @@ const K_LAST = 'workoutlab:last';    // { exerciseId: { w, d } }  last load used
 const K_PREFS = 'workoutlab:prefs';  // { unit, autoRest, sound }
 const readJSON = (k, fb) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? fb : v; } catch (e) { return fb; } };
 const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
-const prefs = () => Object.assign({ unit: 'lb', autoRest: true, sound: true }, readJSON(K_PREFS, {}));
+const prefs = () => Object.assign({ unit: 'lb', autoRest: true, sound: true, vis: true }, readJSON(K_PREFS, {}));
 const setPref = (k, v) => { const p = prefs(); p[k] = v; writeJSON(K_PREFS, p); };
 
 // ==========================================================================
@@ -472,6 +472,330 @@ const SCHEDULE = [
 ];
 
 // ==========================================================================
+// EXERCISE VISUALS
+// ==========================================================================
+/* Tiny stick-figure "how it looks" diagrams, drawn as inline SVG so there are
+ * no image assets to load and both themes work for free (figure strokes use
+ * currentColor; weights, bars and bands use the lab accent). Each visual is
+ * 1–2 frames; two frames read start → finish with an arrow between them.
+ *
+ * Frame primitives (coords live in a 95×96 box, ground at y=84):
+ *   ['h', x, y]            head (circle)
+ *   ['p', x1,y1,x2,y2,…]   body/limb polyline
+ *   ['e', x1,y1,…]         equipment line (bar, band, bench) — accent color
+ *   ['d', x, y]            dumbbell     ['k', x, y]  kettlebell
+ *   ['o', x, y, r]         accent circle outline (plate, motion hint)
+ *   ['g', x1,y1,x2,y2]     ground / wall line (muted)
+ *
+ * Exercises are matched by NAME via VIS_MATCH (first hit wins), so the
+ * diagram always shows the primary movement even when `alts` list swaps.
+ * Add a new exercise to PLAN → add/reuse a VIS entry + a matcher here.
+ */
+const VG = ['g', 6, 84, 89, 84]; // the floor
+
+const VIS = {
+  // --- lying press family (side view, head at left) -----------------------
+  floorpress: { cap: 'On the floor — upper arms stop at the ground, press straight up', f: [
+    [VG, ['h', 16, 74], ['p', 23, 78, 52, 78], ['p', 52, 78, 63, 62, 74, 82], ['p', 28, 78, 40, 76, 40, 58], ['d', 40, 53]],
+    [VG, ['h', 16, 74], ['p', 23, 78, 52, 78], ['p', 52, 78, 63, 62, 74, 82], ['p', 28, 78, 29, 50], ['d', 29, 45]],
+  ] },
+  closegrip: { cap: 'Bells squeezed together, elbows tucked to the ribs', f: [
+    [VG, ['h', 16, 74], ['p', 23, 78, 52, 78], ['p', 52, 78, 63, 62, 74, 82], ['p', 28, 78, 39, 72, 39, 60], ['d', 36, 56], ['d', 42, 56]],
+    [VG, ['h', 16, 74], ['p', 23, 78, 52, 78], ['p', 52, 78, 63, 62, 74, 82], ['p', 28, 78, 29, 50], ['d', 26, 45], ['d', 32, 45]],
+  ] },
+  inclinepress: { cap: 'Bench at 30–45° — press up and slightly back', f: [
+    [VG, ['g', 24, 82, 60, 52], ['h', 64, 44], ['p', 60, 50, 42, 68], ['p', 42, 68, 33, 70, 31, 84], ['p', 58, 52, 68, 62, 72, 54], ['d', 74, 50]],
+    [VG, ['g', 24, 82, 60, 52], ['h', 64, 44], ['p', 60, 50, 42, 68], ['p', 42, 68, 33, 70, 31, 84], ['p', 58, 52, 73, 37], ['d', 76, 33]],
+  ] },
+  skull: { cap: 'Elbows point up and stay frozen — only the forearm moves', f: [
+    [VG, ['h', 16, 74], ['p', 23, 78, 52, 78], ['p', 52, 78, 63, 62, 74, 82], ['p', 30, 78, 32, 56, 19, 58], ['k', 15, 59]],
+    [VG, ['h', 16, 74], ['p', 23, 78, 52, 78], ['p', 52, 78, 63, 62, 74, 82], ['p', 30, 78, 31, 50], ['k', 31, 44]],
+  ] },
+  chestflye: { cap: 'Soft elbows locked — "hug a barrel" from wide to together', f: [
+    [VG, ['h', 16, 74], ['p', 23, 78, 52, 78], ['p', 52, 78, 63, 62, 74, 82], ['p', 29, 78, 13, 58], ['d', 11, 54], ['p', 29, 78, 45, 58], ['d', 47, 54]],
+    [VG, ['h', 16, 74], ['p', 23, 78, 52, 78], ['p', 52, 78, 63, 62, 74, 82], ['p', 29, 78, 26, 50], ['d', 25, 45], ['p', 29, 78, 32, 50], ['d', 33, 45]],
+  ] },
+  pullover: { cap: 'Nearly-straight arms — deep stretch behind, then over the chest', f: [
+    [VG, ['h', 18, 74], ['p', 25, 78, 52, 78], ['p', 52, 78, 63, 62, 74, 82], ['p', 28, 78, 9, 62], ['d', 7, 58]],
+    [VG, ['h', 18, 74], ['p', 25, 78, 52, 78], ['p', 52, 78, 63, 62, 74, 82], ['p', 28, 78, 29, 50], ['d', 29, 45]],
+  ] },
+  legraise: { cap: 'Legs up, curl the pelvis — then lower slower than you lifted', f: [
+    [VG, ['h', 16, 74], ['p', 23, 78, 50, 78], ['p', 30, 78, 44, 80], ['p', 50, 78, 52, 50]],
+    [VG, ['h', 16, 74], ['p', 23, 78, 50, 78], ['p', 30, 78, 44, 80], ['p', 50, 78, 76, 64]],
+  ] },
+  hollow: { cap: 'Low back glued to the floor — hold the banana', f: [
+    [VG, ['h', 18, 60], ['p', 25, 64, 50, 72], ['p', 50, 72, 78, 56], ['p', 25, 64, 8, 52]],
+  ] },
+  twist: { cap: 'Lean back, rotate rib cage side to side — the weight follows your chest', f: [
+    [VG, ['h', 37, 38], ['p', 41, 44, 50, 66], ['p', 50, 66, 66, 56, 75, 66], ['p', 42, 48, 26, 56], ['d', 23, 58]],
+    [VG, ['h', 37, 38], ['p', 41, 44, 50, 66], ['p', 50, 66, 66, 56, 75, 66], ['p', 42, 48, 59, 52], ['d', 62, 53]],
+  ] },
+  bridge: { cap: 'Heels close, drive the hips up — squeeze at the top', f: [
+    [VG, ['h', 13, 76], ['p', 20, 80, 48, 80], ['p', 48, 80, 60, 64], ['p', 60, 64, 60, 84]],
+    [VG, ['h', 13, 76], ['p', 20, 80, 52, 60], ['p', 52, 60, 62, 62], ['p', 62, 62, 62, 84]],
+  ] },
+  superman: { cap: 'Face down — squeeze the glutes to float arms and legs up', f: [
+    [VG, ['h', 11, 76], ['p', 18, 80, 76, 80]],
+    [VG, ['h', 11, 66], ['p', 19, 72, 46, 79, 72, 72], ['p', 22, 72, 8, 62], ['p', 70, 73, 84, 64]],
+  ] },
+  cobra: { cap: 'Hips stay down — press the chest up and forward', f: [
+    [VG, ['h', 19, 50], ['p', 25, 56, 44, 72, 78, 80], ['p', 25, 58, 23, 82]],
+  ] },
+  windmill: { cap: 'Side-lying, knees stacked — only the top arm travels', f: [
+    [VG, ['h', 12, 72], ['p', 19, 76, 50, 76], ['p', 50, 76, 62, 64, 72, 72], ['p', 23, 76, 25, 54]],
+    [VG, ['h', 12, 72], ['p', 19, 76, 50, 76], ['p', 50, 76, 62, 64, 72, 72], ['p', 23, 76, 7, 62]],
+  ] },
+
+  // --- plank / push-up family ---------------------------------------------
+  pushup: { cap: 'One straight line, ear to ankle — chest to the deck and back', f: [
+    [VG, ['h', 18, 46], ['p', 25, 50, 56, 64, 78, 80], ['p', 25, 50, 28, 82]],
+    [VG, ['h', 14, 62], ['p', 21, 66, 56, 76, 79, 82], ['p', 21, 66, 12, 74, 22, 82]],
+  ] },
+  planktap: { cap: 'Feet wide, hips quiet — hand to the opposite shoulder', f: [
+    [VG, ['h', 18, 46], ['p', 25, 50, 56, 64, 78, 80], ['p', 25, 50, 28, 82]],
+    [VG, ['h', 18, 46], ['p', 25, 50, 56, 64, 78, 80], ['p', 25, 50, 29, 82], ['p', 25, 50, 14, 44]],
+  ] },
+  sideplank: { cap: 'Hips stacked and lifted — push the floor away', f: [
+    [VG, ['h', 17, 56], ['p', 24, 60, 78, 78], ['p', 27, 62, 27, 84], ['p', 26, 60, 31, 44]],
+  ] },
+  burpee: { cap: 'Chest to deck, then jump tall', f: [
+    [VG, ['h', 14, 62], ['p', 21, 66, 56, 76, 79, 82], ['p', 21, 66, 12, 74, 22, 82]],
+    [VG, ['h', 44, 16], ['p', 44, 22, 44, 46], ['p', 44, 26, 37, 7], ['p', 44, 26, 51, 7], ['p', 44, 46, 41, 58, 40, 70], ['p', 44, 46, 47, 58, 49, 70]],
+  ] },
+
+  // --- hanging / bar family -----------------------------------------------
+  pullup: { cap: 'From a dead hang, pull the chest toward the bar', f: [
+    [['e', 20, 8, 70, 8], ['h', 44, 26], ['p', 34, 8, 42, 31], ['p', 54, 8, 46, 31], ['p', 44, 32, 44, 56], ['p', 44, 56, 40, 68, 45, 76]],
+    [['e', 20, 8, 70, 8], ['h', 44, 13], ['p', 34, 8, 31, 17, 40, 20], ['p', 54, 8, 57, 17, 48, 20], ['p', 44, 20, 44, 44], ['p', 44, 44, 40, 56, 45, 64]],
+  ] },
+  hang: { cap: 'Arms straight, just hang — let the shoulders decompress', f: [
+    [['e', 20, 8, 70, 8], ['h', 44, 28], ['p', 34, 8, 42, 33], ['p', 54, 8, 46, 33], ['p', 44, 34, 44, 60], ['p', 44, 60, 42, 76], ['p', 44, 60, 47, 76]],
+  ] },
+  invrow: { cap: 'Body straight as a plank — row the chest up to the bar', f: [
+    [VG, ['e', 16, 24, 60, 24], ['h', 21, 48], ['p', 27, 52, 56, 66, 79, 80], ['p', 30, 52, 40, 24]],
+    [VG, ['e', 16, 24, 60, 24], ['h', 19, 34], ['p', 25, 38, 55, 62, 79, 80], ['p', 28, 38, 36, 24]],
+  ] },
+
+  // --- hinge family (side view, facing right) -----------------------------
+  row: { cap: 'Flat back at ~45° — pull the bell to the belt line', f: [
+    [VG, ['h', 65, 32], ['p', 59, 36, 42, 56], ['p', 42, 56, 44, 70, 42, 84], ['p', 42, 56, 48, 70, 48, 84], ['p', 57, 38, 59, 62], ['d', 59, 66]],
+    [VG, ['h', 65, 32], ['p', 59, 36, 42, 56], ['p', 42, 56, 44, 70, 42, 84], ['p', 42, 56, 48, 70, 48, 84], ['p', 57, 38, 52, 50, 45, 56], ['d', 44, 60]],
+  ] },
+  reardelt: { cap: 'Hinge over, light bells — lead with the elbows out to the sides', f: [
+    [VG, ['h', 65, 30], ['p', 59, 34, 42, 54], ['p', 42, 54, 44, 70, 42, 84], ['p', 42, 54, 48, 70, 48, 84], ['p', 57, 36, 57, 58], ['d', 57, 62]],
+    [VG, ['h', 65, 30], ['p', 59, 34, 42, 54], ['p', 42, 54, 44, 70, 42, 84], ['p', 42, 54, 48, 70, 48, 84], ['p', 57, 36, 71, 46], ['d', 74, 48], ['p', 57, 36, 43, 44], ['d', 40, 46]],
+  ] },
+  rdl: { cap: 'Hips push BACK, back flat — bells slide down the thighs', f: [
+    [VG, ['h', 45, 14], ['p', 45, 20, 45, 50], ['p', 45, 50, 42, 67, 41, 84], ['p', 45, 50, 49, 67, 50, 84], ['p', 45, 26, 45, 52], ['d', 45, 56]],
+    [VG, ['h', 69, 36], ['p', 63, 40, 45, 54], ['p', 45, 54, 47, 69, 45, 84], ['p', 45, 54, 51, 69, 51, 84], ['p', 61, 42, 60, 64], ['d', 60, 68]],
+  ] },
+  kbswing: { cap: 'A hip snap, not an arm lift — the bell floats to chest height', f: [
+    [VG, ['h', 64, 34], ['p', 58, 38, 42, 56], ['p', 42, 56, 45, 70, 43, 84], ['p', 42, 56, 49, 70, 49, 84], ['p', 56, 40, 35, 60], ['k', 31, 63]],
+    [VG, ['h', 45, 14], ['p', 45, 20, 45, 50], ['p', 45, 50, 42, 67, 41, 84], ['p', 45, 50, 49, 67, 50, 84], ['p', 45, 28, 66, 26], ['k', 71, 25]],
+  ] },
+
+  // --- squat / lunge family ------------------------------------------------
+  squat: { cap: 'Bell at the chest — sit down between the heels, chest tall', f: [
+    [VG, ['h', 45, 14], ['p', 45, 20, 45, 50], ['p', 45, 50, 42, 67, 41, 84], ['p', 45, 50, 49, 67, 50, 84], ['p', 45, 26, 54, 32, 55, 24], ['k', 58, 21]],
+    [VG, ['h', 52, 36], ['p', 52, 42, 42, 60], ['p', 42, 60, 57, 66, 51, 84], ['p', 42, 60, 55, 68, 47, 84], ['p', 51, 44, 61, 50, 62, 42], ['k', 65, 39]],
+  ] },
+  lunge: { cap: 'Step BACK — the back knee kisses the floor, front heel drives up', f: [
+    [VG, ['h', 45, 14], ['p', 45, 20, 45, 50], ['p', 45, 50, 42, 67, 41, 84], ['p', 45, 50, 49, 67, 50, 84]],
+    [VG, ['h', 41, 26], ['p', 41, 32, 41, 58], ['p', 41, 58, 45, 70, 45, 84], ['p', 41, 58, 57, 78, 70, 84]],
+  ] },
+  anklerock: { cap: 'Half-kneel — the knee travels over the toes, heel stays down', f: [
+    [VG, ['h', 48, 32], ['p', 48, 38, 48, 60], ['p', 48, 60, 32, 64], ['p', 32, 64, 32, 84], ['p', 48, 60, 62, 82], ['p', 62, 82, 76, 84]],
+    [VG, ['h', 43, 30], ['p', 43, 36, 46, 60], ['p', 46, 60, 25, 62], ['p', 25, 62, 31, 84], ['p', 46, 60, 62, 82], ['p', 62, 82, 76, 84]],
+  ] },
+
+  // --- standing lifts -------------------------------------------------------
+  ohp: { cap: 'Glutes tight so the back can\'t arch — finish over the ears', f: [
+    [VG, ['h', 45, 28], ['p', 45, 34, 45, 60], ['p', 45, 60, 42, 72, 41, 84], ['p', 45, 60, 48, 72, 49, 84], ['p', 45, 38, 54, 36], ['d', 57, 33]],
+    [VG, ['h', 45, 28], ['p', 45, 34, 45, 60], ['p', 45, 60, 42, 72, 41, 84], ['p', 45, 60, 48, 72, 49, 84], ['p', 45, 38, 52, 24, 52, 10], ['d', 52, 6]],
+  ] },
+  ohext: { cap: 'Bell behind the head, elbows in — press to lockout overhead', f: [
+    [VG, ['h', 45, 28], ['p', 45, 34, 45, 60], ['p', 45, 60, 42, 72, 41, 84], ['p', 45, 60, 48, 72, 49, 84], ['p', 45, 38, 54, 22, 40, 16], ['k', 35, 17]],
+    [VG, ['h', 45, 28], ['p', 45, 34, 45, 60], ['p', 45, 60, 42, 72, 41, 84], ['p', 45, 60, 48, 72, 49, 84], ['p', 45, 38, 52, 24, 52, 12], ['k', 52, 7]],
+  ] },
+  curl: { cap: 'Elbow pinned at your side — curl up, no swing', f: [
+    [VG, ['h', 45, 14], ['p', 45, 20, 45, 50], ['p', 45, 50, 42, 67, 41, 84], ['p', 45, 50, 49, 67, 50, 84], ['p', 45, 26, 47, 52], ['d', 47, 56]],
+    [VG, ['h', 45, 14], ['p', 45, 20, 45, 50], ['p', 45, 50, 42, 67, 41, 84], ['p', 45, 50, 49, 67, 50, 84], ['p', 45, 26, 48, 42, 38, 32], ['d', 36, 29]],
+  ] },
+  latraise: { cap: 'Light — lead with the elbows, stop at shoulder height', f: [
+    [VG, ['h', 47, 14], ['p', 47, 20, 47, 50], ['p', 47, 50, 41, 67, 39, 84], ['p', 47, 50, 53, 67, 55, 84], ['p', 47, 26, 44, 52], ['d', 44, 56], ['p', 47, 26, 50, 52], ['d', 50, 56]],
+    [VG, ['h', 47, 14], ['p', 47, 20, 47, 50], ['p', 47, 50, 41, 67, 39, 84], ['p', 47, 50, 53, 67, 55, 84], ['p', 47, 26, 25, 29], ['d', 21, 29], ['p', 47, 26, 69, 29], ['d', 73, 29]],
+  ] },
+  carry: { cap: 'Heavy bells, walk tall and quiet — ribs down, shoulders back', f: [
+    [VG, ['h', 46, 14], ['p', 46, 20, 46, 50], ['p', 46, 50, 38, 66, 34, 84], ['p', 46, 50, 54, 66, 58, 84], ['p', 46, 26, 43, 54], ['d', 43, 58], ['p', 46, 26, 50, 54], ['d', 50, 58]],
+    [VG, ['h', 46, 14], ['p', 46, 20, 46, 50], ['p', 46, 50, 54, 66, 57, 84], ['p', 46, 50, 40, 66, 35, 84], ['p', 46, 26, 43, 54], ['d', 43, 58], ['p', 46, 26, 50, 54], ['d', 50, 58]],
+  ] },
+  calfraise: { cap: 'Pause tall on the toes — full stretch at the bottom, no bounce', f: [
+    [VG, ['h', 46, 18], ['p', 46, 24, 46, 54], ['p', 46, 54, 44, 68, 44, 80], ['p', 44, 80, 54, 84], ['p', 46, 30, 44, 56], ['d', 44, 60]],
+    [VG, ['h', 46, 12], ['p', 46, 18, 46, 48], ['p', 46, 48, 44, 62, 44, 74], ['p', 44, 74, 52, 84], ['p', 46, 24, 44, 50], ['d', 44, 54]],
+  ] },
+  pinch: { cap: 'Plate held flat between fingers and thumb — just don\'t let go', f: [
+    [VG, ['h', 45, 14], ['p', 45, 20, 45, 50], ['p', 45, 50, 42, 67, 41, 84], ['p', 45, 50, 49, 67, 50, 84], ['p', 45, 26, 47, 54], ['o', 48, 61, 5]],
+  ] },
+  wristcurl: { cap: 'Forearm stays on the thigh — only the wrist moves, both directions', f: [
+    [VG, ['h', 33, 22], ['p', 35, 28, 40, 52], ['p', 40, 52, 60, 54], ['p', 60, 54, 62, 84], ['p', 36, 32, 52, 46], ['p', 52, 46, 66, 48], ['p', 66, 48, 70, 55], ['d', 71, 58]],
+    [VG, ['h', 33, 22], ['p', 35, 28, 40, 52], ['p', 40, 52, 60, 54], ['p', 60, 54, 62, 84], ['p', 36, 32, 52, 46], ['p', 52, 46, 66, 48], ['p', 66, 48, 71, 42], ['d', 72, 39]],
+  ] },
+
+  // --- bands / front-view moves --------------------------------------------
+  pullapart: { cap: 'Arms straight — stretch the band across the chest', f: [
+    [VG, ['h', 47, 14], ['p', 47, 20, 47, 50], ['p', 47, 50, 41, 67, 39, 84], ['p', 47, 50, 53, 67, 55, 84], ['e', 31, 29, 63, 29], ['p', 47, 26, 31, 29], ['p', 47, 26, 63, 29]],
+    [VG, ['h', 47, 14], ['p', 47, 20, 47, 50], ['p', 47, 50, 41, 67, 39, 84], ['p', 47, 50, 53, 67, 55, 84], ['e', 14, 24, 80, 24], ['p', 47, 26, 14, 24], ['p', 47, 26, 80, 24]],
+  ] },
+  pallof: { cap: 'Band anchored to the side — press out and refuse to twist', f: [
+    [VG, ['h', 47, 14], ['p', 47, 20, 47, 50], ['p', 47, 50, 41, 67, 39, 84], ['p', 47, 50, 53, 67, 55, 84], ['e', 4, 28, 41, 31], ['p', 47, 26, 41, 31]],
+    [VG, ['h', 47, 14], ['p', 47, 20, 47, 50], ['p', 47, 50, 41, 67, 39, 84], ['p', 47, 50, 53, 67, 55, 84], ['e', 4, 28, 67, 31], ['p', 47, 26, 67, 31]],
+  ] },
+  armcircles: { cap: 'Big slow circles, both directions', f: [
+    [VG, ['h', 47, 14], ['p', 47, 20, 47, 50], ['p', 47, 50, 41, 67, 39, 84], ['p', 47, 50, 53, 67, 55, 84], ['p', 47, 26, 21, 26], ['p', 47, 26, 73, 26], ['o', 17, 26, 8], ['o', 77, 26, 8]],
+  ] },
+  crossbody: { cap: 'Pull the arm across the chest — shoulder stays down', f: [
+    [VG, ['h', 47, 14], ['p', 47, 20, 47, 50], ['p', 47, 50, 41, 67, 39, 84], ['p', 47, 50, 53, 67, 55, 84], ['p', 47, 26, 29, 33], ['p', 47, 26, 37, 29]],
+  ] },
+
+  // --- legs / feet ----------------------------------------------------------
+  legswing: { cap: 'Hold something — swing the leg loose, front to back', f: [
+    [VG, ['g', 78, 22, 78, 84], ['h', 46, 16], ['p', 46, 22, 46, 52], ['p', 46, 28, 76, 34], ['p', 46, 52, 46, 68, 45, 84], ['p', 46, 52, 68, 62]],
+    [VG, ['g', 78, 22, 78, 84], ['h', 46, 16], ['p', 46, 22, 46, 52], ['p', 46, 28, 76, 34], ['p', 46, 52, 46, 68, 45, 84], ['p', 46, 52, 26, 64]],
+  ] },
+  tibialis: { cap: 'Back against a wall, heels down — pull the toes up', f: [
+    [VG, ['g', 74, 24, 74, 84], ['h', 63, 26], ['p', 65, 32, 70, 54], ['p', 70, 54, 56, 72, 54, 84], ['p', 54, 84, 63, 81]],
+    [VG, ['g', 74, 24, 74, 84], ['h', 63, 26], ['p', 65, 32, 70, 54], ['p', 70, 54, 56, 72, 54, 84], ['p', 54, 84, 61, 74]],
+  ] },
+
+  // --- floor mobility -------------------------------------------------------
+  catcow: { cap: 'On all fours — round the back up, then let it dip. Slow, with breath', f: [
+    [VG, ['h', 22, 62], ['p', 28, 64, 30, 84], ['p', 28, 64, 48, 53, 66, 61], ['p', 66, 61, 68, 84]],
+    [VG, ['h', 20, 52], ['p', 27, 57, 30, 84], ['p', 27, 57, 48, 68, 66, 58], ['p', 66, 58, 68, 84]],
+  ] },
+  ninety: { cap: 'Both knees at 90° on the floor — sit tall, then switch sides', f: [
+    [VG, ['h', 42, 32], ['p', 42, 38, 42, 66], ['p', 42, 66, 62, 70], ['p', 62, 70, 56, 82], ['p', 42, 66, 26, 70], ['p', 26, 70, 32, 82]],
+  ] },
+  worlds: { cap: 'Deep lunge, hand inside the foot — then rotate and reach up', f: [
+    [VG, ['h', 44, 26], ['p', 44, 32, 42, 56], ['p', 42, 56, 28, 60, 28, 84], ['p', 42, 56, 64, 72, 80, 84], ['p', 44, 36, 24, 80], ['p', 44, 36, 56, 14]],
+  ] },
+  childs: { cap: 'Sit back toward the heels — arms long, forehead down', f: [
+    [VG, ['h', 17, 72], ['p', 24, 74, 54, 66], ['p', 54, 66, 60, 82], ['p', 58, 83, 74, 84], ['p', 24, 76, 8, 80]],
+  ] },
+  couch: { cap: 'Back foot up the wall, torso tall — squeeze that glute', f: [
+    [VG, ['g', 80, 34, 80, 84], ['h', 46, 26], ['p', 46, 32, 48, 58], ['p', 48, 58, 30, 62], ['p', 30, 62, 28, 84], ['p', 48, 58, 62, 82], ['p', 62, 82, 78, 64]],
+  ] },
+
+  // --- stretches ------------------------------------------------------------
+  doorway: { cap: 'Forearm on the frame — lean gently through the doorway', f: [
+    [VG, ['g', 60, 14, 60, 84], ['h', 42, 18], ['p', 42, 24, 40, 52], ['p', 42, 28, 58, 22], ['p', 40, 52, 46, 68, 44, 84], ['p', 40, 52, 36, 68, 34, 84]],
+  ] },
+  tristretch: { cap: 'Elbow up by the ear, hand down the spine — other hand assists', f: [
+    [VG, ['h', 44, 22], ['p', 44, 28, 44, 56], ['p', 44, 56, 41, 70, 40, 84], ['p', 44, 56, 47, 70, 48, 84], ['p', 44, 32, 52, 12, 40, 8], ['p', 44, 32, 53, 16]],
+  ] },
+  quadstretch: { cap: 'Knees together — pull the heel to your seat', f: [
+    [VG, ['h', 44, 14], ['p', 44, 20, 44, 50], ['p', 44, 50, 44, 68, 43, 84], ['p', 44, 50, 50, 66, 44, 55], ['p', 44, 26, 47, 53]],
+  ] },
+  hamstretch: { cap: 'Hinge and hang toward the toes — soft knees are fine', f: [
+    [VG, ['p', 42, 50, 42, 84], ['p', 42, 50, 47, 84], ['p', 42, 50, 62, 60], ['h', 67, 64], ['p', 54, 56, 50, 78]],
+  ] },
+  calfstretch: { cap: 'Hands on the wall, back leg straight — press that heel down', f: [
+    [VG, ['g', 24, 20, 24, 84], ['h', 38, 20], ['p', 38, 26, 44, 52], ['p', 38, 30, 26, 34], ['p', 44, 52, 38, 68, 36, 84], ['p', 44, 52, 58, 70, 64, 84]],
+  ] },
+  neck: { cap: 'Palm against the head, push into it — nothing actually moves', f: [
+    [VG, ['h', 44, 26], ['p', 44, 33, 44, 60], ['p', 44, 60, 41, 72, 40, 84], ['p', 44, 60, 47, 72, 48, 84], ['p', 44, 40, 58, 34, 51, 24]],
+  ] },
+};
+
+// Ordered name → visual matching. First hit wins, so the specific patterns
+// (rear-delt before flye, inverted row before row, wrist curl before curl…)
+// must stay above the generic ones.
+const VIS_MATCH = [
+  [/scap|dead hang|towel hang|lat stretch/, 'hang'],
+  [/leg swing/, 'legswing'],
+  [/swing/, 'kbswing'],
+  [/arm circle/, 'armcircles'],
+  [/pull-apart/, 'pullapart'],
+  [/floor press|light db press|bench press/, 'floorpress'],
+  [/close-grip/, 'closegrip'],
+  [/incline db press/, 'inclinepress'],
+  [/skull/, 'skull'],
+  [/rear-delt|y-raise|face pull/, 'reardelt'],
+  [/flye|crossover/, 'chestflye'],
+  [/overhead .*extension|triceps extension/, 'ohext'],
+  [/triceps stretch/, 'tristretch'],
+  [/shoulder tap/, 'planktap'],
+  [/push-up/, 'pushup'],
+  [/hollow|dead bug/, 'hollow'],
+  [/leg raise|reverse crunch|knee tuck/, 'legraise'],
+  [/twist/, 'twist'],
+  [/pull-up|chin-up|pulldown/, 'pullup'],
+  [/inverted row/, 'invrow'],
+  [/row/, 'row'],
+  [/pullover/, 'pullover'],
+  [/wrist curl/, 'wristcurl'],
+  [/curl/, 'curl'],
+  [/pinch/, 'pinch'],
+  [/carry|kb hold|db hold/, 'carry'],
+  [/superman|back extension|bird dog/, 'superman'],
+  [/goblet|bodyweight squat|front squat|deep squat/, 'squat'],
+  [/overhead press|db press|kb press/, 'ohp'],
+  [/romanian|rdl|good morning/, 'rdl'],
+  [/lateral raise/, 'latraise'],
+  [/lunge|split squat|step-up/, 'lunge'],
+  [/glute bridge|hip thrust/, 'bridge'],
+  [/calf raise/, 'calfraise'],
+  [/calf stretch/, 'calfstretch'],
+  [/pallof/, 'pallof'],
+  [/side plank/, 'sideplank'],
+  [/tibialis|heel walk/, 'tibialis'],
+  [/burpee|mountain climber/, 'burpee'],
+  [/ankle rock/, 'anklerock'],
+  [/cat-cow/, 'catcow'],
+  [/90\/90/, 'ninety'],
+  [/world/, 'worlds'],
+  [/windmill|thoracic/, 'windmill'],
+  [/couch stretch/, 'couch'],
+  [/quad stretch/, 'quadstretch'],
+  [/hamstring stretch/, 'hamstretch'],
+  [/cross-body/, 'crossbody'],
+  [/doorway|wall biceps/, 'doorway'],
+  [/child/, 'childs'],
+  [/cobra/, 'cobra'],
+  [/neck/, 'neck'],
+  [/squat/, 'squat'],
+];
+
+function visFor(name) {
+  if (prefs().vis === false) return null;
+  const n = String(name || '').toLowerCase();
+  for (const [re, k] of VIS_MATCH) if (re.test(n)) return VIS[k];
+  return null;
+}
+
+function visPrim(p) {
+  const pts = (a) => { const o = []; for (let i = 0; i < a.length; i += 2) o.push(a[i] + ',' + a[i + 1]); return o.join(' '); };
+  switch (p[0]) {
+    case 'h': return `<circle cx="${p[1]}" cy="${p[2]}" r="6" class="vh"/>`;
+    case 'p': return `<polyline points="${pts(p.slice(1))}" class="vp"/>`;
+    case 'e': return `<polyline points="${pts(p.slice(1))}" class="veq"/>`;
+    case 'g': return `<line x1="${p[1]}" y1="${p[2]}" x2="${p[3]}" y2="${p[4]}" class="vgr"/>`;
+    case 'd': return `<circle cx="${p[1]}" cy="${p[2]}" r="4" class="vwt"/>`;
+    case 'k': return `<circle cx="${p[1]}" cy="${p[2]}" r="4.5" class="vwt"/><path d="M ${p[1] - 3} ${p[2] - 3} a 4 4 0 0 1 6 0" class="veq"/>`;
+    case 'o': return `<circle cx="${p[1]}" cy="${p[2]}" r="${p[3]}" class="veq"/>`;
+  }
+  return '';
+}
+
+function visSVG(v) {
+  const frame = (f, tx) => `<g transform="translate(${tx},0)">${f.map(visPrim).join('')}</g>`;
+  const two = v.f.length > 1;
+  const arrow = '<g class="va"><line x1="98" y1="46" x2="109" y2="46"/><polyline points="104,41 110,46 104,51"/></g>';
+  return `<div class="wk-vis"><svg viewBox="0 0 214 96" role="img" aria-label="Movement diagram">${
+    two ? frame(v.f[0], 4) + arrow + frame(v.f[1], 115) : frame(v.f[0], 60)
+  }</svg>${v.cap ? `<div class="wk-vis-cap">${esc(v.cap)}</div>` : ''}</div>`;
+}
+
+// ==========================================================================
 // SCREENS
 // ==========================================================================
 const SCREENS = ['home', 'plan', 'session', 'coverage', 'history', 'summary'];
@@ -498,11 +822,13 @@ function cueHTML(ex) {
 function exHTML(ex, id, block, live) {
   const p = prefs();
   const last = readJSON(K_LAST, {})[id];
+  const vis = visFor(ex.n);
   return `<div class="wk-ex" data-ex="${esc(id)}">
     <div class="wk-ex-top">
       <div class="wk-ex-n">${esc(ex.n)}</div>
       <div class="wk-ex-r">${esc(ex.reps)}</div>
     </div>
+    ${vis ? visSVG(vis) : ''}
     ${live ? `
       <div class="wk-sets">
         ${Array.from({ length: block.rounds || 1 }, (_, r) =>
@@ -531,11 +857,15 @@ function blockHTML(day, block, live) {
 
 function listHTML(items) {
   if (!items || !items.length) return '';
-  return `<div class="wk-blk">${items.map((x) => `
+  return `<div class="wk-blk">${items.map((x) => {
+    const vis = visFor(x.n);
+    return `
     <div class="wk-ex">
       <div class="wk-ex-top"><div class="wk-ex-n">${esc(x.n)}</div><div class="wk-ex-r">${esc(x.reps)}</div></div>
       ${x.cue ? `<div class="wk-ex-alt">${esc(x.cue)}</div>` : ''}
-    </div>`).join('')}</div>`;
+      ${vis ? `<details><summary>👁 Show me</summary>${visSVG(vis)}</details>` : ''}
+    </div>`;
+  }).join('')}</div>`;
 }
 
 // ==========================================================================
@@ -561,6 +891,8 @@ function stats() {
   const log = readJSON(K_LOG, []);
   const ws = weekStart();
   const thisWeek = log.filter((e) => e.d >= ws && DAY_KEYS.includes(e.key)).length;
+  // Training TIME this week — every finished session counts, add-ons included.
+  const weekMin = Math.round(log.filter((e) => e.d >= ws).reduce((a, e) => a + (e.dur || 0), 0) / 60);
   const last = log.length ? log[log.length - 1] : null;
   // Streak = consecutive prior weeks (including this one, once it has 3) with
   // all three sessions logged. A partial current week doesn't break it.
@@ -575,7 +907,7 @@ function stats() {
     if (n >= 3) streak++;
     else if (w > 0) break; // an incomplete current week is allowed
   }
-  return { total: log.length, thisWeek, streak, last };
+  return { total: log.length, thisWeek, weekMin, streak, last };
 }
 
 function showHome() {
@@ -588,8 +920,9 @@ function showHome() {
   $('#home').innerHTML = `
     <div class="wk-stats">
       <div class="wk-stat"><b>${st.thisWeek}<span style="font-size:13px;color:var(--muted)">/3</span></b><span>This week</span></div>
+      <div class="wk-stat"><b>${st.weekMin}<span style="font-size:13px;color:var(--muted)">m</span></b><span>Time this wk</span></div>
       <div class="wk-stat"><b>${st.total}</b><span>Sessions</span></div>
-      <div class="wk-stat"><b>${st.streak}</b><span>Week streak</span></div>
+      <div class="wk-stat"><b>${st.streak}</b><span>Wk streak</span></div>
       <div class="wk-stat"><b>${st.last ? (daysAgo(st.last.d) === 0 ? 'Today' : daysAgo(st.last.d) + 'd') : '–'}</b><span>Last lift</span></div>
     </div>
 
@@ -644,8 +977,9 @@ function showHome() {
     <h3 class="ds-h sec">Reference</h3>
     <div class="wk-chips">
       <button class="wk-chip" type="button" data-go="coverage">🗺️ Muscle coverage map</button>
-      <button class="wk-chip" type="button" data-go="history">📈 History &amp; loads</button>
+      <button class="wk-chip" type="button" data-go="history">📈 History, time &amp; loads</button>
       <button class="wk-chip" type="button" id="unit-toggle">⚖️ Units: ${esc(prefs().unit)}</button>
+      <button class="wk-chip" type="button" id="vis-toggle">👁 Exercise visuals: ${prefs().vis === false ? 'off' : 'on'}</button>
     </div>
 
     <p class="ds-note">
@@ -661,6 +995,8 @@ function showHome() {
   $$('#home [data-go]').forEach((b) => { b.onclick = () => (b.dataset.go === 'coverage' ? showCoverage() : showHistory()); });
   const ut = $('#unit-toggle');
   if (ut) ut.onclick = () => { setPref('unit', prefs().unit === 'lb' ? 'kg' : 'lb'); showHome(); };
+  const vt = $('#vis-toggle');
+  if (vt) vt.onclick = () => { setPref('vis', prefs().vis === false); showHome(); };
   show('home');
 }
 
@@ -916,12 +1252,17 @@ function showSummary(s, entry) {
   const pct = setsTotal(s) ? Math.round((entry.sets / setsTotal(s)) * 100) : 0;
   const grade = pct >= 100 ? '🏆 Every set logged' : pct >= 80 ? '💪 Solid session' : pct >= 50 ? '👍 Got the work in' : '✅ Something beats nothing';
   const nk = nextUp();
+  // The day's total training time — this session is already in the log, and a
+  // second session (an add-on, say) stacks onto the same day.
+  const todays = readJSON(K_LOG, []).filter((e) => e.d === entry.d);
+  const todayMin = Math.max(1, Math.round(todays.reduce((a, e) => a + (e.dur || 0), 0) / 60));
 
   $('#summary').innerHTML = `
     <div class="wk-res">
       <div class="g">${grade}</div>
       <div class="n">${fmtClock(entry.dur)}<span>elapsed</span></div>
       <div class="l">${entry.sets} of ${setsTotal(s)} sets · ${esc(s.day.n)}${entry.vol ? ` · ${entry.vol.toLocaleString()} ${esc(entry.unit)} moved` : ''}</div>
+      <div class="l" style="margin-top:6px;font-weight:800;color:var(--text)">⏱ ${todayMin} min trained today${todays.length > 1 ? ` across ${todays.length} sessions` : ''} — saved to your history</div>
       <div class="row">
         <button class="ds-btn primary" id="sm-home">Done</button>
         <button class="ds-btn" id="sm-hist">See history</button>
@@ -991,6 +1332,52 @@ function showCoverage() {
 // ==========================================================================
 // HISTORY
 // ==========================================================================
+/** Minutes-per-day bar chart for the last 14 days + week/average totals. */
+function timeChartHTML(log) {
+  if (!log.length) return '';
+  const byDay = {};
+  log.forEach((e) => { byDay[e.d] = (byDay[e.d] || 0) + (e.dur || 0); });
+
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - i);
+    const key = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    days.push({
+      wd: d.toLocaleDateString(undefined, { weekday: 'narrow' }),
+      min: Math.round((byDay[key] || 0) / 60),
+      today: i === 0,
+    });
+  }
+  const max = Math.max(...days.map((x) => x.min), 1);
+
+  const ws = weekStart();
+  const lw = new Date(); lw.setHours(12, 0, 0, 0);
+  lw.setDate(lw.getDate() - ((lw.getDay() + 6) % 7) - 7);
+  const lws = `${lw.getFullYear()}-${pad2(lw.getMonth() + 1)}-${pad2(lw.getDate())}`;
+  const sum = (f) => Math.round(log.filter(f).reduce((a, e) => a + (e.dur || 0), 0) / 60);
+  const wkMin = sum((e) => e.d >= ws);
+  const lwMin = sum((e) => e.d >= lws && e.d < ws);
+  const avg = Math.round(log.reduce((a, e) => a + (e.dur || 0), 0) / log.length / 60);
+
+  return `
+    <h3 class="ds-h sec">⏱ Time trained</h3>
+    <div class="wk-card">
+      <div class="wk-time-tots">
+        <div><b>${wkMin}m</b><span>this week</span></div>
+        <div><b>${lwMin}m</b><span>last week</span></div>
+        <div><b>${avg}m</b><span>avg session</span></div>
+      </div>
+      <div class="wk-tchart">
+        ${days.map((x) => `<div class="wk-tcol${x.today ? ' today' : ''}">
+          <span class="v">${x.min || ''}</span>
+          <div class="bar${x.min ? '' : ' zero'}" style="height:${x.min ? Math.max(8, Math.round((x.min / max) * 58)) : 3}px"></div>
+          <span class="d">${esc(x.wd)}</span>
+        </div>`).join('')}
+      </div>
+      <p class="ds-note" style="margin-top:8px">Minutes trained per day, last 14 days. Every session you finish adds its time to that day — add-ons included.</p>
+    </div>`;
+}
+
 function showHistory() {
   const log = readJSON(K_LOG, []).slice().reverse();
   const last = readJSON(K_LAST, {});
@@ -1008,6 +1395,7 @@ function showHistory() {
 
   $('#history').innerHTML = `
     <button class="ds-btn small ghost" id="h-back">‹ Back</button>
+    ${timeChartHTML(readJSON(K_LOG, []))}
     <h3 class="ds-h sec" style="margin-top:16px">Session history</h3>
     ${log.length ? log.map((e) => {
       const d = getPlan(e.key) || { n: e.key, color: 'var(--wk-1)', emoji: '•' };
