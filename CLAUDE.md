@@ -310,7 +310,20 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v145**.
+Current version as of this writing: **v146**.
+
+- **Game modal sits preseason out too (v146)** — the owner's screenshot of a
+  preseason final (CAR@ARI) showed the modal running the full model treatment:
+  an AI Pick (63%), model-vs-book price grades (A-/F), and "model total 45.1 →
+  OVER 34.5". The model's data is regular-season (v145 blend = last season's
+  real games), which is exactly wrong for preseason where backups play — the
+  totals read especially so. `openGameDetail` now skips `predictGame` when
+  `g.seasonType === 1` and shows an honest "🤖 Preseason — the model sits these
+  out" note instead; the odds grid and the report's market-only parts (line
+  movement, DK splits) still render, since real market data is fine to show.
+  With `pred` null the model-agrees banner, factor breakdown, and the report's
+  model rows all self-suppress (existing null paths). Matches the AI Picks
+  tab's v145 preseason skip.
 
 - **🏈 NFL tab + NFL model data readiness (v145)** — new top-level **🏈 NFL tab**
   (after Eagles; the Eagles tab stays the team deep-dive, this is the league

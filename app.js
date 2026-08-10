@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v145';
+const APP_VERSION = 'v146';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -479,9 +479,13 @@ async function openGameDetail(sport, id, g) {
   $('#modal-body').innerHTML = '<div class="empty">Loading live stats…</div>';
   try {
     const path = LEAGUES[sport].espnPath;
+    // Preseason: the model's data is regular-season based (and starters sit),
+    // so no AI pick, no model-vs-book grades, no model total — real odds and
+    // market data still show. Mirrors the AI Picks tab sitting preseason out.
+    const preseason = g?.seasonType === 1;
     const [data, pred, hitters, report] = await Promise.all([
       fetchJSON(`${SITE}/${path}/summary?event=${id}`, 30000),
-      g ? predictGame(sport, g).catch(() => null) : Promise.resolve(null),
+      g && !preseason ? predictGame(sport, g).catch(() => null) : Promise.resolve(null),
       g && sport === 'mlb' ? Promise.all([topHitters(g.home.id), topHitters(g.away.id)]).catch(() => null) : Promise.resolve(null),
       g ? getBettingReport(sport) : Promise.resolve(null),
     ]);
@@ -494,6 +498,9 @@ async function openGameDetail(sport, id, g) {
       reportHTML = gameReportHTML(sport, g, pred, normOdds(rawO, g.home.name, g.away.name), report);
     }
     let extra = '';
+    if (preseason) {
+      extra += '<div class="md-section-title acc-open">🤖 AI Pick</div><div class="ai-why">Preseason — the model sits these out. Backups play most of the snaps, so results and totals aren\'t predictive.</div>';
+    }
     if (g && sport === 'mlb') {
       extra += startersHTML(g) + (hitters ? hittersHTML(g, hitters[0], hitters[1]) : '');
     } else if (g && sport === 'nfl') {
