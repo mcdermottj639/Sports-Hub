@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v144';
+const APP_VERSION = 'v145';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -144,6 +144,7 @@ function normEvent(ev) {
     id: ev.id,
     date: ev.date,
     state: st.state, // 'pre' | 'in' | 'post'
+    seasonType: Number(ev.season?.type ?? comp.season?.type) || null, // 1 pre, 2 regular, 3 post
     statusText: st.shortDetail || st.detail || st.description,
     situation: comp.situation || null,
     home: teamObj(home),
@@ -173,6 +174,10 @@ function normStandings(json) {
       losses: Number(getStat(stats, ['losses'])) || 0,
       points: getStat(stats, ['points']),
       gp: getStat(stats, ['gamesPlayed']),
+      pf: (v => isNaN(v) ? null : v)(Number(getStat(stats, ['pointsFor']))),
+      pa: (v => isNaN(v) ? null : v)(Number(getStat(stats, ['pointsAgainst']))),
+      diff: (v => isNaN(v) ? null : v)(Number(getStat(stats, ['pointDifferential', 'differential']))),
+      seed: (v => isNaN(v) ? null : v)(Number(getStat(stats, ['playoffSeed']))),
     };
   };
   // Only emit rows from the deepest node that holds entries — when a league
@@ -230,13 +235,16 @@ function trackLines(sport, games) {
     }
   } catch (_) {}
 }
-async function getStandings(sport) {
+async function getStandings(sport, season) {
   const path = LEAGUES[sport].espnPath;
   // level=3 asks ESPN to nest by division (MLB East/Central/West, NFL
   // divisions). Fall back to the default grouping if that comes back empty.
+  // Optional season (e.g. 2025) fetches a past season's final standings —
+  // the NFL Power Board's offseason fallback.
+  const sq = season ? `&season=${season}` : '';
   let rows = [];
-  try { rows = normStandings(await fetchJSON(`${CORE}/${path}/standings?level=3`, 5 * 60000)); } catch (_) {}
-  if (!rows.length) { try { rows = normStandings(await fetchJSON(`${CORE}/${path}/standings`, 5 * 60000)); } catch (_) {} }
+  try { rows = normStandings(await fetchJSON(`${CORE}/${path}/standings?level=3${sq}`, 5 * 60000)); } catch (_) {}
+  if (!rows.length) { try { rows = normStandings(await fetchJSON(`${CORE}/${path}/standings${season ? `?season=${season}` : ''}`, 5 * 60000)); } catch (_) {} }
   return rows;
 }
 
@@ -958,7 +966,11 @@ const PARK_WEIGHT = 0.7;
 // picks were wildly overconfident (its 80-84% bucket won ~22%, its 90%+ bucket
 // only ~73%) — a single baseball game tops out around 65-70% even best-vs-worst,
 // so MLB confidence is capped well below the football/basketball ceiling.
-const CONF_CAP = { mlb: 72, default: 92 };
+const CONF_CAP = { mlb: 72, nfl: 85, default: 92 };
+// NFL cap note: the NFL side of the model has NO validated calibration data yet
+// (every graded NFL pick predates both the confidence meta and the v138
+// look-ahead fix), and the biggest market favorites only win ~90%. 85 is a
+// principled ceiling until this season produces a clean graded sample.
 
 // beforeDate (v138): when profiling for a PREDICTION, only games that finished
 // strictly before the predicted game may count. Without it a game that's
@@ -966,26 +978,55 @@ const CONF_CAP = { mlb: 72, default: 92 };
 // that then graded it — the record looked far better than the model's true
 // forward accuracy. Omit the arg for display uses (season trends), where the
 // full schedule is what you want.
+// Preseason (season type 1 — NFL preseason, MLB spring training) is practice,
+// not signal: starters barely play and results don't predict anything. The
+// model never counts those games. Shape of the marker varies by feed.
+function isPreseasonEv(ev) {
+  const t = ev?.seasonType?.type ?? ev?.seasonType?.id ?? ev?.season?.type;
+  return Number(t) === 1;
+}
 async function teamProfile(sport, teamId, beforeDate) {
   if (!teamId) return null;
   const path = LEAGUES[sport].espnPath;
   const data = await fetchJSON(`${SITE}/${path}/teams/${teamId}/schedule`, 3 * 3600000).catch(() => null);
   const cut = beforeDate ? new Date(beforeDate).getTime() : null;
-  const games = [];
-  (data?.events || []).forEach((ev) => {
-    const comp = ev.competitions?.[0]; if (!comp?.status?.type?.completed) return;
-    if (cut != null) { const t = new Date(ev.date).getTime(); if (!(t < cut)) return; }
-    const me = (comp.competitors || []).find((c) => String(c.team?.id) === String(teamId));
-    const opp = (comp.competitors || []).find((c) => String(c.team?.id) !== String(teamId));
-    const ms = Number(me?.score?.value ?? me?.score?.displayValue);
-    const os = Number(opp?.score?.value ?? opp?.score?.displayValue);
-    if (!me || isNaN(ms) || isNaN(os)) return;
-    games.push({ date: ev.date, margin: ms - os, pf: ms, pa: os, home: me.homeAway === 'home', win: me.winner === true || ms > os });
-  });
-  if (!games.length) return null;
-  games.sort((a, b) => new Date(a.date) - new Date(b.date));
+  const parse = (payload) => {
+    const out = [];
+    (payload?.events || []).forEach((ev) => {
+      const comp = ev.competitions?.[0]; if (!comp?.status?.type?.completed) return;
+      if (isPreseasonEv(ev)) return;
+      if (cut != null) { const t = new Date(ev.date).getTime(); if (!(t < cut)) return; }
+      const me = (comp.competitors || []).find((c) => String(c.team?.id) === String(teamId));
+      const opp = (comp.competitors || []).find((c) => String(c.team?.id) !== String(teamId));
+      const ms = Number(me?.score?.value ?? me?.score?.displayValue);
+      const os = Number(opp?.score?.value ?? opp?.score?.displayValue);
+      if (!me || isNaN(ms) || isNaN(os)) return;
+      out.push({ date: ev.date, margin: ms - os, pf: ms, pa: os, home: me.homeAway === 'home', win: me.winner === true || ms > os });
+    });
+    out.sort((a, b) => new Date(a.date) - new Date(b.date));
+    return out;
+  };
+  const games = parse(data);
+  // Early-season blend (model path only — beforeDate is passed): with fewer
+  // than 6 real games the current sample is mostly noise (and week 1 is empty),
+  // so last season's full record is blended in, fading out as games arrive and
+  // capped below full weight because rosters turn over. Display callers omit
+  // beforeDate and get the pure current season.
+  let prior = null, priorW = 0;
+  if (beforeDate && games.length < 6) {
+    const yr = Number(data?.season?.year) || new Date(beforeDate).getFullYear();
+    const pdata = await fetchJSON(`${SITE}/${path}/teams/${teamId}/schedule?season=${yr - 1}`, 6 * 3600000).catch(() => null);
+    const pg = parse(pdata);
+    if (pg.length >= 8) {
+      const psum = (f) => pg.reduce((s, g) => s + f(g), 0) / pg.length;
+      prior = { winPct: psum((g) => (g.win ? 1 : 0)), pdpg: psum((g) => g.margin), ppg: psum((g) => g.pf), papg: psum((g) => g.pa) };
+      priorW = ((6 - games.length) / 6) * 0.75;
+    }
+  }
+  if (!games.length && !prior) return null;
   const gp = games.length;
-  const sum = (f) => games.reduce((s, g) => s + f(g), 0);
+  const mix = (cur, pv) => (prior ? (gp ? cur * (1 - priorW) + pv * priorW : pv) : cur);
+  const sum = (f) => (gp ? games.reduce((s, g) => s + f(g), 0) : 0);
   const recent = games.slice(-5);
   let wsum = 0, wtot = 0;
   recent.forEach((g, i) => { const w = i + 1; wsum += g.margin * w; wtot += w; });
@@ -998,17 +1039,18 @@ async function teamProfile(sport, teamId, beforeDate) {
   for (let i = gp - 1; i >= 0; i--) { const w = games[i].win; if (i === gp - 1) { streak = w ? 1 : -1; } else if ((w && streak > 0) || (!w && streak < 0)) { streak += w ? 1 : -1; } else break; }
   return {
     gp,
-    winPct: sum((g) => (g.win ? 1 : 0)) / gp,
-    pdpg: sum((g) => g.margin) / gp,
-    ppg: sum((g) => g.pf) / gp,
-    papg: sum((g) => g.pa) / gp,
+    winPct: mix(gp ? sum((g) => (g.win ? 1 : 0)) / gp : 0, prior?.winPct),
+    pdpg: mix(gp ? sum((g) => g.margin) / gp : 0, prior?.pdpg),
+    ppg: mix(gp ? sum((g) => g.pf) / gp : 0, prior?.ppg),
+    papg: mix(gp ? sum((g) => g.pa) / gp : 0, prior?.papg),
     form: wtot ? wsum / wtot : 0,
     homeWP: wp(homeG),
     roadWP: wp(roadG),
     homeGP: homeG.length,
     roadGP: roadG.length,
     last10, streak,
-    lastDate: games[gp - 1].date,
+    lastDate: gp ? games[gp - 1].date : null,
+    blended: priorW > 0, // record/margin partly from last season (early weeks)
   };
 }
 
@@ -1246,7 +1288,9 @@ async function predictGame(sport, g) {
     if (pf) projTotal *= 1 + ((pf / 100) - 1) * PARK_WEIGHT;
     projTotal = clamp(projTotal, 4, 20);
   }
-  return { winner, conf, homePick, probHome: pHome, projTotal, breakdown, notes: mu.notes, thin: !(hf && af) };
+  const notes = mu.notes.slice();
+  if (hf?.blended || af?.blended) notes.unshift('Early season — record/margin blended with last season (damped)');
+  return { winner, conf, homePick, probHome: pHome, projTotal, breakdown, notes, thin: !(hf && af) };
 }
 
 function aiPickHead(pred) {
@@ -1591,7 +1635,10 @@ async function renderPredictions() {
   container.innerHTML = '<div class="empty">Crunching the numbers…</div>';
 
   const games = await getGames(sport, ymd(sportsDate())).catch(() => []);
-  const playable = games.filter((g) => g.id);
+  // Preseason games are excluded from picks entirely: backups play, results
+  // predict nothing, and grading them would pollute the model's record.
+  const playable = games.filter((g) => g.id && g.seasonType !== 1);
+  const allPreseason = games.length > 0 && !playable.length;
   const renderTally = (todayTxt) => {
     const ts = tallyStats();
     const parts = [];
@@ -1619,7 +1666,9 @@ async function renderPredictions() {
     container.appendChild(statBar(0, 'no games today'));
     const det0 = tallyDetails();
     if (det0.total) container.appendChild(reportCard(det0));
-    container.appendChild(el('div', 'empty', 'No games today for this sport.'));
+    container.appendChild(el('div', 'empty', allPreseason
+      ? 'Preseason only today — the model sits these out (backups play; results don\'t predict anything).'
+      : 'No games today for this sport.'));
     renderTally('');
     return;
   }
@@ -5085,7 +5134,7 @@ function setMode(live) {
 // (Eagles has its own curated nav, so it's skipped here.)
 function injectJumpNav(name) {
   const panel = document.getElementById(name);
-  if (!panel || name === 'eagles' || name === 'redsox' || name === 'home') return;
+  if (!panel || name === 'eagles' || name === 'redsox' || name === 'nfl' || name === 'home') return;
   // Derive each chip label from the heading text WITHOUT any nested controls
   // (e.g. the Standings/Power toggle inside the "League" heading) so labels stay
   // clean. Empty sections set their box to '' and emit no .section-title, so they
@@ -5110,7 +5159,139 @@ function injectJumpNav(name) {
     (b.onclick = () => document.getElementById(b.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
 }
 
-const renderers = { home: renderHome, eagles: renderEagles, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, labs: () => {}, about: () => {} };
+// ============================== NFL tab ===================================
+// League-wide NFL lens (the Eagles tab stays the team deep-dive): weekly
+// slate, league headlines, a model-flavored Power Board, and the playoff
+// picture. Everything degrades to honest empty-states when feeds are down.
+async function renderNFL() {
+  const navItems = [['nfl-sec-week', 'Week'], ['nfl-sec-news', 'News'], ['nfl-sec-power', 'Power Board'], ['nfl-sec-playoff', 'Playoffs']];
+  const navEl = $('#nfl-nav');
+  navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
+  navEl.querySelectorAll('button').forEach((b) =>
+    (b.onclick = () => { const t = document.getElementById(b.dataset.target); if (t?._accSet) t._accSet(true); t?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+  makeAccordion(document.getElementById('nfl'), '.section-title', 2);
+  // each section fetches + renders independently, in parallel
+  renderNFLWeek();
+  renderNFLNews();
+  renderNFLPower();
+}
+
+// Hero + this week's slate. NFL is a weekly sport — the bare scoreboard call
+// returns the CURRENT week's full Thu–Mon slate plus week/season metadata,
+// which is exactly the view the daily Home slate can't give.
+async function renderNFLWeek() {
+  const heroEl = $('#nfl-hero'), box = $('#nfl-week');
+  let json = null;
+  try { json = await fetchJSON(`${SITE}/football/nfl/scoreboard`, 60000); } catch (_) {}
+  const events = (json?.events || []).map(normEvent);
+  const stype = Number(json?.season?.type ?? json?.leagues?.[0]?.season?.type) || events.find((g) => g.seasonType)?.seasonType || null;
+  const week = json?.week?.number ?? null;
+  const kick = daysUntil(NFL_KICKOFF);
+  const phase = stype === 3 ? 'Playoffs'
+    : stype === 2 ? `Regular Season${week ? ` · Week ${week}` : ''}`
+    : stype === 1 ? `Preseason${week ? ` · Week ${week}` : ''}`
+    : '2026 Season';
+  heroEl.innerHTML = `
+    <h2 style="margin:0">NFL</h2><div class="muted">${esc(phase)}</div>
+    ${stype !== 2 && stype !== 3 && kick > 0 ? `<div class="nfl-kick">🏈 Kickoff in <b>${kick} day${kick === 1 ? '' : 's'}</b> — Thu Sep 10</div>` : ''}
+    ${stype === 1 ? '<div class="muted" style="margin-top:4px;font-size:.85rem">Preseason results don\'t feed the AI model — backups play, nothing predictive.</div>' : ''}`;
+  if (setMode && events.length) setMode(true);
+  if (!events.length) {
+    box.innerHTML = `<div class="empty">${json ? 'No games on this week\'s slate.' : 'Scoreboard unreachable right now.'}</div>`;
+    return;
+  }
+  box.innerHTML = '';
+  const byDay = {};
+  events.forEach((g) => {
+    const key = new Date(g.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
+    (byDay[key] = byDay[key] || []).push(g);
+  });
+  Object.entries(byDay).forEach(([day, arr]) => {
+    box.appendChild(el('div', 'nfl-day', day));
+    const grid = el('div', 'games-grid');
+    arr.forEach((g) => grid.appendChild(gameCard('nfl', g, { odds: true })));
+    box.appendChild(grid);
+  });
+}
+
+async function renderNFLNews() {
+  const nb = $('#nfl-news');
+  let arts = [];
+  try { arts = (await fetchJSON(`${SITE}/football/nfl/news?limit=12`, 5 * 60000))?.articles || []; } catch (_) {}
+  if (!arts.length) { nb.innerHTML = '<div class="empty">No league news right now.</div>'; return; }
+  nb.innerHTML = arts.slice(0, 12).map((a, idx) => {
+    const img = a.images?.[0]?.url;
+    const when = a.published ? new Date(a.published).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+    return `<div class="news-item" data-news="${idx}">
+      ${img ? `<img src="${esc(img)}" alt="" onerror="this.style.display='none'">` : ''}
+      <div><div class="nh">${esc(a.headline || '')}</div><div class="nd">${esc(a.description || '')}</div><div class="nt">${when} · tap for summary</div></div></div>`;
+  }).join('');
+  nb.querySelectorAll('.news-item').forEach((it) => { it.onclick = () => openNewsSummary(arts[+it.dataset.news]); });
+}
+
+// Power Board (all 32 by record + per-game point diff — one standings pull,
+// prior-season final standings until 2026 games count) and the Playoff
+// Picture (seeds 1–7 per conference off ESPN's playoffSeed).
+const NFL_CONF = (r) => {
+  const s = `${r.league || ''} ${r.division || ''}`;
+  return /American|^AFC|\bAFC\b/.test(s) ? 'AFC' : /National|^NFC|\bNFC\b/.test(s) ? 'NFC' : '?';
+};
+async function renderNFLPower() {
+  const pb = $('#nfl-power'), po = $('#nfl-playoff');
+  let rows = await getStandings('nfl').catch(() => []);
+  const played = rows.some((r) => (r.wins + r.losses) > 0);
+  let src = 'live';
+  if (!rows.length || !played) {
+    const prev = await getStandings('nfl', 2025).catch(() => []);
+    if (prev.length && prev.some((r) => r.wins + r.losses > 0)) { rows = prev; src = 'prior'; }
+  }
+  if (!rows.length) {
+    pb.innerHTML = '<div class="empty">Standings feed unreachable right now.</div>';
+    po.innerHTML = '<div class="empty">Needs the standings feed — try again later.</div>';
+    return;
+  }
+  const scored = rows.map((r) => {
+    const g = (r.wins || 0) + (r.losses || 0), wp = g ? r.wins / g : 0;
+    const dpg = g && r.diff != null ? r.diff / g
+      : g && r.pf != null && r.pa != null ? (r.pf - r.pa) / g : 0;
+    return { ...r, g, wp, dpg, score: wp + dpg / 28 }; // ~14 pts/gm diff ≈ a .500 swing
+  }).sort((a, b) => b.score - a.score);
+  const note = src === 'prior'
+    ? 'No 2026 games yet — ranked on final 2025 record + point diff until real games count.'
+    : 'Ranked on 2026 record + per-game point differential (the same signals the AI model reads).';
+  pb.innerHTML = `<div class="ai-why" style="margin:2px 0 8px">${note}</div>` + scored.map((r, i) => {
+    const barPct = clamp(((r.score + 0.45) / 1.9) * 100, 4, 100);
+    const d = r.dpg ? (r.dpg > 0 ? '+' : '') + r.dpg.toFixed(1) : '—';
+    return `<div class="pw-row${/eagles/i.test(r.team) ? ' you' : ''}">
+      <span class="pw-rank">${i + 1}</span>
+      <span class="pw-team">${r.logo ? `<img src="${esc(r.logo)}" alt="" loading="lazy">` : ''}${esc(r.team)}</span>
+      <span class="pw-rec">${r.wins}-${r.losses}</span>
+      <span class="pw-diff ${r.dpg > 0 ? 'up' : r.dpg < 0 ? 'dn' : ''}">${d}</span>
+      <span class="pw-bar"><i style="width:${barPct}%"></i></span>
+    </div>`;
+  }).join('');
+  if (src === 'prior' || !played) {
+    po.innerHTML = '<div class="empty">Appears once 2026 regular-season games count — the Power Board carries the offseason read for now.</div>';
+    return;
+  }
+  const conf = { AFC: [], NFC: [] };
+  scored.forEach((r) => { const c = NFL_CONF(r); if (conf[c]) conf[c].push(r); });
+  const hasSeeds = scored.some((r) => r.seed != null && r.seed > 0);
+  po.innerHTML = `<div class="ai-why" style="margin:2px 0 8px">${hasSeeds ? 'Seeds from ESPN standings.' : 'Approximate seeding by record — ESPN hasn\'t sent playoff seeds yet.'} Top 7 make it.</div>` +
+    Object.entries(conf).map(([c, arr]) => {
+      if (!arr.length) return '';
+      const seeded = hasSeeds ? arr.slice().sort((a, b) => (a.seed || 99) - (b.seed || 99)) : arr;
+      const field = seeded.slice(0, 7), hunt = seeded.slice(7, 10);
+      const row = (r, i) => `<div class="npo-row${/eagles/i.test(r.team) ? ' you' : ''}">
+        <span class="npo-seed">${hasSeeds && r.seed ? r.seed : i + 1}</span>
+        <span class="pw-team">${r.logo ? `<img src="${esc(r.logo)}" alt="" loading="lazy">` : ''}${esc(r.team)}</span>
+        <span class="pw-rec">${r.wins}-${r.losses}</span></div>`;
+      return `<div class="npo-conf">${c}</div>${field.map(row).join('')}<div class="npo-cut"></div>` +
+        (hunt.length ? `<div class="ai-why" style="margin:2px 0 4px;font-size:.78rem">In the hunt</div>${hunt.map((r, i) => row(r, i + 7)).join('')}` : '');
+    }).join('');
+}
+
+const renderers = { home: renderHome, eagles: renderEagles, nfl: renderNFL, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, labs: () => {}, about: () => {} };
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => {

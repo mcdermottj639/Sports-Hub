@@ -310,7 +310,50 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v144**.
+Current version as of this writing: **v145**.
+
+- **🏈 NFL tab + NFL model data readiness (v145)** — new top-level **🏈 NFL tab**
+  (after Eagles; the Eagles tab stays the team deep-dive, this is the league
+  lens) + fixes that make the model safe for the NFL season start:
+  - **Model readiness (Step 0):** (a) `normEvent` now captures ESPN's
+    `seasonType` (1=pre/2=reg/3=post) on every game object; (b) `teamProfile`
+    filters preseason games out via `isPreseasonEv` (shape-defensive — NFL
+    preseason AND MLB spring training are seasonType 1), so August/September
+    profiles are no longer polluted by practice games; (c) **prior-season
+    blend** — when `beforeDate` is passed (the model path only; the season-trends
+    display caller omits it and stays pure current-season) and a team has <6
+    current-season games, last season's full schedule (`?season=yr-1`) is
+    blended into winPct/pdpg/ppg/papg at weight `((6-gp)/6)×0.75` (never full —
+    rosters turn over; needs ≥8 prior games). Week 1 picks are now real instead
+    of "home edge only" coin flips; a `blended` flag adds an honest "Early
+    season — blended with last season (damped)" note to the pick. Form/streak/
+    splits/rest stay current-season only. (d) **AI Picks skips preseason
+    entirely** (`g.seasonType !== 1` filter before the pick pipeline) — no picks
+    rendered, recorded, or graded on preseason games, with an honest empty-state
+    ("model sits these out"); the Home slate still shows them normally.
+    (e) `CONF_CAP.nfl = 85` — the NFL side has NO validated calibration data
+    (all graded NFL picks predate the confidence meta and the v138 leak fix), so
+    it gets a principled ceiling until this season builds a clean sample.
+  - **The tab** (`renderNFL` + `renderNFLWeek`/`renderNFLNews`/`renderNFLPower`,
+    `#nfl-*` ids, `.pw-*`/`.npo-*`/`.nfl-*` CSS, curated nav so `injectJumpNav`
+    skips it, hero watermark 🏈): **hero** (season phase + kickoff countdown via
+    `NFL_KICKOFF`, auto-detects Preseason/Week N/Playoffs from the scoreboard's
+    `week`/`season.type`); **This Week's Slate** — the bare NFL scoreboard call
+    returns the current week's full Thu–Mon slate, grouped by day headings
+    (`.nfl-day`), rendered with the standard tappable `gameCard` (odds+TV+modal;
+    the weekly view Home's daily slate can't give); **Top NFL Headlines** (league
+    news feed → in-app `openNewsSummary` popup, same pattern as Eagles news);
+    **⚡ Power Board** — all 32 teams ranked by `win% + (point diff/gm)/28` from
+    ONE standings pull (`normStandings` now also extracts `pf/pa/diff/seed`;
+    `getStandings` gained an optional `season` param) — in the offseason it
+    falls back to **final 2025 standings** (labeled as such) so the board is
+    never empty; Eagles row highlighted (`.pw-row.you`); **Playoff Picture** —
+    AFC/NFC seeds 1–7 off ESPN's `playoffSeed` (approx-by-record fallback,
+    labeled), dashed cut line, "in the hunt" list; hidden behind an honest note
+    until 2026 games count. All sections degrade independently to empty-states.
+    NOTE: sandbox can't reach ESPN — structure/fallbacks verified, live shapes
+    (scoreboard `week`, standings `pf/pa/seed`, `?season=2025` param) need
+    on-device verification.
 
 - **💰 Contract Angle card (v144)** — the Fantasy → Football prep view gained a
   contract-status targeting section (between the Draft-Turn Plan and My Draft
@@ -773,7 +816,7 @@ Current version as of this writing: **v144**.
 - `fetchJSON(url, ttl)` — in-memory cache by URL with TTL; 9s abort. All data goes through it.
 - `LEAGUES` — per-sport config (label, emoji, espnPath, `fav` favorite teams, type).
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
-- Tabs: Home, Eagles, **Red Sox**, AI Picks, Fantasy, **Labs**, About. `showTab()` +
+- Tabs: Home, Eagles, **🏈 NFL** (league-wide lens, v145), **Red Sox**, AI Picks, Fantasy, **Labs**, About. `showTab()` +
   `renderers{}` map drive rendering. (**Labs** — its own top-level tab as of
   v107, holding the Labs experiments: the standalone `draft.html`/`trivia.html`/
   `workout.html` links plus the in-app **Fantasy Mock Draft** rendered into `#labs-mock`; its

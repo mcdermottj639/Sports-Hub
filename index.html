@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=144" />
+  <link rel="stylesheet" href="styles.css?v=145" />
   <script>
     /* Set the theme before first paint to avoid a flash. Uses the saved
        preference if present, else follows the OS light/dark setting. */
@@ -42,6 +42,7 @@
   <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
     <button id="tab-home" data-tab="home" class="active" role="tab" aria-selected="true" aria-controls="home">Home</button>
     <button id="tab-eagles" data-tab="eagles" role="tab" aria-selected="false" aria-controls="eagles">🦅 Eagles</button>
+    <button id="tab-nfl" data-tab="nfl" role="tab" aria-selected="false" aria-controls="nfl">🏈 NFL</button>
     <button id="tab-redsox" data-tab="redsox" role="tab" aria-selected="false" aria-controls="redsox">⚾ Red Sox</button>
     <button id="tab-predictions" data-tab="predictions" role="tab" aria-selected="false" aria-controls="predictions">🤖 AI Picks</button>
     <button id="tab-fantasy" data-tab="fantasy" role="tab" aria-selected="false" aria-controls="fantasy">Fantasy</button>
@@ -81,6 +82,19 @@
       <div id="eagles-analytics" class="fan-cards"></div>
       <h2 class="section-title" id="sec-staff">Coaching Staff</h2>
       <div id="eagles-staff" class="fan-cards"></div>
+    </section>
+
+    <section id="nfl" class="tab-panel" role="tabpanel" aria-labelledby="tab-nfl" tabindex="0">
+      <div id="nfl-hero" class="featured-card nfl-hero">Loading NFL…</div>
+      <div id="nfl-nav" class="eagles-nav"></div>
+      <h2 class="section-title" id="nfl-sec-week">This Week&rsquo;s Slate</h2>
+      <div id="nfl-week"></div>
+      <h2 class="section-title" id="nfl-sec-news">Top NFL Headlines</h2>
+      <div id="nfl-news"></div>
+      <h2 class="section-title" id="nfl-sec-power">⚡ Power Board</h2>
+      <div id="nfl-power"></div>
+      <h2 class="section-title" id="nfl-sec-playoff">Playoff Picture</h2>
+      <div id="nfl-playoff"></div>
     </section>
 
     <section id="redsox" class="tab-panel" role="tabpanel" aria-labelledby="tab-redsox" tabindex="0">
@@ -187,6 +201,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=144" defer></script>
+  <script src="app.js?v=145" defer></script>
 </body>
 </html>

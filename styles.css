@@ -757,6 +757,27 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .pl-outlook { background: var(--card); border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 10px; padding: 10px 12px; margin-bottom: 4px; font-size: 13px; line-height: 1.55; }
 .pl-o-note { font-size: 10.5px; color: var(--muted); font-weight: 700; margin-top: 7px; }
 
+/* --- 🏈 NFL tab (league lens: week slate, power board, playoff picture) --- */
+.featured-card.nfl-hero::after { content: "🏈"; }
+.nfl-kick { margin-top: 8px; font-size: 15px; }
+.nfl-kick b { color: var(--accent); }
+.nfl-day { font-weight: 700; color: var(--muted); margin: 12px 2px 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+.pw-row, .npo-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); min-height: 34px; }
+.pw-row:last-child, .npo-row:last-child { border-bottom: none; }
+.pw-row.you, .npo-row.you { background: rgba(58, 210, 159, .07); border-radius: 6px; }
+.pw-rank { width: 24px; text-align: right; font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pw-team { flex: 1; display: flex; align-items: center; gap: 8px; font-weight: 600; min-width: 0; }
+.pw-team img { width: 20px; height: 20px; flex: none; }
+.pw-rec { color: var(--muted); font-variant-numeric: tabular-nums; }
+.pw-diff { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; }
+.pw-diff.up { color: var(--accent); }
+.pw-diff.dn { color: #d1493f; }
+.pw-bar { width: 56px; height: 6px; border-radius: 4px; background: rgba(128, 128, 128, .22); overflow: hidden; flex: none; }
+.pw-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.npo-conf { font-weight: 800; margin: 12px 2px 4px; color: var(--gold); text-transform: uppercase; letter-spacing: .5px; font-size: 13px; }
+.npo-seed { width: 24px; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }
+.npo-cut { border-top: 2px dashed var(--gold); margin: 6px 0; opacity: .6; }
+
 /* ==========================================================================
    LIGHT MODE — "Editorial / Premium" theme (Design 3).
    Active only when <html data-theme="light">. Dark mode is the default and is
