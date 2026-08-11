@@ -310,7 +310,31 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v149**.
+Current version as of this writing: **v150**.
+
+- **Mock draft ran out of real players — board deepened 129 → 203 (v150)** —
+  the owner reported the sim "running out of players". Cause: `MOCK_POOL_RAW`
+  held **129** names but the default draft (12 teams × 15 rounds) needs **180**
+  picks, so ~51 picks — roughly **the last 4.3 rounds** — fell through to the
+  generic `Depth WR 1` / `Best Available N` padding. **K and DST were the worst
+  offenders** (only 4 K and 5 DST for 12 teams, so most teams got filler at
+  those spots). Added **74 real players** — 10 QB, 18 RB, 20 WR, 10 TE, 8 K,
+  8 DST — inserted before the K/DST block so `rank` (= line order) stays
+  sensible. New totals: WR 68 · RB 62 · QB 26 · TE 22 · DST 13 · K 12 = **203**,
+  enough for 180 picks plus buffer. Verified: a full 12×15 sim now produces
+  **0 filler picks and 0 duplicate names**, and round 15 reads like a real
+  draft (kickers + deep RBs). ⚠️ Still a **SAMPLE board, not live ADP** — the
+  deep-board team labels are consensus/offseason-approximate since the sandbox
+  can't reach ESPN; the backend `/api/fantasy/football/rankings` remains the
+  live-ranks source for the separate auto-filled Draft Board (it returns
+  name/pos/tier but **no team abbreviation**, which is why the mock pool is
+  still hand-maintained).
+  Also fixed a realism bug the deep-sim testing exposed: **pending keepers now
+  count toward positional need** (`mockPendingKeepers`, folded into
+  `mockCpuChoose`'s counts). Previously a keeper only joined the roster when its
+  round arrived, so the sim would hand the owner a round-3 QB despite Maye being
+  locked for R11. Measured over 200 sims: drafts wasting an early (R1–6) pick on
+  an already-kept position went **97% → 0%**. Applies to rivals too.
 
 - **Mock draft models the FULL league keeper board (v149)** — v148 only pulled
   rivals' keepers out of the pool, which was half the story: in a

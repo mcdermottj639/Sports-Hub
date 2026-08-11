@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v149';
+const APP_VERSION = 'v150';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2985,15 +2985,89 @@ Jaylen Wright|RB|MIA
 Isaac Guerendo|RB|SF
 Justin Herbert|QB|LAC
 Jordan Love|QB|GB
+Michael Pittman Jr.|WR|IND
+Emeka Egbuka|WR|TB
+Darnell Mooney|WR|ATL
+Matthew Golden|WR|GB
+Zach Charbonnet|RB|SEA
+Rachaad White|RB|TB
+Javonte Williams|RB|DAL
+Luther Burden III|WR|CHI
+Tucker Kraft|TE|GB
+Jonnu Smith|TE|PIT
+Nick Chubb|RB|HOU
+Tre Harris|WR|LAC
+Jayden Higgins|WR|HOU
+Isaiah Likely|TE|BAL
+Alec Pierce|WR|IND
+Austin Ekeler|RB|WSH
+Jake Ferguson|TE|DAL
+Quentin Johnston|WR|LAC
+Bhayshul Tuten|RB|JAX
+Kyle Williams|WR|NE
+Trevor Lawrence|QB|JAX
+C.J. Stroud|QB|HOU
+Ray Davis|RB|BUF
+Romeo Doubs|WR|GB
+Hunter Henry|TE|NE
+Xavier Legette|WR|CAR
+Dylan Sampson|RB|CLE
+Wan'Dale Robinson|WR|NYG
+Michael Penix Jr.|QB|ATL
+Cam Ward|QB|TEN
+Trevor Etienne|RB|CAR
+Adonai Mitchell|WR|IND
+Cade Otton|TE|TB
+Woody Marks|RB|HOU
+Troy Franklin|WR|DEN
+J.J. McCarthy|QB|MIN
+Jack Bech|WR|LV
+Mason Taylor|TE|NYJ
+DJ Giddens|RB|IND
+Christian Kirk|WR|HOU
+Tua Tagovailoa|QB|MIA
+Kimani Vidal|RB|LAC
+Pat Freiermuth|TE|PIT
+Dontayvion Wicks|WR|GB
+Devin Neal|RB|NO
+Elic Ayomanor|WR|TEN
+Matthew Stafford|QB|LAR
+Harold Fannin Jr.|TE|CLE
+Jarquez Hunter|RB|LAR
+DeMario Douglas|WR|NE
+Sam Darnold|QB|SEA
+Roschon Johnson|RB|CHI
+Zach Ertz|TE|WSH
+Ollie Gordon II|RB|MIA
+Geno Smith|QB|LV
+Sean Tucker|RB|TB
+Bryce Young|QB|CAR
+Emanuel Wilson|RB|GB
 Brandon Aubrey|K|DAL
 Jake Bates|K|DET
 Cameron Dicker|K|LAC
 Harrison Butker|K|KC
+Chris Boswell|K|PIT
+Jake Elliott|K|PHI
+Ka'imi Fairbairn|K|HOU
+Tyler Bass|K|BUF
+Younghoe Koo|K|ATL
+Wil Lutz|K|DEN
+Jason Sanders|K|MIA
+Evan McPherson|K|CIN
 Eagles D/ST|DST|PHI
 Ravens D/ST|DST|BAL
 Broncos D/ST|DST|DEN
 Texans D/ST|DST|HOU
-Steelers D/ST|DST|PIT`;
+Steelers D/ST|DST|PIT
+Vikings D/ST|DST|MIN
+Bills D/ST|DST|BUF
+Packers D/ST|DST|GB
+Lions D/ST|DST|DET
+Chiefs D/ST|DST|KC
+49ers D/ST|DST|SF
+Chargers D/ST|DST|LAC
+Seahawks D/ST|DST|SEA`;
 const MOCK_POOL = MOCK_POOL_RAW.trim().split('\n').map((l, i) => {
   const [name, pos, team] = l.split('|');
   return { name, pos, team, rank: i + 1 };
@@ -3045,9 +3119,25 @@ function mockScore(p, counts, round, rounds) {
   const reach = Math.exp((Math.random() - 0.5) * 0.7); // ~0.70–1.42, simulates differing team boards
   return value * mult * reach;
 }
+// Keepers a team hasn't received yet still fill a roster spot, so they have to
+// count toward positional need — otherwise the sim hands you a round-3 QB when
+// your QB keeper is already locked in for round 11.
+function mockPendingKeepers(m, teamIdx) {
+  const out = [];
+  if (teamIdx === m.userIdx && m.keeperAt) {
+    Object.entries(m.keeperAt).forEach(([ov, pl]) => { if (Number(ov) > m.onClock) out.push(pl); });
+  }
+  if (m.leagueKeeperAt) {
+    Object.entries(m.leagueKeeperAt).forEach(([ov, e]) => {
+      if (e.teamIdx === teamIdx && Number(ov) > m.onClock) out.push(e.player);
+    });
+  }
+  return out;
+}
 function mockCpuChoose(m) {
   if (!m.pool.length) return mockFiller(m);
-  const counts = mockCounts(m.rosters[mockTeamOnClock(m.onClock, m.teams)]);
+  const t = mockTeamOnClock(m.onClock, m.teams);
+  const counts = mockCounts(m.rosters[t].concat(mockPendingKeepers(m, t)));
   const round = Math.floor(m.onClock / m.teams) + 1;
   let best = null, bestScore = -Infinity;
   for (const p of m.pool) {
