@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v151';
+const APP_VERSION = 'v152';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2211,6 +2211,34 @@ const CONTRACT_WATCH = [
       { n: 'Kyler Murray', p: 'QB', tier: 5, deal: '1-yr prove-it in Minnesota after the ARI release' },
     ] },
 ];
+// Why a pick was interesting beyond its board rank: the contract angle it fits
+// (💰 just paid / 🔥 contract year) and whether it was on the Draft-Turn Plan.
+// Powers the mock draft's post-draft footnotes — a "-13 reach" on a guy you
+// deliberately targeted for a real reason isn't the same as a random reach.
+function pickAngles(name) {
+  const out = [];
+  CONTRACT_WATCH.forEach((g) => {
+    const p = (g.players || []).find((x) => keepNorm(x.n) === keepNorm(name));
+    if (p) out.push({ icon: g.key === 'paid' ? '💰' : '🔥', color: g.color, kind: g.key === 'paid' ? 'Just paid' : 'Contract year', note: p.deal });
+  });
+  let planned = null;
+  TURN_ROUNDS.forEach((rd) => {
+    (rd.groups || []).forEach((grp) => {
+      if (!planned && (grp.players || []).some((x) => keepNorm(x.n) === keepNorm(name))) {
+        planned = { icon: '🎯', color: '#8fb0ff', kind: `Plan target · R${rd.r}`, note: grp.label };
+      }
+    });
+  });
+  if (!planned) {
+    TURN_SLEEPERS.forEach((grp) => {
+      if (!planned && (grp.players || []).some((x) => keepNorm(x.n) === keepNorm(name))) {
+        planned = { icon: '🎯', color: '#8fb0ff', kind: 'Sleeper-pool target', note: grp.label };
+      }
+    });
+  }
+  if (planned) out.push(planned);
+  return out;
+}
 // Owner's league scoring (edit here if the league settings change).
 const NFL_SCORING = 'Half-PPR (0.5 per reception)';
 const daysUntil = (iso) => Math.ceil((new Date(iso + 'T12:00:00') - new Date()) / 86400000);
@@ -2386,21 +2414,30 @@ function renderFantasyFootball() {
     </div>
 
     <h2 class="section-title">My Draft Board</h2>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-      <button id="bd-autofill" class="fan-btn">⚡ Auto-fill ESPN rankings</button>
-      <span id="bd-rank-note" class="muted" style="font-size:11.5px">${rankNote}</span>
-    </div>
-    <div class="chips" style="margin-bottom:10px">${filterChips}</div>
-    <div class="bd-list">${boardHTML}</div>
-    <div class="muted" style="font-size:11px;margin:4px 0 0">Tap a player's <b>tier</b> dropdown to re-rank them; the board re-sorts by position then tier.</div>
-    <div class="pp-add">
-      <input id="bd-name" type="text" placeholder="Add a player…" autocomplete="off" />
-      <select id="bd-pos">${NFL_POS.map((p) => `<option>${p}</option>`).join('')}</select>
-      <select id="bd-tier">${[1, 2, 3, 4, 5].map((t) => `<option value="${t}"${t === 3 ? ' selected' : ''}>Tier ${t}</option>`).join('')}</select>
-      <button id="bd-add" class="fan-btn">Add</button>
-    </div>
-    <div class="muted" style="font-size:12px;margin:12px 0 6px">Quick add — popular names to start (tap to add, then edit freely; not a ranking):</div>
-    ${sugg}
+    <details class="tp-r" id="bd-wrap"${fanState.bdOpen ? ' open' : ''} style="border:1px solid var(--line);border-radius:10px;background:var(--card);margin-bottom:4px">
+      <summary class="tp-sum" style="display:flex;align-items:center;gap:8px;padding:11px 12px;cursor:pointer;list-style:none;min-height:44px;box-sizing:border-box">
+        <b style="font-size:13px;flex:none">📋 ${board.length} player${board.length === 1 ? '' : 's'}</b>
+        <span style="flex:1;font-size:11.5px;color:var(--muted);min-width:0">tap to ${fanState.bdOpen ? 'collapse' : 'open'} · add, re-tier, filter</span>
+        <span class="tp-chev" style="color:var(--muted);flex:none">▸</span>
+      </summary>
+      <div style="padding:0 12px 12px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+          <button id="bd-autofill" class="fan-btn">⚡ Auto-fill ESPN rankings</button>
+          <span id="bd-rank-note" class="muted" style="font-size:11.5px">${rankNote}</span>
+        </div>
+        <div class="chips" style="margin-bottom:10px">${filterChips}</div>
+        <div class="bd-list">${boardHTML}</div>
+        <div class="muted" style="font-size:11px;margin:4px 0 0">Tap a player's <b>tier</b> dropdown to re-rank them; the board re-sorts by position then tier.</div>
+        <div class="pp-add">
+          <input id="bd-name" type="text" placeholder="Add a player…" autocomplete="off" />
+          <select id="bd-pos">${NFL_POS.map((p) => `<option>${p}</option>`).join('')}</select>
+          <select id="bd-tier">${[1, 2, 3, 4, 5].map((t) => `<option value="${t}"${t === 3 ? ' selected' : ''}>Tier ${t}</option>`).join('')}</select>
+          <button id="bd-add" class="fan-btn">Add</button>
+        </div>
+        <div class="muted" style="font-size:12px;margin:12px 0 6px">Quick add — popular names to start (tap to add, then edit freely; not a ranking):</div>
+        ${sugg}
+      </div>
+    </details>
 
     <h2 class="section-title">Prep Tips</h2>
     <ul class="pp-tips">
@@ -2421,15 +2458,21 @@ function renderFantasyFootball() {
     const list = loadNflBoard();
     if (list.some((p) => p.name.toLowerCase() === name.toLowerCase())) return;
     list.push({ name, pos, tier });
+    fanState.bdOpen = true;
     saveNflBoard(list);
     renderFantasyFootball();
   };
-  box.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { fanState.nflFilter = b.dataset.filter; renderFantasyFootball(); }));
-  box.querySelectorAll('.bd-rm').forEach((b) => (b.onclick = () => { saveNflBoard(loadNflBoard().filter((p) => p.name !== b.dataset.name)); renderFantasyFootball(); }));
+  // Remember whether the Draft Board is expanded — every edit (add, remove,
+  // re-tier, filter, auto-fill) re-renders the view, and collapsing the board
+  // out from under you mid-edit would be maddening.
+  const bdWrap = box.querySelector('#bd-wrap');
+  if (bdWrap) bdWrap.addEventListener('toggle', () => { fanState.bdOpen = bdWrap.open; });
+  box.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { fanState.bdOpen = true; fanState.nflFilter = b.dataset.filter; renderFantasyFootball(); }));
+  box.querySelectorAll(".bd-rm").forEach((b) => (b.onclick = () => { fanState.bdOpen = true; saveNflBoard(loadNflBoard().filter((p) => p.name !== b.dataset.name)); renderFantasyFootball(); }));
   box.querySelectorAll('.bd-tier-sel').forEach((s) => (s.onchange = () => {
     const list = loadNflBoard();
     const pl = list.find((p) => p.name === s.dataset.name);
-    if (pl) { pl.tier = Number(s.value) || pl.tier; saveNflBoard(list); renderFantasyFootball(); }
+    if (pl) { pl.tier = Number(s.value) || pl.tier; fanState.bdOpen = true; saveNflBoard(list); renderFantasyFootball(); }
   }));
   box.querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => addPlayer(b.dataset.add, b.dataset.pos, 3)));
   const addBtn = box.querySelector('#bd-add');
@@ -3331,14 +3374,34 @@ function renderMockDraft() {
     // Every one of your picks, in draft order, with its value vs the slot it was
     // taken (+ = fell to you past its board rank, − = a reach).
     const myPicks = m.picks.filter((p) => p.teamIdx === m.userIdx).sort((a, b) => a.overall - b.overall);
+    const noteRows = [];
     const picksHTML = myPicks.map((pk) => {
       const slot = pk.overall + 1;
       const real = pk.player.rank < 900;
       const val = pk.keeper ? null : (real ? slot - pk.player.rank : null);
       const cls = pk.keeper ? 'na' : val == null ? 'na' : val > 0 ? 'pos' : val < 0 ? 'neg' : 'zero';
       const txt = pk.keeper ? '🔒 kept' : val == null ? '–' : (val > 0 ? '+' : '') + val;
-      return `<div class="mk-pick"><span class="mk-pk-slot">R${pk.round} · #${slot}</span><span class="mk-pk-name">${esc(pk.player.name)} <span class="mk-meta">${esc(pk.player.pos)}·${esc(pk.player.team || '')}</span></span><span class="mk-pk-val ${cls}">${txt}</span></div>`;
+      const angles = pickAngles(pk.player.name);
+      angles.forEach((a) => noteRows.push({ ...a, name: pk.player.name, round: pk.round }));
+      const badges = angles.length
+        ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">${angles.map((a) =>
+            `<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;border:1px solid ${a.color};color:${a.color}">${a.icon} ${esc(a.kind)}</span>`).join('')}</div>`
+        : '';
+      return `<div class="mk-pick"><span class="mk-pk-slot">R${pk.round} · #${slot}</span><span class="mk-pk-name">${esc(pk.player.name)} <span class="mk-meta">${esc(pk.player.pos)}·${esc(pk.player.team || '')}</span>${badges}</span><span class="mk-pk-val ${cls}">${txt}</span></div>`;
     }).join('');
+    // Footnotes: the story behind the tagged picks, since +/- vs board rank
+    // says nothing about WHY a player was worth taking.
+    const notesHTML = noteRows.length ? `
+      <h2 class="section-title">Why These Picks</h2>
+      <div class="muted" style="font-size:11.5px;margin:2px 0 8px">The value column only compares to board rank. These are the angles you actually drafted for.</div>
+      <div class="setup-card" style="padding:10px 12px">
+        ${noteRows.map((n) => `
+          <div style="display:flex;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line);align-items:baseline;flex-wrap:wrap">
+            <span style="flex:none;font-size:11px;font-weight:700;color:${n.color};min-width:104px">${n.icon} ${esc(n.kind)}</span>
+            <b style="flex:none;font-size:12.5px">${esc(n.name)}</b>
+            <span style="flex:1;min-width:160px;font-size:11.5px;color:var(--muted)">${esc(n.note)}</span>
+          </div>`).join('')}
+      </div>` : '';
     box.innerHTML = `
       <div class="setup-card pp-hero"><div class="pp-kicker">🏈 Draft Complete</div>
         <div class="pp-count"><span class="pp-big">${g.letter}</span> your draft grade</div>
@@ -3346,7 +3409,8 @@ function renderMockDraft() {
       </div>
       <h2 class="section-title">Your Picks</h2>
       <div class="mk-picks">${picksHTML}</div>
-      <div class="muted" style="font-size:11px;margin-top:6px"><b class="mk-pk-val pos">+</b> value (fell to you) · <b class="mk-pk-val neg">−</b> reach vs board rank</div>
+      <div class="muted" style="font-size:11px;margin-top:6px"><b class="mk-pk-val pos">+</b> value (fell to you) · <b class="mk-pk-val neg">−</b> reach vs board rank · badges = the angle you targeted</div>
+      ${notesHTML}
       <div class="fan-actions">
         <button id="mk-new" class="fan-btn">New draft</button>
         <button id="mk-exit" class="fan-btn ghost">Close</button>

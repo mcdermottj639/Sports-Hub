@@ -310,7 +310,32 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v151**.
+Current version as of this writing: **v152**.
+
+- **Draft recap footnotes + collapsible Draft Board (v152)** — two owner asks:
+  - **"Why These Picks" footnotes** on the mock-draft completion screen. The
+    +/- value column only compares a pick to its board rank, which says nothing
+    about *why* a player was worth taking. New **`pickAngles(name)`** (defined
+    right after `CONTRACT_WATCH`) cross-references each pick against three
+    existing data sources and returns tag objects `{icon,color,kind,note}`:
+    **💰 Just paid** / **🔥 Contract year** (from `CONTRACT_WATCH`, carrying the
+    verified deal blurb) and **🎯 Plan target · R{n}** / **Sleeper-pool target**
+    (from `TURN_ROUNDS`/`TURN_SLEEPERS`, carrying the tier-group label; first
+    match wins). A player can carry both (e.g. Kenneth Walker III = 💰 paid +
+    🎯 R2 target). Each pick row gets inline pill badges, and a **Why These
+    Picks** card below the list spells out the note per tagged pick. Uses
+    `keepNorm` for name matching, so punctuation/case differences don't miss.
+    Verified against a full sim (8 of 15 picks tagged) and by direct lookups of
+    every `CONTRACT_WATCH` name.
+  - **Draft Board is collapsible** (Fantasy → Football). The board had grown
+    long enough to bury the sections under it, so it's now wrapped in a native
+    `<details class="tp-r" id="bd-wrap">` (same pattern as the Draft-Turn Plan
+    rows) with a summary showing the player count. ⚠️ Every board mutation
+    (add / remove / re-tier / filter / auto-fill) calls `renderFantasyFootball()`,
+    which would rebuild the `<details>` **collapsed** and yank the UI shut
+    mid-edit — so the open state is held in **`fanState.bdOpen`**, set by a
+    `toggle` listener and forced `true` by each mutation handler. Keep that in
+    mind when adding new board controls.
 
 - **Mock draft room reordered for phone drafting (v151)** — owner request: while
   drafting they want the actions and their roster visible at the top, not below
