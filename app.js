@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v148';
+const APP_VERSION = 'v149';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3010,8 +3010,12 @@ const MOCK_KEEPERS = [
 ];
 // The user's 0-based overall pick number in a given (1-based) snake round.
 function mockUserOverallInRound(m, round) {
+  return mockOverallFor(m, m.userIdx, round);
+}
+// Any team's 0-based overall pick number in a given (1-based) snake round.
+function mockOverallFor(m, teamIdx, round) {
   const rnd = round - 1;
-  const pos = rnd % 2 === 0 ? m.userIdx : m.teams - 1 - m.userIdx;
+  const pos = rnd % 2 === 0 ? teamIdx : m.teams - 1 - teamIdx;
   return rnd * m.teams + pos;
 }
 
@@ -3071,7 +3075,8 @@ function mockAdvance(m) {
       mockAssign(m, m.userIdx, kept, true);
       continue;
     }
-    mockAssign(m, t, mockCpuChoose(m));
+    const rival = m.leagueKeeperAt && m.leagueKeeperAt[m.onClock];
+    mockAssign(m, t, rival ? rival.player : mockCpuChoose(m), !!rival);
   }
 }
 const mockDone = (m) => m.onClock >= m.teams * m.rounds;
@@ -3079,13 +3084,29 @@ const mockDone = (m) => m.onClock >= m.teams * m.rounds;
 function mockStart(m) {
   m.userIdx = Math.max(0, Math.min(m.teams - 1, (m.slot || 1) - 1));
   m.pool = MOCK_POOL.slice();
-  // Other teams' league keepers are off the board too — without this the sim
-  // would happily offer you a player your league-mate has already kept. (Your
-  // OWN keepers are handled below, since they also consume your pick.)
-  if ((m.keepers || []).length) {
-    const mine = new Set((m.keepers || []).map((k) => keepNorm(k.name)));
-    const theirs = new Set(LEAGUE_KEEPERS.filter((k) => !mine.has(keepNorm(k.n))).map((k) => keepNorm(k.n)));
-    if (theirs.size) m.pool = m.pool.filter((p) => !theirs.has(keepNorm(p.name)));
+  // League-wide keepers (real league shape only — 12 teams). Keep-the-round
+  // means a rival who keeps a player in R6 does NOT pick in R6: that slot is
+  // consumed by the keeper. Modelling only the pool removal (and letting rivals
+  // still make every pick) would drain the board faster than the real draft, so
+  // each rival keeper is scheduled at its owner's slot in that round.
+  // Rivals are mapped by draft slot (LEAGUE_ORDER[i] → team index i); the
+  // user's own index is skipped, since m.keepers drives their side and can be
+  // toggled off.
+  m.leagueKeeperAt = {};
+  if (m.teams === LEAGUE_TEAMS_TOTAL) {
+    const mineNames = new Set((m.keepers || []).map((k) => keepNorm(k.name)));
+    LEAGUE_ORDER.forEach((t, idx) => {
+      if (!t.team || idx === m.userIdx) return; // unreported, or that's you
+      LEAGUE_KEEPERS.filter((k) => k.team === t.team).forEach((k) => {
+        if (mineNames.has(keepNorm(k.n))) return; // don't double-assign your own
+        let pl = m.pool.find((p) => keepNorm(p.name) === keepNorm(k.n));
+        if (pl) m.pool = m.pool.filter((p) => p !== pl);
+        else pl = { name: k.n, pos: k.p || 'FLEX', team: '', rank: 900 };
+        pl._keeper = true;
+        // Keeper rounds beyond the sim's length just stay off the board.
+        if (k.r <= (m.rounds || 0)) m.leagueKeeperAt[mockOverallFor(m, idx, k.r)] = { teamIdx: idx, player: pl };
+      });
+    });
   }
   // Keepers: pull each kept player off the board (so no CPU can draft them) and
   // schedule them to fill the user's pick in the round they cost. Any keeper
@@ -3105,9 +3126,14 @@ function mockStart(m) {
   // and excluded from the draft grade.
   const need = m.teams * m.rounds + 4;
   const fillPos = ['WR', 'RB', 'WR', 'RB', 'TE', 'QB'];
+  // Number each filler PER POSITION — the old `i / fillPos.length` math reused
+  // a number for the two WR (and two RB) slots in every group of six, so the
+  // draft log showed two different players both called "Depth WR 1".
+  const fillN = {};
   for (let i = 0; m.pool.length < need; i++) {
     const pos = fillPos[i % fillPos.length];
-    m.pool.push({ name: `Depth ${pos} ${Math.floor(i / fillPos.length) + 1}`, pos, team: 'FA', rank: 901 + i });
+    fillN[pos] = (fillN[pos] || 0) + 1;
+    m.pool.push({ name: `Depth ${pos} ${fillN[pos]}`, pos, team: 'FA', rank: 901 + i });
   }
   m.rosters = Array.from({ length: m.teams }, () => []);
   m.picks = [];
@@ -3122,7 +3148,9 @@ function mockSimRest(m) {
   const total = m.teams * m.rounds;
   while (m.onClock < total) {
     const t = mockTeamOnClock(m.onClock, m.teams);
-    const kept = t === m.userIdx && m.keeperAt && m.keeperAt[m.onClock];
+    const kept = t === m.userIdx
+      ? (m.keeperAt && m.keeperAt[m.onClock])
+      : (m.leagueKeeperAt && m.leagueKeeperAt[m.onClock] || {}).player;
     mockAssign(m, t, kept || mockCpuChoose(m), !!kept);
   }
 }

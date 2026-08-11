@@ -310,7 +310,32 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v148**.
+Current version as of this writing: **v149**.
+
+- **Mock draft models the FULL league keeper board (v149)** — v148 only pulled
+  rivals' keepers out of the pool, which was half the story: in a
+  keep-the-round league a rival who keeps a player in R6 **does not pick in
+  R6**, so letting the CPUs draft every round drained the board faster than the
+  real draft would. `mockStart` now builds **`m.leagueKeeperAt`** (overall pick
+  → `{teamIdx, player}`) for every reported rival by mapping `LEAGUE_ORDER[i]`
+  → team index `i`, and `mockAdvance`/`mockSimRest` fill those slots with the
+  kept player (flagged `keeper:true`, so it shows "🔒 kept" and is excluded
+  from the value grade) instead of making a pick. New helper
+  **`mockOverallFor(m, teamIdx, round)`** generalizes the old user-only
+  `mockUserOverallInRound` (which now delegates to it). Guards: league keepers
+  apply **only when `m.teams === LEAGUE_TEAMS_TOTAL` (12)** — a 10-team sim is
+  a different league and gets the plain board; the user's own index is skipped
+  (their side is driven by `m.keepers`, which the setup toggle can disable, and
+  rival entries dedupe against it so a player can't be assigned twice).
+  Verified by running full sims in-sandbox: 180/180 picks, all 16 keepers land
+  at the correct manager AND round (McBride R7 #82, Maye R11 #130 — matching
+  the Draft-Turn Plan's pick numbers), zero duplicate players, keepers-off and
+  10-team paths behave, and the interactive `mockAdvance` stops exactly at
+  overall #10 (the owner's 1.10).
+  Also fixed a **pre-existing filler-name collision**: the pad loop numbered by
+  `i / fillPos.length`, so the two WR (and two RB) slots in each group of six
+  reused a number and the draft log showed two different players both named
+  "Depth WR 1". Filler is now numbered per position.
 
 - **🔒 League keepers + real draft order (v148)** — the owner sent the
   commissioner's keeper sheet (PDF) and the 2026 draft order for their 12-team
