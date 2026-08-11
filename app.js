@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v146';
+const APP_VERSION = 'v147';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1915,7 +1915,7 @@ const DEFAULT_ROSTERS = {
   football: [],
 };
 
-const fanState = { sport: 'baseball', gamesByTeam: {} };
+const fanState = { sport: 'football', gamesByTeam: {} };
 const fanKey = (s) => `sportshub:fantasy:${s}`;
 function loadRoster(sport) {
   const saved = localStorage.getItem(fanKey(sport));
@@ -3155,12 +3155,19 @@ async function renderFantasy() {
   // wired up and in season). NOTE: we do NOT hit the backend here — the health
   // check is deferred to the baseball branch so the Football prep view (and the
   // sport chips) render instantly even when the free backend is cold-starting.
-  const sports = [['baseball', '⚾ Baseball'], ['football', '🏈 Football']];
-  if (!sports.some(([s]) => s === fanState.sport)) fanState.sport = 'baseball';
+  // ⚾ SHELVED (Aug 2026): the owner's fantasy-baseball season is done, so the
+  // baseball live-league view is parked until next spring. ALL baseball code
+  // (syncFromLeague, matchup/projection/opponent/waivers/standings/playoffs
+  // renderers, the backend wiring) is intact and dormant — to bring it back,
+  // re-add ['baseball', '⚾ Baseball'] to this list and flip the fanState
+  // default back to 'baseball' if wanted. Nothing else needs to change.
+  const sports = [['football', '🏈 Football']];
+  if (!sports.some(([s]) => s === fanState.sport)) fanState.sport = 'football';
 
-  // sport chips
+  // sport chips (hidden while only one sport is live — see shelf note above)
   const chips = $('#fantasy-sport');
   chips.innerHTML = '';
+  chips.style.display = sports.length > 1 ? '' : 'none';
   sports.forEach(([s, label]) => {
     const c = el('button', 'chip' + (s === fanState.sport ? ' active' : ''), label);
     c.onclick = () => { fanState.sport = s; renderFantasy(); };

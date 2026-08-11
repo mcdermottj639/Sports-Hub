@@ -310,7 +310,22 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v146**.
+Current version as of this writing: **v147**.
+
+- **⚾ Fantasy baseball SHELVED for the season (v147)** — owner call: their
+  fantasy-baseball season is done, football season is starting, so the Fantasy
+  tab is now **football-only**. This is a shelf, NOT a removal: the entire
+  baseball live-league stack (syncFromLeague, league header, matchup scoreboard,
+  projection, How You Stack Up, Snapshot/Roster, Category Strengths, Suggested
+  Moves, Waiver Wire, League Analyzer, Playoff Predictor, all `#fantasy-live`
+  HTML and CSS) is intact and dormant. Mechanism: `renderFantasy`'s `sports`
+  list (the shelf point, with a SHELVED comment) now holds only football, and
+  `fanState.sport` defaults to `'football'`; the sport chip row auto-hides when
+  only one sport is listed (`chips.style.display` gate). **To revive next
+  spring: re-add `['baseball', '⚾ Baseball']` to that list — nothing else.**
+  The backend (`server/` on Render) stays deployed untouched — the Scriptable
+  widget still calls it directly, and the baseball endpoints remain live for
+  the revival. Saved rosters/localStorage keys are untouched.
 
 - **Game modal sits preseason out too (v146)** — the owner's screenshot of a
   preseason final (CAR@ARI) showed the modal running the full model treatment:
