@@ -310,7 +310,23 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v150**.
+Current version as of this writing: **v151**.
+
+- **Mock draft room reordered for phone drafting (v151)** — owner request: while
+  drafting they want the actions and their roster visible at the top, not below
+  a 40-row player board. The war-room markup in `renderMockDraft` now reads:
+  clock → **Auto-pick / Sim rest / Exit** → **Your Team** → **Recent Picks** →
+  new **"Best Available"** heading → position filter + search → `#mk-list`.
+  Pure markup reorder (same ids/handlers, all wiring is by id so nothing else
+  moved); the new heading was added so the board still has a visible label now
+  that it's no longer the first thing under the clock.
+  Also: **your keepers now show in Your Team from pick 1.** Previously a keeper
+  only appeared once its round arrived (they're placed by `m.keeperAt`), so for
+  the first six rounds the panel gave no hint that TE and QB were already spoken
+  for. Pending keepers now render in their position group, dimmed, labelled
+  "🔒 keeper, lands R7" — and flip to the normal "🔒 kept" line once placed.
+  Verified in a scripted draft: both keepers listed at the 1.10, McBride moves
+  onto the roster at R7 while Maye stays pending until R11.
 
 - **Mock draft ran out of real players — board deepened 129 → 203 (v150)** —
   the owner reported the sim "running out of players". Cause: `MOCK_POOL_RAW`

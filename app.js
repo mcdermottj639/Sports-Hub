@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v150';
+const APP_VERSION = 'v151';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3302,13 +3302,24 @@ function renderMockDraft() {
     return t ? t.mgr : `Team ${i + 1}`;
   };
 
-  // Your roster panel
+  // Your roster panel. Keepers you haven't received yet (their round hasn't come
+  // up) are shown alongside the real picks, dimmed with the round they land —
+  // they're already yours, so drafting without seeing them invites doubling up.
   const mine = m.rosters[m.userIdx];
+  const pendingRows = [];
+  if (m.keeperAt) {
+    Object.entries(m.keeperAt).forEach(([ov, pl]) => {
+      if (Number(ov) > m.onClock) pendingRows.push({ p: pl, round: Math.floor(Number(ov) / m.teams) + 1 });
+    });
+  }
   const posOrder = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST'];
   const teamHTML = posOrder.map((pos) => {
     const list = mine.filter((p) => p.pos === pos);
-    if (!list.length) return '';
-    return `<div class="pos-h">${pos}</div>` + list.map((p) => `<div class="mk-pick-line">${esc(p.name)} <span class="mk-meta">${esc(p.team || '')}${p._keeper ? ' · 🔒 kept' : ''}</span></div>`).join('');
+    const pend = pendingRows.filter((x) => x.p.pos === pos);
+    if (!list.length && !pend.length) return '';
+    return `<div class="pos-h">${pos}</div>`
+      + list.map((p) => `<div class="mk-pick-line">${esc(p.name)} <span class="mk-meta">${esc(p.team || '')}${p._keeper ? ' · 🔒 kept' : ''}</span></div>`).join('')
+      + pend.map((x) => `<div class="mk-pick-line" style="opacity:.65">${esc(x.p.name)} <span class="mk-meta">${esc(x.p.team || '')} · 🔒 keeper, lands R${x.round}</span></div>`).join('');
   }).join('') || '<div class="muted">No picks yet.</div>';
 
   // Recent picks log (last 8)
@@ -3355,10 +3366,6 @@ function renderMockDraft() {
       <div class="mk-clock">🕐 On the clock: <b>${teamLabel(mockTeamOnClock(m.onClock, m.teams))}</b></div>
       <div class="mk-sub">Round ${round} · Pick ${inRound}/${m.teams} · #${m.onClock + 1} overall</div>
     </div>
-    <div class="chips" style="margin-bottom:8px">${filterChips}
-      <input id="mk-search" type="text" placeholder="Search…" autocomplete="off" style="flex:1 1 120px;min-width:100px" />
-    </div>
-    <div id="mk-list" class="mk-board"></div>
     <div class="fan-actions">
       <button id="mk-auto" class="fan-btn">Auto-pick best</button>
       <button id="mk-sim" class="fan-btn ghost">Sim rest</button>
@@ -3367,7 +3374,12 @@ function renderMockDraft() {
     <h2 class="section-title">Your Team <span class="season-tag">${mine.length} pick${mine.length === 1 ? '' : 's'}</span></h2>
     <div class="mk-team">${teamHTML}</div>
     <h2 class="section-title">Recent Picks</h2>
-    <div class="mk-log">${log || '<div class="muted">Draft just started.</div>'}</div>`;
+    <div class="mk-log">${log || '<div class="muted">Draft just started.</div>'}</div>
+    <h2 class="section-title">Best Available</h2>
+    <div class="chips" style="margin-bottom:8px">${filterChips}
+      <input id="mk-search" type="text" placeholder="Search…" autocomplete="off" style="flex:1 1 120px;min-width:100px" />
+    </div>
+    <div id="mk-list" class="mk-board"></div>`;
 
   const listBox = box.querySelector('#mk-list');
   const searchEl = box.querySelector('#mk-search');
