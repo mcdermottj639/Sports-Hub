@@ -310,7 +310,42 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v147**.
+Current version as of this writing: **v148**.
+
+- **🔒 League keepers + real draft order (v148)** — the owner sent the
+  commissioner's keeper sheet (PDF) and the 2026 draft order for their 12-team
+  keep-the-round league ("Nectars Bologna"). Two new consts near `TURN_ROUNDS`
+  are now the single source of truth:
+  - **`LEAGUE_ORDER`** — slots 1–12 with the manager ↔ team-name mapping
+    (Gotch=Thurgood Marshall, Riz, Hurd, Hyman, Christel, Slemp=Slob On My Cobb,
+    Woods=Morning Woods, Zach, CC, **McD=Current Champ = the owner, slot 10**,
+    Buley=GMDD, Jew(=Wolff)=Future champ). `team: null` = keepers not reported.
+  - **`LEAGUE_KEEPERS`** — 16 kept players across 8 reported teams, each
+    `{team, n, p, r}` (+`you` for the owner's). ⚠️ **PARTIAL — Riz, Hurd, Hyman
+    and Zach haven't reported; append them here and everything downstream
+    updates.** The league's 1st/2nd/final-keep bookkeeping is deliberately NOT
+    modeled (owner: "just player and round matter"). Names must match
+    `MOCK_POOL_RAW` spelling; `keptEntry(name)`/`keepNorm` do the lookups.
+  Wired into four places: (1) **Draft-Turn Plan targets that are kept render
+  struck-through** with who holds them, so a stale plan can't send you hunting an
+  undraftable player; (2) a new **🔒 League Keepers & Draft Order** card above
+  the plan — the league in draft order, keepers per team as pills, unreported
+  teams called out, plus a **turn-insight box**: only 4 picks (Buley, Jew, Jew,
+  Buley) happen between the owner's 1.10 and 2.15, and both those managers'
+  keepers are known, so you can read what they still need; (3) the **Labs mock
+  draft** pulls opponents' keepers off the board (previously it would offer you
+  Ja'Marr Chase, whom Buley keeps) and labels CPU teams with the real manager
+  names when teams===12; (4) the ⭐ turn-target board merge **skips kept
+  players** and says how many it skipped.
+  **R1/R2 plan retuned to the real board:** 4 of R1's old targets (JSN, Puka,
+  Achane, Nico Collins) and R2's McConkey are kept by others. Because ~6 top-15
+  players never enter the draft while every team still picks in R1, the board at
+  #10 is DEEPER than a normal draft — verified by simulating the pool minus
+  keepers (top available: Bijan, Jefferson, Saquon, Gibbs, CeeDee, CMC, JT,
+  ARSB, Jeanty, then Love ≈ the owner's pick). R1 groups now read Bijan/
+  Jefferson/ARSB → Saquon/Gibbs/JT/CMC → CeeDee/London/A.J. Brown. Five kept
+  names remain in R3/R4/R5/R9 groups on purpose — they render struck-through,
+  which is the informative treatment for a mid-round group with alternatives.
 
 - **⚾ Fantasy baseball SHELVED for the season (v147)** — owner call: their
   fantasy-baseball season is done, football season is starting, so the Fantasy

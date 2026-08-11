@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v147';
+const APP_VERSION = 'v148';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2076,15 +2076,71 @@ const NFL_POS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST'];
 // priority for the ⭐ merge), `keeper` rows render locked. Targets are
 // consensus-style and aligned with the app's built-in ranked board (rank ≈
 // pick number); edit here as the offseason moves.
+// League-wide keepers (2026 "Nectars Bologna", 12-team keep-the-round league).
+// Reported by the commissioner; the owner's own team is `you: true`. Only the
+// PLAYER and the ROUND matter here — the league's 1st/2nd/final-keep bookkeeping
+// (how many years a player has been held) doesn't affect the draft board, so
+// it isn't modeled. Names must match MOCK_POOL_RAW spelling so the mock draft
+// can pull them off the board.
+// ⚠️ PARTIAL: 8 of 12 teams have reported — append the rest as they come in and
+// everything downstream (turn-plan strikeouts, the keepers card, the mock draft
+// pool, the ⭐ board merges) updates from this one list.
+const LEAGUE_TEAMS_TOTAL = 12;
+const LEAGUE_KEEPERS = [
+  { team: 'CC', n: 'Chase Brown', p: 'RB', r: 6 },
+  { team: 'CC', n: 'Brock Bowers', p: 'TE', r: 7 },
+  { team: 'Future champ', n: 'Puka Nacua', p: 'WR', r: 6 },
+  { team: 'Future champ', n: 'Nico Collins', p: 'WR', r: 11 },
+  { team: 'Morning Woods', n: 'Cam Skattebo', p: 'RB', r: 6 },
+  { team: 'Morning Woods', n: 'Chuba Hubbard', p: 'RB', r: 8 },
+  { team: 'Thurgood Marshall', n: 'Jaxon Smith-Njigba', p: 'WR', r: 4 },
+  { team: 'Thurgood Marshall', n: 'Colston Loveland', p: 'TE', r: 7 },
+  { team: 'Slob On My Cobb', n: 'Ladd McConkey', p: 'WR', r: 6 },
+  { team: 'Slob On My Cobb', n: 'Javonte Williams', p: 'RB', r: 7 },
+  { team: 'Current Champ', n: 'Trey McBride', p: 'TE', r: 7, you: true },
+  { team: 'Current Champ', n: 'Drake Maye', p: 'QB', r: 11, you: true },
+  { team: 'GMDD', n: "Ja'Marr Chase", p: 'WR', r: 3 },
+  { team: 'GMDD', n: 'Quinshon Judkins', p: 'RB', r: 6 },
+  { team: 'Christel', n: 'Jaylen Waddle', p: 'WR', r: 5 },
+  { team: 'Christel', n: "De'Von Achane", p: 'RB', r: 11 },
+];
+// 2026 draft order (slot 1–12) with the manager ↔ team-name mapping, so the
+// keeper board reads in real draft order and the mock sim can use real names.
+// The owner drafts at slot 10 ("McD" / Current Champ) — the 1.10 + 2.15 turn
+// the Draft-Turn Plan is built around. `team: null` = hasn't reported keepers.
+const LEAGUE_ORDER = [
+  { slot: 1, mgr: 'Gotch', team: 'Thurgood Marshall' },
+  { slot: 2, mgr: 'Riz', team: null },
+  { slot: 3, mgr: 'Hurd', team: null },
+  { slot: 4, mgr: 'Hyman', team: null },
+  { slot: 5, mgr: 'Christel', team: 'Christel' },
+  { slot: 6, mgr: 'Slemp', team: 'Slob On My Cobb' },
+  { slot: 7, mgr: 'Woods', team: 'Morning Woods' },
+  { slot: 8, mgr: 'Zach', team: null },
+  { slot: 9, mgr: 'CC', team: 'CC' },
+  { slot: 10, mgr: 'McD', team: 'Current Champ', you: true },
+  { slot: 11, mgr: 'Buley', team: 'GMDD' },
+  { slot: 12, mgr: 'Jew', team: 'Future champ' }, // Jew = Wolff
+];
+const keepNorm = (s) => (s || '').toLowerCase().replace(/[^a-z]/g, '');
+// name -> keeper entry, for "is this player already off the board?" lookups.
+const KEPT_BY = (() => {
+  const m = {};
+  LEAGUE_KEEPERS.forEach((k) => { m[keepNorm(k.n)] = k; });
+  return m;
+})();
+const keptEntry = (name) => KEPT_BY[keepNorm(name)] || null;
+const LEAGUE_TEAMS_IN = [...new Set(LEAGUE_KEEPERS.map((k) => k.team))].length;
+
 const TURN_ROUNDS = [
-  { r: 1, pick: '#10', tag: 'best of the board — RB now in play', note: 'QB (Maye) and TE (McBride) are locked, but with Kyren no longer kept you start with ZERO running backs — so the elite RBs are just as live as WR here. Snap any top-6 slider either way.', groups: [
-    { label: 'Snap it if it falls (top-6 talents)', tier: 1, players: [{ n: 'Jaxon Smith-Njigba', p: 'WR' }, { n: 'Puka Nacua', p: 'WR' }, { n: 'Amon-Ra St. Brown', p: 'WR' }] },
-    { label: 'Elite RB — a real option now', tier: 2, players: [{ n: "De'Von Achane", p: 'RB' }, { n: 'Jonathan Taylor', p: 'RB' }, { n: 'Christian McCaffrey', p: 'RB' }, { n: 'James Cook', p: 'RB' }] },
-    { label: 'WR if the elite RBs are gone', tier: 2, players: [{ n: 'CeeDee Lamb', p: 'WR' }, { n: 'Nico Collins', p: 'WR' }, { n: 'Drake London', p: 'WR' }] },
+  { r: 1, pick: '#10', tag: 'elite talent WILL fall to you', note: 'The keeper board is doing you a favor: Chase, JSN, Puka, Achane, Nico and Bowers are all kept, so ~6 top-15 players never enter the draft — but every team still picks in R1. At #10 you should get a player who normally goes ~1.4. With zero RBs rostered, an elite back is the default.', groups: [
+    { label: 'Snap it if it falls (true elite)', tier: 1, players: [{ n: 'Bijan Robinson', p: 'RB' }, { n: 'Justin Jefferson', p: 'WR' }, { n: 'Amon-Ra St. Brown', p: 'WR' }] },
+    { label: 'Elite RB — the default here', tier: 2, players: [{ n: 'Saquon Barkley', p: 'RB' }, { n: 'Jahmyr Gibbs', p: 'RB' }, { n: 'Jonathan Taylor', p: 'RB' }, { n: 'Christian McCaffrey', p: 'RB' }] },
+    { label: 'WR if the elite RBs are gone', tier: 2, players: [{ n: 'CeeDee Lamb', p: 'WR' }, { n: 'Drake London', p: 'WR' }, { n: 'A.J. Brown', p: 'WR' }] },
   ] },
   { r: 2, pick: '#15', tag: '🆕 Love/Jeanty — near-mandatory RB', note: 'With no Kyren, do NOT leave this turn without at least one RB. Rookie Jeremiyah Love (Cardinals, #3 overall pick) and Ashton Jeanty both sit ~ADP 16 — one should be on the board at #15.', groups: [
     { label: 'RB at your pick', tier: 2, players: [{ n: 'Jeremiyah Love', p: 'RB' }, { n: 'Ashton Jeanty', p: 'RB' }, { n: 'Kenneth Walker III', p: 'RB' }, { n: 'Josh Jacobs', p: 'RB' }] },
-    { label: 'WR — only if you took an RB at 1.10', tier: 3, players: [{ n: 'Brian Thomas Jr.', p: 'WR' }, { n: 'Ladd McConkey', p: 'WR' }, { n: 'Tee Higgins', p: 'WR' }, { n: 'Garrett Wilson', p: 'WR' }] },
+    { label: 'WR — only if you took an RB at 1.10', tier: 3, players: [{ n: 'Brian Thomas Jr.', p: 'WR' }, { n: 'Marvin Harrison Jr.', p: 'WR' }, { n: 'Tee Higgins', p: 'WR' }, { n: 'Garrett Wilson', p: 'WR' }] },
   ] },
   { r: 3, pick: '#34', tag: 'RB2 — or the Nabers discount', note: 'Aim to leave R3 with 2 RB + 1 WR — your QB is already rostered, so every early pick goes to RB/WR. Nabers (ACL, Sept 2025) at ~31–46 ADP is the WR swing if the backfield is settled.', groups: [
     { label: 'RB — round out the backfield', tier: 3, players: [{ n: 'Bucky Irving', p: 'RB' }, { n: 'Chase Brown', p: 'RB' }, { n: 'Breece Hall', p: 'RB' }] },
@@ -2208,11 +2264,17 @@ function renderFantasyFootball() {
   // tap-to-expand <details> row (native, no JS wiring; inline styles so it
   // always renders regardless of stylesheet state — see the v74 note).
   const tierColor = { 1: '#3ad29f', 2: '#d9b341', 3: '#8fb0ff', 4: '#c9a2e8', 5: '#9fb3c8' };
+  // A target that another team has KEPT can't be drafted — render it struck
+  // through with who holds it, so a stale plan can't send you hunting a player
+  // who was never going to be there.
   const tpGroup = (g) => `
     <div style="margin:8px 0">
       <div style="font-size:12px;font-weight:700;color:${tierColor[g.tier] || 'var(--muted)'};margin-bottom:5px">${esc(g.label)}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${g.players.map((pl) =>
-        `<span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-size:12.5px;background:var(--card)"><b>${esc(pl.n)}</b><span style="color:var(--muted);font-size:11px">${esc(pl.p)}</span></span>`).join('')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${g.players.map((pl) => {
+        const k = keptEntry(pl.n);
+        if (k) return `<span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px dashed var(--line);border-radius:999px;font-size:12.5px;background:transparent;opacity:.6"><b style="text-decoration:line-through">${esc(pl.n)}</b><span style="color:var(--muted);font-size:11px">🔒 ${esc(k.you ? 'your keeper' : k.team)}</span></span>`;
+        return `<span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;font-size:12.5px;background:var(--card)"><b>${esc(pl.n)}</b><span style="color:var(--muted);font-size:11px">${esc(pl.p)}</span></span>`;
+      }).join('')}</div>
     </div>`;
   const tpSummary = (left, pick, tag) => `
     <summary class="tp-sum" style="display:flex;align-items:center;gap:8px;padding:11px 12px;cursor:pointer;list-style:none;min-height:44px;box-sizing:border-box">
@@ -2258,6 +2320,35 @@ function renderFantasyFootball() {
         </div>`).join('')}
     </div>`).join('');
 
+  // 🔒 League Keepers — the whole league in real draft order, so it reads like
+  // the draft room: who picks where, what they've locked up, and who hasn't
+  // reported. Keep-the-round means a keeper costs that team that round's pick.
+  const keepersOf = (team) => LEAGUE_KEEPERS.filter((k) => k.team === team).sort((a, b) => a.r - b.r);
+  const keeperHTML = LEAGUE_ORDER.map((t) => {
+    const ks = t.team ? keepersOf(t.team) : [];
+    const body = !t.team
+      ? '<span style="font-size:11.5px;color:var(--muted)">keepers not reported yet</span>'
+      : ks.length
+        ? ks.map((k) => `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;margin:2px 3px 2px 0;border:1px solid var(--line);border-radius:999px;font-size:12px;background:var(--card)"><b>${esc(k.n)}</b><span style="color:var(--muted);font-size:10.5px">${esc(k.p)} · R${k.r}</span></span>`).join('')
+        : '<span style="font-size:11.5px;color:var(--muted)">no keepers</span>';
+    return `
+      <div style="display:flex;gap:9px;padding:9px 10px;margin:4px 0;border:1px solid ${t.you ? 'var(--accent)' : 'var(--line)'};border-radius:10px;background:var(--card);align-items:flex-start">
+        <b style="font-size:12.5px;flex:none;width:22px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums">${t.slot}</b>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:700;margin-bottom:3px">${esc(t.mgr)}${t.you ? ' <span style="color:var(--accent);font-weight:600">— you</span>' : ''}${t.team ? ` <span style="color:var(--muted);font-weight:500;font-size:11px">${esc(t.team)}</span>` : ''}</div>
+          <div>${body}</div>
+        </div>
+      </div>`;
+  }).join('');
+  // Who actually picks between your two turn picks (snake: R1 …10,11,12 →
+  // R2 12,11,10). Knowing their keepers tells you what they still NEED.
+  const turnFoes = [11, 12].map((s) => LEAGUE_ORDER.find((t) => t.slot === s)).filter(Boolean);
+  const turnInsight = turnFoes.map((t) => {
+    const ks = t.team ? keepersOf(t.team) : [];
+    const pos = [...new Set(ks.map((k) => k.p))];
+    return `<b>${esc(t.mgr)}</b> ${ks.length ? `has ${esc(pos.join('/'))} locked (${ks.map((k) => esc(k.n)).join(', ')})` : 'hasn\'t reported keepers'}`;
+  }).join(' · ');
+
   const liveOn = !!(fanState.cfg && fanState.cfg.football);
   box.innerHTML = `
     ${liveOn ? '<div style="margin-bottom:10px"><button id="pp-live" class="fan-btn ghost">← Back to live league</button></div>' : ''}
@@ -2273,6 +2364,14 @@ function renderFantasyFootball() {
     <div class="tr-bar"><label for="tr-team">Team</label><select id="tr-team"><option>Loading teams…</option></select></div>
     <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Projected offensive fantasy starters from the latest depth chart (QB · RB · WR · TE). Tap a player for more info.</div>
     <div id="tr-content" class="tr-content"></div>
+
+    <h2 class="section-title">🔒 League Keepers &amp; Draft Order</h2>
+    <div class="muted" style="font-size:11.5px;margin:2px 0 8px">The league in draft order — <b>${LEAGUE_KEEPERS.length} players off the board</b> from ${LEAGUE_TEAMS_IN} of ${LEAGUE_TEAMS_TOTAL} teams${LEAGUE_TEAMS_IN < LEAGUE_TEAMS_TOTAL ? ' <b>(4 still to report)</b>' : ''}. Keep-the-round: a keeper costs that team that round's pick, so R1–R2 stay full while this much talent is gone — the board at your <b>1.10</b> is <b>deeper than a normal draft</b>.</div>
+    <div class="setup-card" style="padding:12px 14px">${keeperHTML}
+      <div style="margin-top:10px;padding:9px 11px;border:1px dashed var(--gold);border-radius:10px;font-size:11.5px;line-height:1.5">
+        <b style="color:var(--gold)">🔄 Your turn (1.10 → 2.15):</b> only <b>4 picks</b> happen in between, from just two managers — ${turnInsight}. Read what they still need to guess what survives back to you.
+      </div>
+    </div>
 
     <h2 class="section-title">🎯 Draft-Turn Plan</h2>
     <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Your full draft from <b>slot 10</b> (12-team half-PPR snake; keepers <b>McBride R7</b> + <b>Maye R11</b> — Kyren goes back in the pool). Tap a round to expand its targets — R12+ is the sleeper pool.</div>
@@ -2353,15 +2452,25 @@ function renderFantasyFootball() {
     const have = new Set(list.map((p) => (p.name || '').toLowerCase()));
     let added = 0;
     const groups = TURN_ROUNDS.flatMap((rd) => rd.groups || []).concat(TURN_SLEEPERS);
+    let skipped = 0;
     groups.forEach((g) => g.players.forEach((pl) => {
       if (pl.p === 'K' || pl.p === 'DST') return;
       if (have.has(pl.n.toLowerCase())) return;
+      if (keptEntry(pl.n)) { skipped++; return; } // kept by a league team — undraftable
       list.push({ name: pl.n, pos: pl.p, tier: g.tier });
       have.add(pl.n.toLowerCase());
       added++;
     }));
-    if (added) { saveNflBoard(list); renderFantasyFootball(); }
-    else { const n = box.querySelector('#tp-note'); if (n) n.textContent = 'All turn targets are already on your board.'; }
+    const n = box.querySelector('#tp-note');
+    if (added) {
+      saveNflBoard(list);
+      if (skipped) fanState.tpSkipped = skipped;
+      renderFantasyFootball();
+    } else if (n) {
+      n.textContent = skipped
+        ? `All draftable turn targets are already on your board (${skipped} skipped — kept by other teams).`
+        : 'All turn targets are already on your board.';
+    }
   };
   // Same non-destructive merge for the 💰 Contract Angle names (tier comes
   // from each player's entry; skips anyone already on the board).
@@ -2970,6 +3079,14 @@ const mockDone = (m) => m.onClock >= m.teams * m.rounds;
 function mockStart(m) {
   m.userIdx = Math.max(0, Math.min(m.teams - 1, (m.slot || 1) - 1));
   m.pool = MOCK_POOL.slice();
+  // Other teams' league keepers are off the board too — without this the sim
+  // would happily offer you a player your league-mate has already kept. (Your
+  // OWN keepers are handled below, since they also consume your pick.)
+  if ((m.keepers || []).length) {
+    const mine = new Set((m.keepers || []).map((k) => keepNorm(k.name)));
+    const theirs = new Set(LEAGUE_KEEPERS.filter((k) => !mine.has(keepNorm(k.n))).map((k) => keepNorm(k.n)));
+    if (theirs.size) m.pool = m.pool.filter((p) => !theirs.has(keepNorm(p.name)));
+  }
   // Keepers: pull each kept player off the board (so no CPU can draft them) and
   // schedule them to fill the user's pick in the round they cost. Any keeper
   // whose round is beyond the draft length is simply pre-rostered up front.
@@ -3035,7 +3152,7 @@ function renderMockDraft() {
         <div class="mock-setrow"><label>Your pick</label><select id="mk-slot">${slotOpts()}</select></div>
         <div class="mock-setrow"><label>Rounds</label><select id="mk-rounds">${[8, 10, 12, 15].map((n) => `<option value="${n}"${n === m.rounds ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
         <div class="mock-setrow"><label>Keepers</label><label class="mk-keep-toggle"><input type="checkbox" id="mk-keepers"${(m.keepers || []).length ? ' checked' : ''}> Use mine</label></div>
-        ${MOCK_KEEPERS.length ? `<div class="muted" style="font-size:11.5px;margin-top:2px">Keeping <b>${MOCK_KEEPERS.map((k) => `${esc(k.name)} (R${k.round})`).join('</b>, <b>')}</b>. Those rounds are auto-filled with your keeper; other teams draft the full board (their keepers aren't simulated).</div>` : ''}
+        ${MOCK_KEEPERS.length ? `<div class="muted" style="font-size:11.5px;margin-top:2px">Keeping <b>${MOCK_KEEPERS.map((k) => `${esc(k.name)} (R${k.round})`).join('</b>, <b>')}</b>. Those rounds are auto-filled with your keeper. Your league-mates' keepers (${LEAGUE_KEEPERS.filter((k) => !k.you).length} players from ${LEAGUE_TEAMS_IN - 1} teams) are pulled off the board too, so the pool matches your real draft.</div>` : ''}
         <div class="fan-actions">
           <button id="mk-go" class="fan-btn">Start draft</button>
           <button id="mk-cancel" class="fan-btn ghost">Cancel</button>
@@ -3059,7 +3176,13 @@ function renderMockDraft() {
   const done = mockDone(m);
   const round = Math.floor(m.onClock / m.teams) + 1;
   const inRound = (m.onClock % m.teams) + 1;
-  const teamLabel = (i) => (i === m.userIdx ? 'You' : `Team ${i + 1}`);
+  // Real league managers when the sim matches the real league shape (12 teams),
+  // so the draft room reads like the actual room; generic otherwise.
+  const teamLabel = (i) => {
+    if (i === m.userIdx) return 'You';
+    const t = m.teams === LEAGUE_TEAMS_TOTAL ? LEAGUE_ORDER[i] : null;
+    return t ? t.mgr : `Team ${i + 1}`;
+  };
 
   // Your roster panel
   const mine = m.rosters[m.userIdx];
