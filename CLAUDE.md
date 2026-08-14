@@ -71,7 +71,10 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > intraday movement is the product, so that's fine). NOTE: ESPN's MLB
 > scoreboard sends NO raw moneylines — only the favorite string ("SEA -231")
 > + O/U — so snapshots often have `hML/aML: null` and only `details`),
-> `/api/refresh` (also clears the VSiN cache).
+> `/api/articles/{sport}` (nfl → **FantasyPros articles**, see v155 — server-side
+> scrape because fantasypros.com sends no CORS headers; cached
+> `ARTICLES_TTL_SECONDS`/30m, stdlib-only, self-diagnosing with `?debug=1`),
+> `/api/refresh` (also clears the VSiN + articles caches).
 > **Baseball is live** (league `42353353`, team "Duran Duran" id `2`); football is
 > coded but not yet configured (no league id set). The Fantasy tab calls the API
 > once per session (`syncFromLeague`), overwrites the saved roster with the real
@@ -310,7 +313,48 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v154**.
+Current version as of this writing: **v155**.
+
+- **📰 Fantasy Advice — FantasyPros articles (v155, backend `b9-fparticles`)** —
+  the owner sent `https://www.fantasypros.com/nfl/articles/`, so the Fantasy →
+  Football prep view now leads with a **📰 Fantasy Advice** section (`#pp-articles`,
+  right under the hero, above Team Research) listing FantasyPros' latest draft /
+  waiver / sleeper articles — title, category · author · age, a summary line when
+  the feed carries one, first 6 shown with the rest behind a "+N more" `<details>`.
+  Rows open on FantasyPros (`target="_blank"`); there's **no in-app summary popup**
+  like ESPN news gets, because we can't fetch their article bodies from the browser.
+  - **Why it needs the backend:** fantasypros.com sends **no CORS headers** (same
+    wall as API-Sports/Reddit), so this is the VSiN-scrape pattern, not a
+    browser-direct read. New endpoint **`/api/articles/{sport}`** (`nfl` only for
+    now; `ARTICLE_SOURCES` is the table to extend) walks a list of candidate URLs —
+    RSS/Atom feeds first (they carry author/date/summary), the HTML article index
+    last — and tries **three parsers per page**: `_parse_feed` (RSS `<item>` /
+    Atom `<entry>`, namespace-agnostic), `_parse_jsonld` (schema.org
+    Article/ItemList blocks), then `_parse_links` (anchors matching
+    `/nfl/articles/…`, which survives most redesigns but yields title+URL only).
+    Results are deduped by URL+title and sorted newest-first **only when every
+    item has a parseable date** (otherwise source order is the site's own
+    ordering and re-sorting would scramble it). Cached `ARTICLES_TTL_SECONDS`
+    (30m); `/api/refresh` clears it. Never raises — always returns
+    `ok/error/attempts`, and **`?debug=1`** reveals per-URL status/bytes and
+    which parser hit.
+  - ⚠️ **The candidate URLs are UNVERIFIED.** The sandbox is egress-blocked from
+    fantasypros.com (WebFetch *and* curl), so the exact feed path could not be
+    confirmed — `https://www.fantasypros.com/rss/nfl-articles.php`,
+    `/nfl/articles/feed/`, `/nfl/articles/rss/`, `/feed/` and the plain
+    `/nfl/articles/` page are tried in that order. The HTML index is the
+    backstop and should work even if every feed guess is wrong; if FantasyPros
+    blocks the scrape outright (Cloudflare), the card says so honestly. **First
+    on-device check: `/api/articles/nfl?debug=1` → look at `parser` + `attempts`.**
+  - **Degradation:** the last good payload is cached on-device
+    (`sportshub:fparticles`) and painted instantly, so the section survives a
+    Render cold start and shows something offline. Backend unreachable vs.
+    reachable-but-scrape-empty are reported as **different** messages, and either
+    way the card hands over a direct FantasyPros link rather than inventing
+    content. Verified end-to-end in headless Chromium (both themes) across all
+    four states — live, backend-down, stale-cache, and no-cache — plus a
+    fixture-driven test of the three parsers (RSS, Atom, JSON-LD, anchors,
+    dedupe/sort, malformed input).
 
 - **Keeper-vs-board guard + board audit (v154)** — the owner asked how Kyle Pitts
   could have been missing from `MOCK_POOL_RAW` at all, and who else is.
@@ -1368,7 +1412,8 @@ Current version as of this writing: **v154**.
     merge is **non-destructive** (adds only missing names, never overwrites your
     edited tiers); backend down → board stays manual with an honest note. And
     evergreen prep
-    tips. Section order (v113): Team Research → My Draft Board → Prep Tips →
+    tips. Section order (v155): **📰 Fantasy Advice** → Team Research → League
+    Keepers → Draft-Turn Plan → Contract Angle → My Draft Board → Prep Tips →
     **Offseason Timeline (last)**. `renderFantasy` hides the baseball wrapper (`#fantasy-live`) and returns
     early for football; `injectJumpNav` now skips hidden headings so the hidden
     baseball sections don't produce dead chips. The **live** football league
@@ -1472,6 +1517,9 @@ Current version as of this writing: **v154**.
   Only today's key is kept; older days are purged on write.
 - `sportshub:fantasy:{sport}` — the saved fantasy roster, one per sport
   (`fanKey(sport)`, e.g. `sportshub:fantasy:baseball`).
+- `sportshub:fparticles` — last good FantasyPros article list (`{at, items}`), so
+  the 📰 Fantasy Advice section paints instantly and still shows something when
+  the backend is asleep.
 - `sportshub:theme` — chosen color theme (`'light'` | `'dark'`). Absent = follow the
   OS `prefers-color-scheme`. Read by the inline `<head>` script and by `applyTheme`.
 - Note: localStorage is **per browser/device** — the home-screen PWA and Safari
@@ -1483,6 +1531,10 @@ Current version as of this writing: **v154**.
 - **X / Twitter embeds** — widgets hang/throttle, especially in PWAs; removed.
 - **Reddit "Buzz" feeds** — Reddit sends no CORS header; even free CORS proxies
   (allorigins, corsproxy.io) didn't pull through reliably. Removed in v60.
+- **FantasyPros (and fantasy-advice sites generally)** — no CORS header, so the
+  browser can't read their article pages or feeds. Going through the backend
+  scrape is the only route (v155's `/api/articles/nfl`), and even server-side the
+  exact feed URL is a guess until it's checked on device.
 - General rule: **social/highlight feeds need a server.** Not viable in this
   no-backend app. ESPN is the one source that allows direct browser reads.
 

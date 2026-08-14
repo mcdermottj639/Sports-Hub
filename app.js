@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v154';
+const APP_VERSION = 'v155';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2049,6 +2049,82 @@ async function autoFillNflBoard() {
   return { ok: false, added: 0, source, msg: 'Every ranked player is already on your board.' };
 }
 
+// --- 📰 Latest fantasy advice (FantasyPros) ---------------------------------
+// fantasypros.com sends no CORS headers, so the browser CANNOT read their
+// articles page or feeds directly — the backend scrapes it server-side and
+// hands us clean JSON (`/api/articles/nfl`, see server/main.py). The last good
+// payload is stashed on-device so the section paints instantly instead of
+// waiting out a Render cold start, and still shows something when the backend
+// is asleep. Articles open on FantasyPros (we can't fetch their body text for
+// an in-app summary the way we do with ESPN's news feed).
+const FP_KEY = 'sportshub:fparticles';
+const FP_PAGE = 'https://www.fantasypros.com/nfl/articles/';
+const loadArticleCache = () => { try { return JSON.parse(localStorage.getItem(FP_KEY)) || null; } catch (_) { return null; } };
+const saveArticleCache = (items) => { try { localStorage.setItem(FP_KEY, JSON.stringify({ at: Date.now(), items })); } catch (_) {} };
+
+function articleRowHTML(a) {
+  const when = a.ts ? timeAgo(a.ts * 1000) : (a.published ? timeAgo(a.published) : '');
+  const meta = [a.category, a.author, when].filter(Boolean).map(esc).join(' · ');
+  return `
+    <a href="${esc(a.url)}" target="_blank" rel="noopener" style="display:block;padding:9px 11px;margin:5px 0;border:1px solid var(--line);border-radius:10px;background:var(--card);text-decoration:none;color:inherit">
+      <div style="font-size:13px;font-weight:700;line-height:1.35">${esc(a.title)} <span style="color:var(--muted);font-weight:500">↗</span></div>
+      ${meta ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">${meta}</div>` : ''}
+      ${a.summary ? `<div style="font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.45">${esc(a.summary)}</div>` : ''}
+    </a>`;
+}
+
+// Honest fallback: no scrape, no invented content — say why and hand over the
+// link. `stale` = we're showing a previously-cached list, not today's.
+const articleNoteHTML = (msg) => `
+  <div style="padding:10px 12px;border:1px dashed var(--line);border-radius:10px;font-size:11.5px;color:var(--muted);line-height:1.5">
+    ${msg} <a href="${FP_PAGE}" target="_blank" rel="noopener" style="color:var(--accent)">Open FantasyPros ↗</a>
+  </div>`;
+
+function paintArticles(items, note) {
+  const box = $('#pp-articles');
+  if (!box) return;
+  if (!items || !items.length) {
+    box.innerHTML = articleNoteHTML(note || "Couldn't load articles right now.");
+    return;
+  }
+  const head = items.slice(0, 6), rest = items.slice(6);
+  box.innerHTML = `
+    ${note ? `<div style="font-size:11px;color:var(--muted);margin:0 0 6px">${note}</div>` : ''}
+    ${head.map(articleRowHTML).join('')}
+    ${rest.length ? `<details class="tp-r" style="margin:6px 0;border:1px solid var(--line);border-radius:10px;background:var(--card)">
+      <summary class="tp-sum" style="display:flex;align-items:center;gap:8px;padding:11px 12px;cursor:pointer;list-style:none;min-height:44px;box-sizing:border-box">
+        <b style="font-size:13px;flex:1">+ ${rest.length} more article${rest.length === 1 ? '' : 's'}</b>
+        <span class="tp-chev" style="color:var(--muted);flex:none">▸</span>
+      </summary>
+      <div style="padding:0 12px 10px">${rest.map(articleRowHTML).join('')}</div>
+    </details>` : ''}
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">From <a href="${FP_PAGE}" target="_blank" rel="noopener" style="color:var(--accent)">FantasyPros ↗</a> — headlines only; tap one to read it there.</div>`;
+}
+
+async function renderFantasyArticles() {
+  const box = $('#pp-articles');
+  if (!box) return;
+  const cached = loadArticleCache();
+  // Paint the cached list first (instant), then refresh in the background.
+  if (cached?.items?.length) paintArticles(cached.items, `Saved list — checking for new articles…`);
+  else box.innerHTML = '<div class="muted" style="font-size:11.5px;padding:8px 2px">Loading fantasy articles…</div>';
+  let data = null;
+  try { data = await fetchJSON(`${FANTASY_API}/api/articles/nfl?limit=20`, 30 * 60000); } catch (_) {}
+  if (fanState.sport !== 'football' || !$('#pp-articles')) return; // view moved on
+  if (data?.ok && data.items?.length) {
+    saveArticleCache(data.items);
+    paintArticles(data.items, `Updated ${timeAgo(data.fetched * 1000)}`);
+    return;
+  }
+  // Backend unreachable, or reachable but the scrape came back empty — those
+  // are different problems, so say which one.
+  const why = data
+    ? "FantasyPros didn't return any articles (they may be blocking the scrape, or changed their layout)."
+    : 'The backend is asleep or unreachable, so new articles could not be fetched.';
+  if (cached?.items?.length) paintArticles(cached.items, `⚠️ Showing a saved list from ${timeAgo(cached.at)} — ${why}`);
+  else paintArticles(null, `📰 ${why}`);
+}
+
 // 2026 NFL calendar (expected). Kickoff is the Week-1 Thursday nighter.
 const NFL_KICKOFF = '2026-09-10';
 const NFL_DATES = [
@@ -2407,6 +2483,10 @@ function renderFantasyFootball() {
       <div class="muted" style="margin-top:8px">${liveOn ? 'Your live league is connected — tap “Back to live league” for matchups, standings & roster. These draft tools stay here year-round.' : 'Your live ESPN league — matchups, roster, standings — will sync here once the season starts and the league is connected. Until then, get your draft ready below.'}</div>
     </div>
 
+    <h2 class="section-title">📰 Fantasy Advice</h2>
+    <div class="muted" style="font-size:11.5px;margin:2px 0 8px">Latest draft strategy, sleepers and waiver advice from <b>FantasyPros</b>, pulled through the backend (their site can't be read from the browser). Opens on their site.</div>
+    <div id="pp-articles"></div>
+
     <h2 class="section-title">Team Research</h2>
     <div id="tr-nav" class="tr-nav"></div>
     <div class="tr-bar"><label for="tr-team">Team</label><select id="tr-team"><option>Loading teams…</option></select></div>
@@ -2557,6 +2637,7 @@ function renderFantasyFootball() {
   const liveBtn = box.querySelector('#pp-live');
   if (liveBtn) liveBtn.onclick = () => { fanState.footballView = 'live'; renderFantasy(); };
   initTeamResearch();
+  renderFantasyArticles();
 }
 
 // --- Fantasy: Team Research (any NFL team's projected offensive starters) ---

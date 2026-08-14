@@ -32,7 +32,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b8-fflranks"
+SERVER_VERSION = "b9-fparticles"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -1191,6 +1191,318 @@ def betting_report(sport: str, debug: int = 0):
     return out
 
 
+# =============================================================================
+# 📰 Fantasy football articles (FantasyPros)
+# -----------------------------------------------------------------------------
+# The browser can't read fantasypros.com — no CORS headers on their pages or
+# feeds — so, exactly like the VSiN splits scrape, we pull it server-side and
+# hand the frontend clean JSON.
+#
+# We do NOT know which URL works from Render (the dev sandbox is egress-blocked
+# from fantasypros.com), so this tries a list of candidates in order — RSS/Atom
+# feeds first because they carry real metadata (author, date, summary), then the
+# HTML article index as a last resort. Each page gets three parse attempts:
+#   1. RSS/Atom XML          — richest, when a feed exists
+#   2. JSON-LD (schema.org)  — most sites embed ItemList/Article blocks
+#   3. anchors matching the article URL pattern — survives most redesigns
+# Never raises: always returns ok/error/attempts so the frontend can degrade to
+# an honest "couldn't load, here's the link" card. `?debug=1` adds per-URL
+# statuses + which parser hit, so a redesign is diagnosable without a redeploy.
+# =============================================================================
+ARTICLES_TTL_SECONDS = int(os.getenv("ARTICLES_TTL_SECONDS", "1800"))
+_ARTICLES_CACHE: dict = {}  # sport -> {"ts": float, "data": {...}}
+
+ARTICLE_SOURCES = {
+    "nfl": {
+        "site": "FantasyPros",
+        "page": "https://www.fantasypros.com/nfl/articles/",
+        # Feeds first (metadata), HTML index last (always exists).
+        "urls": [
+            "https://www.fantasypros.com/rss/nfl-articles.php",
+            "https://www.fantasypros.com/nfl/articles/feed/",
+            "https://www.fantasypros.com/nfl/articles/rss/",
+            "https://www.fantasypros.com/feed/",
+            "https://www.fantasypros.com/nfl/articles/",
+        ],
+        "pattern": re.compile(r"/nfl/articles/[a-z0-9][a-z0-9\-/]{6,}", re.I),
+    },
+}
+_JSONLD_RE = re.compile(
+    r"<script[^>]+type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>", re.I | re.S
+)
+_TAG_RE = re.compile(r"<[^>]+>")
+_ARTICLE_TYPES = {"article", "newsarticle", "blogposting", "report"}
+
+
+def _strip_tags(s: str) -> str:
+    txt = _TAG_RE.sub(" ", s or "")
+    for ent, ch in (("&amp;", "&"), ("&#39;", "'"), ("&rsquo;", "’"),
+                    ("&quot;", '"'), ("&nbsp;", " "), ("&lt;", "<"), ("&gt;", ">")):
+        txt = txt.replace(ent, ch)
+    return " ".join(txt.split())
+
+
+def _abs_url(href: str, base: str) -> str:
+    if not href:
+        return ""
+    if href.startswith("//"):
+        return "https:" + href
+    if href.startswith("http"):
+        return href
+    if href.startswith("/"):
+        return "https://www.fantasypros.com" + href
+    return base.rstrip("/") + "/" + href
+
+
+def _epoch(when: str):
+    """Best-effort epoch from an RFC-822 (RSS) or ISO-8601 (JSON-LD) date."""
+    if not when:
+        return None
+    try:
+        from email.utils import parsedate_to_datetime
+        return int(parsedate_to_datetime(when).timestamp())
+    except Exception:
+        pass
+    try:
+        import datetime as _dt
+        s = when.strip().replace("Z", "+00:00")
+        return int(_dt.datetime.fromisoformat(s).timestamp())
+    except Exception:
+        return None
+
+
+def _mk_item(title, url, author="", published="", summary="", category=""):
+    title, url = _strip_tags(title), (url or "").strip()
+    if not title or not url or len(title) < 12:
+        return None
+    return {
+        "title": title[:220],
+        "url": url,
+        "author": _strip_tags(author)[:80],
+        "published": (published or "").strip()[:60],
+        "ts": _epoch(published),
+        "summary": _strip_tags(summary)[:320],
+        "category": _strip_tags(category)[:40],
+    }
+
+
+def _parse_feed(text: str):
+    """RSS <item> / Atom <entry> → article dicts. Namespace-agnostic."""
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.fromstring(text.strip())
+    except Exception:
+        return []
+    local = lambda t: t.tag.rsplit("}", 1)[-1].lower()  # noqa: E731 — strip ns
+
+    def pick(node, *names):
+        for ch in node:
+            if local(ch) in names:
+                if local(ch) == "link" and not (ch.text or "").strip():
+                    return (ch.attrib.get("href") or "").strip()
+                if (ch.text or "").strip():
+                    return ch.text.strip()
+                # <author><name>…</name></author>
+                for gc in ch:
+                    if (gc.text or "").strip():
+                        return gc.text.strip()
+        return ""
+
+    out = []
+    for node in root.iter():
+        if local(node) not in ("item", "entry"):
+            continue
+        it = _mk_item(
+            pick(node, "title"),
+            pick(node, "link", "id"),
+            pick(node, "creator", "author", "dc:creator"),
+            pick(node, "pubdate", "published", "updated", "date"),
+            pick(node, "description", "summary", "content"),
+            pick(node, "category"),
+        )
+        if it:
+            out.append(it)
+    return out
+
+
+def _parse_jsonld(text: str, pattern):
+    """schema.org blocks — Article/NewsArticle objects, or ItemList members."""
+    out = []
+
+    def take(obj):
+        if not isinstance(obj, dict):
+            return
+        types = obj.get("@type") or ""
+        types = [types] if isinstance(types, str) else [t for t in types if isinstance(t, str)]
+        if not any(t.lower() in _ARTICLE_TYPES for t in types):
+            return
+        author = obj.get("author")
+        if isinstance(author, dict):
+            author = author.get("name") or ""
+        elif isinstance(author, list):
+            author = ", ".join(a.get("name", "") for a in author if isinstance(a, dict))
+        url = obj.get("url") or obj.get("mainEntityOfPage") or ""
+        if isinstance(url, dict):
+            url = url.get("@id") or ""
+        it = _mk_item(obj.get("headline") or obj.get("name") or "", url,
+                      author if isinstance(author, str) else "",
+                      obj.get("datePublished") or obj.get("dateModified") or "",
+                      obj.get("description") or "",
+                      obj.get("articleSection") or "")
+        if it and pattern.search(it["url"]):
+            out.append(it)
+
+    def walk(node, depth=0):
+        if depth > 6:
+            return
+        if isinstance(node, list):
+            for n in node:
+                walk(n, depth + 1)
+        elif isinstance(node, dict):
+            take(node)
+            for key in ("@graph", "itemListElement", "item", "mainEntity"):
+                if key in node:
+                    walk(node[key], depth + 1)
+
+    for block in _JSONLD_RE.findall(text):
+        try:
+            walk(_json.loads(block.strip()))
+        except Exception:
+            continue
+    return out
+
+
+class _LinkGrab(HTMLParser):
+    """Collect (href, anchor text) for every <a> on the page."""
+
+    def __init__(self):
+        super().__init__()
+        self.links, self._href, self._buf = [], None, []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "a":
+            self._flush()
+            self._href = dict(attrs).get("href") or ""
+            self._buf = []
+
+    def handle_endtag(self, tag):
+        if tag == "a":
+            self._flush()
+
+    def handle_data(self, data):
+        if self._href is not None:
+            self._buf.append(data)
+
+    def _flush(self):
+        if self._href is not None:
+            self.links.append((self._href, " ".join("".join(self._buf).split())))
+        self._href, self._buf = None, []
+
+
+def _parse_links(text: str, pattern, base: str):
+    """Last resort: anchors whose href looks like an article permalink. Titles
+    come from the anchor text, so no author/date — still a usable list."""
+    grab = _LinkGrab()
+    try:
+        grab.feed(text)
+    except Exception:
+        pass
+    out, seen = [], set()
+    for href, label in grab.links:
+        if not pattern.search(href or ""):
+            continue
+        url = _abs_url(href, base)
+        if url in seen or url.rstrip("/").endswith("/nfl/articles"):
+            continue
+        it = _mk_item(label, url)
+        if it:
+            seen.add(url)
+            out.append(it)
+    return out
+
+
+def _dedupe(items, limit):
+    out, seen_url, seen_title = [], set(), set()
+    for it in items:
+        key_u, key_t = it["url"].rstrip("/"), it["title"].lower()
+        if key_u in seen_url or key_t in seen_title:
+            continue
+        seen_url.add(key_u)
+        seen_title.add(key_t)
+        out.append(it)
+    dated = [i for i in out if i["ts"]]
+    if len(dated) == len(out) and out:  # only re-sort when every item has a date
+        out.sort(key=lambda i: i["ts"], reverse=True)
+    return out[:limit]
+
+
+def _fetch_articles(sport: str, limit: int) -> dict:
+    cfg = ARTICLE_SOURCES[sport]
+    now = time.time()
+    hit = _ARTICLES_CACHE.get(sport)
+    if hit and now - hit["ts"] < ARTICLES_TTL_SECONDS:
+        data = dict(hit["data"])
+        data["items"] = data["items"][:limit]
+        return data
+
+    attempts, items, used, how = [], [], None, None
+    for u in cfg["urls"]:
+        status, text = _http_get_text(u)
+        err = text.startswith("__ERR__")
+        att = {"url": u, "status": status, "bytes": 0 if err else len(text)}
+        if err:
+            att["err"] = text[7:120]
+        if status == 200 and text and not err:
+            for name, parse in (
+                ("feed", lambda t: _parse_feed(t)),
+                ("jsonld", lambda t: _parse_jsonld(t, cfg["pattern"])),
+                ("links", lambda t: _parse_links(t, cfg["pattern"], u)),
+            ):
+                try:
+                    got = parse(text)
+                except Exception as e:  # a parser must never take the endpoint down
+                    att.setdefault("parseErr", f"{name}: {type(e).__name__}")
+                    got = []
+                if got:
+                    items, used, how = got, u, name
+                    att["parsed"] = f"{name}:{len(got)}"
+                    break
+        attempts.append(att)
+        if items:
+            break
+
+    items = _dedupe(items, 40)
+    data = {
+        "ok": bool(items),
+        "site": cfg["site"],
+        "page": cfg["page"],
+        "source": used,
+        "parser": how,
+        "items": items,
+        "count": len(items),
+        "attempts": attempts,
+        "error": None if items else "no articles parsed (site unreachable, blocking us, or layout changed)",
+        "fetched": int(now),
+    }
+    _ARTICLES_CACHE[sport] = {"ts": now, "data": data}
+    out = dict(data)
+    out["items"] = items[:limit]
+    return out
+
+
+@app.get("/api/articles/{sport}")
+def articles(sport: str, limit: int = 20, debug: int = 0):
+    """Recent fantasy articles for a sport (nfl → FantasyPros). Cached
+    ARTICLES_TTL_SECONDS; `?debug=1` shows which URL/parser was used."""
+    sport = sport.lower()
+    if sport not in ARTICLE_SOURCES:
+        raise HTTPException(404, f"No article feed for '{sport}'. Try: {', '.join(ARTICLE_SOURCES)}.")
+    data = _fetch_articles(sport, max(1, min(limit, 40)))
+    if not debug:
+        data.pop("attempts", None)
+    return data
+
+
 @app.get("/api/refresh")
 def refresh():
     """Drop the cached League objects so the next call re-pulls from ESPN."""
@@ -1198,4 +1510,5 @@ def refresh():
     _DRAFT_CACHE.clear()
     _RANKINGS_CACHE.clear()
     _VSIN_CACHE.clear()
+    _ARTICLES_CACHE.clear()
     return {"ok": True, "cleared": True}
