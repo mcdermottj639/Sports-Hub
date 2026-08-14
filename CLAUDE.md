@@ -310,7 +310,43 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v153**.
+Current version as of this writing: **v154**.
+
+- **Keeper-vs-board guard + board audit (v154)** — the owner asked how Kyle Pitts
+  could have been missing from `MOCK_POOL_RAW` at all, and who else is.
+  - **Why it was silent (the actual root cause):** a keeper name that isn't in
+    `MOCK_POOL` does NOT error. `mockStart` falls through to
+    `pl = { name, pos, team: '', rank: 900 }` and schedules the stub, so the sim
+    runs clean while the player shows with no pro team, sorts to the bottom of
+    the board, and is undraftable in any sim with keepers toggled off. (⚠️ An
+    earlier note in this session said the sim "could not pull him off the board"
+    — that was wrong; verified by test that the stub path handles it.) New
+    **`keepersMissingFromPool()`** (next to `keptEntry`) surfaces exactly that
+    case as a red ⚠️ row inside the 🔒 League Keepers card, naming the players
+    and saying to add them to `MOCK_POOL_RAW`. It's a function, not a const,
+    because `MOCK_POOL` is defined further down the file.
+  - **Fixed: Washington was spelled two ways** in `MOCK_POOL_RAW` — four rows
+    `|WAS` (McLaurin, Daniels, Brian Robinson Jr., Deebo) vs two `|WSH` (Ekeler,
+    Ertz). Normalized to **WSH** (ESPN's code). Cosmetic only — nothing keys off
+    the mock pool's team string — but it also made per-team audits misreport.
+  - **The audit, and what it means.** `MOCK_POOL_RAW` is a **hand-maintained
+    SAMPLE board sized so the draft never runs out** (204 names ≥ 180 picks +
+    buffer), NOT a complete player universe — completeness was never its design
+    goal, which is how Pitts was absent. It only became a correctness concern
+    once `LEAGUE_KEEPERS` started naming real players. Per-position team
+    coverage as of v154: **7 teams have no QB** (ARI, CLE, DET, IND, NO, NYG,
+    PIT), **12 have no TE** (CAR, CIN, HOU, JAX, KC, LAC, LAR, MIA, NO, NYG,
+    SEA, TEN), **6 have fewer than 2 WR** (ARI, BAL, CLE, DAL, MIA, NYJ). Counts
+    per position are still sufficient for a 12×15 draft (26 QB / 23 TE), so
+    nothing breaks — these are realism gaps, not failures.
+  - **Why this can't just be automated:** the backend
+    `/api/fantasy/football/rankings` gives real ESPN draft ranks but returns
+    **name/pos/tier with NO team abbreviation**, which is precisely why the mock
+    pool is hand-maintained (see v150). Filling the gaps by name needs a source
+    the sandbox can't reach — ESPN is blocked and `WebFetch` is 403'd; web
+    *search* works but returned contradictory/stale 2026 depth-chart snippets,
+    so no names were guessed in. **Next step if the owner wants it: verify
+    starters on device, then append to `MOCK_POOL_RAW`.**
 
 - **🔒 Keeper board COMPLETE — all 12 teams + R1/R2 replan (v153)** — the owner
   sent the commissioner's updated keeper sheet. `LEAGUE_KEEPERS` went **16 → 21

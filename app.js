@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v153';
+const APP_VERSION = 'v154';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2138,6 +2138,13 @@ const KEPT_BY = (() => {
   return m;
 })();
 const keptEntry = (name) => KEPT_BY[keepNorm(name)] || null;
+// Sanity guard (v153). A keeper name that isn't in MOCK_POOL doesn't error —
+// mockStart quietly synthesizes a `rank:900, team:''` stub for it, so the sim
+// looks fine while the player has no team label, sorts to the bottom of the
+// board, and is undraftable in any sim with keepers toggled off. Kyle Pitts sat
+// in exactly that state until v153 and nothing surfaced it. MOCK_POOL is
+// defined further down the file, so this stays a function (called at render).
+const keepersMissingFromPool = () => LEAGUE_KEEPERS.filter((k) => !MOCK_POOL.some((p) => keepNorm(p.name) === keepNorm(k.n)));
 // "Reported" = the manager answered the commissioner, which includes answering
 // "none" (Cummish). Counting distinct teams in LEAGUE_KEEPERS would wrongly
 // file a zero-keeper team as still-outstanding.
@@ -2382,6 +2389,7 @@ function renderFantasyFootball() {
   }).join('');
   // Who actually picks between your two turn picks (snake: R1 …10,11,12 →
   // R2 12,11,10). Knowing their keepers tells you what they still NEED.
+  const missingFromPool = keepersMissingFromPool();
   const turnFoes = [11, 12].map((s) => LEAGUE_ORDER.find((t) => t.slot === s)).filter(Boolean);
   const turnInsight = turnFoes.map((t) => {
     const ks = t.team ? keepersOf(t.team) : [];
@@ -2408,6 +2416,9 @@ function renderFantasyFootball() {
     <h2 class="section-title">🔒 League Keepers &amp; Draft Order</h2>
     <div class="muted" style="font-size:11.5px;margin:2px 0 8px">The league in draft order — <b>${LEAGUE_KEEPERS.length} players off the board</b>, ${LEAGUE_TEAMS_OUT ? `from ${LEAGUE_TEAMS_IN} of ${LEAGUE_TEAMS_TOTAL} teams <b>(${LEAGUE_TEAMS_OUT} still to report)</b>` : `<b>all ${LEAGUE_TEAMS_TOTAL} teams reported</b>`}. Keep-the-round: a keeper costs that team that round's pick, so R1–R2 stay full while this much talent is gone — the board at your <b>1.10</b> is <b>deeper than a normal draft</b>.</div>
     <div class="setup-card" style="padding:12px 14px">${keeperHTML}
+      ${missingFromPool.length ? `<div style="margin-top:10px;padding:9px 11px;border:1px dashed #e0655f;border-radius:10px;font-size:11.5px;line-height:1.5">
+        <b style="color:#e0655f">⚠️ Not on the mock-draft board:</b> ${missingFromPool.map((k) => `<b>${esc(k.n)}</b>`).join(', ')}. The sim still places ${missingFromPool.length > 1 ? 'them' : 'him'} as ${missingFromPool.length > 1 ? 'keepers' : 'a keeper'}, but with no pro team and a bottom-of-board rank — add to <code>MOCK_POOL_RAW</code> to fix.
+      </div>` : ''}
       <div style="margin-top:10px;padding:9px 11px;border:1px dashed var(--gold);border-radius:10px;font-size:11.5px;line-height:1.5">
         <b style="color:var(--gold)">🔄 Your turn (1.10 → 2.15):</b> only <b>4 picks</b> happen in between, from just two managers — ${turnInsight}. Read what they still need to guess what survives back to you.
       </div>
@@ -2949,7 +2960,7 @@ Chase Brown|RB|CIN
 Trey McBride|TE|ARI
 Garrett Wilson|WR|NYJ
 Davante Adams|WR|LAR
-Terry McLaurin|WR|WAS
+Terry McLaurin|WR|WSH
 Malik Nabers|WR|NYG
 Marvin Harrison Jr.|WR|ARI
 James Cook|RB|BUF
@@ -2960,7 +2971,7 @@ Mike Evans|WR|SF
 DJ Moore|WR|CHI
 Josh Allen|QB|BUF
 Lamar Jackson|QB|BAL
-Jayden Daniels|QB|WAS
+Jayden Daniels|QB|WSH
 Jalen Hurts|QB|PHI
 George Kittle|TE|SF
 Omarion Hampton|RB|LAC
@@ -2994,7 +3005,7 @@ T.J. Hockenson|TE|MIN
 Mark Andrews|TE|BAL
 D'Andre Swift|RB|CHI
 Isiah Pacheco|RB|KC
-Brian Robinson Jr.|RB|WAS
+Brian Robinson Jr.|RB|WSH
 Rome Odunze|WR|CHI
 Chris Godwin|WR|TB
 Stefon Diggs|WR|NE
@@ -3004,7 +3015,7 @@ Kaleb Johnson|RB|PIT
 Tyrone Tracy Jr.|RB|NYG
 Jaylen Warren|RB|PIT
 Khalil Shakir|WR|BUF
-Deebo Samuel|WR|WAS
+Deebo Samuel|WR|WSH
 Keon Coleman|WR|BUF
 Ricky Pearsall|WR|SF
 Dallas Goedert|TE|PHI
