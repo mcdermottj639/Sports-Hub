@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v152';
+const APP_VERSION = 'v153';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2082,9 +2082,11 @@ const NFL_POS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST'];
 // (how many years a player has been held) doesn't affect the draft board, so
 // it isn't modeled. Names must match MOCK_POOL_RAW spelling so the mock draft
 // can pull them off the board.
-// ⚠️ PARTIAL: 8 of 12 teams have reported — append the rest as they come in and
-// everything downstream (turn-plan strikeouts, the keepers card, the mock draft
-// pool, the ⭐ board merges) updates from this one list.
+// ✅ COMPLETE as of the commissioner's Aug-2026 sheet: all 12 teams have
+// reported. Cummish (Hurd) reported NO keepers — that's a real answer, not a
+// missing one, so it has no rows here and `LEAGUE_ORDER` still names the team.
+// Append/edit here and everything downstream (turn-plan strikeouts, the keepers
+// card, the mock draft pool, the ⭐ board merges) updates from this one list.
 const LEAGUE_TEAMS_TOTAL = 12;
 const LEAGUE_KEEPERS = [
   { team: 'CC', n: 'Chase Brown', p: 'RB', r: 6 },
@@ -2092,7 +2094,7 @@ const LEAGUE_KEEPERS = [
   { team: 'Future champ', n: 'Puka Nacua', p: 'WR', r: 6 },
   { team: 'Future champ', n: 'Nico Collins', p: 'WR', r: 11 },
   { team: 'Morning Woods', n: 'Cam Skattebo', p: 'RB', r: 6 },
-  { team: 'Morning Woods', n: 'Chuba Hubbard', p: 'RB', r: 8 },
+  { team: 'Morning Woods', n: 'Chuba Hubbard', p: 'RB', r: 7 },
   { team: 'Thurgood Marshall', n: 'Jaxon Smith-Njigba', p: 'WR', r: 4 },
   { team: 'Thurgood Marshall', n: 'Colston Loveland', p: 'TE', r: 7 },
   { team: 'Slob On My Cobb', n: 'Ladd McConkey', p: 'WR', r: 6 },
@@ -2100,23 +2102,29 @@ const LEAGUE_KEEPERS = [
   { team: 'Current Champ', n: 'Trey McBride', p: 'TE', r: 7, you: true },
   { team: 'Current Champ', n: 'Drake Maye', p: 'QB', r: 11, you: true },
   { team: 'GMDD', n: "Ja'Marr Chase", p: 'WR', r: 3 },
-  { team: 'GMDD', n: 'Quinshon Judkins', p: 'RB', r: 6 },
+  { team: 'GMDD', n: 'Quinshon Judkins', p: 'RB', r: 5 },
   { team: 'Christel', n: 'Jaylen Waddle', p: 'WR', r: 5 },
   { team: 'Christel', n: "De'Von Achane", p: 'RB', r: 11 },
+  { team: 'Samrizz', n: 'Justin Jefferson', p: 'WR', r: 8 },
+  { team: 'Cheeky Clapz', n: 'Kyle Pitts', p: 'TE', r: 9 },
+  { team: 'Cheeky Clapz', n: 'Seahawks D/ST', p: 'DST', r: 15 },
+  { team: 'Goff Hits Women', n: 'Bhayshul Tuten', p: 'RB', r: 10 },
+  { team: 'Goff Hits Women', n: 'Rachaad White', p: 'RB', r: 11 },
 ];
 // 2026 draft order (slot 1–12) with the manager ↔ team-name mapping, so the
 // keeper board reads in real draft order and the mock sim can use real names.
 // The owner drafts at slot 10 ("McD" / Current Champ) — the 1.10 + 2.15 turn
-// the Draft-Turn Plan is built around. `team: null` = hasn't reported keepers.
+// the Draft-Turn Plan is built around. `team: null` = hasn't reported keepers
+// (all 12 have, as of the Aug-2026 sheet — Hurd/Cummish reported zero).
 const LEAGUE_ORDER = [
   { slot: 1, mgr: 'Gotch', team: 'Thurgood Marshall' },
-  { slot: 2, mgr: 'Riz', team: null },
-  { slot: 3, mgr: 'Hurd', team: null },
-  { slot: 4, mgr: 'Hyman', team: null },
+  { slot: 2, mgr: 'Riz', team: 'Samrizz' },
+  { slot: 3, mgr: 'Hurd', team: 'Cummish' },
+  { slot: 4, mgr: 'Hyman', team: 'Cheeky Clapz' },
   { slot: 5, mgr: 'Christel', team: 'Christel' },
   { slot: 6, mgr: 'Slemp', team: 'Slob On My Cobb' },
   { slot: 7, mgr: 'Woods', team: 'Morning Woods' },
-  { slot: 8, mgr: 'Zach', team: null },
+  { slot: 8, mgr: 'Zach', team: 'Goff Hits Women' },
   { slot: 9, mgr: 'CC', team: 'CC' },
   { slot: 10, mgr: 'McD', team: 'Current Champ', you: true },
   { slot: 11, mgr: 'Buley', team: 'GMDD' },
@@ -2130,17 +2138,21 @@ const KEPT_BY = (() => {
   return m;
 })();
 const keptEntry = (name) => KEPT_BY[keepNorm(name)] || null;
-const LEAGUE_TEAMS_IN = [...new Set(LEAGUE_KEEPERS.map((k) => k.team))].length;
+// "Reported" = the manager answered the commissioner, which includes answering
+// "none" (Cummish). Counting distinct teams in LEAGUE_KEEPERS would wrongly
+// file a zero-keeper team as still-outstanding.
+const LEAGUE_TEAMS_IN = LEAGUE_ORDER.filter((t) => t.team).length;
+const LEAGUE_TEAMS_OUT = LEAGUE_TEAMS_TOTAL - LEAGUE_TEAMS_IN;
 
 const TURN_ROUNDS = [
-  { r: 1, pick: '#10', tag: 'elite talent WILL fall to you', note: 'The keeper board is doing you a favor: Chase, JSN, Puka, Achane, Nico and Bowers are all kept, so ~6 top-15 players never enter the draft — but every team still picks in R1. At #10 you should get a player who normally goes ~1.4. With zero RBs rostered, an elite back is the default.', groups: [
-    { label: 'Snap it if it falls (true elite)', tier: 1, players: [{ n: 'Bijan Robinson', p: 'RB' }, { n: 'Justin Jefferson', p: 'WR' }, { n: 'Amon-Ra St. Brown', p: 'WR' }] },
-    { label: 'Elite RB — the default here', tier: 2, players: [{ n: 'Saquon Barkley', p: 'RB' }, { n: 'Jahmyr Gibbs', p: 'RB' }, { n: 'Jonathan Taylor', p: 'RB' }, { n: 'Christian McCaffrey', p: 'RB' }] },
-    { label: 'WR if the elite RBs are gone', tier: 2, players: [{ n: 'CeeDee Lamb', p: 'WR' }, { n: 'Drake London', p: 'WR' }, { n: 'A.J. Brown', p: 'WR' }] },
+  { r: 1, pick: '#10', tag: '🎯 take your RB1 HERE, not at 2.15', note: 'The keeper board is doing you a favor: Chase, JSN, Jefferson, Puka, Achane, Nico and Bowers are all kept, so ~7 top-20 players never enter the draft — but every team still picks in R1, so the board at #10 runs deep. ⚠️ Reality check: across 200 sims of this app\'s own board, the true elite (Bijan, ARSB, CeeDee, Saquon, Gibbs, JT, CMC) reached #10 in under 10% of drafts — do NOT plan around them. What actually lands here is Love/Jeanty at RB or London/A.J. Brown/BTJ at WR. And the RBs are the urgent half: Love and Jeanty were on the board at #10 in ~60–75% of sims but survived to your 2.15 in under 5%. With zero RBs rostered, take the back now and let the WRs come back to you.', groups: [
+    { label: 'Only if he falls — rare (<10% of sims)', tier: 1, players: [{ n: 'Bijan Robinson', p: 'RB' }, { n: 'Amon-Ra St. Brown', p: 'WR' }, { n: 'CeeDee Lamb', p: 'WR' }, { n: 'Jonathan Taylor', p: 'RB' }] },
+    { label: '🎯 The realistic RB1 — take him here', tier: 2, players: [{ n: 'Jeremiyah Love', p: 'RB' }, { n: 'Ashton Jeanty', p: 'RB' }, { n: 'Derrick Henry', p: 'RB' }] },
+    { label: 'WR only if both backs are gone', tier: 2, players: [{ n: 'Drake London', p: 'WR' }, { n: 'A.J. Brown', p: 'WR' }, { n: 'Brian Thomas Jr.', p: 'WR' }] },
   ] },
-  { r: 2, pick: '#15', tag: '🆕 Love/Jeanty — near-mandatory RB', note: 'With no Kyren, do NOT leave this turn without at least one RB. Rookie Jeremiyah Love (Cardinals, #3 overall pick) and Ashton Jeanty both sit ~ADP 16 — one should be on the board at #15.', groups: [
-    { label: 'RB at your pick', tier: 2, players: [{ n: 'Jeremiyah Love', p: 'RB' }, { n: 'Ashton Jeanty', p: 'RB' }, { n: 'Kenneth Walker III', p: 'RB' }, { n: 'Josh Jacobs', p: 'RB' }] },
-    { label: 'WR — only if you took an RB at 1.10', tier: 3, players: [{ n: 'Brian Thomas Jr.', p: 'WR' }, { n: 'Marvin Harrison Jr.', p: 'WR' }, { n: 'Tee Higgins', p: 'WR' }, { n: 'Garrett Wilson', p: 'WR' }] },
+  { r: 2, pick: '#15', tag: 'the RB tier has broken — take the value that fell', note: 'Only 4 picks happen between your two, but they clear the top RB tier: Love and Jeanty reached #15 in under 5% of sims, so if you wanted one that was your 1.10. What is genuinely still here: Kyren Williams (back in the pool now that you keep Maye instead — available at #15 in ~95% of sims), Bucky Irving and Josh Jacobs at RB, Garrett Wilson and Tee Higgins at WR. Do not leave this turn without at least one RB.', groups: [
+    { label: 'RB at your pick', tier: 2, players: [{ n: 'Kyren Williams', p: 'RB' }, { n: 'Bucky Irving', p: 'RB' }, { n: 'Josh Jacobs', p: 'RB' }, { n: 'Derrick Henry', p: 'RB' }] },
+    { label: 'WR — only if you took an RB at 1.10', tier: 3, players: [{ n: 'Garrett Wilson', p: 'WR' }, { n: 'Tee Higgins', p: 'WR' }, { n: 'Marvin Harrison Jr.', p: 'WR' }] },
   ] },
   { r: 3, pick: '#34', tag: 'RB2 — or the Nabers discount', note: 'Aim to leave R3 with 2 RB + 1 WR — your QB is already rostered, so every early pick goes to RB/WR. Nabers (ACL, Sept 2025) at ~31–46 ADP is the WR swing if the backfield is settled.', groups: [
     { label: 'RB — round out the backfield', tier: 3, players: [{ n: 'Bucky Irving', p: 'RB' }, { n: 'Chase Brown', p: 'RB' }, { n: 'Breece Hall', p: 'RB' }] },
@@ -2394,7 +2406,7 @@ function renderFantasyFootball() {
     <div id="tr-content" class="tr-content"></div>
 
     <h2 class="section-title">🔒 League Keepers &amp; Draft Order</h2>
-    <div class="muted" style="font-size:11.5px;margin:2px 0 8px">The league in draft order — <b>${LEAGUE_KEEPERS.length} players off the board</b> from ${LEAGUE_TEAMS_IN} of ${LEAGUE_TEAMS_TOTAL} teams${LEAGUE_TEAMS_IN < LEAGUE_TEAMS_TOTAL ? ' <b>(4 still to report)</b>' : ''}. Keep-the-round: a keeper costs that team that round's pick, so R1–R2 stay full while this much talent is gone — the board at your <b>1.10</b> is <b>deeper than a normal draft</b>.</div>
+    <div class="muted" style="font-size:11.5px;margin:2px 0 8px">The league in draft order — <b>${LEAGUE_KEEPERS.length} players off the board</b>, ${LEAGUE_TEAMS_OUT ? `from ${LEAGUE_TEAMS_IN} of ${LEAGUE_TEAMS_TOTAL} teams <b>(${LEAGUE_TEAMS_OUT} still to report)</b>` : `<b>all ${LEAGUE_TEAMS_TOTAL} teams reported</b>`}. Keep-the-round: a keeper costs that team that round's pick, so R1–R2 stay full while this much talent is gone — the board at your <b>1.10</b> is <b>deeper than a normal draft</b>.</div>
     <div class="setup-card" style="padding:12px 14px">${keeperHTML}
       <div style="margin-top:10px;padding:9px 11px;border:1px dashed var(--gold);border-radius:10px;font-size:11.5px;line-height:1.5">
         <b style="color:var(--gold)">🔄 Your turn (1.10 → 2.15):</b> only <b>4 picks</b> happen in between, from just two managers — ${turnInsight}. Read what they still need to guess what survives back to you.
@@ -3014,6 +3026,7 @@ Chris Olave|WR|NO
 Quinshon Judkins|RB|CLE
 Cam Skattebo|RB|NYG
 Dalton Kincaid|TE|BUF
+Kyle Pitts|TE|ATL
 Jayden Reed|WR|GB
 Keenan Allen|WR|LAC
 Tank Bigsby|RB|PHI

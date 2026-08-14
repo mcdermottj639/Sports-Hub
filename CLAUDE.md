@@ -310,7 +310,54 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v152**.
+Current version as of this writing: **v153**.
+
+- **🔒 Keeper board COMPLETE — all 12 teams + R1/R2 replan (v153)** — the owner
+  sent the commissioner's updated keeper sheet. `LEAGUE_KEEPERS` went **16 → 21
+  players** and, with `LEAGUE_ORDER` filled in, the league is now **fully
+  reported** for the first time. Changes:
+  - **4 new teams mapped to their slots** (the owner confirmed the manager ↔
+    team-name pairs): **Samrizz = Riz (slot 2)** · **Cummish = Hurd (slot 3)** ·
+    **Cheeky Clapz = Hyman (slot 4)** · **Goff Hits Women = Zach (slot 8)**.
+  - **New keepers:** Justin Jefferson (Samrizz, R8) · Kyle Pitts (Cheeky Clapz,
+    R9) · Seahawks D/ST (Cheeky Clapz, R15) · Bhayshul Tuten (Goff Hits Women,
+    R10) · Rachaad White (Goff Hits Women, R11). **Cummish reported ZERO
+    keepers** — that's an answer, not a gap, so it has no `LEAGUE_KEEPERS` rows
+    but still carries a `team` in `LEAGUE_ORDER`. That distinction is why
+    **`LEAGUE_TEAMS_IN` now counts `LEAGUE_ORDER` entries with a team** instead
+    of distinct teams in `LEAGUE_KEEPERS` (the old math would have filed a
+    zero-keeper team as still-outstanding), and why the keepers-card header's
+    hardcoded "(4 still to report)" is now driven by `LEAGUE_TEAMS_OUT`.
+  - **Round corrections:** Chuba Hubbard R8 → **R7**, Quinshon Judkins R6 → **R5**.
+  - **`Kyle Pitts|TE|ATL` added to `MOCK_POOL_RAW`** (~rank 107, right after
+    Dalton Kincaid — consistent with an R9 keep). He wasn't in the pool at all,
+    so the sim could not have pulled him off the board. Contract web-verified:
+    3yr/$54M with Atlanta, signed June 2026.
+  - **⚠️ R1/R2 of the Draft-Turn Plan replanned, and this time against measured
+    data.** Justin Jefferson was a headline R1 tier-1 target and is now
+    undraftable. Rather than guess, the board was measured by running **200 full
+    12×15 sims** and recording what was actually available at the owner's picks.
+    Two findings forced real changes: (a) the old tier-2 group **"Elite RB — the
+    default here" (Saquon/Gibbs/JT/CMC) reaches #10 in under 10% of drafts** — it
+    was never a plan, it was a wish; (b) **Love and Jeanty are on the board at
+    #10 in ~60–75% of sims but survive to the 2.15 in under 5%**, which inverts
+    the old advice (R2 used to be the "near-mandatory RB" round). So R1 is now
+    "🎯 take your RB1 HERE, not at 2.15" with an honest rare-fall tier, and R2 is
+    "the RB tier has broken — take the value that fell" built around **Kyren
+    Williams (~95% available at #15, back in the pool since the v142 Maye swap)**,
+    Bucky Irving, Josh Jacobs, Garrett Wilson, Tee Higgins. The percentages are
+    quoted in the card notes so the owner can see they're modeled, not asserted.
+    ⚠️ These come from the app's **own sample board + CPU model**, NOT live ADP —
+    directionally useful, not gospel. R3–R6 were left alone (their groups only
+    contain already-kept names that render struck-through, the documented
+    treatment); one known rough edge left in place: **R5 is still headlined "the
+    Jadarian Price window" but the sim has Price available at #58 only ~7% of the
+    time** — worth a look before draft day.
+  - Verified by a scripted harness (`node` + DOM stubs, run against the real
+    `app.js`): 3 full 12×15 sims → **180/180 picks, 0 duplicates, 0 filler**, and
+    **all 21 keepers land at the correct manager AND round** (Jefferson → slot 2
+    R8, Pitts → slot 4 R9, Seahawks D/ST → slot 4 R15, Tuten → slot 8 R10, White
+    → slot 8 R11). The 10-team path still ignores the league board.
 
 - **Draft recap footnotes + collapsible Draft Board (v152)** — two owner asks:
   - **"Why These Picks" footnotes** on the mock-draft completion screen. The
@@ -410,10 +457,12 @@ Current version as of this writing: **v152**.
     (Gotch=Thurgood Marshall, Riz, Hurd, Hyman, Christel, Slemp=Slob On My Cobb,
     Woods=Morning Woods, Zach, CC, **McD=Current Champ = the owner, slot 10**,
     Buley=GMDD, Jew(=Wolff)=Future champ). `team: null` = keepers not reported.
+    **(v153 filled the four blanks: Riz=Samrizz, Hurd=Cummish, Hyman=Cheeky
+    Clapz, Zach=Goff Hits Women — no `null` entries remain.)**
   - **`LEAGUE_KEEPERS`** — 16 kept players across 8 reported teams, each
-    `{team, n, p, r}` (+`you` for the owner's). ⚠️ **PARTIAL — Riz, Hurd, Hyman
-    and Zach haven't reported; append them here and everything downstream
-    updates.** The league's 1st/2nd/final-keep bookkeeping is deliberately NOT
+    `{team, n, p, r}` (+`you` for the owner's). ⚠️ PARTIAL — Riz, Hurd, Hyman
+    and Zach hadn't reported. **(Superseded by v153: all 12 teams have now
+    reported, 21 keepers.)** The league's 1st/2nd/final-keep bookkeeping is deliberately NOT
     modeled (owner: "just player and round matter"). Names must match
     `MOCK_POOL_RAW` spelling; `keptEntry(name)`/`keepNorm` do the lookups.
   Wired into four places: (1) **Draft-Turn Plan targets that are kept render
