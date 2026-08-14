@@ -313,7 +313,54 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v155**.
+Current version as of this writing: **v156**.
+
+- **Board audit closed + plan re-measured against real ADP (v156)** — the owner
+  asked for all three open items from v154/v155 at once. Web search works in this
+  session (WebFetch/curl are egress-blocked from *every* fantasy site — fantasypros,
+  rotowire, draftsharks, pff, even Sleeper's key-less API — so this was done from
+  search snippets, the v141 method).
+  - **5 stale team labels fixed in `MOCK_POOL_RAW`** — real 2026 moves the pool had
+    missed, each web-verified: **Jaylen Waddle MIA → DEN** (traded Mar 17; Tyreek
+    Hill was released and is still a free agent, so Miami's WR room is now
+    Tolbert/Washington — note Waddle is one of Christel's keepers), **Isaiah Likely
+    BAL → NYG** (3yr/$40M, day 1 of FA, following Harbaugh), **David Njoku CLE →
+    LAC** (1yr/$8M, listed a co-starter), **Michael Pittman Jr. IND → PIT** (traded
+    + 3yr/$59M), **Adonai Mitchell IND → NYJ**. Nothing keys off the team string
+    mechanically, but a wrong team makes the board lie to you on draft day.
+  - **Coverage gaps CLOSED — pool 204 → 227.** Added the verified 2026 starters
+    the audit was missing: **7 QBs** (Brissett ARI, Shedeur Sanders CLE — still an
+    open Watson competition, Goff DET, Daniel Jones IND, Shough NO, Dart NYG,
+    Rodgers PIT), **10 TEs** (Kelce KC — still atop the chart at 37, Gesicki CIN,
+    Schultz HOU, Strange JAX, T.Ferguson LAR, Dulcich MIA, Juwan Johnson NO,
+    Arroyo SEA, Tremble CAR, Okonkwo TEN; NYG + LAC were fixed by the Likely/Njoku
+    relabels), and **6 WRs** (Pickens DAL, M.Wilson ARI, Bateman BAL, Boston CLE,
+    Washington + Tolbert MIA). **Every team now has a QB, TE, RB and ≥2 WR** — the
+    v154 audit is closed. Verified: 300 full 12×15 sims → 54,000 picks, **0
+    duplicates, 0 filler**, all 21 keepers still resolve.
+  - **Top-of-board re-ranked to measured ADP:** Gibbs → #1 (ADP **1.0**; he was
+    pool #6) and Saquon → ~#13 (ADP **~14**; he was pool #5). Only the two moves
+    the ADP quotes directly support. This materially changes R1 — Saquon went from
+    "unreachable elite" to **55% available at your #10**.
+  - **Draft-Turn Plan R1–R6 rewritten from 300 measured sims** of the real keeper
+    board, with the percentages quoted in each round's note so the owner can see
+    they're modeled. Headlines: R1 is Love (79%) / Saquon (55%) / Henry (99%) —
+    **Jeanty is only 25%**, so he moved to the "rare fall" tier; R2 is the WR
+    value pocket (McLaurin/MHJ/**Pickens** 100%, Nabers 99%, Kyren 93%); **Breece
+    Hall was dropped from R3 entirely (6%)**.
+  - **⚠️ The R5 Jadarian Price question — answered, and the plan moved.** National
+    ADP is **57.8 (Underdog) – 63.3**, which looks like it validates the old #58
+    window. It doesn't, because national ADP doesn't know this league: **8 RBs are
+    kept** (Achane, Chase Brown, Skattebo, Hubbard, Javonte, Judkins, Tuten,
+    White), so the surviving backs go earlier. Measured: Price is available at
+    **#39 in 100%** of sims but at **#58 in only 12%**. So **R4 is now "the
+    Jadarian Price pick — HERE, not R5"** and R5 was rebuilt around what actually
+    survives (Montgomery 90%, Meyers 86%, Pollard 78%). The v153 "~7% at #58"
+    figure was right; the conclusion drawn from it was the thing that was wrong.
+  - **Still true and worth repeating:** these percentages come from the app's own
+    sample board + CPU model, not live ADP — directionally useful, not gospel. And
+    the pool is still **hand-maintained**: `/api/fantasy/football/rankings` returns
+    name/pos/tier with **no team abbreviation**, so nothing can auto-fill it.
 
 - **📰 Fantasy Advice — FantasyPros articles (v155, backend `b9-fparticles`)** —
   the owner sent `https://www.fantasypros.com/nfl/articles/`, so the Fantasy →

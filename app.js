@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v155';
+const APP_VERSION = 'v156';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2228,32 +2228,31 @@ const LEAGUE_TEAMS_IN = LEAGUE_ORDER.filter((t) => t.team).length;
 const LEAGUE_TEAMS_OUT = LEAGUE_TEAMS_TOTAL - LEAGUE_TEAMS_IN;
 
 const TURN_ROUNDS = [
-  { r: 1, pick: '#10', tag: '🎯 take your RB1 HERE, not at 2.15', note: 'The keeper board is doing you a favor: Chase, JSN, Jefferson, Puka, Achane, Nico and Bowers are all kept, so ~7 top-20 players never enter the draft — but every team still picks in R1, so the board at #10 runs deep. ⚠️ Reality check: across 200 sims of this app\'s own board, the true elite (Bijan, ARSB, CeeDee, Saquon, Gibbs, JT, CMC) reached #10 in under 10% of drafts — do NOT plan around them. What actually lands here is Love/Jeanty at RB or London/A.J. Brown/BTJ at WR. And the RBs are the urgent half: Love and Jeanty were on the board at #10 in ~60–75% of sims but survived to your 2.15 in under 5%. With zero RBs rostered, take the back now and let the WRs come back to you.', groups: [
-    { label: 'Only if he falls — rare (<10% of sims)', tier: 1, players: [{ n: 'Bijan Robinson', p: 'RB' }, { n: 'Amon-Ra St. Brown', p: 'WR' }, { n: 'CeeDee Lamb', p: 'WR' }, { n: 'Jonathan Taylor', p: 'RB' }] },
-    { label: '🎯 The realistic RB1 — take him here', tier: 2, players: [{ n: 'Jeremiyah Love', p: 'RB' }, { n: 'Ashton Jeanty', p: 'RB' }, { n: 'Derrick Henry', p: 'RB' }] },
-    { label: 'WR only if both backs are gone', tier: 2, players: [{ n: 'Drake London', p: 'WR' }, { n: 'A.J. Brown', p: 'WR' }, { n: 'Brian Thomas Jr.', p: 'WR' }] },
+  { r: 1, pick: '#10', tag: '🎯 your RB1 — Love or Saquon', note: 'The keeper board helps you: Chase, JSN, Jefferson, Puka, Achane, Nico and Bowers are all kept, so ~7 top-20 players never enter the draft while every team still picks in R1 — the board at #10 runs deep. Measured over 300 sims of the real keeper board (v156, after the pool was re-ranked to live ADP): 🟢 Derrick Henry 99% · Jeremiyah Love 79% · Drake London 67% · Saquon Barkley 55% · A.J. Brown 46% — and 🔴 Jeanty only 25%, BTJ 28%, CMC 1%, Jonathan Taylor 0%. Saquon is the change: real ADP has him ~14th, not top-5, so he now reaches you in over half of drafts. Take the RB here — Love and Jeanty survive to your 2.15 essentially never (0%), while the WR tier below is 93–100% to come back to you.', groups: [
+    { label: '🎁 Rare falls — take instantly', tier: 1, players: [{ n: 'Ashton Jeanty', p: 'RB' }, { n: 'Brian Thomas Jr.', p: 'WR' }, { n: 'A.J. Brown', p: 'WR' }] },
+    { label: '🎯 Your realistic RB1 — this is the pick', tier: 2, players: [{ n: 'Jeremiyah Love', p: 'RB' }, { n: 'Saquon Barkley', p: 'RB' }, { n: 'Derrick Henry', p: 'RB' }] },
+    { label: 'WR instead — only if all three backs are gone', tier: 2, players: [{ n: 'Drake London', p: 'WR' }] },
   ] },
-  { r: 2, pick: '#15', tag: 'the RB tier has broken — take the value that fell', note: 'Only 4 picks happen between your two, but they clear the top RB tier: Love and Jeanty reached #15 in under 5% of sims, so if you wanted one that was your 1.10. What is genuinely still here: Kyren Williams (back in the pool now that you keep Maye instead — available at #15 in ~95% of sims), Bucky Irving and Josh Jacobs at RB, Garrett Wilson and Tee Higgins at WR. Do not leave this turn without at least one RB.', groups: [
-    { label: 'RB at your pick', tier: 2, players: [{ n: 'Kyren Williams', p: 'RB' }, { n: 'Bucky Irving', p: 'RB' }, { n: 'Josh Jacobs', p: 'RB' }, { n: 'Derrick Henry', p: 'RB' }] },
-    { label: 'WR — only if you took an RB at 1.10', tier: 3, players: [{ n: 'Garrett Wilson', p: 'WR' }, { n: 'Tee Higgins', p: 'WR' }, { n: 'Marvin Harrison Jr.', p: 'WR' }] },
+  { r: 2, pick: '#15', tag: 'the RB tier broke — take the value that fell', note: 'Only 4 picks happen between your two, but they clear the top RB tier: Love and Jeanty reach #15 in 0% of sims. Measured availability at #15: Terry McLaurin + Marvin Harrison Jr. + George Pickens 100% · Malik Nabers 99% · Davante Adams 98% · Garrett Wilson 97% · Kyren Williams 93% · Tee Higgins 75% · Bucky Irving 67% · Josh Jacobs 49%. Kyren is the value (back in the pool now that you keep Maye instead), and Pickens is new to the board — ESPN grades the Lamb/Pickens duo as two top-10 WRs after his 1,400-yard first year in Dallas.', groups: [
+    { label: 'RB2 — if you went WR at 1.10, this is mandatory', tier: 2, players: [{ n: 'Kyren Williams', p: 'RB' }, { n: 'Bucky Irving', p: 'RB' }, { n: 'Josh Jacobs', p: 'RB' }] },
+    { label: 'WR — the real value pocket', tier: 3, players: [{ n: 'Garrett Wilson', p: 'WR' }, { n: 'George Pickens', p: 'WR' }, { n: 'Malik Nabers', p: 'WR' }, { n: 'Tee Higgins', p: 'WR' }] },
   ] },
-  { r: 3, pick: '#34', tag: 'RB2 — or the Nabers discount', note: 'Aim to leave R3 with 2 RB + 1 WR — your QB is already rostered, so every early pick goes to RB/WR. Nabers (ACL, Sept 2025) at ~31–46 ADP is the WR swing if the backfield is settled.', groups: [
-    { label: 'RB — round out the backfield', tier: 3, players: [{ n: 'Bucky Irving', p: 'RB' }, { n: 'Chase Brown', p: 'RB' }, { n: 'Breece Hall', p: 'RB' }] },
-    { label: 'High-upside WR swing', tier: 3, players: [{ n: 'Malik Nabers', p: 'WR' }] },
-    { label: 'Safer WR2', tier: 3, players: [{ n: 'A.J. Brown', p: 'WR' }, { n: 'DK Metcalf', p: 'WR' }, { n: 'Mike Evans', p: 'WR' }, { n: 'Terry McLaurin', p: 'WR' }] },
+  { r: 3, pick: '#34', tag: 'RB2/RB3 + the WR value pocket', note: 'Aim to leave R3 with 2 RB + 1 WR — your QB and TE are already rostered, so every early pick goes to RB/WR. Measured at #34: Alvin Kamara + TreVeyon Henderson + DeVonta Smith 100% · Omarion Hampton 99% · Zay Flowers 99% · Courtland Sutton 97% · Rashee Rice 93%. ⚠️ Breece Hall is out of the plan — he survives to #34 only 6% of the time. Nabers is the R2 swing now, not R3.', groups: [
+    { label: 'RB — round out the backfield', tier: 3, players: [{ n: 'Omarion Hampton', p: 'RB' }, { n: 'Alvin Kamara', p: 'RB' }, { n: 'TreVeyon Henderson', p: 'RB' }] },
+    { label: 'WR — all of these are 93%+ to be here', tier: 3, players: [{ n: 'Rashee Rice', p: 'WR' }, { n: 'Courtland Sutton', p: 'WR' }, { n: 'Zay Flowers', p: 'WR' }, { n: 'DeVonta Smith', p: 'WR' }] },
   ] },
-  { r: 4, pick: '#39', tag: 'all WR/RB — no QB, ever', note: 'The old "elite QB if one slides" rule is dead — Maye is your R11 keeper. Let someone else spend here on Allen/Lamar while you stack RB/WR.', groups: [
-    { label: 'Best WR on the board', tier: 3, players: [{ n: 'Rashee Rice', p: 'WR' }, { n: 'Jaylen Waddle', p: 'WR' }, { n: 'Marvin Harrison Jr.', p: 'WR' }] },
-    { label: 'RB depth', tier: 3, players: [{ n: 'Omarion Hampton', p: 'RB' }, { n: 'TreVeyon Henderson', p: 'RB' }] },
+  { r: 4, pick: '#39', tag: '🆕 the Jadarian Price pick — HERE, not R5', note: 'Price moved up a round (v156). Nationally his ADP is 57.8 (Underdog) to 63.3, which is why the old plan put him at #58 — but national ADP does not know YOUR league, which keeps 8 running backs (Achane, Chase Brown, Skattebo, Hubbard, Javonte, Judkins, Tuten, White). Strip 8 backs out and the rest go earlier: measured, Price is on the board at #39 in 100% of sims but at #58 in only 12%. If you want the Seahawks rookie with the lead-back path (Walker left for KC, Charbonnet coming off a knee), this is the pick. No QB — ever; Maye is your R11 keeper.', groups: [
+    { label: '🎯 The rookie with a lead-back path', tier: 3, players: [{ n: 'Jadarian Price', p: 'RB' }] },
+    { label: 'RB depth — all 100% to be here', tier: 3, players: [{ n: 'TreVeyon Henderson', p: 'RB' }, { n: 'James Conner', p: 'RB' }, { n: 'Aaron Jones', p: 'RB' }] },
+    { label: 'WR if the backfield is set', tier: 3, players: [{ n: 'DeVonta Smith', p: 'WR' }, { n: 'Zay Flowers', p: 'WR' }, { n: 'Jerry Jeudy', p: 'WR' }, { n: 'Calvin Ridley', p: 'WR' }] },
   ] },
-  { r: 5, pick: '#58', tag: '🆕 the Jadarian Price window', note: "Rookie Jadarian Price (Seahawks) goes ~R5 with a real path to Seattle's lead job — Walker left for KC and Charbonnet is coming off a knee injury.", groups: [
-    { label: 'The rookie with a lead-back path', tier: 3, players: [{ n: 'Jadarian Price', p: 'RB' }] },
-    { label: 'RB depth — proven vets', tier: 4, players: [{ n: 'Chuba Hubbard', p: 'RB' }, { n: 'James Conner', p: 'RB' }, { n: 'Aaron Jones', p: 'RB' }] },
-    { label: 'WR4 with a path to more', tier: 4, players: [{ n: 'Jameson Williams', p: 'WR' }, { n: 'Tetairoa McMillan', p: 'WR' }, { n: 'Calvin Ridley', p: 'WR' }] },
+  { r: 5, pick: '#58', tag: 'RB volume + WR3', note: 'Assume Price is gone (88%). What actually survives to #58: David Montgomery 90% · Jakobi Meyers 86% · Tony Pollard 78% · Jordan Addison 74% · RJ Harvey 59% · Xavier Worthy 55%. Travis Hunter (37%) and a second TE are luxuries you do not need — McBride is kept.', groups: [
+    { label: 'RB volume', tier: 4, players: [{ n: 'David Montgomery', p: 'RB' }, { n: 'Tony Pollard', p: 'RB' }, { n: 'RJ Harvey', p: 'RB' }] },
+    { label: 'WR upside', tier: 4, players: [{ n: 'Jakobi Meyers', p: 'WR' }, { n: 'Jordan Addison', p: 'WR' }, { n: 'Xavier Worthy', p: 'WR' }] },
   ] },
-  { r: 6, pick: '#63', tag: 'bonus pick — Kyren’s old slot', note: 'This pick is live again now that Kyren isn’t kept — more RB/WR volume, or whoever slid from the R5 lists.', groups: [
-    { label: 'RB volume swings', tier: 4, players: [{ n: 'RJ Harvey', p: 'RB' }, { n: 'Tony Pollard', p: 'RB' }, { n: 'David Montgomery', p: 'RB' }] },
-    { label: 'WR upside', tier: 4, players: [{ n: 'Travis Hunter', p: 'WR' }, { n: 'Xavier Worthy', p: 'WR' }, { n: 'Jordan Addison', p: 'WR' }] },
+  { r: 6, pick: '#63', tag: 'bonus pick — Kyren’s old slot', note: 'This pick is live again now that Kyren isn’t kept. Only 4 picks after your #58, so the R5 names thin fast (Montgomery 49%, Addison 63%, Worthy 40%) — behind them sits a wall of players who are on the board in 100% of sims. Take volume.', groups: [
+    { label: 'RB volume swings — 100% available', tier: 4, players: [{ n: "D'Andre Swift", p: 'RB' }, { n: 'Isiah Pacheco', p: 'RB' }, { n: 'Brian Robinson Jr.', p: 'RB' }] },
+    { label: 'WR upside — 100% available', tier: 4, players: [{ n: 'Rome Odunze', p: 'WR' }, { n: 'Chris Godwin', p: 'WR' }, { n: 'Deebo Samuel', p: 'WR' }] },
   ] },
   { r: 7, pick: '#82', keeper: 'Trey McBride', kpos: 'TE' },
   { r: 8, pick: '#87', tag: 'skip the QB run — stack RB/WR', note: 'This used to be your QB1 window. Others will spend R8–R10 chasing Nix/Baker/Herbert — you have Maye for an 11th. Take the best RB/WR they pass over.', groups: [
@@ -3012,19 +3011,19 @@ async function openPlayerModal(aid) {
 
 // --- Fantasy: NFL mock draft (client-side snake draft vs CPU GMs) ----------
 // Built-in SAMPLE big board (~100 players) — for practice, not live ADP.
-const MOCK_POOL_RAW = `Ja'Marr Chase|WR|CIN
+const MOCK_POOL_RAW = `Jahmyr Gibbs|RB|DET
+Ja'Marr Chase|WR|CIN
 Jaxon Smith-Njigba|WR|SEA
 Bijan Robinson|RB|ATL
 Justin Jefferson|WR|MIN
-Saquon Barkley|RB|PHI
-Jahmyr Gibbs|RB|DET
 CeeDee Lamb|WR|DAL
 Christian McCaffrey|RB|SF
 Jonathan Taylor|RB|IND
 Amon-Ra St. Brown|WR|DET
 Puka Nacua|WR|LAR
-De'Von Achane|RB|MIA
 Ashton Jeanty|RB|LV
+De'Von Achane|RB|MIA
+Saquon Barkley|RB|PHI
 Jeremiyah Love|RB|ARI
 Nico Collins|WR|HOU
 Brian Thomas Jr.|WR|JAX
@@ -3044,6 +3043,7 @@ Davante Adams|WR|LAR
 Terry McLaurin|WR|WSH
 Malik Nabers|WR|NYG
 Marvin Harrison Jr.|WR|ARI
+George Pickens|WR|DAL
 James Cook|RB|BUF
 Kenneth Walker III|RB|KC
 Breece Hall|RB|NYJ
@@ -3059,7 +3059,7 @@ Omarion Hampton|RB|LAC
 Alvin Kamara|RB|NO
 Rashee Rice|WR|KC
 Courtland Sutton|WR|DEN
-Jaylen Waddle|WR|MIA
+Jaylen Waddle|WR|DEN
 Zay Flowers|WR|BAL
 DeVonta Smith|WR|PHI
 Chuba Hubbard|RB|CAR
@@ -3100,7 +3100,7 @@ Deebo Samuel|WR|WSH
 Keon Coleman|WR|BUF
 Ricky Pearsall|WR|SF
 Dallas Goedert|TE|PHI
-David Njoku|TE|CLE
+David Njoku|TE|LAC
 Evan Engram|TE|DEN
 Caleb Williams|QB|CHI
 Kyler Murray|QB|MIN
@@ -3112,17 +3112,21 @@ Cooper Kupp|WR|SEA
 Jordan Mason|RB|MIN
 Tyler Warren|TE|IND
 Colston Loveland|TE|CHI
+Travis Kelce|TE|KC
 Dak Prescott|QB|DAL
 Brock Purdy|QB|SF
 Chris Olave|WR|NO
 Quinshon Judkins|RB|CLE
 Cam Skattebo|RB|NYG
 Dalton Kincaid|TE|BUF
+Juwan Johnson|TE|NO
 Kyle Pitts|TE|ATL
+Brenton Strange|TE|JAX
 Jayden Reed|WR|GB
 Keenan Allen|WR|LAC
 Tank Bigsby|RB|PHI
 Josh Downs|WR|IND
+Michael Wilson|WR|ARI
 Tyjae Spears|RB|TEN
 Marvin Mims Jr.|WR|DEN
 Braelon Allen|RB|NYJ
@@ -3133,7 +3137,8 @@ Jaylen Wright|RB|MIA
 Isaac Guerendo|RB|SF
 Justin Herbert|QB|LAC
 Jordan Love|QB|GB
-Michael Pittman Jr.|WR|IND
+Jared Goff|QB|DET
+Michael Pittman Jr.|WR|PIT
 Emeka Egbuka|WR|TB
 Darnell Mooney|WR|ATL
 Matthew Golden|WR|GB
@@ -3142,41 +3147,55 @@ Rachaad White|RB|TB
 Javonte Williams|RB|DAL
 Luther Burden III|WR|CHI
 Tucker Kraft|TE|GB
+Chig Okonkwo|TE|TEN
 Jonnu Smith|TE|PIT
+Dalton Schultz|TE|HOU
 Nick Chubb|RB|HOU
 Tre Harris|WR|LAC
 Jayden Higgins|WR|HOU
-Isaiah Likely|TE|BAL
+Rashod Bateman|WR|BAL
+Isaiah Likely|TE|NYG
 Alec Pierce|WR|IND
 Austin Ekeler|RB|WSH
 Jake Ferguson|TE|DAL
+Terrance Ferguson|TE|LAR
 Quentin Johnston|WR|LAC
 Bhayshul Tuten|RB|JAX
 Kyle Williams|WR|NE
+Denzel Boston|WR|CLE
 Trevor Lawrence|QB|JAX
 C.J. Stroud|QB|HOU
+Aaron Rodgers|QB|PIT
 Ray Davis|RB|BUF
 Romeo Doubs|WR|GB
+Malik Washington|WR|MIA
 Hunter Henry|TE|NE
+Elijah Arroyo|TE|SEA
 Xavier Legette|WR|CAR
 Dylan Sampson|RB|CLE
 Wan'Dale Robinson|WR|NYG
 Michael Penix Jr.|QB|ATL
 Cam Ward|QB|TEN
+Jaxson Dart|QB|NYG
 Trevor Etienne|RB|CAR
-Adonai Mitchell|WR|IND
+Adonai Mitchell|WR|NYJ
 Cade Otton|TE|TB
+Mike Gesicki|TE|CIN
 Woody Marks|RB|HOU
 Troy Franklin|WR|DEN
 J.J. McCarthy|QB|MIN
+Daniel Jones|QB|IND
 Jack Bech|WR|LV
 Mason Taylor|TE|NYJ
 DJ Giddens|RB|IND
 Christian Kirk|WR|HOU
 Tua Tagovailoa|QB|MIA
+Tyler Shough|QB|NO
 Kimani Vidal|RB|LAC
 Pat Freiermuth|TE|PIT
+Greg Dulcich|TE|MIA
 Dontayvion Wicks|WR|GB
+Jalen Tolbert|WR|MIA
 Devin Neal|RB|NO
 Elic Ayomanor|WR|TEN
 Matthew Stafford|QB|LAR
@@ -3184,10 +3203,13 @@ Harold Fannin Jr.|TE|CLE
 Jarquez Hunter|RB|LAR
 DeMario Douglas|WR|NE
 Sam Darnold|QB|SEA
+Shedeur Sanders|QB|CLE
 Roschon Johnson|RB|CHI
 Zach Ertz|TE|WSH
+Tommy Tremble|TE|CAR
 Ollie Gordon II|RB|MIA
 Geno Smith|QB|LV
+Jacoby Brissett|QB|ARI
 Sean Tucker|RB|TB
 Bryce Young|QB|CAR
 Emanuel Wilson|RB|GB
