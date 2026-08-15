@@ -32,7 +32,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b9-fparticles"
+SERVER_VERSION = "b10-fparticles-nfl-filter"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -1225,20 +1225,62 @@ ARTICLE_SOURCES = {
             "https://www.fantasypros.com/nfl/articles/",
         ],
         "pattern": re.compile(r"/nfl/articles/[a-z0-9][a-z0-9\-/]{6,}", re.I),
+        # FantasyPros is a MULTI-SPORT site, and whichever feed answers may be
+        # the site-wide one — so every parser's output gets filtered to the
+        # sport we asked for. URL is the strongest signal, but WordPress
+        # permalinks are often date-based (/2026/08/slug/) and carry no sport
+        # at all, so titles are the fallback. Deliberately a DENY-list: an
+        # unrecognised football post should still get through.
+        "urlYes": re.compile(r"/nfl/", re.I),
+        "urlNo": re.compile(
+            r"/(mlb|baseball|nba|basketball|nhl|hockey|golf|pga|soccer|mma|ufc"
+            r"|wnba|cbb|college-basketball|college-fantasy-football)/", re.I),
+        # Title/category only — NOT the summary. An NFL article can mention
+        # baseball in passing; its headline almost never does.
+        "textNo": re.compile(
+            r"(fantasy baseball|\bmlb\b|\bnba\b|\bnhl\b|\bwnba\b|\bmma\b|\bufc\b"
+            r"|\bpga\b|college fantasy|college basketball|\bcbb\b"
+            r"|\bnascar\b|\bsoccer\b|\bgolf\b|\bhockey\b)", re.I),
     },
 }
+# A candidate feed has to clear this after filtering to win outright; below it
+# we keep looking and fall back to the best list we saw.
+ARTICLES_MIN_ITEMS = 3
 _JSONLD_RE = re.compile(
     r"<script[^>]+type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>", re.I | re.S
 )
 _TAG_RE = re.compile(r"<[^>]+>")
 _ARTICLE_TYPES = {"article", "newsarticle", "blogposting", "report"}
+# "… read more »" / "Continue reading →" — WordPress excerpt boilerplate that
+# reads as garbage once the entities are decoded.
+_READMORE_RE = re.compile(
+    r"\s*(?:\.\.\.|…)?\s*(?:read\s+more|continue\s+reading)\s*[»→>\.\s]*$", re.I)
+
+
+def _sport_ok(item: dict, cfg: dict) -> bool:
+    """Is this article actually about the sport we asked for? See the deny-list
+    note on ARTICLE_SOURCES — a site-wide feed mixes every sport together."""
+    url = item.get("url") or ""
+    if cfg.get("urlNo") and cfg["urlNo"].search(url):
+        return False
+    if cfg.get("urlYes") and cfg["urlYes"].search(url):
+        return True                       # an /nfl/ permalink settles it
+    text = f"{item.get('title', '')} {item.get('category', '')}"
+    if cfg.get("textNo") and cfg["textNo"].search(text):
+        return False
+    return True
 
 
 def _strip_tags(s: str) -> str:
-    txt = _TAG_RE.sub(" ", s or "")
-    for ent, ch in (("&amp;", "&"), ("&#39;", "'"), ("&rsquo;", "’"),
-                    ("&quot;", '"'), ("&nbsp;", " "), ("&lt;", "<"), ("&gt;", ">")):
-        txt = txt.replace(ent, ch)
+    """Tags out, entities decoded. `html.unescape` handles the NUMERIC entities
+    (&#8217; &#187;) a hand-rolled table always misses — feed descriptions are
+    HTML escaped inside XML, so one decode pass is still needed after the XML
+    parser has done its own. Callers escape again on output, so decoding here
+    can't inject markup."""
+    import html as _html
+    txt = _html.unescape(_TAG_RE.sub(" ", s or ""))
+    txt = _TAG_RE.sub(" ", txt)          # in case a tag was itself escaped
+    txt = _READMORE_RE.sub("…", txt)     # drop the WordPress excerpt tail
     return " ".join(txt.split())
 
 
@@ -1464,11 +1506,18 @@ def _fetch_articles(sport: str, limit: int) -> dict:
                     att.setdefault("parseErr", f"{name}: {type(e).__name__}")
                     got = []
                 if got:
-                    items, used, how = got, u, name
+                    kept = [i for i in got if _sport_ok(i, cfg)]
                     att["parsed"] = f"{name}:{len(got)}"
+                    if len(kept) != len(got):
+                        att["offSport"] = len(got) - len(kept)
+                    # Keep the richest list we've seen. A feed that parses but
+                    # is mostly other sports doesn't get to win by arriving
+                    # first — we keep walking to the sport-specific candidates.
+                    if len(kept) > len(items):
+                        items, used, how = kept, u, name
                     break
         attempts.append(att)
-        if items:
+        if len(items) >= ARTICLES_MIN_ITEMS:
             break
 
     items = _dedupe(items, 40)

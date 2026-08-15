@@ -326,7 +326,53 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v156**.
+Current version as of this writing: **v156** (backend **b10-fparticles-nfl-filter**).
+
+- **📰 Fantasy Advice was showing MLB articles (backend `b10`)** — the owner's
+  screenshot of the NFL prep view led with "Fantasy Baseball Closer Rankings"
+  and "MLB DFS Picks". **Frontend-clean — this was entirely `/api/articles/nfl`.**
+  Two bugs, both fixed server-side (no `APP_VERSION` bump: no frontend file
+  changed; confirm the deploy via `/api/health` → `version`):
+  - **Wrong sport.** `_parse_feed` accepted **every `<item>`** in whatever feed
+    answered, with no sport filter at all — while `_parse_jsonld` and
+    `_parse_links` both filtered through `cfg["pattern"]`. FantasyPros is a
+    multi-sport site, so when the sport-specific feed guesses 404'd and the
+    **site-wide** `/feed/` answered, its baseball/NBA/college posts sailed
+    straight through. (Tell-tale in the screenshot: every row's category read
+    "Articles" — the generic site-wide tag.) Fixed with **`_sport_ok(item, cfg)`**,
+    now applied to **all three** parsers' output. It's a **deny-list**, not an
+    allow-list, and deliberately so: FantasyPros permalinks are often
+    **date-based** (`/2026/08/slug/`) and carry no sport, so a `/nfl/`-only
+    allow-list would have emptied the section. Order: `urlNo` (other-sport path)
+    rejects → `urlYes` (`/nfl/`) accepts outright → `textNo` on **title +
+    category only** rejects → otherwise keep. Summaries are NOT matched — an NFL
+    article can mention baseball in passing; its headline almost never does.
+    **College fantasy football is treated as off-sport** (different game from
+    the owner's NFL league) — flip `college-fantasy-football`/`college fantasy`
+    out of `urlNo`/`textNo` to let it back in.
+  - **Raw HTML entities** (`read more &#187;`, `We&#8217;re`) — `_strip_tags`
+    hand-decoded seven named entities and missed every **numeric** one. Now uses
+    `html.unescape` (feed descriptions are HTML-escaped *inside* XML, so a
+    decode pass is still needed after ElementTree's own), re-strips in case a
+    tag was itself escaped, and drops the WordPress "… read more »" excerpt tail
+    via `_READMORE_RE`. Output is still `esc()`d frontend-side, so decoding here
+    can't inject markup.
+  - **Candidate selection no longer trusts first-answer.** The loop used to
+    `break` on the first URL that parsed anything; a site-wide feed arriving
+    first therefore won permanently. It now filters each candidate, **keeps the
+    richest surviving list**, and only stops early once one clears
+    **`ARTICLES_MIN_ITEMS`** (3) — so an all-baseball feed can't lock in a bad
+    or empty result. Happy path is unchanged (a good NFL feed is first in
+    `urls`, wins immediately, later URLs are never fetched). `?debug=1` now also
+    reports **`offSport`** per attempt = how many items the filter dropped.
+  - Verified against fixtures built from the exact headlines in the screenshot:
+    all three off-sport rows dropped, the two football rows kept, entities
+    decoded (`Don't reach for these guys…`), plus five loop scenarios
+    (site-wide-only, NFL-feed-wins, all-baseball-keeps-walking, thin-loses-to-
+    richer, everything-down-fails-honestly). ⚠️ Still **unverified live** — the
+    sandbox is egress-blocked from both fantasypros.com and onrender.com, so
+    which candidate URL actually answers is still unknown. **On-device check:
+    `/api/articles/nfl?debug=1` → `source` + `parser` + `offSport`.**
 
 - **Board audit closed + plan re-measured against real ADP (v156)** — the owner
   asked for all three open items from v154/v155 at once. Web search works in this
