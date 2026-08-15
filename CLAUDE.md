@@ -326,7 +326,34 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v156** (backend **b10-fparticles-nfl-filter**).
+Current version as of this writing: **v157** (backend **b10-fparticles-nfl-filter**).
+
+- **Game modal stuck on "Loading live stats…" (v157)** — the owner tapped a
+  preseason card on the NFL tab and the modal sat on the loading line. Not a
+  hang and not ESPN: `openGameDetail`'s `Promise.all` awaited
+  **`getBettingReport(sport)`** alongside the ESPN calls, and that one goes to
+  the **Render backend**, which `fetchJSON` deliberately gives a **45s** leash
+  for its free-tier cold start (ESPN stays at 9s). So a sleeping (or dead)
+  backend held the ENTIRE modal — score, odds, box score, everything — hostage
+  for up to 45 seconds even though the ESPN summary had landed in ~1s. Fixed by
+  making the report **non-blocking**: it's kicked off before the `await`, the
+  modal renders as soon as the ESPN data is in with a `<div id="md-report">`
+  placeholder ("📊 Loading betting report…") in the report's slot, and the
+  report is injected into that host when it lands (`makeAccordion` re-run on the
+  host alone, so the surrounding sections aren't re-wired). A module-level
+  **`detailToken`**, bumped per open, drops a late report into the void if the
+  user closed the modal or opened a different game meanwhile. Also added
+  **`reportDownUntil`** in `getBettingReport` — a failed/timed-out fetch is
+  remembered for 3 minutes, so during an outage every subsequent card returns
+  null immediately instead of opening its own 45s request. When the report is
+  null `gameReportHTML` already degrades (model grades + device-local line
+  movement, or `''` if there's nothing to show), so the slot just empties.
+  Verified in headless Chromium with the network stubbed across three backend
+  states (never answers / errors immediately / answers after 1.5s): the modal
+  painted in **26–51 ms** in all three, the report appeared with a working
+  accordion when it arrived, and the slot cleared cleanly when it didn't. **The
+  general lesson: never `await` a `FANTASY_API` call in the same `Promise.all`
+  as the ESPN calls — the 45s cold-start budget becomes the render time.**
 
 - **📰 Fantasy Advice was showing MLB articles (backend `b10`)** — the owner's
   screenshot of the NFL prep view led with "Fantasy Baseball Closer Rankings"

@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v156';
+const APP_VERSION = 'v157';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -474,29 +474,31 @@ async function openNewsSummary(a, backFn) {
   }
 }
 
+// Bumped on every modal open so a slow async section (the Game Report) can tell
+// it's landing in a modal the user has since closed or replaced.
+let detailToken = 0;
+
 async function openGameDetail(sport, id, g) {
   modal().classList.remove('hidden');
   $('#modal-body').innerHTML = '<div class="empty">Loading live stats…</div>';
+  const token = ++detailToken;
   try {
     const path = LEAGUES[sport].espnPath;
     // Preseason: the model's data is regular-season based (and starters sit),
     // so no AI pick, no model-vs-book grades, no model total — real odds and
     // market data still show. Mirrors the AI Picks tab sitting preseason out.
     const preseason = g?.seasonType === 1;
-    const [data, pred, hitters, report] = await Promise.all([
+    // The Game Report needs the Render backend, which cold-starts in ~30-60s
+    // after idling (fetchJSON gives it a 45s leash). Awaiting it here left the
+    // whole modal stuck on "Loading live stats…" for up to 45s even though the
+    // ESPN data was ready in a second — so it's kicked off now and injected
+    // into its slot whenever it lands. Everything else is ESPN (9s cap).
+    const reportP = g ? getBettingReport(sport) : null;
+    const [data, pred, hitters] = await Promise.all([
       fetchJSON(`${SITE}/${path}/summary?event=${id}`, 30000),
       g && !preseason ? predictGame(sport, g).catch(() => null) : Promise.resolve(null),
       g && sport === 'mlb' ? Promise.all([topHitters(g.home.id), topHitters(g.away.id)]).catch(() => null) : Promise.resolve(null),
-      g ? getBettingReport(sport) : Promise.resolve(null),
     ]);
-    let reportHTML = '';
-    if (g) {
-      // Odds for the report: prefer the summary's pickcenter — the scoreboard
-      // object often drops its odds once a game goes live, which blanked the
-      // Book/Grade columns mid-game.
-      const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g.odds;
-      reportHTML = gameReportHTML(sport, g, pred, normOdds(rawO, g.home.name, g.away.name), report);
-    }
     let extra = '';
     if (preseason) {
       extra += '<div class="md-section-title acc-open">🤖 AI Pick</div><div class="ai-why">Preseason — the model sits these out. Backups play most of the snaps, so results and totals aren\'t predictive.</div>';
@@ -506,8 +508,25 @@ async function openGameDetail(sport, id, g) {
     } else if (g && sport === 'nfl') {
       extra += nflKeyHTML(g);
     }
-    $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, reportHTML);
+    const slot = reportP ? '<div id="md-report"><div class="empty">📊 Loading betting report…</div></div>' : '';
+    $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, slot);
     makeAccordion($('#modal-body'), '.md-section-title', 0);
+    if (reportP) {
+      // Odds for the report: prefer the summary's pickcenter — the scoreboard
+      // object often drops its odds once a game goes live, which blanked the
+      // Book/Grade columns mid-game.
+      const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g.odds;
+      reportP.then((report) => {
+        if (token !== detailToken) return; // modal moved on while we waited
+        const host = document.getElementById('md-report');
+        if (!host) return;
+        host.innerHTML = gameReportHTML(sport, g, pred, normOdds(rawO, g.home.name, g.away.name), report);
+        makeAccordion(host, '.md-section-title', 0);
+      }).catch(() => {
+        const host = token === detailToken ? document.getElementById('md-report') : null;
+        if (host) host.innerHTML = '';
+      });
+    }
   } catch (_) {
     $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>';
   }
@@ -1322,9 +1341,15 @@ function aiFactors(pred) {
 // everything degrades gracefully when it's unreachable (model grades and
 // device-tracked movement still render).
 const BETTING_SPORTS = new Set(['mlb', 'nfl', 'nba']);
+// Remembers a failed/timed-out backend report so every game card opened during
+// an outage (or a long cold start) doesn't sit on its own 45s request — the
+// report degrades to model-only, which gameReportHTML already handles.
+let reportDownUntil = 0;
 async function getBettingReport(sport) {
   if (!BETTING_SPORTS.has(sport)) return null;
-  return fetchJSON(`${FANTASY_API}/api/betting/${sport}/report`, 5 * 60000).catch(() => null);
+  if (Date.now() < reportDownUntil) return null;
+  return fetchJSON(`${FANTASY_API}/api/betting/${sport}/report`, 5 * 60000)
+    .catch(() => { reportDownUntil = Date.now() + 3 * 60000; return null; });
 }
 // Match a VSiN team cell ("9:40 PM LA Angels +1.5") to an ESPN team name.
 function vsinMatches(vstr, teamName) {
