@@ -285,12 +285,25 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     (sums multiple sessions that day), and a **⏱ Time trained** card atop History —
     this-week / last-week / avg-session totals + a 14-day minutes-per-day bar chart
     (`timeChartHTML`, `.wk-tchart`/`.wk-time-tots` CSS, today's bar highlighted).
+  - **No-zoom on iPhone (wk v3)** — the owner reported the page zooming in (and
+    staying zoomed) whenever they typed a weight or tapped a set chip. Two separate
+    iOS Safari behaviors, both fixed in `workout.css`: (a) **focus zoom** — Safari
+    zooms the viewport whenever you focus an input whose `font-size` is **under
+    16px**, and never zooms back out. `.wk-load input` was `14px`; it's now **16px**
+    (width 68→74px to keep 3 digits comfortable) with a comment saying it must stay
+    ≥16px. (b) **double-tap zoom** — tapping set chips in a rhythm reads as
+    double-tap-to-zoom, so `touch-action: manipulation` is set on every
+    `button`/`input`/`select`/`label`/`summary`/`a` under `.wk-body`, which kills
+    the double-tap gesture while **leaving pinch-zoom intact** (the viewport meta
+    is deliberately NOT locked with `user-scalable=no` — that breaks accessibility).
+    Plus `-webkit-text-size-adjust: 100%` on the body. **When adding any new input
+    to this page, keep it at 16px+.**
   - localStorage: `workoutlab:log` (sessions), `workoutlab:last` (load per exercise id,
     `day.blockIdN`), `workoutlab:prefs` (`unit` lb/kg, `autoRest`, `sound`, `vis`).
   - Themed via the shared `styles.css` vars **and** the `<head>` theme script, so unlike
     `draft.html`/`trivia.html` it renders correctly in BOTH light and dark. Standalone, so
     NOT part of the `APP_VERSION`/`?v=` ritual — but bump `workout.css`/`workout.js` `?v=`
-    in `workout.html` on changes (currently **v2**), and its `styles.css?v=` (now 143) if
+    in `workout.html` on changes (currently **v3**), and its `styles.css?v=` (now 143) if
     you change shared CSS it leans on.
 - `scriptable/` — optional iOS Home Screen widgets ([Scriptable](https://scriptable.app), JS).
   **Companion scripts, NOT part of the web app** — they don't deploy with Pages and

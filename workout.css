@@ -22,6 +22,21 @@ body.wk-body {
   background:
     radial-gradient(1200px 500px at 50% -10%, rgba(226, 84, 47, .28), transparent 70%),
     var(--bg);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* iOS Safari treats a quick second tap on a control as double-tap-to-zoom,
+   which is exactly what tapping set chips / day cards in a rhythm looks like.
+   `manipulation` keeps pinch-zoom but kills the double-tap gesture on
+   anything you're meant to tap repeatedly. */
+.wk-body button,
+.wk-body input,
+.wk-body select,
+.wk-body label,
+.wk-body summary,
+.wk-body a {
+  touch-action: manipulation;
 }
 
 /* ---------- page shell (mirrors the draft / trivia labs) ---------- */
@@ -186,9 +201,12 @@ main.ds-main { max-width: 820px; margin: 0 auto; padding: 18px 16px 80px; }
 .wk-set.on { background: var(--wk-ok); border-color: transparent; color: #06241b; }
 .wk-load { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; }
 .wk-load input {
-  width: 68px; min-height: 40px; padding: 6px 8px; text-align: center;
+  width: 74px; min-height: 40px; padding: 6px 8px; text-align: center;
   background: var(--card-2); border: 1px solid var(--wk-line-2); border-radius: 9px;
-  color: var(--text); font-size: 14px; font-weight: 800;
+  color: var(--text); font-weight: 800;
+  /* MUST stay >= 16px: iOS Safari zooms the whole page in when you focus an
+     input smaller than that, and never zooms back out. */
+  font-size: 16px;
 }
 .wk-load span { font-size: 11px; font-weight: 800; color: var(--muted); }
 .wk-last { font-size: 11px; color: var(--muted); margin-top: 6px; }
