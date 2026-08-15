@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v157';
+const APP_VERSION = 'v158';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2972,6 +2972,61 @@ function outlook2026(a, role, sev, nw) {
   return s.slice(0, 3).join(' ') || `In the mix at ${posName} for 2026.`;
 }
 
+// --- Player modal → My Draft Board ----------------------------------------
+// Team Research is where you're actually sizing a guy up, so the modal can put
+// him straight onto the SAME on-device draft board the Fantasy → Football view
+// edits (`sportshub:fantasy:nflboard`) — no scrolling back down to retype the
+// name. Kept players are refused, not silently added: they can't be drafted.
+const BOARD_POS = { QB: 'QB', RB: 'RB', HB: 'RB', FB: 'RB', WR: 'WR', TE: 'TE', K: 'K', PK: 'K', DEF: 'DST', DST: 'DST' };
+const boardPosFor = (abbr) => BOARD_POS[(abbr || '').toUpperCase()] || 'FLEX';
+// If he's already a Draft-Turn Plan target, add him at that group's tier so
+// this button and "⭐ Add these targets to my board" agree; else neutral T3.
+function planTierFor(name) {
+  let t = null;
+  TURN_ROUNDS.forEach((rd) => (rd.groups || []).forEach((g) => {
+    if (t == null && (g.players || []).some((x) => keepNorm(x.n) === keepNorm(name))) t = g.tier;
+  }));
+  if (t == null) TURN_SLEEPERS.forEach((g) => {
+    if (t == null && (g.players || []).some((x) => keepNorm(x.n) === keepNorm(name))) t = g.tier;
+  });
+  return t || 3;
+}
+const onBoard = (name) => loadNflBoard().find((p) => keepNorm(p.name) === keepNorm(name)) || null;
+
+// Inline styles (see the v74 lesson) so the card renders regardless of
+// stylesheet state.
+function draftPlanHTML(name, pos) {
+  const kept = keptEntry(name);
+  const on = onBoard(name);
+  const tier = on ? on.tier : planTierFor(name);
+  const pills = pickAngles(name).map((x) =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border:1px solid ${x.color};border-radius:999px;font-size:11px;font-weight:700;color:${x.color}">${x.icon} ${esc(x.kind)}</span>`).join('');
+  const tierSel = `<select id="pl-bd-tier" aria-label="Tier" style="font:inherit;font-size:13px;padding:8px 10px;min-height:44px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:var(--text)">${[1, 2, 3, 4, 5].map((t) => `<option value="${t}"${t === tier ? ' selected' : ''}>Tier ${t}</option>`).join('')}</select>`;
+  let body;
+  if (kept) {
+    body = `<div style="padding:9px 11px;border:1px dashed #e0655f;border-radius:10px;font-size:12.5px;line-height:1.5">
+      <b style="color:#e0655f">🔒 ${kept.you ? 'Your keeper' : 'Kept by ' + esc(kept.team)}</b> — costs round <b>R${kept.r}</b>, so he never enters the draft. Nothing to plan here.</div>`;
+  } else if (on) {
+    body = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:700;color:var(--accent);flex:1;min-width:130px">✅ On your draft board</span>
+        ${tierSel}
+        <button id="pl-bd-rm" class="fan-btn ghost" type="button">Remove</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Listed as <b>${esc(on.pos)}</b>. Change the tier here or on the board.</div>`;
+  } else {
+    body = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        ${tierSel}
+        <button id="pl-bd-add" class="fan-btn" type="button" style="flex:1;min-width:170px">⭐ Add to my draft board</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Adds as <b>${esc(pos)}</b> — editable on the board any time.</div>`;
+  }
+  return `<div style="border:1px solid var(--line);border-radius:10px;background:var(--card);padding:10px 12px;margin-bottom:4px">
+    ${pills ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${pills}</div>` : ''}
+    ${body}
+    <div style="font-size:10.5px;color:var(--muted);font-weight:700;margin-top:7px">Saved on this device with your Fantasy → Football draft board.</div>
+  </div>`;
+}
+
 async function openPlayerModal(aid) {
   const a = (fanState.researchAthletes || {})[aid];
   modal().classList.remove('hidden');
@@ -3016,6 +3071,8 @@ async function openPlayerModal(aid) {
     <div class="md-section-title">2026 Outlook</div>
     <div class="pl-outlook"><span id="pl-outlook">${esc(outlook2026(a, role, healthSev(rosterH), nw))}</span>
       <div class="pl-o-note">Auto-generated from the depth chart, age &amp; injury data — not a scouting report.</div></div>
+    <div class="md-section-title">Draft Plans</div>
+    <div id="pl-draft"></div>
     ${nw ? `<div class="md-section-title">Latest News</div><button class="pl-news-card" id="pl-news-open" type="button"><div class="pl-news-h">${esc(nw.headline)}</div><div class="pl-news-w">${nwWhen ? esc(nwWhen) + ' · ' : ''}tap for in-app summary</div></button>` : ''}
     <div class="pl-bio">${bio.map(([k, v]) => `<div class="pl-b"><span class="pl-bk">${k}</span><span class="pl-bv">${esc(String(v))}</span></div>`).join('')}</div>
     <a class="fan-btn" href="${espn}" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;text-decoration:none">Full profile &amp; stats on ESPN ↗</a>`;
@@ -3023,6 +3080,47 @@ async function openPlayerModal(aid) {
     const btn = body.querySelector('#pl-news-open');
     if (btn) btn.onclick = () => openNewsSummary(nw.article, () => openPlayerModal(aid));
   }
+  // Draft Plans card — repaints itself in place (so the modal doesn't jump)
+  // and re-renders the prep view underneath, keeping the board count honest.
+  const pname = a.displayName || '';
+  const bpos = boardPosFor(role?.pos || a.position?.abbreviation);
+  const paintPlan = () => {
+    if (body.dataset.aid !== String(aid)) return;
+    const host = body.querySelector('#pl-draft');
+    if (!host) return;
+    host.innerHTML = draftPlanHTML(pname, bpos);
+    const tierSel = host.querySelector('#pl-bd-tier');
+    const addBtn = host.querySelector('#pl-bd-add');
+    const rmBtn = host.querySelector('#pl-bd-rm');
+    // Keep the board (and its collapsed/expanded state) in sync behind the modal.
+    // Only repaint when the prep view is what's actually mounted (#bd-wrap is
+    // its board) — never over the live-league view.
+    const sync = () => {
+      fanState.bdOpen = true;
+      const view = $('#fantasy-football');
+      if (fanState.sport === 'football' && view && view.querySelector('#bd-wrap')) renderFantasyFootball();
+    };
+    if (addBtn) addBtn.onclick = () => {
+      const list = loadNflBoard();
+      if (!list.some((p) => keepNorm(p.name) === keepNorm(pname))) {
+        list.push({ name: pname, pos: bpos, tier: Number(tierSel && tierSel.value) || 3 });
+        saveNflBoard(list);
+      }
+      paintPlan(); sync();
+    };
+    if (rmBtn) rmBtn.onclick = () => {
+      saveNflBoard(loadNflBoard().filter((p) => keepNorm(p.name) !== keepNorm(pname)));
+      paintPlan(); sync();
+    };
+    if (tierSel && !addBtn) tierSel.onchange = () => {
+      const list = loadNflBoard();
+      const pl = list.find((p) => keepNorm(p.name) === keepNorm(pname));
+      if (!pl) return;
+      pl.tier = Number(tierSel.value) || pl.tier;
+      saveNflBoard(list); paintPlan(); sync();
+    };
+  };
+  paintPlan();
   // Live health refresh — only touch the DOM if this modal still shows this player.
   const repaint = (h) => {
     if (body.dataset.aid !== String(aid)) return;

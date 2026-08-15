@@ -326,7 +326,36 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v157** (backend **b10-fparticles-nfl-filter**).
+Current version as of this writing: **v158** (backend **b10-fparticles-nfl-filter**).
+
+- **Player modal → draft board: "Draft Plans" card (v158)** — the owner was
+  looking at Kyle Monangai in Team Research and wanted to add him to their draft
+  plans right there instead of scrolling down to My Draft Board and retyping the
+  name. `openPlayerModal` now renders a **Draft Plans** card (`#pl-draft`,
+  between 2026 Outlook and Latest News) writing to the SAME on-device board
+  (`sportshub:fantasy:nflboard`) the Fantasy → Football view edits:
+  - **Not on the board** → a tier `<select>` + **⭐ Add to my draft board**.
+    Default tier comes from **`planTierFor(name)`** — if he's already a
+    Draft-Turn Plan / sleeper target, his group's tier, so this button and
+    "⭐ Add these targets to my board" agree; otherwise T3.
+  - **Already on the board** → "✅ On your draft board" + a live tier select
+    (re-tiers in place) + **Remove**.
+  - **Kept by a league team** (`keptEntry`) → no add button at all, just a red
+    "🔒 Kept by X — costs round R{n}, so he never enters the draft" notice.
+    Same refusal the ⭐ turn-target merge does, made visible at the player.
+  - The card also shows **`pickAngles`** pills (💰 just paid / 🔥 contract year /
+    🎯 Plan target · R{n}), so the reason he's interesting is right there.
+  - Position maps through **`BOARD_POS`/`boardPosFor`** (HB/FB→RB, PK→K,
+    DEF→DST, anything unrecognized → FLEX) so a non-skill player can't land on
+    the board with a junk position. Card is inline-styled (v74 lesson) and
+    repaints itself in place (`paintPlan`, guarded by `body.dataset.aid`) so the
+    modal doesn't jump; `sync()` re-renders the prep view underneath — but ONLY
+    when `#bd-wrap` is actually mounted, so it can never paint the prep view
+    over the live-league view.
+  - Verified in headless Chromium with the network blocked (both themes): add →
+    localStorage row with the chosen tier, re-tier, remove, kept-player refusal,
+    plan-target tier/pill, FLEX fallback, board count 0 → 1 behind the open
+    modal, `fanState.bdOpen` held true, no console errors.
 
 - **Game modal stuck on "Loading live stats…" (v157)** — the owner tapped a
   preseason card on the NFL tab and the modal sat on the loading line. Not a
@@ -1592,7 +1621,8 @@ Current version as of this writing: **v157** (backend **b10-fparticles-nfl-filte
     player row opens a **player detail modal** (`openPlayerModal`, reuses
     `#game-modal`, `.pl-*` CSS): headshot, pos·#, an injury banner when present,
     a bio grid (position/age/height/weight/college/experience from the roster
-    athlete object), and a "Full profile & stats on ESPN ↗" link. **Backups show
+    athlete object), a **Draft Plans** card that adds/re-tiers/removes him on My
+    Draft Board (v158), and a "Full profile & stats on ESPN ↗" link. **Backups show
     an estimated "% to start"** (`stealOdds`/`paintResearch`) = position base
     rate × depth-rank decay × the starter's injury severity (`injSeverity`) × the
     starter's age (`ageMult`), floored high when the starter is Out/Doubtful; a
