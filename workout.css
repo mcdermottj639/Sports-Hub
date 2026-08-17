@@ -32,6 +32,7 @@ body.wk-body {
    anything you're meant to tap repeatedly. */
 .wk-body button,
 .wk-body input,
+.wk-body textarea,
 .wk-body select,
 .wk-body label,
 .wk-body summary,
@@ -93,6 +94,43 @@ main.ds-main { max-width: 820px; margin: 0 auto; padding: 18px 16px 80px; }
 .wk-next .sub { font-size: 13px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
 .wk-next .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .wk-next .row .ds-btn { flex: 1 1 150px; }
+
+/* ---------- sharing (plan view) ---------- */
+.wk-share { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; margin: 10px 0 4px; }
+.wk-share .ds-btn { flex: 0 1 auto; }
+.wk-share .n { flex-basis: 100%; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+
+/* Banner shown only to someone who OPENED a shared #plan= link. */
+.wk-shared {
+  margin-top: 12px; padding: 13px 15px; border-radius: 14px;
+  background: linear-gradient(135deg, rgba(58,210,159,.2), rgba(58,210,159,.05));
+  border: 1px solid rgba(58,210,159,.35); border-left: 4px solid var(--wk-ok);
+}
+.wk-shared b { display: block; font-size: 14px; font-weight: 900; color: var(--text); margin-bottom: 5px; }
+.wk-shared span { display: block; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+.wk-shared span b { display: inline; font-size: inherit; color: var(--text); }
+
+/* Manual-copy fallback for browsers that block both share sheet + clipboard. */
+.wk-share-out { margin: 10px 0 4px; }
+.wk-share-out .t { font-size: 11.5px; font-weight: 800; color: var(--muted); margin-bottom: 5px; }
+.wk-share-out textarea {
+  width: 100%; padding: 10px; border-radius: 10px; resize: vertical;
+  background: var(--card-2); border: 1px solid var(--wk-line-2); color: var(--text);
+  line-height: 1.5;
+  /* MUST stay >= 16px — see .wk-load input. */
+  font-size: 16px;
+}
+
+.wk-toast {
+  position: fixed; left: 50%; bottom: 22px; z-index: 60;
+  transform: translate(-50%, 14px); opacity: 0; pointer-events: none;
+  max-width: min(92vw, 420px); padding: 12px 18px; border-radius: 999px;
+  background: var(--card); border: 1px solid var(--wk-line-2);
+  box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  font-size: 13px; font-weight: 800; color: var(--text); text-align: center;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.wk-toast.on { opacity: 1; transform: translate(-50%, 0); }
 
 /* ---------- day cards ---------- */
 .wk-days { display: grid; gap: 10px; }
@@ -305,3 +343,8 @@ main.ds-main { max-width: 820px; margin: 0 auto; padding: 18px 16px 80px; }
 :root[data-theme="light"] { --wk-warn: #96690a; }
 :root[data-theme="light"] .wk-blk.gap .wk-blk-tag { color: #fff; }
 :root[data-theme="light"] .wk-blk-why { background: rgba(150,105,10,.09); border-color: rgba(150,105,10,.3); }
+:root[data-theme="light"] .wk-shared {
+  background: linear-gradient(135deg, rgba(31,156,115,.13), rgba(31,156,115,.03));
+  border-color: rgba(31,156,115,.35); border-left-color: #1f9c73;
+}
+:root[data-theme="light"] .wk-toast { box-shadow: 0 10px 26px rgba(0,0,0,.16); }

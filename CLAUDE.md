@@ -298,12 +298,43 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     is deliberately NOT locked with `user-scalable=no` — that breaks accessibility).
     Plus `-webkit-text-size-adjust: 100%` on the body. **When adding any new input
     to this page, keep it at 16px+.**
+  - **Shareable plan view (wk v4)** — the owner wanted to send a day's session to
+    someone who wants to do the workout. The plan screen (`showPlan`) now carries a
+    **📤 Share this workout** / **📋 Copy as text** pair (`.wk-share` CSS), and the
+    whole SHARING section of `workout.js` sits just above the plan view. Two routes,
+    because they suit different recipients:
+    - **A link** — `workout.html#plan=<key>` (`planURL`). The program is baked into
+      the page, so the link is just a bookmark to a screen: no data is encoded in it,
+      nothing personal travels with it, and the recipient's own logs stay in their own
+      localStorage. Works for the three days AND the four `ADDONS`. `navigator.share`
+      opens the native iOS share sheet (Messages/Mail/AirDrop); no share sheet →
+      clipboard + a toast; clipboard blocked too → the text is dropped into a
+      pre-selected `<textarea>` (`shareFallback`, 16px per the iOS zoom rule).
+      `AbortError`/`NotAllowedError` from a cancelled sheet are swallowed, not
+      treated as failures.
+    - **Plain text** (`planText`) — the entire session written out (~4.1k chars for
+      Day 1): title, focus, warm-up, every block with its style/rounds/rest, each
+      exercise with reps + full form cue + equipment swaps, gap-fix "why", cooldown,
+      and the link back at the bottom. For anyone who'd rather read it in a message.
+    - **Routing:** `route()` runs at boot and on `hashchange`; an unknown day falls
+      back to home. The address bar tracks the plan view via `setHash`, which uses
+      **`history.replaceState`** deliberately — the back button should leave the page,
+      not walk back through screens (so Safari's own share button also yields the
+      right URL). `show()` clears the hash for every non-plan screen.
+    - **Recipient orientation:** opening a shared link sets `SHARED_KEY`, which paints
+      a one-time green "📬 Someone shared this workout with you" banner (`.wk-shared`)
+      and relabels Back as "☰ See the full 3-day program". Cleared on `showHome`, so
+      the owner never sees it and it doesn't come back on a later visit to the plan.
+    - Verified end-to-end in headless Chromium at 390px in BOTH themes (62 checks):
+      owner share, share-sheet payload, text contents, clipboard fallback,
+      everything-blocked fallback, recipient deep link → banner → guided session →
+      finish → save, junk hash, add-on links, no history spam, no console errors.
   - localStorage: `workoutlab:log` (sessions), `workoutlab:last` (load per exercise id,
     `day.blockIdN`), `workoutlab:prefs` (`unit` lb/kg, `autoRest`, `sound`, `vis`).
   - Themed via the shared `styles.css` vars **and** the `<head>` theme script, so unlike
     `draft.html`/`trivia.html` it renders correctly in BOTH light and dark. Standalone, so
     NOT part of the `APP_VERSION`/`?v=` ritual — but bump `workout.css`/`workout.js` `?v=`
-    in `workout.html` on changes (currently **v3**), and its `styles.css?v=` (now 143) if
+    in `workout.html` on changes (currently **v4**), and its `styles.css?v=` (now 143) if
     you change shared CSS it leans on.
 - `scriptable/` — optional iOS Home Screen widgets ([Scriptable](https://scriptable.app), JS).
   **Companion scripts, NOT part of the web app** — they don't deploy with Pages and

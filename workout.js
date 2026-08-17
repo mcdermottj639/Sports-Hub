@@ -799,8 +799,14 @@ function visSVG(v) {
 // SCREENS
 // ==========================================================================
 const SCREENS = ['home', 'plan', 'session', 'coverage', 'history', 'summary'];
+// Set when the page is OPENED on a shared #plan=… link — drives the one-time
+// "someone shared this with you" banner. Cleared the moment they go home.
+let SHARED_KEY = null;
 function show(name) {
   SCREENS.forEach((s) => { const n = $('#' + s); if (n) n.hidden = s !== name; });
+  // The plan view is the only shareable screen, so it's the only one that
+  // leaves a #plan=… in the address bar (showPlan sets it right after this).
+  if (name !== 'plan') setHash('');
   window.scrollTo({ top: 0, behavior: 'auto' });
 }
 
@@ -911,6 +917,7 @@ function stats() {
 }
 
 function showHome() {
+  SHARED_KEY = null; // once they've looked around, they're not "arriving" any more
   const st = stats();
   const nk = nextUp();
   const next = PLAN[nk];
@@ -1001,19 +1008,194 @@ function showHome() {
 }
 
 // ==========================================================================
-// PLAN VIEW (read-only)
+// SHARING
+// ==========================================================================
+/* The plan view is the thing worth sending somebody — "here's the session, go
+ * do it." Two ways out of the app, because they suit different people:
+ *
+ *   • a LINK (…/workout.html#plan=push) — opens this page straight on that
+ *     day's plan, diagrams and rest timers included. No account, no backend,
+ *     and nothing personal travels with it: the program is baked into the
+ *     page, so the link is just a bookmark to a screen. The recipient's own
+ *     logs stay on their own device (localStorage), same as ours.
+ *   • plain TEXT — the entire session written out, form cues and swaps and
+ *     all, for anyone who'd rather read it in a message than open a link.
+ *
+ * On iPhone the link route goes through the native share sheet (Messages,
+ * Mail, AirDrop…). Everywhere else it falls back to copying to the clipboard.
+ */
+const planURL = (key) => `${location.origin}${location.pathname}#plan=${encodeURIComponent(key)}`;
+
+/** Keep the address bar in sync WITHOUT pushing history entries — the back
+ *  button should leave the page, not walk back through screens. */
+function setHash(h) {
+  try {
+    if ((location.hash || '') === h) return;
+    history.replaceState(null, '', location.pathname + location.search + h);
+  } catch (e) {}
+}
+
+/** The whole session as plain text, formatted to survive a chat bubble. */
+function planText(d) {
+  const L = [];
+  const bullet = (x) => {
+    L.push(`• ${x.n} — ${x.reps}`);
+    if (x.cue) L.push(`   ${x.cue}`);
+  };
+  L.push(`${d.emoji} ${d.n.toUpperCase()} — ${d.sub}`);
+  L.push(`~${d.mins} min · ${d.focus.join(' · ')}`);
+  if (d.intro) L.push('', d.intro);
+
+  if (d.warmup && d.warmup.length) {
+    L.push('', '— WARM-UP —');
+    d.warmup.forEach(bullet);
+  }
+
+  d.blocks.forEach((b) => {
+    L.push('', `— ${b.gap ? 'GAP FIX' : 'BLOCK ' + b.id} · ${b.name.replace(/^Gap fix — /, '')} —`);
+    L.push(`${b.style} · ${b.rounds} round${b.rounds === 1 ? '' : 's'} · ${b.rest ? b.rest + 's rest' : 'minimal rest'} · ~${b.mins} min`);
+    if (b.why) L.push(`Why this is here: ${b.why}`);
+    if (b.note) L.push(b.note);
+    b.ex.forEach((ex, i) => {
+      L.push(`${i + 1}. ${ex.n} — ${ex.reps}`);
+      if (ex.cue) L.push(`   ${ex.cue}`);
+      if (ex.alts && ex.alts.length) L.push(`   ↔ No equipment? ${ex.alts.join(' · ')}`);
+    });
+  });
+
+  if (d.cooldown && d.cooldown.length) {
+    L.push('', '— COOLDOWN —');
+    d.cooldown.forEach(bullet);
+  }
+  if (d.alt) L.push('', d.alt);
+
+  L.push('', 'Pick a weight where the last two reps are genuinely hard but your form still holds.');
+  L.push('', 'Same workout with movement diagrams, a rest timer and set tracking:', planURL(d.k));
+  return L.join('\n');
+}
+
+/** Clipboard write with the old-school fallback for browsers that block it. */
+async function copyText(txt) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(txt);
+      return true;
+    }
+  } catch (e) {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, txt.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+let TOAST_T = null;
+function toast(msg) {
+  let n = $('#wk-toast');
+  if (!n) {
+    n = document.createElement('div');
+    n.id = 'wk-toast';
+    n.className = 'wk-toast';
+    n.setAttribute('role', 'status');
+    document.body.appendChild(n);
+  }
+  n.textContent = msg;
+  n.classList.add('on');
+  clearTimeout(TOAST_T);
+  TOAST_T = setTimeout(() => n.classList.remove('on'), 2800);
+}
+
+/** Last resort: if neither the share sheet nor the clipboard worked, put the
+ *  text on screen pre-selected so it can be copied by hand. */
+function shareFallback(label, txt) {
+  const host = $('#p-share-out');
+  if (!host) return;
+  host.innerHTML = `<div class="wk-share-out">
+    <div class="t">${esc(label)} — select and copy:</div>
+    <textarea readonly rows="${txt.length > 400 ? 10 : 3}"></textarea>
+  </div>`;
+  const ta = host.querySelector('textarea');
+  ta.value = txt; // set as a value, never interpolated into markup
+  ta.focus();
+  ta.select();
+}
+
+async function sharePlan(d) {
+  const url = planURL(d.k);
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: `${d.n} — Workout Lab`,
+        text: `${d.emoji} ${d.n} · ${d.sub} — ~${d.mins} min, ${d.blocks.length} blocks with form cues, movement diagrams and a rest timer.`,
+        url,
+      });
+      return;
+    } catch (e) {
+      // The user backing out of the share sheet is not a failure.
+      if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return;
+    }
+  }
+  const ok = await copyText(url);
+  if (ok) toast('🔗 Link copied — paste it into a message');
+  else shareFallback('Link', url);
+}
+
+async function sharePlanText(d) {
+  const txt = planText(d);
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: `${d.n} — Workout Lab`, text: txt });
+      return;
+    } catch (e) {
+      if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return;
+    }
+  }
+  const ok = await copyText(txt);
+  if (ok) toast('📋 Full workout copied as text');
+  else shareFallback('Workout', txt);
+}
+
+// ==========================================================================
+// PLAN VIEW (read-only) — also the shared/deep-linked view
 // ==========================================================================
 function showPlan(key) {
   const d = getPlan(key);
   if (!d) return showHome();
+  // True only when this page was OPENED on this plan from a shared link, so a
+  // recipient gets a word of orientation and the owner never sees the banner.
+  const arrived = SHARED_KEY === key;
+
   $('#plan').innerHTML = `
-    <button class="ds-btn small ghost" id="p-back">‹ Back</button>
+    <button class="ds-btn small ghost" id="p-back">${arrived ? '☰ See the full 3-day program' : '‹ Back'}</button>
+
+    ${arrived ? `<div class="wk-shared">
+      <b>📬 Someone shared this workout with you</b>
+      <span>The whole session is below — reps, form cues, movement diagrams, and a swap for every exercise if you don't have the equipment. Tap <b>Start session</b> and the page walks you through it a block at a time with a rest timer. Free, nothing to sign up for, and nothing you do here leaves your own phone.</span>
+    </div>` : ''}
+
     <div class="wk-next" style="margin-top:12px">
       <div class="kick">${esc(d.sub)}</div>
       <h2>${esc(d.emoji)} ${esc(d.n)}</h2>
       <div class="sub">~${d.mins} min · ${esc(d.focus.join(' · '))}</div>
       <div class="row"><button class="ds-btn primary wide" id="p-start">▶︎ Start session</button></div>
     </div>
+
+    <div class="wk-share">
+      <button class="ds-btn small" id="p-share">📤 Share this workout</button>
+      <button class="ds-btn small ghost" id="p-copy">📋 Copy as text</button>
+      <div class="n">Sends a link that opens straight to this session — diagrams, cues and timers included. "Copy as text" writes the whole thing out instead, for pasting into a message.</div>
+    </div>
+    <div id="p-share-out"></div>
+
     ${d.intro ? `<p class="ds-note" style="margin-bottom:4px">${esc(d.intro)}</p>` : ''}
 
     ${d.warmup && d.warmup.length ? `<h3 class="ds-h sec">Warm-up</h3>${listHTML(d.warmup)}` : ''}
@@ -1024,11 +1206,17 @@ function showPlan(key) {
     ${d.cooldown && d.cooldown.length ? `<h3 class="ds-h sec">Cooldown</h3>${listHTML(d.cooldown)}` : ''}
     ${d.alt ? `<p class="ds-note">${esc(d.alt)}</p>` : ''}
 
-    <div class="wk-nav"><button class="ds-btn primary" id="p-start2">▶︎ Start session</button></div>`;
+    <div class="wk-nav">
+      <button class="ds-btn primary" id="p-start2">▶︎ Start session</button>
+      <button class="ds-btn" id="p-share2">📤 Share</button>
+    </div>`;
 
   $('#p-back').onclick = showHome;
   $('#p-start').onclick = $('#p-start2').onclick = () => startSession(key);
+  $('#p-share').onclick = $('#p-share2').onclick = () => sharePlan(d);
+  $('#p-copy').onclick = () => sharePlanText(d);
   show('plan');
+  setHash(`#plan=${encodeURIComponent(key)}`);
 }
 
 // ==========================================================================
@@ -1429,4 +1617,15 @@ function showHistory() {
 }
 
 // --- boot -----------------------------------------------------------------
-showHome();
+/** A shared link lands on #plan=<day>; anything else opens the home screen. */
+function route() {
+  const m = /^#plan=([\w-]+)$/.exec(decodeURIComponent(location.hash || ''));
+  const k = m && getPlan(m[1]) ? m[1] : null;
+  if (!k) { SHARED_KEY = null; showHome(); return; }
+  SHARED_KEY = k;
+  showPlan(k);
+}
+// Only fires if the hash is changed from outside (a pasted link, the back
+// button after an external navigation) — our own setHash uses replaceState.
+window.addEventListener('hashchange', route);
+route();
