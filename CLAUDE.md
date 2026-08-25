@@ -357,7 +357,63 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v158** (backend **b10-fparticles-nfl-filter**).
+Current version as of this writing: **v159** (backend **b10-fparticles-nfl-filter**).
+
+- **Totals instrumentation + O/U split in the Report Card (v159)** — the owner
+  exported the graded tally again (**402 entries**, up from v138's 289) and asked
+  how the model is doing. Analysis of that export, and the one change it
+  justified:
+  - **The v138 calibration fix worked.** Splitting the record by era (the
+    export's `d` dates vs the v127/v138 ship dates): pre-v127 picks claimed
+    **73.4%** and won **54.3%** (gap **−19.1**), with a Brier of **.2792** —
+    *worse* than the .2481 you'd get by saying "54%" every game, i.e. the
+    confidence number carried negative information. Post-v138 picks (8/4+, n=80)
+    claim **62.2%** and win **60.0%** (gap **−2.2**), Brier **.2311** vs a
+    .2400 base-rate baseline — it now **beats** always-quoting the base rate.
+    Discrimination improved too: win/loss AUC on confidence went **.558 →
+    .623**. The shrink + look-ahead fix are doing what they were meant to.
+  - **The headline record is still inflated and that's expected.** All-time
+    sides read 228-133 (63.2%), but **143 of those entries pre-date the v83
+    meta** and went 101-42 (70.6%) — they were graded under the leaky
+    `teamProfile`. The labeled sample is 127-91 (58.3%). The card already says
+    this; it's repeated here because the two numbers will keep diverging.
+  - **Edges are still the weak spot: 17-21 (44.7%) all-time, 6-8 since v138** —
+    under the 52.4% break-even. v138 predicted far fewer edges (it got them) but
+    not yet better ones. n=14 post-fix is too thin to act on; leave `MIN_EDGE_GAP`
+    alone and re-measure.
+  - **🚨 Totals are directionally broken, and park factors did NOT fix it.**
+    All-time **20-21 (48.8%)**, but **30 of 41 picks are OVER (73%)** — under an
+    unbiased projection with a symmetric ±`TOT_EDGE_MIN` threshold that split
+    should be ~50/50, and 30-of-41 has **p = 0.0022**. v138 added `MLB_PARK` to
+    kill exactly this skew; since then it's **still 8 of 11 OVER** and 4-7. So
+    the projected total sits systematically **above** the book's, and park
+    blindness was not the (only) cause. A likely mechanism worth checking first:
+    `MLB_AVG_ERA` is a hardcoded **4.10** anchor, but the ERAs fed against it are
+    *starters'* ERAs, whose population mean runs above the overall league ERA —
+    so the `matchupFactor` nudge adds runs on average rather than centering.
+  - **What shipped (deliberately NOT a refit).** The bias could only be seen,
+    never **sized**, because a graded totals entry stored the side and line
+    (`p: "OVER 8.5"`) and **never the model's projected total** — so no export
+    can say how many runs high the projection runs. Fixed: `recordTotalPick`
+    now carries `proj`, and both grading paths (live in `renderPredictions`,
+    deferred in `gradePending`) write **`pt`** onto the tally entry. The Report
+    Card's Totals section gained an **OVER / UNDER split row**, a gold warning
+    when either side takes ≥65% of picks (fires today at 73% OVER), and a
+    **"Model total vs the book: ±N runs"** row that populates as `pt`-carrying
+    picks grade. **Next session: re-export, read that number, and de-bias
+    `projTotal` (or re-anchor `MLB_AVG_ERA`) against it** — measure, then fit,
+    the same order v126's export button established. No model math changed in
+    v159.
+  - Also observed, not yet acted on: post-v138 the model picks **home 60%** of
+    the time and those go **32-16 (66.7%)** while away picks go **16-16 (50%)** —
+    consistent with `w.homeEdge` (0.12) being *under*-weighted now, but n=80 and
+    the split is confounded with which teams were good. Flagged for the next
+    export, not tuned blind.
+  - Verified in headless Chromium at 390px in both themes with the network fully
+    blocked, driving `tallyDetails`/`reportCard` off the owner's real 402-entry
+    export: totals read 20-21 with OVER 15-15 of 30 and UNDER 5-6 of 11 (matching
+    the offline analysis exactly), the 73% lean warning renders, the bias row
+    correctly stays hidden (no existing entry has `pt`), and no console errors.
 
 - **Player modal → draft board: "Draft Plans" card (v158)** — the owner was
   looking at Kyle Monangai in Team Research and wanted to add him to their draft

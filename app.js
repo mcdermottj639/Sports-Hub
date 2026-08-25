@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v158';
+const APP_VERSION = 'v159';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1506,11 +1506,23 @@ function tallyDetails() {
   let legacy = 0;
   const weekCut = Number(ymd(new Date(Date.now() - 7 * 86400000)));
   const week = { w: 0, n: 0 };
-  const totals = { w: 0, n: 0 };
+  // Totals get an O/U split + a projected-total bias read, because the failure
+  // mode they actually exhibit is directional: a season-average projection that
+  // runs high fires OVER far more often than UNDER, and a 50% record hides it.
+  const totals = { w: 0, n: 0, ow: 0, on: 0, uw: 0, un: 0, biasSum: 0, biasN: 0 };
   const recent = [];
   entries.forEach((r) => {
     const win = !!r.c;
-    if (r.t) { totals.n++; if (win) totals.w++; if (r.p) recent.push(r); return; } // O/U picks: own record, but in history
+    if (r.t) { // O/U picks: own record, but in history
+      totals.n++; if (win) totals.w++;
+      const over = String(r.p || '').startsWith('OVER');
+      if (over) { totals.on++; if (win) totals.ow++; } else if (String(r.p || '').startsWith('UNDER')) { totals.un++; if (win) totals.uw++; }
+      // pt (v159+) is the model's projected total; the line rides in p ("OVER 8.5").
+      const ln = Number(String(r.p || '').split(' ').pop());
+      if (r.pt != null && isFinite(ln)) { totals.biasSum += r.pt - ln; totals.biasN++; }
+      if (r.p) recent.push(r);
+      return;
+    }
     if (r.cf != null) bump(buckets, bucketOf(r.cf), win, r.cf); else legacy++;
     if (r.s) bump(sports, r.s, win);
     if (r.d != null && Number(r.d) >= weekCut) { week.n++; if (win) week.w++; }
@@ -1539,13 +1551,16 @@ function recordPick(id, sport, date, pick, fav, conf, isEdge) {
   setPending(p);
 }
 // Totals pick: keyed `${gameId}:t` so it never collides with the side pick.
-function recordTotalPick(gameId, sport, date, side, line) {
+// proj (v159) = the model's projected total at pick time. Without it a graded
+// export shows only WHICH side we took, so a directional skew (the OVER lean)
+// can be seen but never sized — see the projected-total bias note in the card.
+function recordTotalPick(gameId, sport, date, side, line, proj) {
   const id = `${gameId}:t`;
   if (!gameId || !side || line == null) return;
   if (getTally()[id]) return;
   const p = getPending();
   if (p[id]) return;
-  p[id] = { sport, date, t: 1, pick: side, line };
+  p[id] = { sport, date, t: 1, pick: side, line, proj: proj ?? null };
   setPending(p);
 }
 async function gradePending() {
@@ -1573,7 +1588,8 @@ async function gradePending() {
         if (total == null || total === entry.line) { delete p[id]; changed = true; return; }
         const hit = entry.pick === 'OVER' ? total > entry.line : total < entry.line;
         recordResult(id, hit, null,
-          { s: sport, d: Number(date), t: 1, p: `${entry.pick} ${entry.line}`, m: matchupLabel(sport, g) });
+          { s: sport, d: Number(date), t: 1, p: `${entry.pick} ${entry.line}`, m: matchupLabel(sport, g),
+            ...(entry.proj != null ? { pt: Math.round(entry.proj * 10) / 10 } : {}) });
         delete p[id]; changed = true; return;
       }
       const actual = winnerName(g);
@@ -1621,7 +1637,27 @@ function reportCard(det) {
     const pickTxt = r.t ? (r.p || '') : (r.p || '').split(' ').slice(-1)[0]; // totals keep "OVER 8.5"
     return `<div class="rep-pick"><span class="rep-i">${r.c ? '✅' : '❌'}${r.e ? '⚡' : r.t ? '🎯' : ''}</span><span class="rep-m">${esc(r.m || '')}</span><span class="rep-p">${esc(pickTxt)}${r.cf ? ` <span class="rep-cf">${r.cf}%</span>` : ''}</span><span class="rep-d">${dd}</span></div>`;
   }).join('');
-  const tRow = det.totals?.n ? row('🎯 Totals (O/U) record', det.totals) : '';
+  // A totals record near .500 can still be a broken model: if the projection
+  // runs high it will keep picking OVER, and half of those land by luck. So the
+  // card shows the O/U split and — once picks carry pt — how far the model's
+  // total sat from the book on average.
+  const t = det.totals || {};
+  let tRow = '';
+  if (t.n) {
+    tRow = row('🎯 Totals (O/U) record', t);
+    if (t.on + t.un) {
+      tRow += `<div class="rep-row"><span class="rep-l">OVER / UNDER picks</span><span class="rep-v">${t.ow}-${t.on - t.ow} / ${t.uw}-${t.un - t.uw}</span></div>`;
+      const share = t.on / (t.on + t.un);
+      if (t.on + t.un >= 10 && (share >= 0.65 || share <= 0.35)) {
+        const side = share >= 0.65 ? 'OVER' : 'UNDER';
+        tRow += `<div class="ai-why" style="padding:2px 0;color:var(--gold)">${Math.round((share >= 0.65 ? share : 1 - share) * 100)}% of totals picks are ${side} — a one-sided lean means the projected total sits off the book's, not that ${side}s are live.</div>`;
+      }
+    }
+    if (t.biasN) {
+      const b = t.biasSum / t.biasN;
+      tRow += `<div class="rep-row"><span class="rep-l">Model total vs the book</span><span class="rep-v">${b > 0 ? '+' : ''}${b.toFixed(1)} runs${t.biasN < 10 ? ' <span class="rep-cf">thin</span>' : ''}</span></div>`;
+    }
+  }
   const week = det.week.n ? ` · this week ${det.week.w}-${det.week.n - det.week.w}` : '';
   box.innerHTML = `
     <button class="ai-report-head" aria-expanded="false">📜 Model Report Card${week}<span class="sec-chev">▸</span></button>
@@ -1746,13 +1782,14 @@ async function renderPredictions() {
         const total = g.home.score + g.away.score;
         if (total !== tot.line) {
           recordResult(`${g.id}:t`, tot.side === 'OVER' ? total > tot.line : total < tot.line, null,
-            { s: sport, d: Number(dateStr), t: 1, p: `${tot.side} ${tot.line}`, m: matchupLabel(sport, g) });
+            { s: sport, d: Number(dateStr), t: 1, p: `${tot.side} ${tot.line}`, m: matchupLabel(sport, g),
+              pt: Math.round(tot.proj * 10) / 10 });
         }
       }
     } else if (p) {
       // stash the picks so they get graded later even if the tab isn't open
       recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge);
-      if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line);
+      if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line, tot.proj);
     }
     return { g, p, info, gap, isEdge, tot, resultTag };
   });
