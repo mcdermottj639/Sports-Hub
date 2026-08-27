@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v159';
+const APP_VERSION = 'v160';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -494,9 +494,17 @@ async function openGameDetail(sport, id, g) {
     // ESPN data was ready in a second — so it's kicked off now and injected
     // into its slot whenever it lands. Everything else is ESPN (9s cap).
     const reportP = g ? getBettingReport(sport) : null;
+    // The pick now takes DK's sharp-money splits as an input, so the report is
+    // peeked at (capped, see raceReport) before the model runs — otherwise the
+    // modal would show a different confidence than the AI Picks tab for the
+    // same game. It races the ESPN summary fetch, so it usually costs nothing.
     const [data, pred, hitters] = await Promise.all([
       fetchJSON(`${SITE}/${path}/summary?event=${id}`, 30000),
-      g && !preseason ? predictGame(sport, g).catch(() => null) : Promise.resolve(null),
+      g && !preseason
+        ? raceReport(reportP, SHARP_WAIT.modal)
+            .then((r) => predictGame(sport, g, { splits: r ? splitsFor(r, g) : null }))
+            .catch(() => null)
+        : Promise.resolve(null),
       g && sport === 'mlb' ? Promise.all([topHitters(g.home.id), topHitters(g.away.id)]).catch(() => null) : Promise.resolve(null),
     ]);
     let extra = '';
@@ -959,8 +967,8 @@ const PD_SCALE = { nfl: 7, nba: 6, mlb: 2.2 }; // typical per-game margin used t
 // share football's team-strength weights — record/home are damped here and the
 // starting-pitcher matchup (weighted up in matchupFactor) carries the load.
 const MODEL_W = {
-  mlb:     { record: 0.6, margin: 0.9, form: 0.4, split: 0.7, homeEdge: 0.12 },
-  default: { record: 1.1, margin: 0.9, form: 0.4, split: 1.0, homeEdge: 0.28 },
+  mlb:     { record: 0.6, margin: 0.9, form: 0.4, split: 0.7, homeEdge: 0.12, sharp: 0.30 },
+  default: { record: 1.1, margin: 0.9, form: 0.4, split: 1.0, homeEdge: 0.28, sharp: 0.20 },
 };
 // Rough league-average starter ERA — the anchor for the pitcher-aware total.
 const MLB_AVG_ERA = 4.10;
@@ -997,6 +1005,42 @@ const CONF_CAP = { mlb: 72, nfl: 85, default: 92 };
 // (every graded NFL pick predates both the confidence meta and the v138
 // look-ahead fix), and the biggest market favorites only win ~90%. 85 is a
 // principled ceiling until this season produces a clean graded sample.
+
+// --- Sharp money (v160) ---------------------------------------------------
+// DraftKings publishes two different numbers per side: bets% (share of
+// TICKETS) and handle% (share of DOLLARS). When dollars run well ahead of
+// tickets, the average wager on that side is far bigger than on the other —
+// a handful of large bettors against a crowd of small ones. That divergence is
+// the one piece of market information the posted price hasn't necessarily
+// absorbed yet, which is why the Game Report has flagged it since v88. This
+// folds it into the pick itself instead of only showing it.
+// Deliberately small. The signal is real but modest (money-side edges measure
+// a couple of points, not ten), it rides a free scrape that can go stale, and
+// it has ZERO graded history in this app. So every pick records how far the
+// nudge moved it (`sh` in the tally) and the Report Card slices the record by
+// it — measure first, fit later, the same order v159 set for totals.
+const SHARP_MIN_DIV = 7;    // handle% − bets% must clear this to count (matches sharpSignals' display threshold)
+const SHARP_DIV_SCALE = 20; // 20 points past the deadband = one full unit
+const SHARP_MAX_UNITS = 1.5;
+// Orient a game's DK moneyline splits toward the HOME side. null when the row
+// is missing, unparseable, or the divergence sits inside the deadband.
+function sharpSplit(sp) {
+  if (!sp) return null;
+  const div = (s) => {
+    if (s?.ml_handle == null || s?.ml_bets == null) return null;
+    const h = Number(s.ml_handle), b = Number(s.ml_bets);
+    return isFinite(h) && isFinite(b) ? h - b : null;
+  };
+  const dh = div(sp.home), da = div(sp.away);
+  if (dh == null && da == null) return null;
+  // Each column sums to ~100, so the two sides mirror each other; averaging
+  // them cancels the per-cell rounding the scrape introduces.
+  const d = dh == null ? -da : da == null ? dh : (dh - da) / 2;
+  if (!isFinite(d)) return null;
+  const mag = Math.abs(d) - SHARP_MIN_DIV;
+  if (mag <= 0) return null; // inside the deadband: normal noise, not a signal
+  return { d, units: clamp(Math.sign(d) * (mag / SHARP_DIV_SCALE), -SHARP_MAX_UNITS, SHARP_MAX_UNITS) };
+}
 
 // beforeDate (v138): when profiling for a PREDICTION, only games that finished
 // strictly before the predicted game may count. Without it a game that's
@@ -1249,7 +1293,10 @@ async function matchupFactor(sport, g) {
   return { factors, notes, starters };
 }
 
-async function predictGame(sport, g) {
+// opts.splits (v160) = this game's DraftKings bets%/handle% row, when the
+// betting backend answered in time. Optional by design: every caller must work
+// without it, and the pick simply loses the sharp-money factor.
+async function predictGame(sport, g, opts) {
   const [hf, af] = await Promise.all([teamProfile(sport, g.home.id, g.date), teamProfile(sport, g.away.id, g.date)]);
   const scale = PD_SCALE[sport] || 5;
   const w = MODEL_W[sport] || MODEL_W.default;
@@ -1281,9 +1328,26 @@ async function predictGame(sport, g) {
   const mu = await matchupFactor(sport, g);
   mu.factors.forEach((f) => add(f.label, f.c, f.detail));
 
+  // Sharp money: DK dollars-vs-tickets divergence, oriented toward the home
+  // side. Goes in as an ordinary factor so the breakdown attribution below
+  // stays exact and the calibration shrink applies to it like everything else
+  // (a signal with no graded history should be shrunk, not exempted).
+  const ss = sharpSplit(opts?.splits);
+  let sharp = null, sharpC = 0;
+  if (ss && w.sharp) {
+    const toHome = ss.d > 0;
+    const t = toHome ? g.home : g.away;
+    const row = (opts.splits || {})[toHome ? 'home' : 'away'] || {};
+    sharpC = w.sharp * ss.units;
+    sharp = { side: t.name, abbr: t.abbr || (t.name || '').split(' ').pop(),
+      handle: row.ml_handle, bets: row.ml_bets, d: Math.round(ss.d) };
+    add('Sharp money', sharpC, `${row.ml_handle}% of dollars vs ${row.ml_bets}% of bets on ${sharp.abbr}`);
+  }
+
   // Calibration shrink (see MODEL_SHRINK): the raw factor sum is systematically
   // too confident, so pull it toward even money before it becomes a probability.
-  const zc = z * (MODEL_SHRINK[sport] ?? MODEL_SHRINK.default);
+  const shrink = MODEL_SHRINK[sport] ?? MODEL_SHRINK.default;
+  const zc = z * shrink;
   const pHome = logistic(zc);
   const homePick = pHome >= 0.5;
   const winner = homePick ? g.home : g.away;
@@ -1314,9 +1378,20 @@ async function predictGame(sport, g) {
     if (pf) projTotal *= 1 + ((pf / 100) - 1) * PARK_WEIGHT;
     projTotal = clamp(projTotal, 4, 20);
   }
+  // How much the sharp factor actually moved THIS pick, in probability points
+  // toward the side the model landed on. Stored with every graded pick so the
+  // signal can be measured on real results instead of argued about.
+  if (sharp) {
+    const pNo = logistic((z - sharpC) * shrink);
+    const side = (p) => (homePick ? p : 1 - p);
+    sharp.pts = Math.round((side(pHome) - side(pNo)) * 1000) / 10;
+    sharp.agree = sharp.pts >= 0;
+    sharp.flipped = (pNo >= 0.5) !== homePick; // the nudge changed which side we took
+  }
   const notes = mu.notes.slice();
+  if (sharp) notes.unshift(`Sharp money: ${sharp.handle}% of dollars vs ${sharp.bets}% of bets on ${sharp.side}${sharp.flipped ? ' — enough to flip the model onto that side' : ''}`);
   if (hf?.blended || af?.blended) notes.unshift('Early season — record/margin blended with last season (damped)');
-  return { winner, conf, homePick, probHome: pHome, projTotal, breakdown, notes, thin: !(hf && af) };
+  return { winner, conf, homePick, probHome: pHome, projTotal, breakdown, notes, sharp, thin: !(hf && af) };
 }
 
 function aiPickHead(pred) {
@@ -1351,6 +1426,17 @@ async function getBettingReport(sport) {
   return fetchJSON(`${FANTASY_API}/api/betting/${sport}/report`, 5 * 60000)
     .catch(() => { reportDownUntil = Date.now() + 3 * 60000; return null; });
 }
+// The sharp-money factor (v160) needs the report BEFORE a pick is computed,
+// but v157's rule stands: nothing may sit on the backend's 45s cold-start
+// leash. So every model caller races it against a hard cap and takes null on
+// timeout — a warm backend answers in a fraction of a second, a sleeping one
+// just costs the sharp factor for that render. The promise isn't cancelled, so
+// the Game Report still injects into its own slot whenever it does land.
+const SHARP_WAIT = { picks: 8000, modal: 1200 };
+const raceReport = (p, ms) => Promise.race([
+  Promise.resolve(p).catch(() => null),
+  new Promise((r) => setTimeout(() => r(null), ms)),
+]).catch(() => null);
 // Match a VSiN team cell ("9:40 PM LA Angels +1.5") to an ESPN team name.
 function vsinMatches(vstr, teamName) {
   const v = ` ${norm(vstr || '').replace(/[+-]?\d+(\.\d+)?/g, ' ')} `;
@@ -1455,6 +1541,8 @@ function gameReportHTML(sport, g, pred, info, report) {
     </div>`;
     parts.push(`<div class="gr-sub">💰 Big Money — moneyline splits (${esc(report?.splits?.book || 'DraftKings')})</div>${row(g.away, sp.away)}${row(g.home, sp.home)}`);
     sharpSignals(g, sp, mv).forEach((s) => parts.push(`<div class="gr-sharp">${s}</div>`));
+    // v160: this divergence is no longer display-only — say where it went.
+    if (pred?.sharp) parts.push(`<div class="ai-why">Folded into the model's pick below: ${pred.sharp.pts > 0 ? '+' : ''}${pred.sharp.pts.toFixed(1)} points toward ${esc(pred.winner.name)}.</div>`);
   } else if (report?.splits && !report.splits.ok) {
     parts.push(`<div class="gr-unavail">DK betting splits unavailable — ${esc(report.splits.error || 'source down')}.</div>`);
   } else if (report?.splits?.ok) {
@@ -1510,6 +1598,11 @@ function tallyDetails() {
   // mode they actually exhibit is directional: a season-average projection that
   // runs high fires OVER far more often than UNDER, and a 50% record hides it.
   const totals = { w: 0, n: 0, ow: 0, on: 0, uw: 0, un: 0, biasSum: 0, biasN: 0 };
+  // Sharp money (v160): sh = points the DK dollars-vs-tickets factor moved the
+  // pick, signed toward the side taken. Positive = the big money agreed with
+  // the model; negative = the model took the other side anyway. Splitting the
+  // record on that sign is how we find out whether the factor earns its weight.
+  const sharp = { agree: { w: 0, n: 0 }, against: { w: 0, n: 0 } };
   const recent = [];
   entries.forEach((r) => {
     const win = !!r.c;
@@ -1523,13 +1616,14 @@ function tallyDetails() {
       if (r.p) recent.push(r);
       return;
     }
+    if (r.sh) { const k = r.sh > 0 ? 'agree' : 'against'; sharp[k].n++; if (win) sharp[k].w++; }
     if (r.cf != null) bump(buckets, bucketOf(r.cf), win, r.cf); else legacy++;
     if (r.s) bump(sports, r.s, win);
     if (r.d != null && Number(r.d) >= weekCut) { week.n++; if (win) week.w++; }
     if (r.p) recent.push(r);
   });
   recent.sort((a, b) => Number(b.d || 0) - Number(a.d || 0));
-  return { total: entries.length, buckets, sports, week, totals, legacy, recent: recent.slice(0, 15) };
+  return { total: entries.length, buckets, sports, week, totals, sharp, legacy, recent: recent.slice(0, 15) };
 }
 const matchupLabel = (sport, g) =>
   `${g.away.abbr || g.away.name} @ ${g.home.abbr || g.home.name}`;
@@ -1540,14 +1634,17 @@ const matchupLabel = (sport, g) =>
 const PENDING_KEY = 'sportshub:pending';
 const getPending = () => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || '{}'); } catch (_) { return {}; } };
 const setPending = (p) => { try { localStorage.setItem(PENDING_KEY, JSON.stringify(p)); } catch (_) {} };
-function recordPick(id, sport, date, pick, fav, conf, isEdge) {
+function recordPick(id, sport, date, pick, fav, conf, isEdge, sharpPts) {
   if (!id || !pick) return;
   if (getTally()[id]) return; // already graded
   const p = getPending();
   if (p[id]) return;
   // eg carries the qualified-edge flag (gap-filtered) so deferred grading
   // counts the same picks toward the vs-line record as live grading does.
-  p[id] = { sport, date, pick, fav: fav || null, conf: conf ?? null, eg: isEdge ? 1 : 0 };
+  // sh (v160) = probability points the sharp-money factor moved this pick,
+  // signed toward the side taken. Stored so the signal can be graded.
+  p[id] = { sport, date, pick, fav: fav || null, conf: conf ?? null, eg: isEdge ? 1 : 0,
+    ...(sharpPts != null ? { sh: sharpPts } : {}) };
   setPending(p);
 }
 // Totals pick: keyed `${gameId}:t` so it never collides with the side pick.
@@ -1594,11 +1691,12 @@ async function gradePending() {
       }
       const actual = winnerName(g);
       if (!actual || actual === 'TIE') { delete p[id]; changed = true; return; }
-      const { pick, fav, conf, eg } = entry;
+      const { pick, fav, conf, eg, sh } = entry;
       const hit = actual === pick;
       const wasEdge = eg != null ? !!eg : !!(fav && pick !== fav); // old entries: fav comparison
       recordResult(id, hit, wasEdge ? (hit ? 'h' : 'm') : null,
-        { s: sport, d: Number(date), cf: conf ?? null, p: pick, m: matchupLabel(sport, g) });
+        { s: sport, d: Number(date), cf: conf ?? null, p: pick, m: matchupLabel(sport, g),
+          ...(sh != null ? { sh } : {}) });
       delete p[id]; changed = true;
     });
   }));
@@ -1658,6 +1756,14 @@ function reportCard(det) {
       tRow += `<div class="rep-row"><span class="rep-l">Model total vs the book</span><span class="rep-v">${b > 0 ? '+' : ''}${b.toFixed(1)} runs${t.biasN < 10 ? ' <span class="rep-cf">thin</span>' : ''}</span></div>`;
     }
   }
+  // Sharp money is brand new and unproven here, so it gets its own slice from
+  // day one and says out loud when the sample is too thin to conclude anything.
+  const sh = det.sharp || { agree: { w: 0, n: 0 }, against: { w: 0, n: 0 } };
+  const shN = sh.agree.n + sh.against.n;
+  const shRow = !shN ? '' :
+    (sh.agree.n ? row('Big money on our side', sh.agree) : '') +
+    (sh.against.n ? row('Big money the other way', sh.against) : '') +
+    `<div class="ai-why" style="padding:2px 0">${shN} pick${shN === 1 ? '' : 's'} where DraftKings' dollars ran ${SHARP_MIN_DIV}+ points ahead of its tickets on one side.${shN < 20 ? ' Too thin to tune on — this row exists to measure the factor, not to trust it yet.' : ''}</div>`;
   const week = det.week.n ? ` · this week ${det.week.w}-${det.week.n - det.week.w}` : '';
   box.innerHTML = `
     <button class="ai-report-head" aria-expanded="false">📜 Model Report Card${week}<span class="sec-chev">▸</span></button>
@@ -1667,6 +1773,7 @@ function reportCard(det) {
       ${det.legacy ? `<div class="ai-why" style="padding:2px 0">${det.legacy} older graded pick${det.legacy === 1 ? '' : 's'} stored no confidence, so ${det.legacy === 1 ? 'it counts' : 'they count'} toward the all-time record but can't be calibrated.</div>` : ''}
       ${sRows ? `<div class="rep-sec">By sport</div>${sRows}` : ''}
       ${tRow ? `<div class="rep-sec">Totals</div>${tRow}` : ''}
+      ${shRow ? `<div class="rep-sec">💰 Sharp money (new in v160)</div>${shRow}` : ''}
       ${recent ? `<div class="rep-sec">Recent picks (⚡ = against the line · 🎯 = totals)</div>${recent}` : ''}
       ${!bRows && !recent ? '<div class="ai-why" style="padding:6px 0">Detail builds as new picks grade — earlier picks only counted toward the totals.</div>' : ''}
       <button class="rep-export" type="button" style="margin-top:12px;width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit;cursor:pointer">📋 Copy my record data</button>
@@ -1702,6 +1809,9 @@ async function renderPredictions() {
   const container = $('#ai-picks');
   container.innerHTML = '<div class="empty">Crunching the numbers…</div>';
 
+  // Sharp-money splits ride the same backend as the Game Report, so it's
+  // started alongside the slate and raced (capped) just before the picks run.
+  const reportP = getBettingReport(sport).catch(() => null);
   const games = await getGames(sport, ymd(sportsDate())).catch(() => []);
   // Preseason games are excluded from picks entirely: backups play, results
   // predict nothing, and grading them would pollute the model's record.
@@ -1742,7 +1852,9 @@ async function renderPredictions() {
   }
 
   const dateStr = ymd(sportsDate());
-  const preds = await Promise.all(playable.map((g) => predictGame(sport, g).catch(() => null)));
+  const report = await raceReport(reportP, SHARP_WAIT.picks);
+  const preds = await Promise.all(playable.map((g) =>
+    predictGame(sport, g, { splits: splitsFor(report, g) }).catch(() => null)));
   container.innerHTML = '';
   let right = 0, graded = 0;
 
@@ -1775,7 +1887,8 @@ async function renderPredictions() {
         graded++; const hit = actual === p.winner.name; if (hit) right++;
         const edge = info && info.favName ? (isEdge ? (hit ? 'h' : 'm') : null) : null;
         recordResult(g.id, hit, edge,
-          { s: sport, d: Number(dateStr), cf: p.conf, p: p.winner.name, m: matchupLabel(sport, g) });
+          { s: sport, d: Number(dateStr), cf: p.conf, p: p.winner.name, m: matchupLabel(sport, g),
+            ...(p.sharp ? { sh: p.sharp.pts } : {}) });
         resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
       }
       if (tot && g.home.score != null && g.away.score != null) {
@@ -1788,7 +1901,7 @@ async function renderPredictions() {
       }
     } else if (p) {
       // stash the picks so they get graded later even if the tab isn't open
-      recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge);
+      recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge, p.sharp?.pts ?? null);
       if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line, tot.proj);
     }
     return { g, p, info, gap, isEdge, tot, resultTag };
@@ -1800,6 +1913,17 @@ async function renderPredictions() {
   const upcomingEdges = rows.filter((r) => r.isEdge && gameState(r.g) !== 'final').length;
   container.appendChild(statBar(upcomingEdges,
     upcomingEdges ? 'model disagrees w/ book' : anyLines ? 'model in line w/ book' : 'no lines posted yet'));
+  // Say plainly whether the sharp-money input was live for this slate — a
+  // sleeping backend silently dropping a model factor is exactly the kind of
+  // thing that should be visible, not guessed at.
+  const sharpRows = rows.filter((r) => r.p?.sharp);
+  if (sharpRows.length) {
+    container.appendChild(el('div', 'ai-note',
+      `💰 Sharp money folded into ${sharpRows.length} of ${rows.length} pick${rows.length === 1 ? '' : 's'} — DraftKings dollars vs tickets (via VSiN).`));
+  } else if (BETTING_SPORTS.has(sport) && !report) {
+    container.appendChild(el('div', 'ai-note',
+      '💰 Sharp-money splits unavailable right now (betting backend asleep or down) — these picks are model-only.'));
+  }
   renderTally(graded ? `today ${right}-${graded - right}` : '');
   const det = tallyDetails();
   if (det.total) container.appendChild(reportCard(det));
@@ -1822,6 +1946,7 @@ async function renderPredictions() {
         <div class="ai-pick">🤖 Pick: <b>${esc(p.winner.name)}</b> <span class="ai-conf">${p.conf}%</span></div>
         <div class="conf-bar"><span style="width:${p.conf}%"></span></div>
         ${cmp ? `<div class="market-cmp small">${cmp}</div>` : ''}
+        ${p.sharp ? `<div class="ai-why" style="color:${p.sharp.agree ? 'var(--accent)' : 'var(--muted)'}">💰 ${p.sharp.handle}% of dollars vs ${p.sharp.bets}% of bets on ${esc(p.sharp.abbr)} — sharp side ${p.sharp.agree ? 'agrees' : 'disagrees'} (${p.sharp.pts > 0 ? '+' : ''}${p.sharp.pts.toFixed(1)} pts)</div>` : ''}
         ${oddsLine}
         <div class="ai-why">${top || 'Home-field edge'}</div>
         <div class="ai-why" style="margin-top:4px;opacity:.8">Tap for full breakdown →</div>${resultTag}`;

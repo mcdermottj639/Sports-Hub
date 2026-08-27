@@ -357,7 +357,67 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v159** (backend **b10-fparticles-nfl-filter**).
+Current version as of this writing: **v160** (backend **b10-fparticles-nfl-filter**).
+
+- **💰 Sharp money is now a model input, not just a display (v160)** — the owner
+  pointed at the Game Report's Big Money card (COL 45% of dollars on 25% of
+  bets) and asked for it to feed the picks. It now does. DraftKings publishes
+  bets% (share of TICKETS) and handle% (share of DOLLARS); when dollars run
+  ahead of tickets on one side, the average wager there is much larger — a few
+  big bettors against a crowd of small ones — and that divergence is the one
+  market fact the posted price hasn't necessarily absorbed. Shipped:
+  - **`sharpSplit(sp)`** (in the model constants, next to `MODEL_SHRINK`) folds
+    a game's DK moneyline splits into a single number oriented toward HOME.
+    Deadband **`SHARP_MIN_DIV` = 7** (matches the threshold `sharpSignals` has
+    used since v88 — inside it, it's noise), scale `SHARP_DIV_SCALE` = 20 pts
+    per unit, clamp `SHARP_MAX_UNITS` = 1.5. Both sides are averaged (each
+    column sums to ~100, so they mirror; averaging cancels the scrape's per-cell
+    rounding) and a row reporting only one side still works.
+  - **A normal `Sharp money` factor in `predictGame`**, weight `MODEL_W.*.sharp`
+    (**mlb 0.30 / default 0.20**), added to `z` *before* `MODEL_SHRINK` — a
+    signal with no graded history should be shrunk like everything else, not
+    exempted, and going in as an ordinary factor keeps the breakdown
+    attribution exact. `predictGame` gained an optional 3rd arg
+    `opts.splits`; **every caller must work without it.** Measured effect: a
+    20-point divergence (the owner's screenshot) moves the pick **2.4 pts in
+    MLB / 3.2 in NFL**; the clamp ceiling is 5.6 / 7.5 at a 40-point split,
+    which is rare. `pred.sharp` carries `{side, abbr, handle, bets, d, pts,
+    agree, flipped}` — `flipped` is true when the nudge changed which side the
+    model took, and says so in the notes.
+  - **Instrumented before it's trusted** (the v159 method): every pick stores
+    `sh` = the points the factor moved it, signed toward the side taken —
+    through `recordPick` → `sportshub:pending` → `recordResult`/`gradePending`
+    → the tally. `tallyDetails` splits the record into **big money on our side
+    / big money the other way**, and the Report Card renders it as its own
+    section that says "too thin to tune on" under 20 picks. **Next session:
+    re-export and read that split before touching the weight.**
+  - **Where the splits come from without blocking anything.** They ride the
+    same Render backend as the Game Report, which cold-starts up to 45s — and
+    v157's rule (never let that leash gate a render) still holds. So both
+    callers use **`raceReport(p, ms)`**, a hard-capped race that takes `null` on
+    timeout: `SHARP_WAIT.picks` = 8s on the AI Picks tab (already a "crunching
+    the numbers…" wait), `SHARP_WAIT.modal` = **1.2s** in the game modal, run
+    concurrently with the ESPN summary fetch. The promise isn't cancelled, so
+    the full report still injects into `#md-report` whenever it lands. Measured:
+    modal paints in **3 ms** warm, **1201 ms** with a backend that never
+    answers (and `reportDownUntil` makes that the first tap only).
+    **Why the modal races at all instead of skipping the signal:** the modal and
+    the AI Picks tab must show the SAME confidence for the same game.
+  - **Visible, not silent.** The AI Picks tab says how many picks the signal
+    reached ("folded into N of M") or that it's unavailable and the picks are
+    model-only; each edge card shows the dollars-vs-bets line, green when the
+    sharp side agrees with the model; the Game Report's Big Money card now ends
+    with where the signal went ("+2.4 points toward …").
+  - **NOT done, deliberately:** reverse line movement is still display-only.
+    `sharpSignals` already computes it, but shipping two new unproven inputs at
+    once makes neither measurable. It's the next candidate once `sh` has a
+    sample.
+  - Verified in headless Chromium at 390px in BOTH themes with the network
+    fully blocked — 54 checks on the signal (deadband, orientation, one-sided
+    rows, clamp, junk input, factor labeling, MLB-vs-NFL magnitude, VSiN row
+    matching, tab + card + report-card rendering, `sh` persistence, the
+    backend-asleep path) plus 6 on the modal (pick identical to the tab's,
+    warm/cold paint times, preseason still sits it out). No console errors.
 
 - **Totals instrumentation + O/U split in the Report Card (v159)** — the owner
   exported the graded tally again (**402 entries**, up from v138's 289) and asked
@@ -1526,6 +1586,9 @@ Current version as of this writing: **v159** (backend **b10-fparticles-nfl-filte
     from VSiN's free DK page (scrape may break on redesign — check
     `/api/betting/mlb/report?debug=1`); "sharp" is computed RLM/divergence,
     not a proprietary feed.
+  - **v160: the money-vs-tickets divergence also feeds `predictGame`** as a
+    small, shrunk `Sharp money` factor (see the v160 note above) — the Big
+    Money card is no longer display-only. RLM still is.
 - **Game detail modal** (`renderGameDetail`) — **section order (v92):**
   **🔴 Live Situation** on top *when the game is live* (MLB bases diamond +
   count/outs/pitcher/batter; NFL field-position bar w/ red zone; others last
@@ -1760,7 +1823,11 @@ Current version as of this writing: **v159** (backend **b10-fparticles-nfl-filte
 - `sportshub:aitally` — graded pick results (all-time + vs-line record). v83+:
   entries also carry `{s, d, cf, p, m}` (sport, date, confidence, pick,
   matchup) for the Report Card; older `{c,e}`-only entries remain valid.
-- `sportshub:pending` — ungraded picks awaiting results (v83+ includes `conf`).
+  v159+ totals entries carry `pt` (the model's projected total); v160+ side
+  entries carry `sh` (points the sharp-money factor moved the pick, signed
+  toward the side taken — absent when there was no qualifying split).
+- `sportshub:pending` — ungraded picks awaiting results (v83+ includes `conf`;
+  v160+ includes `sh`).
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
 - `sportshub:lines:{YYYYMMDD}` — device-local line tracking for today's games
   (first-seen + latest ML/O-U per game; movement fallback for Game Reports).
