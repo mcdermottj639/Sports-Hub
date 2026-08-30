@@ -368,7 +368,76 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v177** (backend **b13-pregame-lines**).
+Current version as of this writing: **v178** (backend **b13-pregame-lines**).
+
+- **📐 The model's spread on the Game Report + a saturation guard, and DK
+  splits for college teams (v178)** — the owner asked, looking at USC -37.5 vs
+  SJSU, whether the model produces its own ATS line "so we can see the value
+  and track how we stand". It has since v164 — and it was being tracked — but
+  two things were wrong:
+  - **The card never showed it.** `gameReportHTML` printed the model moneyline
+    and the model total, and nothing about the spread. On a huge favourite the
+    moneyline row can't stand in for it either: model -992 vs book -100000 is
+    off the scale and just grades F, which says the price is bad without
+    saying the spread is the bet. There is now a **Spread** row beside the
+    Total row: the model's own home number, the book's, and the ATS call with
+    its points of value.
+  - **🚨 The ATS call on a huge spread was an ARTIFACT, and it would have
+    polluted the record the owner wants to keep.** `projMarginFor` clamps
+    `pHome` to `[0.02, 0.98]`, so the projected margin has a **hard ceiling —
+    33.9 points in CFB, 27.7 in the NFL**. Above that the model is *pinned*,
+    not measuring: on any CFB spread over 33.9 it takes the underdog on
+    **every** game of that shape, having read nothing. USC -37.5 is exactly
+    that case. It happened to be right, but one result from a saturated signal
+    validates nothing.
+    - `predictGame` now returns **`marginSat`**, and `atsCall` refuses the play
+      when the margin is pinned AND the book's number is past it. Both callers
+      (the Game Report and `buildBoard`, which feeds Home + AI Picks) go
+      through `atsCall`, so the guard covers every surface from one place.
+    - **A pinned model still plays when the book is INSIDE the ceiling** — the
+      guard is about the model being unable to express the number, not about
+      confidence being high.
+    - The card says so plainly: "no play: the model tops out around 33.9
+      points, so it can't price a number this big."
+    - **NFL is unaffected in practice** — its ceiling is 27.7 and NFL spreads
+      never get there. This is a college-football-shaped bug.
+  - **🚨 `vsinMatches` couldn't match a third of college teams.** It assumed a
+    **one-word nickname** — true of every pro team ("New York" + "Giants"),
+    false all over college: Fighting Irish, Yellow Jackets, Tar Heels, Demon
+    Deacons, Sun Devils, Golden Eagles, Blue Raiders, Ragin' Cajuns. Measured
+    against real ESPN names vs the school names VSiN prints, **8 of 18 failed**,
+    so those games could never pick up their DK splits — silently. It now walks
+    progressively shorter prefixes instead of just all-but-the-last-word, with
+    two rules that stop it over-matching:
+    1. **whole-phrase only**, so "Louisiana" doesn't match inside "Louisiana
+       Tech";
+    2. **stop at the first prefix that is present but ambiguous** — a
+       `SCHOOL_QUALIFIER` set (state/tech/a&m/southern/…) marks "North
+       Carolina" inside "North Carolina State" as a different school, and since
+       a *shorter* prefix is strictly less specific, once one is ambiguous
+       there is nothing left to learn. Without this rule, "North" matched
+       "North Carolina State".
+  - **The "no splits" message now says which failure it is.** "No DK splits row
+    matched" couldn't distinguish an empty scrape from a page that simply
+    doesn't carry this game — opposite responses. It now reads either "N games
+    posted, this one isn't among them" or "No DK splits posted for this league
+    right now".
+  - `projMarginFor` became a function declaration (from a `const` arrow) so the
+    harness can reach it on `window` like the other model functions — **module
+    consts are not on `window`; only top-level `function` declarations are.**
+  - Verified — **62 checks** across two new suites: 40 real ESPN-vs-VSiN name
+    pairs including every two-word mascot and six prefix-collision rejections
+    (NC vs NC State, Louisiana vs Louisiana Tech, Michigan vs Michigan State),
+    `splitsFor` end-to-end with the home/away swap, the three note states, the
+    measured ceilings (33.9 / 27.7), the USC -37.5 refusal, a pinned-but-inside
+    game still playing, ordinary dog and favourite covers, the noise band, and
+    ATS grading including a push. The nine prior suites still pass.
+  - ⚠️ **Still unverified live:** the sandbox reaches neither vsin.com nor the
+    Render backend, so whether VSiN's `ncaaf` page carries the owner's games at
+    all is still unknown. The new message is what will answer it on device.
+  - ⚠️ **`rail.js` is timing-flaky on its two reload checks** — it failed those
+    once and passed 53/53 on both re-runs, with nothing in the diff touching
+    the rail. Re-run before believing a failure there.
 
 - **🚨 Saturday was rendering below Sunday, and the NFL/CFB tabs drifted open
   (v177)** — two owner reports, both about the slate:

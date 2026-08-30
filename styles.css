@@ -236,6 +236,12 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .gr-grade { justify-self: end; border: 1.5px solid; border-radius: 8px; font-weight: 900; font-size: 13px; width: 34px; height: 28px; display: inline-flex; align-items: center; justify-content: center; }
 .gr-grade.none { border-color: transparent; color: var(--muted); }
 .gr-total, .gr-move { font-size: 12.5px; color: var(--silver); }
+/* How far the model's number sits off the book's, on the model spread row. */
+.gr-edge {
+  display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; color: var(--gold);
+  background: rgba(197, 160, 50, .18); box-shadow: inset 0 0 0 1px var(--gold);
+}
 .gr-move .gr-src { display: block; font-size: 10.5px; color: var(--muted); margin-top: 2px; }
 .gr-sub { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-top: 4px; }
 .gr-money-row { display: grid; grid-template-columns: 46px 1fr 1fr 30px; gap: 8px; align-items: center; font-size: 12px; }

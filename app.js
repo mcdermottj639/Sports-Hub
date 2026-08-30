@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v177';
+const APP_VERSION = 'v178';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1450,9 +1450,15 @@ function invNorm(p) {
          (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
 }
 // Model's projected home margin in points (positive = home wins by that many).
-const projMarginFor = (sport, pHome) =>
-  (pHome == null || !isFinite(pHome)) ? null
-    : Math.round((PD_SD[sport] || 13.5) * invNorm(clamp(pHome, 0.02, 0.98)) * 10) / 10;
+// ⚠️ pHome is clamped to [0.02, 0.98], so the margin has a HARD CEILING:
+// 33.9 points in CFB, 27.7 in the NFL. Past that the model is pinned, not
+// measuring — see `marginSat` in predictGame and the guard in atsCall.
+// (A declaration, not a const arrow, so the test harness can reach it on
+// `window` like the other model functions.)
+function projMarginFor(sport, pHome) {
+  if (pHome == null || !isFinite(pHome)) return null;
+  return Math.round((PD_SD[sport] || 13.5) * invNorm(clamp(pHome, 0.02, 0.98)) * 10) / 10;
+}
 // NFL cap note: the NFL side of the model has NO validated calibration data yet
 // (every graded NFL pick predates both the confidence meta and the v138
 // look-ahead fix), and the biggest market favorites only win ~90%. 85 is a
@@ -1862,6 +1868,14 @@ async function predictGame(sport, g, opts) {
   if (sharp) notes.unshift(`Sharp money: ${sharp.handle}% of dollars vs ${sharp.bets}% of bets on ${sharp.side}${sharp.flipped ? ' — enough to flip the model onto that side' : ''}`);
   if (hf?.blended || af?.blended) notes.unshift('Early season — record/margin blended with last season (damped)');
   return { winner, conf, homePick, probHome: pHome, projTotal, projMargin: projMarginFor(sport, pHome),
+    // 🚨 The projected margin is derived from pHome, which projMarginFor
+    // clamps to [0.02, 0.98] — so the margin itself has a HARD CEILING
+    // (cfb 33.9 pts, nfl 27.7). Past that the model isn't measuring the
+    // margin any more, it's pinned. That matters for ATS: on a CFB spread
+    // above 33.9 an unguarded model would take the underdog on EVERY such
+    // game, by construction rather than by reading anything. Flag it here so
+    // atsCall can refuse to make a play it can't justify.
+    marginSat: pHome >= 0.98 || pHome <= 0.02,
     breakdown, notes, sharp, thin: !(hf && af) };
 }
 
@@ -1918,6 +1932,27 @@ const raceReport = (p, ms) => Promise.race([
   new Promise((r) => setTimeout(() => r(null), ms)),
 ]).catch(() => null);
 // Match a VSiN team cell ("9:40 PM LA Angels +1.5") to an ESPN team name.
+// Words that turn one school into a DIFFERENT school when they follow it.
+// "North Carolina" and "North Carolina State" are not the same team, and
+// neither are Louisiana / Louisiana Tech or Georgia / Georgia Southern.
+const SCHOOL_QUALIFIER = new Set(['state', 'tech', 'a&m', 'am', 'southern', 'northern',
+  'eastern', 'western', 'central', 'international', 'atlantic', 'poly']);
+
+// Is `cand` in `v` as a whole phrase that isn't the start of a longer school
+// name? 'hit' = yes; 'ambiguous' = it's there but always followed by a
+// qualifier (so this is a different school); 'absent' = not there at all.
+function probeName(v, cand) {
+  let i = 0, seen = false;
+  for (;;) {
+    i = v.indexOf(` ${cand} `, i);
+    if (i < 0) return seen ? 'ambiguous' : 'absent';
+    const after = v.slice(i + cand.length + 2).trimStart().split(/\s+/)[0] || '';
+    if (!SCHOOL_QUALIFIER.has(after)) return 'hit';
+    seen = true;
+    i += 1;
+  }
+}
+
 function vsinMatches(vstr, teamName) {
   const v = ` ${norm(vstr || '').replace(/[+-]?\d+(\.\d+)?/g, ' ')} `;
   const n = norm(teamName || '');
@@ -1929,8 +1964,30 @@ function vsinMatches(vstr, teamName) {
   if (['red sox', 'white sox', 'blue jays'].includes(nick2)) {
     return v.includes(nick2) || v.includes(words.slice(0, -2).join(' ')); // "red sox" or the city
   }
-  const city = words.slice(0, -1).join(' ');
-  return v.includes(nick) || (!!city && v.includes(city));
+  if (v.includes(nick)) return true;
+  // 🚨 v178: this used to be `v.includes(city)` where city = all-but-the-last
+  // word — which assumes a ONE-WORD nickname. True of every pro team ("New
+  // York" + "Giants"), false all over college football: Fighting Irish,
+  // Yellow Jackets, Tar Heels, Demon Deacons, Sun Devils, Golden Eagles,
+  // Blue Raiders, Ragin' Cajuns. Measured against a list of real ESPN names
+  // vs the school names VSiN prints, 8 of 18 failed to match — so roughly a
+  // third of the college slate could never pick up its DK splits, silently.
+  //
+  // So walk progressively shorter prefixes instead of just the one. Two rules
+  // keep it from over-matching:
+  //   1. whole-phrase only (space-delimited), so "Louisiana" doesn't match
+  //      inside "Louisiana Tech";
+  //   2. STOP at the first prefix that's present but ambiguous. If the page
+  //      says "North Carolina State" and we're looking for North Carolina,
+  //      falling back to "North" would match it — but a shorter prefix is
+  //      strictly less specific, so once a longer one is ambiguous there is
+  //      nothing left to learn and the answer is no.
+  for (let k = words.length - 1; k >= 1; k--) {
+    const r = probeName(v, words.slice(0, k).join(' '));
+    if (r === 'hit') return true;
+    if (r === 'ambiguous') return false;
+  }
+  return false;
 }
 function splitsFor(report, g) {
   for (const s of report?.splits?.games || []) {
@@ -2146,6 +2203,28 @@ function gameReportHTML(sport, g, pred, info, report, data) {
       const lean = pred.projTotal > info.ou ? 'OVER' : pred.projTotal < info.ou ? 'UNDER' : null;
       parts.push(`<div class="gr-total">Total: model ${pred.projTotal.toFixed(1)} vs O/U ${info.ou}${lean ? ` → <b>${lean}</b>` : ''}</div>`);
     }
+    // 📐 The model's own SPREAD, next to the book's (v178). The model has
+    // projected a margin since v164 and the AI Picks tab has played and graded
+    // it — but this card only ever showed the moneyline and the total, so the
+    // one number that says "the book has the favourite too high" was invisible
+    // exactly where the owner was looking at the game. On a big favourite the
+    // moneyline row can't show it either: -100000 vs a model -992 is off the
+    // scale and grades F, which says the price is bad without saying the
+    // spread is the bet.
+    if (ATS_SPORTS.has(sport) && pred.projMargin != null && info?.spread != null) {
+      const sp = Number(info.spread);                    // home-oriented
+      const mLine = -pred.projMargin;                    // the model's own home number
+      const ats = atsCall(sport, g, pred, info);
+      const fmt = (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
+      const side = `${esc(g.home.abbr || g.home.name)} ${fmt(mLine)}`;
+      const book = `${esc(g.home.abbr || g.home.name)} ${fmt(sp)}`;
+      const pinned = pred.marginSat && Math.abs(sp) > Math.abs(pred.projMargin);
+      parts.push(`<div class="gr-total">Spread: model <b>${side}</b> vs book ${book}${ats
+        ? ` → <b>${esc(ats.label)}</b> <span class="gr-edge">${Math.abs(ats.edge).toFixed(1)} pts of value</span>`
+        : pinned
+          ? ` <span class="bb-muted">→ no play: the model tops out around ${Math.abs(pred.projMargin).toFixed(1)} points, so it can't price a number this big.</span>`
+          : ` <span class="bb-muted">→ inside the ${ATS_EDGE_MIN[sport] ?? 2}-pt noise band, no play</span>`}</div>`);
+    }
   }
   const mv = lineMoves(sport, g, report);
   if (mv) {
@@ -2220,7 +2299,15 @@ function gameReportHTML(sport, g, pred, info, report, data) {
   } else if (report?.splits && !report.splits.ok) {
     parts.push(`<div class="gr-unavail">DK betting splits unavailable — ${esc(report.splits.error || 'source down')}.</div>`);
   } else if (report?.splits?.ok) {
-    parts.push(`<div class="gr-unavail">No DK splits row matched for this game.</div>`);
+    // Say WHICH of the two very different failures this is. "No row matched"
+    // on its own can't tell "the scrape came back empty" from "the page has
+    // plenty of games, just not this one" — and for college those call for
+    // opposite responses (fix the scrape vs. nothing to fix, VSiN only covers
+    // part of the slate).
+    const listed = (report.splits.games || []).length;
+    parts.push(`<div class="gr-unavail">${listed
+      ? `No DK splits for this game — ${listed} game${listed === 1 ? '' : 's'} posted, this one isn't among them.`
+      : 'No DK splits posted for this league right now.'}</div>`);
   }
   if (!parts.length) return '';
   return `<div class="md-section-title acc-open">📊 Game Report</div><div class="gr-card">${parts.join('')}</div>`;
@@ -2815,6 +2902,14 @@ function atsCall(sport, g, pred, info) {
   if (!ATS_SPORTS.has(sport) || !pred || info?.spread == null) return null;
   const sp = Number(info.spread);                  // home-oriented: -3.5 = home favored by 3.5
   if (!isFinite(sp) || pred.projMargin == null) return null;
+  // 🚨 v178: no play when the projected margin is PINNED at its ceiling and
+  // the book's number is past it. projMarginFor clamps pHome to [0.02, 0.98],
+  // which caps the margin at 33.9 in CFB and 27.7 in the NFL — so on USC -37.5
+  // the model "likes the dog" on every single game of that shape, having
+  // measured nothing: it simply cannot express a number that big. Recording
+  // those would quietly fill the ATS record with picks the model never really
+  // made, which is the opposite of what tracking it is for.
+  if (pred.marginSat && Math.abs(sp) > Math.abs(pred.projMargin)) return null;
   const edge = pred.projMargin + sp;               // >0 → model likes HOME to cover
   if (!isFinite(edge) || Math.abs(edge) < (ATS_EDGE_MIN[sport] ?? 2)) return null;
   const home = edge > 0;
