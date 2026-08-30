@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v165';
+const APP_VERSION = 'v166';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -960,63 +960,147 @@ function mgcGeneric(g) {
     <div class="lrc-cnt" style="font-size:13px">${esc(m[1])}</div>`;
 }
 
+// One rail card. Live games get their sport's gamecast; scheduled games get
+// the start time and TV; finals get the result with the winner highlighted.
 function liveRailCard(sport, g) {
   const cfg = LEAGUES[sport];
+  const st = gameState(g);
   const sit = g.situation || null;
-  const card = el('div', 'lrc' + (isFav(sport, g) ? ' fav' : ''));
+  const win = winnerName(g);
+  const card = el('div', `lrc lrc-${st}` + (isFav(sport, g) ? ' fav' : ''));
   const hs = g.home.score, as = g.away.score;
-  const row = (t, lead) => `<div class="lrc-row${lead ? ' lead' : ''}">${logoHTML(t).replace('class="logo', 'class="lrc-lo logo')}
+  const lead = (t, o) => st === 'final'
+    ? (win && win !== 'TIE' && win === t.name)
+    : (t.score != null && o != null && t.score > o);
+  const row = (t, other) => `<div class="lrc-row${lead(t, other) ? ' lead' : ''}">${logoHTML(t).replace('class="logo', 'class="lrc-lo logo')}
       <span class="lrc-nm">${esc(t.name || 'TBD')}</span>
-      <span class="lrc-sc">${t.score ?? '–'}</span></div>`;
-  let gc = sport === 'mlb' ? mgcBaseball(g, sit)
-    : (sport === 'nfl' || sport === 'cfb') ? mgcFootball(g, sit)
-    : mgcGeneric(g);
-  // Whatever the sport, the status line (inning / quarter+clock) anchors the
-  // column — and it's the only thing left if the situation feed is empty.
-  const st = g.statusText ? `<div class="lrc-st">${esc(g.statusText)}</div>` : '';
+      <span class="lrc-sc">${st === 'scheduled' ? '–' : (t.score ?? '–')}</span></div>`;
+
+  let gc = '', tag;
+  if (st === 'live') {
+    gc = sport === 'mlb' ? mgcBaseball(g, sit)
+      : (sport === 'nfl' || sport === 'cfb') ? mgcFootball(g, sit)
+      : mgcGeneric(g);
+    // The status line (inning / quarter+clock) anchors the column, and it's the
+    // only thing left if the situation feed is empty.
+    gc += g.statusText ? `<div class="lrc-st">${esc(g.statusText)}</div>` : '';
+    tag = `<div class="lrc-tag"><span class="lrc-dot"></span>LIVE · ${cfg.label}</div>`;
+  } else if (st === 'final') {
+    gc = `<div class="lrc-big">FINAL</div>`;
+    tag = `<div class="lrc-tag off">${cfg.emoji} ${cfg.label} · FINAL</div>`;
+  } else {
+    const info = normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
+    gc = `<div class="lrc-when">${esc(scheduledLabel(g))}</div>`
+      + (g.tv ? `<div class="lrc-st">📺 ${esc(g.tv)}</div>` : '')
+      + (info?.details ? `<div class="lrc-st">${esc(info.details)}</div>` : '');
+    tag = `<div class="lrc-tag off">${cfg.emoji} ${cfg.label}</div>`;
+  }
   card.innerHTML = `<span class="lrc-stripe"></span>
-    <div class="lrc-l">
-      <div class="lrc-tag"><span class="lrc-dot"></span>LIVE · ${cfg.label}</div>
-      ${row(g.away, as != null && hs != null && as > hs)}${row(g.home, hs != null && as != null && hs > as)}
-    </div>
-    <div class="lrc-gc">${gc}${st}</div>`;
+    <div class="lrc-l">${tag}${row(g.away, hs)}${row(g.home, as)}</div>
+    <div class="lrc-gc">${gc}</div>`;
   if (g.id) card.onclick = () => openGameDetail(sport, g.id, g);
   return card;
 }
 
+// League filter (v166). One small bubble per league with games today, sitting
+// directly under the rail. Filled = showing, hollow = hidden. Only the OFF
+// leagues are stored, so a league you've never touched — including one whose
+// season starts next week — is on by default.
+const RAIL_OFF_KEY = 'sportshub:railoff';
+const getRailOff = () => { try { return new Set(JSON.parse(localStorage.getItem(RAIL_OFF_KEY) || '[]')); } catch (_) { return new Set(); } };
+const setRailOff = (set) => { try { localStorage.setItem(RAIL_OFF_KEY, JSON.stringify([...set])); } catch (_) {} };
+
+function paintRailLeagues(sportsToday, counts) {
+  const box = $('#rail-leagues');
+  if (!box) return;
+  // With one league on the card there's nothing to filter between, so the row
+  // would just be a button that hides everything — not worth the chrome.
+  if (sportsToday.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+  const off = getRailOff();
+  box.innerHTML = '';
+  sportsToday.forEach((sp) => {
+    const cfg = LEAGUES[sp];
+    const on = !off.has(sp);
+    const b = el('button', 'rl-pill' + (on ? ' on' : ''),
+      `${cfg.emoji} ${cfg.label}${counts[sp] ? ` <span class="rl-n">${counts[sp]}</span>` : ''}`);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(on));
+    b.title = `${on ? 'Hide' : 'Show'} ${cfg.label} games`;
+    b.onclick = () => {
+      const cur = getRailOff();
+      if (cur.has(sp)) cur.delete(sp); else cur.add(sp);
+      setRailOff(cur);
+      renderLiveRail();
+    };
+    box.appendChild(b);
+  });
+  box.hidden = false;
+}
+
+// The rail carries the WHOLE day (v166), not just live games — live first, then
+// what's coming up, then finals. It replaced the Home tab's "Today's Games"
+// section, so it has to hold everything that section did; leaving it live-only
+// would have meant a morning with no games showing anywhere.
+const RAIL_SPORT_CAP = 30;   // a college Saturday can't fan out unbounded
 async function renderLiveRail() {
   const rail = $('#live-rail');
   if (!rail) return;
   const sports = sortedSports({ teamOnly: true });
-  // getGames goes through fetchJSON's URL cache, so on the Home tab this
-  // shares the slate renderHome just pulled rather than doubling the traffic.
+  // getGames goes through fetchJSON's URL cache, so this shares the slate the
+  // Home tab and the Board just pulled rather than doubling the traffic.
   const res = await Promise.allSettled(sports.map((s) => getGames(s, ymd(sportsDate()))));
-  const live = [];
-  const liveSports = new Set(), favLive = new Set();
+  const all = [];
+  const liveSports = new Set(), favLive = new Set(), counts = {};
+  const sportsToday = [];
   res.forEach((r, i) => {
-    if (r.status !== 'fulfilled') return;
-    r.value.forEach((g) => {
-      if (gameState(g) !== 'live') return;
-      liveSports.add(sports[i]);
-      if (isFav(sports[i], g)) favLive.add(sports[i]);
-      live.push({ sport: sports[i], g });
+    if (r.status !== 'fulfilled' || !r.value.length) return;
+    const sp = sports[i];
+    const list = r.value.slice(0, RAIL_SPORT_CAP);
+    sportsToday.push(sp);
+    counts[sp] = list.length;
+    list.forEach((g) => {
+      if (gameState(g) === 'live') {
+        liveSports.add(sp);
+        if (isFav(sp, g)) favLive.add(sp);
+      }
+      all.push({ sport: sp, g });
     });
   });
-  // Your teams first, then by sport order — the Red Sox shouldn't be the
-  // fourth card you swipe to.
-  live.sort((a, b) => (isFav(b.sport, b.g) ? 1 : 0) - (isFav(a.sport, a.g) ? 1 : 0)
-    || sports.indexOf(a.sport) - sports.indexOf(b.sport));
   liveFavSports = favLive;
-  rail.innerHTML = '';
-  if (!live.length) { rail.hidden = true; paintLivePips(liveSports); return; }
-  live.forEach(({ sport, g }) => rail.appendChild(liveRailCard(sport, g)));
-  rail.hidden = false;
   paintLivePips(liveSports);
+  paintRailLeagues(sportsToday, counts);
+
+  const off = getRailOff();
+  const shown = all.filter(({ sport }) => !off.has(sport));
+  // Live first (your teams ahead of the rest), then upcoming by start time,
+  // then finals — the same live → upcoming → finished order the old Home slate
+  // used, so nothing about the reading order changed when it moved up here.
+  const rank = { live: 0, scheduled: 1, final: 2 };
+  shown.sort((a, b) => {
+    const d = rank[gameState(a.g)] - rank[gameState(b.g)];
+    if (d) return d;
+    const f = (isFav(b.sport, b.g) ? 1 : 0) - (isFav(a.sport, a.g) ? 1 : 0);
+    if (f) return f;
+    return new Date(a.g.date || 0) - new Date(b.g.date || 0);
+  });
+
+  rail.innerHTML = '';
+  if (!shown.length) {
+    // Distinguish "no games today" from "you filtered them all out" — the
+    // second is a state the owner created and can undo from the row above.
+    rail.hidden = !all.length;
+    if (all.length) rail.appendChild(el('div', 'lrc-none', 'All leagues hidden — tap a league above to bring its games back.'));
+    return;
+  }
+  shown.forEach(({ sport, g }) => rail.appendChild(liveRailCard(sport, g)));
+  rail.hidden = false;
 }
 
-// 🔴 pip on the tab of any sport with a game in progress, so the rail isn't
-// the only way to know. Tabs map to sports by hand — most are 1:1, and Home
-// deliberately never pips (its whole slate is right there).
+// 🔴 pip on the tab of any sport with a game in progress, so the rail isn't the
+// only way to know. Tabs map to sports by hand — most are 1:1, and Home
+// deliberately never pips (its whole slate is right there). The pips ignore the
+// league filter: hiding a league from the rail is a display choice and
+// shouldn't make a live game invisible everywhere.
 const TAB_SPORT = { nfl: 'nfl', cfb: 'cfb', redsox: 'mlb', eagles: 'nfl' };
 function paintLivePips(liveSports) {
   document.querySelectorAll('#tabs button').forEach((b) => {
@@ -1028,6 +1112,10 @@ function paintLivePips(liveSports) {
   });
 }
 
+// The rail is chrome, not a tab, so it starts once at boot and refreshes itself
+// on a timer — paused while the page is hidden so a backgrounded PWA isn't
+// polling ESPN, and re-run immediately on return so you never look at a stale
+// score after unlocking the phone.
 function startLiveRail() {
   const run = () => {
     if (document.hidden) return;
@@ -1071,7 +1159,7 @@ async function renderHome() {
   }
   html += '</div>';
   $('#featured').innerHTML = html;
-  renderHomeByLeague($('#home-games'), games);
+  renderGolfHome();
   renderHomeHeadline();
   // The board runs the model over every in-season slate, so it's deliberately
   // NOT awaited — the scores paint first and the board fills in behind them.
@@ -1131,48 +1219,16 @@ async function renderHomeHeadline() {
 }
 
 // Today's games grouped by league, with a jump-nav to each league section.
-function renderHomeByLeague(container, games) {
-  container.className = 'home-games';
-  container.innerHTML = '';
-  const nav = el('div', 'jump-nav');
-  container.appendChild(nav);
-  const addChip = (id, label, live) => {
-    const b = el('button', 'chip' + (live ? ' chip-live' : ''), (live ? '🔴 ' : '') + label);
-    b.onclick = () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    nav.appendChild(b);
-  };
-  const addSection = (id, label, cards, live) => {
-    addChip(id, label, live);
-    const head = el('h3', 'games-league-head'); head.id = id;
-    head.innerHTML = (live ? '<span class="live-dot"></span>' : '') + label;
-    container.appendChild(head);
-    const grid = el('div', 'games-grid');
-    cards.forEach((c) => grid.appendChild(c));
-    container.appendChild(grid);
-  };
-
-  const teamSports = sortedSports({ teamOnly: true });
-
-  // Grouped by league (in-season first). Within each league the slate is sorted
-  // live → finished → unstarted, so tapping a league chip lands you on the live
-  // games up top. Leagues with a live game get a 🔴 flag on their chip/heading.
-  const sportsWithGames = teamSports.filter((s) => (games[s] || []).length);
-  sportsWithGames.forEach((s) => {
-    const list = [...(games[s] || [])].sort(byStatus(s));
-    const hasLive = list.some((g) => gameState(g) === 'live');
-    // Tappable cards (v89): scores/time/TV/line at a glance, tap → the game
-    // modal, which leads with the 📊 Game Report.
-    const cards = list.map((g) => gameCard(s, g, { odds: true }));
-    addSection(`home-${s}`, `${LEAGUES[s].emoji} ${LEAGUES[s].label}`, cards, hasLive);
-  });
-  if (!sportsWithGames.length) container.appendChild(el('div', 'empty', 'No games today for your sports.'));
-
-  // golf as its own section (it's a leaderboard, not team games)
-  if (SEASON_MONTHS.golf.includes(new Date().getMonth())) addGolfHomeSection(addSection);
-}
-
-async function addGolfHomeSection(addSection) {
-  const ev = await getGolfEvent();
+// ⛳ Golf on Home. It survived the v166 removal of "Today's Games" because a
+// leaderboard is not a game card — it has no score line and nothing to tap —
+// so it never belonged in a rail of scores. Renders into its own section, and
+// stays silent out of season or when the feed is unreachable.
+async function renderGolfHome() {
+  const box = $('#home-golf');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!SEASON_MONTHS.golf.includes(new Date().getMonth())) return;
+  const ev = await getGolfEvent().catch(() => null);
   if (!ev) return;
   const players = ev.competitions?.[0]?.competitors || [];
   const status = ev.status?.type?.shortDetail || '';
@@ -1184,11 +1240,14 @@ async function addGolfHomeSection(addSection) {
     const fav = (LEAGUES.golf.fav || []).some((f) => f.toLowerCase() === name.toLowerCase());
     return `<div class="golf-line${fav ? ' fav' : ''}"><span>${esc(pos)} ${esc(name)}</span><span class="score">${esc(toPar)}</span></div>`;
   }).join('');
+  const head = el('h2', 'section-title', '⛳ Golf');
   const card = el('div', 'game-card no-tap');
   card.innerHTML = `<div class="game-meta"><span class="game-league">⛳ Golf</span><span class="status">${esc(status)}</span></div>
     <div style="font-weight:700;margin:4px 0">${esc(ev.name || 'PGA Tour')}</div>
     ${top || '<div class="muted">Leaderboard unavailable.</div>'}`;
-  addSection('home-golf', '⛳ Golf', [card]);
+  box.appendChild(head);
+  box.appendChild(card);
+  applySections('home');
 }
 
 // --- SCORES ---------------------------------------------------------------
@@ -2553,7 +2612,7 @@ const BOARD_SPORT_CAP = 24;        // per sport, so a college Saturday can't fan
 async function renderHomeBoard() {
   const box = $('#home-board');
   if (!box) return;
-  box.innerHTML = `<h2 class="section-title">🎲 The Board <span class="season-tag">today</span></h2>
+  box.innerHTML = `<h2 class="section-title acc-open">🎲 The Board <span class="season-tag">today</span></h2>
     <div class="empty">Crunching the numbers…</div>`;
   const sports = sortedSports({ teamOnly: true });
   const built = await Promise.allSettled(sports.map(async (s) => {
@@ -2579,7 +2638,7 @@ async function renderHomeBoard() {
 
   box.innerHTML = '';
   const head = el('div', 'brd-head');
-  head.innerHTML = `<h2 class="section-title" style="margin-bottom:0">🎲 The Board <span class="season-tag">today</span></h2>`;
+  head.innerHTML = `<h2 class="section-title acc-open" style="margin-bottom:0">🎲 The Board <span class="season-tag">today</span></h2>`;
   box.appendChild(head);
   if (!plays.length && !spreads.length && !totals.length) {
     const anyLines = live.some((r) => r.info?.favName);
@@ -2737,7 +2796,8 @@ async function renderPredictions() {
   const section = (key, list) => {
     if (!list.length) return;
     const m = TIER_META[key];
-    const h = el('div', `lad-sec${key === 'best' ? ' hot' : ''}`);
+    // Best Bets is the quick view on this tab, so it stays open by default.
+    const h = el('div', `lad-sec${key === 'best' ? ' hot acc-open' : ''}`);
     h.innerHTML = `${m.head} <span class="n">${m.note}</span> <span class="n">${list.length}</span>`;
     container.appendChild(h);
     list.forEach((r) => {
@@ -6042,12 +6102,15 @@ $('#fan-reset').addEventListener('click', () => {
 //      can still tap anywhere on the row.
 const SECS_KEY = 'sportshub:secs';
 const getSecs = () => { try { return JSON.parse(localStorage.getItem(SECS_KEY) || '{}'); } catch (_) { return {}; } };
-// Only COLLAPSED sections are stored, so a section the user has never touched
-// falls back to the tab's default and newly added sections appear open.
-function setSecClosed(key, closed) {
+// Both states are stored (1 = open, 0 = closed). v165 stored only "closed",
+// which worked while everything defaulted open — but from v166 most sections
+// default CLOSED, so "the owner opened this one" is a choice that has to
+// persist too. An absent key still means "use the tab's default", so a newly
+// added section behaves like the rest of its tab.
+function setSecState(key, open) {
   try {
     const m = getSecs();
-    if (closed) m[key] = 1; else delete m[key];
+    m[key] = open ? 1 : 0;
     localStorage.setItem(SECS_KEY, JSON.stringify(m));
   } catch (_) {}
 }
@@ -6065,10 +6128,11 @@ function secKey(scope, h) {
   return `${scope}|${(c.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60)}`;
 }
 // How many sections a tab leaves open when the user has expressed no
-// preference. The four long team tabs keep their existing behaviour (first two
-// open); everything else starts fully expanded, so turning this on doesn't
-// silently hide anything the owner is used to seeing.
-const SEC_OPEN_DEFAULT = { eagles: 2, redsox: 2, nfl: 2, cfb: 2 };
+// preference. v166: the owner asked for everything collapsed by default except
+// the quick-view summary at the top — so every tab opens its FIRST section and
+// folds the rest. Sections that are themselves a summary (My Teams, 🎲 The
+// Board, 🔥 Best Bets) carry `acc-open` and stay open wherever they sit.
+const SEC_OPEN_DEFAULT = { eagles: 1, redsox: 1, nfl: 1, cfb: 1 };
 
 // Turn a container's headers into tap-to-expand accordion sections.
 // Headers with class "acc-open" start expanded (in addition to the first
@@ -6097,11 +6161,12 @@ function makeAccordion(container, headerSel, openCount = 0, scope = null) {
       h.classList.toggle('open', o);
       chev.setAttribute('aria-expanded', String(o));
       content.forEach((c) => { c.style.display = o ? '' : 'none'; });
-      if (persist && key) setSecClosed(key, !o);
+      if (persist && key) setSecState(key, o);
     };
     // Saved choice wins; otherwise fall back to the tab's default.
     const dflt = idx < openCount || h.classList.contains('acc-open');
-    set(key && saved && saved[key] ? false : dflt, false);
+    const savedState = key && saved && Object.prototype.hasOwnProperty.call(saved, key) ? saved[key] === 1 : null;
+    set(savedState == null ? dflt : savedState, false);
     const toggle = () => set(!h.classList.contains('open'), true);
     h.onclick = (e) => {
       // A tap on a control that lives inside the heading (the League tab's
@@ -6121,7 +6186,7 @@ function applySections(name) {
   const panel = document.getElementById(name);
   if (!panel) return;
   makeAccordion(panel, '.section-title, .lad-sec, .ai-section-head',
-    SEC_OPEN_DEFAULT[name] ?? Infinity, name);
+    SEC_OPEN_DEFAULT[name] ?? 1, name);
 }
 
 // --- EAGLES ---------------------------------------------------------------

@@ -360,7 +360,55 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v165** (backend **b11-cfb-betting**).
+Current version as of this writing: **v166** (backend **b11-cfb-betting**).
+
+- **The rail became the slate · league filters · collapse-by-default (v166)** —
+  three owner asks in one change, and one of them needed a decision:
+  - **🚨 "Remove Today's Games from Home — they're all at the top now."** They
+    weren't. The v163 rail was **live games only**, so deleting the Home slate
+    would have meant that at 10am, with nothing in progress, the app showed no
+    games anywhere. So the rail was widened to carry the **whole day**: live
+    first (your teams ahead of the rest), then upcoming by start time, then
+    finals — the same live → upcoming → finished order the Home slate used, so
+    the reading order didn't change when it moved up. Cards are state-aware
+    (`.lrc-live` / `.lrc-scheduled` / `.lrc-final`): live keeps its gamecast,
+    upcoming shows start time + TV + the posted line, finals show the result
+    with the winner highlighted. The rail now hides only when the day is
+    genuinely empty. `RAIL_SPORT_CAP` (30) keeps a college Saturday bounded.
+  - **⛳ Golf survived the removal.** It was rendered *inside*
+    `renderHomeByLeague`, so deleting that function would have silently removed
+    golf from the entire app. A leaderboard has no score line and nothing to
+    tap, so it never belonged in a rail of scores — it's now its own
+    `#home-golf` section (`renderGolfHome`). `renderHomeByLeague` and
+    `addGolfHomeSection` are gone.
+  - **🔵 League filter bubbles** (`#rail-leagues`, `paintRailLeagues`) — one
+    small pill per league with games today, directly under the rail, with a
+    game count. Filled = showing, hollow = hidden; state in
+    `sportshub:railoff`, storing only the OFF leagues so a league you've never
+    touched is on by default. The row **only appears with 2+ leagues playing**
+    (with one league it'd just be a button that hides everything). Turning all
+    of them off says *"All leagues hidden — tap a league above"* rather than
+    going blank, and the row stays put so it's undoable. **Tab pips ignore the
+    filter** — hiding a league from the rail is a display choice and shouldn't
+    make a live game invisible everywhere.
+  - **Collapse-by-default** — `SEC_OPEN_DEFAULT` is now **1** for every tab (was
+    2 for the team tabs, Infinity elsewhere): each tab opens its top section as
+    the quick view and folds the rest. Sections that ARE the summary carry
+    `acc-open` and stay open wherever they sit: **My Teams**, **🎲 The Board**,
+    **🔥 Best Bets**.
+  - **🚨 Section state now stores BOTH open and closed** (`setSecState`, 1/0).
+    v165 stored only "closed", which was fine while everything defaulted open —
+    but now that most sections default *closed*, "the owner opened this one" is
+    a choice that has to persist too. An absent key still means "use the tab's
+    default".
+  - Verified in headless Chromium at 390px in both themes — **53 checks**: the
+    full-day rail (counts per state, live → upcoming → final ordering, favorite
+    first, `–` for unplayed, winner highlighted on finals), the filter bubbles
+    (one per league, counts, size, hollow/filled, aria-pressed, games actually
+    disappearing, surviving a reload, refilling, the all-off message), Today's
+    Games gone with The Board and golf intact, and the new collapse defaults
+    plus open-state persistence across a reload. The v165 section suite (44)
+    and the v164 market suite (98) still pass. No console errors.
 
 - **Every section folds, and remembers (v165)** — the owner noticed the Fantasy
   tab had no way to collapse anything. `makeAccordion` had existed since v60-odd
@@ -1735,11 +1783,12 @@ Current version as of this writing: **v165** (backend **b11-cfb-betting**).
 
 ## Features built (high level)
 
-- **Home** — the app's front door and full daily overview. Above everything
-  sits the **live rail** (v163, chrome — see the layout note). Order: My Teams →
-  **🎲 The Board** (v164: the model's best plays against the book across every
-  in-season sport — moneyline, spread and totals — with its own record stated in
-  the header) → Top Headlines → Today's Games. Top Headlines
+- **Home** — the app's front door. The day's scores are NOT on this tab any
+  more (v166): they live in the **rail** pinned above the masthead, with the
+  league filter bubbles under it. Order: My Teams → **🎲 The Board** (v164: the
+  model's best plays against the book across every in-season sport — moneyline,
+  spread and totals — with its own record stated in the header) → ⛳ Golf →
+  Top Headlines. Top Headlines
   (numbered story strip, **up to 10** as of v111, from in-season leagues' lead
   stories — leads first, then up to 5 more per league, deduped; tap → in-app
   summary popup — headlines stay tappable; the strip stays a horizontal scroll on
@@ -2173,9 +2222,12 @@ Current version as of this writing: **v165** (backend **b11-cfb-betting**).
 - `sportshub:fparticles` — last good FantasyPros article list (`{at, items}`), so
   the 📰 Fantasy Advice section paints instantly and still shows something when
   the backend is asleep.
-- `sportshub:secs` — sections the user has collapsed (`{"<tab>|<heading>": 1}`).
-  Only collapsed ones are stored, so the absence of a key means "use the tab's
-  default" and a newly added section always appears open.
+- `sportshub:secs` — per-section collapse state (`{"<tab>|<heading>": 1|0}`,
+  1 = open). Both states are stored since v166, because most sections now
+  default closed; an absent key means "use the tab's default".
+- `sportshub:railoff` — leagues the user has filtered OUT of the top rail
+  (array of sport keys). Only the hidden ones are stored, so a league you've
+  never touched — including one whose season starts next week — shows by default.
 - `sportshub:theme` — chosen color theme (`'light'` | `'dark'`). Absent = follow the
   OS `prefers-color-scheme`. Read by the inline `<head>` script and by `applyTheme`.
 - Note: localStorage is **per browser/device** — the home-screen PWA and Safari

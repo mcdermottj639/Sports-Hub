@@ -6,10 +6,11 @@ A personal multi-sport hub — **NFL (Go Birds 🦅), college football (Top 25),
 
 ## Features
 
-- **Home** — the Eagles up top (record + today's game), plus today's games across every sport (your favorites float to the top).
+- **Live rail** — every game today, pinned above the header on every tab. Live games lead and carry that sport's own gamecast (bases, count and outs; field position with down &amp; distance; period and clock), then what's coming up, then finals. Little league bubbles under it filter which sports show.
+- **Home** — the Eagles up top, then **🎲 The Board**: where the model disagrees with the book across every in-season sport — moneyline, spread and totals — with its own record printed on it.
 - **🏈 NFL** — the weekly slate, a betting board (line + model price + where the money is), league headlines, a power board and the playoff picture.
 - **🎓 CFB** — college football, **Top 25 only**: the ranked slate, the poll with weekly movement, the projected playoff field, a betting board and league news. A game appears anywhere in the app only when a ranked team is playing in it.
-- **Predictions** — pick winners of upcoming games; they grade automatically once final. Picks save in your browser.
+- **🤖 AI Picks** — the model's full read as a conviction ladder (best bets → edges → leans → spread → totals → the games it passes on), plus backtesting: calibration, record by tier, and moneyline / spread / totals kept apart per sport. Picks grade themselves once games go final and save in your browser.
 - **🧪 Labs** — standalone experiments: an NFL mock draft simulator, a sports trivia lab, a fantasy mock draft, and a **Workout Lab** (a 3-day training split with guided sessions, rest timers and load tracking).
 
 ## How it works

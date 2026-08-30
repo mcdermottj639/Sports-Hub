@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=165" />
+  <link rel="stylesheet" href="styles.css?v=166" />
   <script>
     /* Set the theme before first paint to avoid a flash. Uses the saved
        preference if present, else follows the OS light/dark setting. */
@@ -31,7 +31,10 @@
        sport's own gamecast (bases/count/outs, field position + down, clock).
        Rendered by renderLiveRail(); stays hidden entirely when nothing is
        live, so it never costs a dead strip of chrome. -->
-  <div id="live-rail" class="live-rail" hidden aria-label="Live games"></div>
+  <div id="live-rail" class="live-rail" hidden aria-label="Today's games"></div>
+  <!-- League filter (v166): one bubble per league with games today. Filled =
+       showing, hollow = hidden. Only appears when 2+ leagues are playing. -->
+  <div id="rail-leagues" class="rail-leagues" hidden aria-label="Filter leagues"></div>
 
   <header class="topbar">
     <div class="brand">
@@ -60,11 +63,13 @@
   <main>
     <section id="home" class="tab-panel active" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
       <div id="home-headline"></div>
-      <h2 class="section-title" style="margin-top:6px">My Teams</h2>
+      <h2 class="section-title acc-open" style="margin-top:6px">My Teams</h2>
       <div id="featured" class="featured-card">Loading your teams…</div>
       <div id="home-board"></div>
-      <h2 class="section-title">Today’s Games</h2>
-      <div id="home-games" class="games-grid"></div>
+      <!-- Today's Games moved to the rail at the top of the screen (v166).
+           Golf stays here: it's a leaderboard, not a game card, so it never
+           belonged in a rail of scores. -->
+      <div id="home-golf"></div>
     </section>
 
     <section id="eagles" class="tab-panel" role="tabpanel" aria-labelledby="tab-eagles" tabindex="0">
@@ -153,7 +158,7 @@
         <h2 class="section-title no-acc" style="margin-top:0">🤖 AI Picks — Today</h2>
         <div id="ai-score" class="pred-score"></div>
       </div>
-      <p class="muted">Only games where the model disagrees with the betting favorite show here — the full slate is on the Home tab. Below the edges: team and player-prop trends worth a look. For fun — not betting advice.</p>
+      <p class="muted">The model’s full read: best bets, edges, leans, spread and totals — plus its own record and calibration below. Today’s scores live in the rail at the top of the screen. For fun — not betting advice.</p>
       <div id="ai-picks" class="games-grid"></div>
     </section>
 
@@ -226,6 +231,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=165" defer></script>
+  <script src="app.js?v=166" defer></script>
 </body>
 </html>
