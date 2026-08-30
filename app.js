@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v167';
+const APP_VERSION = 'v168';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2067,6 +2067,12 @@ function gameReportHTML(sport, g, pred, info, report, data) {
   // actually see it. Two independent sources, either of which may be absent.
   const mh = moveHistory(sport, g, report);
   const con = bookConsensus(data);
+  // How many sportsbooks ESPN actually listed for this game. Shown in plain
+  // text when there aren't enough for a consensus, so the card explains its
+  // own absence instead of leaving a silent gap — and so the question "does
+  // pickcenter carry more than one book?" can be answered by looking at the
+  // app rather than by opening a console on a phone.
+  const nBooks = bookLines(data).length;
   if (mh || con) {
     const rows = [];
     const bar = (v, max) => `<span class="sa-bar"><i style="width:${max ? clamp((v / max) * 100, 0, 100) : 0}%"></i></span>`;
@@ -2100,6 +2106,11 @@ function gameReportHTML(sport, g, pred, info, report, data) {
         ${bits.length ? bits.map((b) => `<div class="sa-row"><span class="sa-txt">${b}</span></div>`).join('') : ''}
         ${split.length ? split.map((b) => `<div class="sa-row"><span class="sa-txt">${b}</span></div>`).join('')
           : (!bits.length ? '<div class="ai-why">All books are on the same number right now.</div>' : '')}</div>`);
+    }
+    if (!con) {
+      rows.push(`<div class="sa-note">${nBooks === 1
+        ? 'ESPN listed 1 sportsbook for this game — comparing books needs at least 2.'
+        : 'ESPN listed no sportsbook prices for this game, so there are no books to compare.'}</div>`);
     }
     parts.push(`<div class="gr-sub">🔪 Sharp Action — where the line keeps moving</div>${rows.join('')}`);
   }

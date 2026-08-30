@@ -360,7 +360,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v167** (backend **b12-move-history**).
+Current version as of this writing: **v168** (backend **b12-move-history**).
 
 - **🔪 Sharp Action — moves per side (v167, backend `b12-move-history`)** — the
   owner sent a screenshot of a paid product showing *"Under: 6 sharp moves ·
@@ -407,6 +407,11 @@ Current version as of this writing: **v167** (backend **b12-move-history**).
   - **Honest by construction:** the card says "this undercounts" and names its
     source (server snapshots vs this device). It renders nothing at all when
     neither source has anything.
+  - **The card says how many books ESPN listed (v168)** when there aren't
+    enough to compare ("ESPN listed 1 sportsbook for this game — comparing
+    books needs at least 2"). It explains its own absence instead of leaving a
+    silent gap, and it answers the open question about `pickcenter` by being
+    *looked at* rather than by opening a JS console on a phone.
   - ⚠️ **`pickcenter`'s real shape is UNVERIFIED** — the sandbox can't reach
     ESPN, so provider count and open/current sub-objects were coded defensively
     against several plausible shapes but never confirmed. **On-device check: set
