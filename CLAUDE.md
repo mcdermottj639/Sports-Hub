@@ -394,6 +394,16 @@ Current version as of this writing: **v167** (backend **b12-move-history**).
     the poller only runs while someone is using the app and every cold start
     wipes it. The device record is the one that persists, and both sources feed
     the same counter via `moveHistory()`.
+  - **🚨 Backfill from `first`+`last` (v167.1).** The first cut required
+    `hist.length > 1`, and `hist` only starts filling on the NEXT change after
+    the upgrade — so a game the app had watched move all day (the owner's
+    screenshot: `BOS -116 → -141`, recorded under v166) counted as **zero
+    moves**. `moveHistory` now synthesizes a two-point history when a record
+    carries only `first`/`last` and they differ, which also covers the backend
+    until `b12` is actually deployed. `snapsDiffer` compares a field only when
+    **both** snapshots carry it, so a value appearing for the first time (a
+    v166 record has no `sp`, a v167 one does) is the app learning something,
+    not the line moving.
   - **Honest by construction:** the card says "this undercounts" and names its
     source (server snapshots vs this device). It renders nothing at all when
     neither source has anything.
@@ -403,12 +413,13 @@ Current version as of this writing: **v167** (backend **b12-move-history**).
     localStorage `sportshub:debugbooks` to `'1'` and open any game** — the
     console prints the raw providers and what got parsed out. If ESPN sends one
     provider with no opener, the multi-book half silently doesn't render.
-  - Verified in headless Chromium — **23 checks**: the direction counter (both
+  - Verified in headless Chromium — **28 checks**: the direction counter (both
     ways on all three markets, the pair-counting fix, empty and single-entry
     histories), the consensus reader (moves with openers, the split-across-books
     fallback, single book, absent `pickcenter`, junk providers), the device
-    history accumulating, the card naming its source, and the card being absent
-    entirely with no data. No console errors.
+    history accumulating, the pre-v167 first+last backfill counting its move,
+    a newly-populated field NOT counting as one, the card naming its source,
+    and the card being absent entirely with no data. No console errors.
 
 - **The rail became the slate · league filters · collapse-by-default (v166)** —
   three owner asks in one change, and one of them needed a decision:

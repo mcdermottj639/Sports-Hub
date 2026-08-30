@@ -295,6 +295,11 @@ const rankScore = (g) => (g.home.rank && g.away.rank ? 0 : 100) + Math.min(g.hom
 // Device-local line tracking: remember the first line this device saw for each
 // game today (opener proxy) + the latest, so the Game Report can show movement
 // even when the backend tracker is unreachable. One key per sports-day.
+const MOVE_FIELDS = ['hML', 'aML', 'ou', 'sp', 'details'];
+// Two snapshots differ only where BOTH carry the field. A value appearing for
+// the first time (a v166 record has no `sp`, a v167 one does) is the app
+// learning something, not the line moving.
+const snapsDiffer = (a, b) => MOVE_FIELDS.some((k) => a?.[k] != null && b?.[k] != null && a[k] !== b[k]);
 // How many observed line changes to keep per game. The app only samples while
 // it's open, so this is a record of what YOU saw move, not a continuous feed —
 // which is exactly how it's labelled wherever it's shown.
@@ -316,9 +321,12 @@ function trackLines(sport, games) {
       if (!all[k]) { all[k] = { first: snap, hist: [snap] }; changed = true; return; }
       const rec = all[k];
       const last = rec.last || rec.first;
-      if (['hML', 'aML', 'ou', 'sp', 'details'].some((f) => last[f] !== snap[f])) {
+      if (MOVE_FIELDS.some((f) => last[f] !== snap[f])) {
         rec.last = snap;
-        rec.hist = [...(rec.hist || [rec.first]), snap].slice(-HIST_MAX);
+        // Seed from first+last for records written before hist existed, so the
+        // move already on file isn't lost when the next one arrives.
+        const seed = rec.hist || (rec.first && snapsDiffer(rec.first, last) ? [rec.first, last] : [rec.first || last]);
+        rec.hist = [...seed, snap].slice(-HIST_MAX);
         changed = true;
       }
     });
@@ -1912,13 +1920,22 @@ function countMoves(hist) {
 // been awake (better sampling), else this device's own record. Both are the
 // same shape, so the counter doesn't care which it got.
 function moveHistory(sport, g, report) {
-  const be = report?.movement?.[String(g.id)];
-  if (be?.hist?.length > 1) return { hist: be.hist, src: 'server' };
+  // Records written before v167 — and the backend until b12 is deployed —
+  // carry only `first` and `last`. When those two differ that IS one observed
+  // move, so synthesize a two-point history from them rather than showing
+  // nothing until the next change happens to land. Without this, a line the
+  // app has watched move all day counts as zero moves.
+  const from = (rec, src) => {
+    if (!rec) return null;
+    if (rec.hist?.length > 1) return { hist: rec.hist, src };
+    if (rec.first && rec.last && snapsDiffer(rec.first, rec.last)) return { hist: [rec.first, rec.last], src };
+    return null;
+  };
+  const be = from(report?.movement?.[String(g.id)], 'server');
+  if (be) return be;
   try {
-    const rec = JSON.parse(localStorage.getItem(`sportshub:lines:${ymd(sportsDate())}`) || '{}')[`${sport}:${g.id}`];
-    if (rec?.hist?.length > 1) return { hist: rec.hist, src: 'device' };
-  } catch (_) {}
-  return null;
+    return from(JSON.parse(localStorage.getItem(`sportshub:lines:${ymd(sportsDate())}`) || '{}')[`${sport}:${g.id}`], 'device');
+  } catch (_) { return null; }
 }
 
 // Every book ESPN lists for this game. `pickcenter` is an array of providers;
