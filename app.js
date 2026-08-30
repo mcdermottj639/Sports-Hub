@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v166';
+const APP_VERSION = 'v167';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -295,6 +295,10 @@ const rankScore = (g) => (g.home.rank && g.away.rank ? 0 : 100) + Math.min(g.hom
 // Device-local line tracking: remember the first line this device saw for each
 // game today (opener proxy) + the latest, so the Game Report can show movement
 // even when the backend tracker is unreachable. One key per sports-day.
+// How many observed line changes to keep per game. The app only samples while
+// it's open, so this is a record of what YOU saw move, not a continuous feed —
+// which is exactly how it's labelled wherever it's shown.
+const HIST_MAX = 40;
 function trackLines(sport, games) {
   try {
     const key = `sportshub:lines:${ymd(sportsDate())}`;
@@ -303,11 +307,20 @@ function trackLines(sport, games) {
     games.forEach((g) => {
       const info = normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
       if (!info) return;
-      const snap = { t: Date.now(), hML: info.hML ?? null, aML: info.aML ?? null, ou: info.ou ?? null, details: info.details ?? null };
+      const snap = { t: Date.now(), hML: info.hML ?? null, aML: info.aML ?? null,
+                     ou: info.ou ?? null, sp: info.spread ?? null, details: info.details ?? null };
       const k = `${sport}:${g.id}`;
-      if (!all[k]) { all[k] = { first: snap }; changed = true; return; }
-      const last = all[k].last || all[k].first;
-      if (['hML', 'aML', 'ou', 'details'].some((f) => last[f] !== snap[f])) { all[k].last = snap; changed = true; }
+      // hist (v167) keeps every observed CHANGE, not just first + last, so the
+      // app can count how many times a line moved and in which direction.
+      // Bounded at HIST_MAX; first/last are still written for lineMoves.
+      if (!all[k]) { all[k] = { first: snap, hist: [snap] }; changed = true; return; }
+      const rec = all[k];
+      const last = rec.last || rec.first;
+      if (['hML', 'aML', 'ou', 'sp', 'details'].some((f) => last[f] !== snap[f])) {
+        rec.last = snap;
+        rec.hist = [...(rec.hist || [rec.first]), snap].slice(-HIST_MAX);
+        changed = true;
+      }
     });
     if (changed) {
       localStorage.setItem(key, JSON.stringify(all));
@@ -610,7 +623,7 @@ async function openGameDetail(sport, id, g) {
         if (token !== detailToken) return; // modal moved on while we waited
         const host = document.getElementById('md-report');
         if (!host) return;
-        host.innerHTML = gameReportHTML(sport, g, pred, normOdds(rawO, g.home.name, g.away.name, g.home.abbr, g.away.abbr), report);
+        host.innerHTML = gameReportHTML(sport, g, pred, normOdds(rawO, g.home.name, g.away.name, g.home.abbr, g.away.abbr), report, data);
         makeAccordion(host, '.md-section-title', 0);
       }).catch(() => {
         const host = token === detailToken ? document.getElementById('md-report') : null;
@@ -1857,6 +1870,121 @@ function lineMoves(sport, g, report) {
   } catch (_) {}
   return be?.first ? { first: be.first, last: be.last || be.first, src: 'server' } : null;
 }
+// ===================== 🔪 Sharp Action (v167) ==============================
+// The paid books show "N sharp moves toward the Under" — a count of steam moves
+// detected across a dozen sportsbooks. We can't reproduce that: it needs a
+// multi-book feed polled continuously, and this app has neither. What we CAN
+// do honestly is two weaker but real things, and label both for what they are:
+//
+//   1. COUNT THE MOVES WE ACTUALLY SAW. Every line change the app observes is
+//      already recorded (trackLines → hist). Counting them by direction gives
+//      "the total moved toward the Under 3 times, toward the Over once". The
+//      catch is stated on the card: it samples only while the app is open.
+//   2. READ THE BOOKS AGAINST EACH OTHER. ESPN's summary carries `pickcenter`,
+//      an ARRAY of providers — we were using only the first and throwing the
+//      rest away. Where several books are listed, how they disagree (and, when
+//      ESPN sends open vs current per book, which way each has moved) is a
+//      consensus read that costs nothing to compute and needs no backend.
+
+// Count direction changes in a line history. Returns per-market tallies
+// oriented to a side, so a card can say "Under 3 · Over 0".
+function countMoves(hist) {
+  const h = (hist || []).filter(Boolean);
+  const out = { ouUp: 0, ouDown: 0, homeIn: 0, awayIn: 0, spHome: 0, spAway: 0, n: h.length };
+  for (let i = 1; i < h.length; i++) {
+    const a = h[i - 1], b = h[i];
+    // Total: a lower number is money on the Under, a higher one the Over.
+    if (a.ou != null && b.ou != null && a.ou !== b.ou) (b.ou < a.ou ? out.ouDown++ : out.ouUp++);
+    // Moneyline: a shorter (more negative) price means money came in on that
+    // side. The two prices always move TOGETHER, so this counts a move once —
+    // reading both would score every move twice. Home is the primary signal;
+    // the away price is only consulted when ESPN sent no home number, which is
+    // routine on MLB (its scoreboard often carries no raw moneylines at all).
+    if (a.hML != null && b.hML != null && a.hML !== b.hML) (b.hML < a.hML ? out.homeIn++ : out.awayIn++);
+    else if (a.aML != null && b.aML != null && a.aML !== b.aML) (b.aML < a.aML ? out.awayIn++ : out.homeIn++);
+    // Spread is home-oriented: more negative = home laying more points.
+    if (a.sp != null && b.sp != null && a.sp !== b.sp) (b.sp < a.sp ? out.spHome++ : out.spAway++);
+  }
+  return out;
+}
+
+// Best available move history for a game: the backend's snapshots when it has
+// been awake (better sampling), else this device's own record. Both are the
+// same shape, so the counter doesn't care which it got.
+function moveHistory(sport, g, report) {
+  const be = report?.movement?.[String(g.id)];
+  if (be?.hist?.length > 1) return { hist: be.hist, src: 'server' };
+  try {
+    const rec = JSON.parse(localStorage.getItem(`sportshub:lines:${ymd(sportsDate())}`) || '{}')[`${sport}:${g.id}`];
+    if (rec?.hist?.length > 1) return { hist: rec.hist, src: 'device' };
+  } catch (_) {}
+  return null;
+}
+
+// Every book ESPN lists for this game. `pickcenter` is an array of providers;
+// the rest of the app deliberately takes one entry from it for a single clean
+// line, but the whole array is what makes a consensus read possible.
+// Defensive throughout: ESPN's per-provider shape varies by sport and season,
+// and open/current sub-objects are not always present.
+function bookLines(data) {
+  const num = (v) => { const n = Number(v); return isFinite(n) ? n : null; };
+  // A provider's number can arrive as a bare value or nested under
+  // open/current as {value} / {displayValue} / {american}.
+  const pick = (o, ...keys) => {
+    for (const k of keys) {
+      const v = o?.[k];
+      if (v == null) continue;
+      if (typeof v === 'object') { const n = num(v.value ?? v.displayValue ?? v.american); if (n != null) return n; }
+      else { const n = num(v); if (n != null) return n; }
+    }
+    return null;
+  };
+  return (data?.pickcenter || []).map((p) => {
+    const name = p.provider?.name || p.provider?.shortName || null;
+    const cur = { ou: pick(p, 'overUnder', 'total'), sp: pick(p, 'spread') };
+    if (cur.ou == null && p.current) cur.ou = pick(p.current, 'over', 'total', 'overUnder');
+    if (cur.sp == null && p.current) cur.sp = pick(p.current, 'spread', 'pointSpread');
+    const open = p.open ? { ou: pick(p.open, 'over', 'total', 'overUnder'), sp: pick(p.open, 'spread', 'pointSpread') } : null;
+    return { name, ...cur, open };
+  }).filter((b) => b.ou != null || b.sp != null);
+}
+
+// Where the books stand against each other. Two reads, whichever the data
+// supports: how many have MOVED each way (needs open+current per book), and
+// failing that, how they're SPLIT across numbers right now.
+function bookConsensus(data) {
+  const books = bookLines(data);
+  // ⚠️ UNVERIFIED SHAPE: the sandbox can't reach ESPN, so how many providers
+  // `pickcenter` actually carries — and whether it sends per-book open lines —
+  // could only be coded for defensively, not confirmed. Set localStorage
+  // `sportshub:debugbooks` to '1' and open any game to see exactly what came
+  // back; if it's one provider with no open data, the multi-book half of the
+  // Sharp Action card simply won't render and the move counter carries it.
+  try {
+    if (localStorage.getItem('sportshub:debugbooks') === '1') {
+      console.log('[pickcenter]', (data?.pickcenter || []).length, 'provider(s):',
+        JSON.stringify(data?.pickcenter || [], null, 1).slice(0, 4000));
+      console.log('[parsed books]', JSON.stringify(books));
+    }
+  } catch (_) {}
+  if (books.length < 2) return null;               // one book is not a consensus
+  const moved = { ouDown: 0, ouUp: 0, spHome: 0, spAway: 0, withOpen: 0 };
+  books.forEach((b) => {
+    if (!b.open) return;
+    let counted = false;
+    if (b.open.ou != null && b.ou != null && b.open.ou !== b.ou) { (b.ou < b.open.ou ? moved.ouDown++ : moved.ouUp++); counted = true; }
+    if (b.open.sp != null && b.sp != null && b.open.sp !== b.sp) { (b.sp < b.open.sp ? moved.spHome++ : moved.spAway++); counted = true; }
+    if (counted || b.open.ou != null || b.open.sp != null) moved.withOpen++;
+  });
+  // Current spread of numbers across books — meaningful even with no open data.
+  const tally = (key) => {
+    const m = new Map();
+    books.forEach((b) => { if (b[key] != null) m.set(b[key], (m.get(b[key]) || 0) + 1); });
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+  };
+  return { books, n: books.length, moved, ouSpread: tally('ou'), spSpread: tally('sp') };
+}
+
 // Sharp-flavored reads computed from splits + movement (labeled, no hand-waving).
 function sharpSignals(g, sp, mv) {
   const out = [];
@@ -1885,7 +2013,7 @@ function sharpSignals(g, sp, mv) {
 }
 // The modal's PRO-style report: model line vs book (graded per side), model
 // total, line movement, DK money splits, and sharp signals.
-function gameReportHTML(sport, g, pred, info, report) {
+function gameReportHTML(sport, g, pred, info, report, data) {
   const parts = [];
   const mkt = info ? marketHomeProb(info) : null;
   if (pred && pred.probHome != null) {
@@ -1918,6 +2046,47 @@ function gameReportHTML(sport, g, pred, info, report) {
     parts.push(`<div class="gr-move">📈 ${changes.length ? changes.join(' · ') : 'No line movement yet'}
       <span class="gr-src">${mv.src === 'server' ? `server tracking since ${since}` : `since first seen on this device (${since})`}</span></div>`);
   }
+  // 🔪 Sharp Action — how many times each side has been bet, as far as we can
+  // actually see it. Two independent sources, either of which may be absent.
+  const mh = moveHistory(sport, g, report);
+  const con = bookConsensus(data);
+  if (mh || con) {
+    const rows = [];
+    const bar = (v, max) => `<span class="sa-bar"><i style="width:${max ? clamp((v / max) * 100, 0, 100) : 0}%"></i></span>`;
+    const pair = (label, aLbl, a, bLbl, b) => {
+      const max = Math.max(a, b, 1);
+      return `<div class="sa-pair"><div class="sa-lbl">${label}</div>
+        <div class="sa-row${a > b ? ' hot' : ''}"><span class="sa-side">${esc(aLbl)}</span>
+          <span class="sa-n">${a} move${a === 1 ? '' : 's'}</span>${bar(a, max)}</div>
+        <div class="sa-row${b > a ? ' hot' : ''}"><span class="sa-side">${esc(bLbl)}</span>
+          <span class="sa-n">${b} move${b === 1 ? '' : 's'}</span>${bar(b, max)}</div></div>`;
+    };
+    if (mh) {
+      const c = countMoves(mh.hist);
+      if (c.ouDown || c.ouUp) rows.push(pair('Total', 'Under', c.ouDown, 'Over', c.ouUp));
+      if (c.homeIn || c.awayIn) rows.push(pair('Moneyline', g.home.abbr || 'Home', c.homeIn, g.away.abbr || 'Away', c.awayIn));
+      if (c.spHome || c.spAway) rows.push(pair('Spread', g.home.abbr || 'Home', c.spHome, g.away.abbr || 'Away', c.spAway));
+      if (!rows.length) rows.push(`<div class="ai-why">No line changes seen yet across ${c.n} check${c.n === 1 ? '' : 's'}.</div>`);
+      rows.push(`<div class="sa-note">${mh.src === 'server'
+        ? 'Counted from the backend\'s line snapshots — it only polls while it\'s awake, so this undercounts.'
+        : 'Counted from what this device saw while the app was open — not a continuous feed, so this undercounts.'}</div>`);
+    }
+    if (con) {
+      const bits = [];
+      const m = con.moved;
+      if (m.ouDown || m.ouUp) bits.push(`<b>${m.ouDown}</b> book${m.ouDown === 1 ? '' : 's'} moved toward the Under, <b>${m.ouUp}</b> toward the Over`);
+      if (m.spHome || m.spAway) bits.push(`<b>${m.spHome}</b> toward ${esc(g.home.abbr || 'home')}, <b>${m.spAway}</b> toward ${esc(g.away.abbr || 'away')} on the spread`);
+      const spread = (arr, label) => arr.length > 1
+        ? `${label}: ${arr.map(([v, n]) => `${v} <span class="sa-c">×${n}</span>`).join(' · ')}` : '';
+      const split = [spread(con.ouSpread, 'Totals'), spread(con.spSpread, 'Spreads')].filter(Boolean);
+      rows.push(`<div class="sa-pair"><div class="sa-lbl">Across ${con.n} book${con.n === 1 ? '' : 's'}</div>
+        ${bits.length ? bits.map((b) => `<div class="sa-row"><span class="sa-txt">${b}</span></div>`).join('') : ''}
+        ${split.length ? split.map((b) => `<div class="sa-row"><span class="sa-txt">${b}</span></div>`).join('')
+          : (!bits.length ? '<div class="ai-why">All books are on the same number right now.</div>' : '')}</div>`);
+    }
+    parts.push(`<div class="gr-sub">🔪 Sharp Action — where the line keeps moving</div>${rows.join('')}`);
+  }
+
   const sp = splitsFor(report, g);
   if (sp) {
     const bar = (v) => `<span class="gr-bar"><i style="width:${clamp(v, 0, 100)}%"></i></span>`;

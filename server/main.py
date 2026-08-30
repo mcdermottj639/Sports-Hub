@@ -32,7 +32,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b11-cfb-betting"
+SERVER_VERSION = "b12-move-history"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -929,6 +929,10 @@ SB_QUERY = {"cfb": "?groups=80&limit=300"}
 # VSiN files its splits under its own sport slugs, which don't all match ours.
 VSIN_SLUG = {"cfb": "ncaaf"}
 LINES_POLL_SECONDS = int(os.getenv("LINES_POLL_SECONDS", "900"))
+# How many line snapshots per game to hand the frontend (b12). It counts
+# directional moves from these; 24 is plenty for a game day and keeps a full
+# college Saturday's payload small.
+MOVE_HIST_MAX = int(os.getenv("MOVE_HIST_MAX", "24"))
 VSIN_TTL_SECONDS = int(os.getenv("VSIN_TTL_SECONDS", "600"))
 
 _LINES: dict = {}  # sport -> {eventId: {home, away, date, snaps: [{t,hML,aML,details,ou}]}}
@@ -978,6 +982,9 @@ def _snap_lines_once():
                     "aML": (odds.get("awayTeamOdds") or {}).get("moneyLine"),
                     "details": odds.get("details"),
                     "ou": odds.get("overUnder"),
+                    # Numeric spread (b12) so the frontend can count spread
+                    # moves the same way it counts total and moneyline moves.
+                    "sp": odds.get("spread"),
                 }
                 if snap["hML"] is None and snap["aML"] is None and snap["ou"] is None and not snap["details"]:
                     continue
@@ -1181,9 +1188,15 @@ def betting_report(sport: str, debug: int = 0):
         raise HTTPException(404, f"No betting feed for '{sport}'. Try: {', '.join(BETTING_SPORTS)}.")
     splits = _vsin_splits(sport)
     with _LINES_LOCK:
+        # hist (b12) is the trimmed snapshot list, not just first/last: the
+        # frontend counts how many times a line moved and in which direction,
+        # which first+last cannot answer. Capped per game so a full slate stays
+        # a small payload, and only the fields the counter reads are sent.
         movement = {
             eid: {"home": rec["home"], "away": rec["away"],
-                  "first": rec["snaps"][0], "last": rec["snaps"][-1], "n": len(rec["snaps"])}
+                  "first": rec["snaps"][0], "last": rec["snaps"][-1], "n": len(rec["snaps"]),
+                  "hist": [{k: sn.get(k) for k in ("t", "hML", "aML", "ou", "sp", "details")}
+                           for sn in rec["snaps"][-MOVE_HIST_MAX:]]}
             for eid, rec in (_LINES.get(sport) or {}).items() if rec["snaps"]
         }
     out = {

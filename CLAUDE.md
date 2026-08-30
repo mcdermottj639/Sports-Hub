@@ -360,7 +360,55 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v166** (backend **b11-cfb-betting**).
+Current version as of this writing: **v167** (backend **b12-move-history**).
+
+- **🔪 Sharp Action — moves per side (v167, backend `b12-move-history`)** — the
+  owner sent a screenshot of a paid product showing *"Under: 6 sharp moves ·
+  Over: 0"* and asked for the same read. **We cannot reproduce that**: it is
+  steam detection across a dozen sportsbooks polled continuously, and this app
+  has neither the feed nor the uptime. Two weaker-but-real reads ship instead,
+  each labelled for exactly what it is:
+  - **Count the moves we actually saw.** `trackLines` already recorded a line
+    change per game — but only `first` and `last`, which cannot answer "how many
+    times". It now keeps a bounded **`hist`** (`HIST_MAX` 40) of every observed
+    change, and **`countMoves(hist)`** tallies direction: total down = toward
+    the Under, a shortening moneyline = money on that side, spread by sign.
+    Rendered as the per-side bars the screenshot showed.
+  - **🚨 Moneylines move in PAIRS**, so reading both sides scored every move
+    twice (caught by test: 4/2 where 2/1 was right). `countMoves` counts a
+    moneyline move **once**, from the home price, falling back to the away
+    price only when ESPN sent no home number — routine on MLB, whose
+    scoreboard often carries no raw moneylines at all.
+  - **Read the books against each other** (`bookLines`/`bookConsensus`). ESPN's
+    summary carries **`pickcenter`, an ARRAY of providers** — the app was taking
+    the first entry and discarding the rest. Where 2+ books are listed it now
+    reports how many moved each way (when per-book `open` exists) and otherwise
+    how the books are split across numbers right now. One book is not a
+    consensus, so it returns null and the card falls back to the move counter.
+  - **Backend `b12`:** the daemon already kept 50 snapshots per game, but
+    `/api/betting/{sport}/report` only exposed `first`/`last`/`n` — the history
+    was thrown away at the API boundary. It now sends a trimmed **`hist`**
+    (`MOVE_HIST_MAX` 24) plus the numeric **`sp`** spread on each snapshot.
+  - **Why the device history matters more than the backend's:** Render's free
+    tier stops the container after ~15 min idle and `_LINES` is in-memory, so
+    the poller only runs while someone is using the app and every cold start
+    wipes it. The device record is the one that persists, and both sources feed
+    the same counter via `moveHistory()`.
+  - **Honest by construction:** the card says "this undercounts" and names its
+    source (server snapshots vs this device). It renders nothing at all when
+    neither source has anything.
+  - ⚠️ **`pickcenter`'s real shape is UNVERIFIED** — the sandbox can't reach
+    ESPN, so provider count and open/current sub-objects were coded defensively
+    against several plausible shapes but never confirmed. **On-device check: set
+    localStorage `sportshub:debugbooks` to `'1'` and open any game** — the
+    console prints the raw providers and what got parsed out. If ESPN sends one
+    provider with no opener, the multi-book half silently doesn't render.
+  - Verified in headless Chromium — **23 checks**: the direction counter (both
+    ways on all three markets, the pair-counting fix, empty and single-entry
+    histories), the consensus reader (moves with openers, the split-across-books
+    fallback, single book, absent `pickcenter`, junk providers), the device
+    history accumulating, the card naming its source, and the card being absent
+    entirely with no data. No console errors.
 
 - **The rail became the slate · league filters · collapse-by-default (v166)** —
   three owner asks in one change, and one of them needed a decision:
@@ -2214,9 +2262,12 @@ Current version as of this writing: **v166** (backend **b11-cfb-betting**).
   v160+ includes `sh`; v164+ includes `gp`/`tr`, plus `:s` ATS rows carrying
   `hsp` (the home-oriented spread) so they can be graded without re-fetching odds).
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
-- `sportshub:lines:{YYYYMMDD}` — device-local line tracking for today's games
-  (first-seen + latest ML/O-U per game; movement fallback for Game Reports).
-  Only today's key is kept; older days are purged on write.
+- `sportshub:lines:{YYYYMMDD}` — device-local line tracking for today's games:
+  first-seen, latest, and (v167) a bounded **`hist`** of every observed change
+  with the numeric spread, which is what the 🔪 Sharp Action move counts are
+  built from. Only today's key is kept; older days are purged on write.
+- `sportshub:debugbooks` — set to `'1'` to log ESPN's raw `pickcenter` payload
+  to the console when a game opens (v167; the multi-book shape is unverified).
 - `sportshub:fantasy:{sport}` — the saved fantasy roster, one per sport
   (`fanKey(sport)`, e.g. `sportshub:fantasy:baseball`).
 - `sportshub:fparticles` — last good FantasyPros article list (`{at, items}`), so

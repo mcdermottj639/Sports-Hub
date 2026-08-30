@@ -1284,3 +1284,20 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-theme="light"] .brd-card.ats .brd-rib { background: #2f6bbf; }
 :root[data-theme="light"] .brd-tier.ats { background: #2f6bbf; color: #fff; }
 :root[data-theme="light"] .brd-pick .p.ats { color: #2f6bbf; }
+
+/* 🔪 Sharp Action (v167) — how many times each side has actually been bet, as
+   far as the app can see it. Deliberately plain: the numbers are small and
+   honestly sourced, so they shouldn't be dressed up like a paid steam feed. */
+.sa-pair { margin: 7px 0 9px; }
+.sa-lbl { font-size: 10px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+.sa-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px; }
+.sa-row .sa-side { min-width: 52px; font-weight: 700; color: var(--muted); }
+.sa-row .sa-n { min-width: 62px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--muted); }
+.sa-row.hot .sa-side, .sa-row.hot .sa-n { color: var(--accent); }
+.sa-row .sa-txt { color: var(--text); line-height: 1.45; }
+.sa-row .sa-txt b { color: var(--accent); }
+.sa-bar { flex: 1; height: 5px; border-radius: 5px; background: rgba(128,128,128,.22); overflow: hidden; }
+.sa-bar i { display: block; height: 100%; background: rgba(128,128,128,.5); }
+.sa-row.hot .sa-bar i { background: var(--accent); }
+.sa-c { color: var(--muted); font-size: 11px; }
+.sa-note { font-size: 10.5px; line-height: 1.45; color: var(--muted); margin-top: 4px; }
