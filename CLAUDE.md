@@ -368,7 +368,54 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v176** (backend **b13-pregame-lines**).
+Current version as of this writing: **v177** (backend **b13-pregame-lines**).
+
+- **🚨 Saturday was rendering below Sunday, and the NFL/CFB tabs drifted open
+  (v177)** — two owner reports, both about the slate:
+  - **The day order was never sorted — it was ESPN's array order.** Both
+    `renderNFLWeek` and `renderCFBWeek` built a `byDay` object and walked
+    `Object.entries(byDay)`, so the heading order was just the order the feed
+    happened to list its games in. On a college week that put **Saturday below
+    Sunday**. Games *within* a day were unsorted too. Both are now sorted by
+    kickoff in a single shared **`paintSlate(sport, games, box)`** (the two tabs
+    had identical copies of the grouping code, which is how one could have been
+    fixed without the other): days by their earliest game, games inside a day by
+    start time. The grouping key is the **ET calendar date via `en-CA`**
+    (`2026-09-12`, which sorts correctly as a string) with the pretty
+    `weekday, Mon D` label carried alongside — the label itself is unsortable,
+    which is what made the original bug easy to write.
+    - ⚠️ **Consequence worth knowing:** `rankScore` (v161) put the marquee
+      ranked-vs-ranked game at the top of the CFB slate. Inside a day, kickoff
+      time now wins instead. That's the owner's explicit ask ("earliest games
+      first"); `rankScore` still orders Home and AI Picks.
+    - `enrichSlate` sorts by kickoff too, so when `BB_MAX_GAMES` bites it keeps
+      the games that haven't started rather than whichever ESPN listed first.
+  - **"Start with the week's slate open and everything else collapsed."** The
+    *default* already did that (`SEC_OPEN_DEFAULT` is 1 for both tabs and the
+    slate is section 1) — but **a saved open state beats the default**, by
+    design since v166, so a section expanded once stayed expanded on every
+    future visit and the tab drifted back to fully open. New
+    **`SEC_RESET_ON_LOAD = ['nfl', 'cfb']`** + `resetTabSections()`, called at
+    boot beside `clearNflPreseason()`, drops those two tabs' saved entries on
+    each launch.
+    - **Deliberately scoped, not a change to how persistence works.**
+      Persistence is still doing a real job *within* a visit: these tabs
+      repaint as news / power board / playoff picture land at different times,
+      and a section folding itself mid-scroll would be worse than the drift. So
+      taps stick while the app is open and the next launch starts clean.
+      **Fantasy, AI Picks and the team tabs keep their choices across
+      restarts** — only these two reset.
+  - Verified — **127 checks** (14 new): jumbled feeds (Sunday listed first,
+    Saturday's late game before its early one) coming out Fri → Sat → Sun with
+    the noon game ahead of the 7pm one on BOTH tabs, and the reset seeded with
+    the drifted state the owner actually has — NFL and CFB opening slate-only,
+    other tabs' saved sections untouched, a tap surviving a repaint within the
+    visit, and a reload going back to slate-only. The eight prior suites
+    (105/53/44/40/16/10/14/32) still pass.
+    - ⚠️ **Test-fixture note:** the CFB half of the ordering test first failed
+      with an empty slate — the fixture games were unranked, so the Top-25 gate
+      correctly dropped all of them. **Any CFB fixture needs `curatedRank` on
+      its competitors or it tests nothing.**
 
 - **📊 The Betting Board is now the slate (v176)** — the owner: *"the betting
   board info, while great, is just a similar this week's slate for NFL and CFB
@@ -2725,7 +2772,10 @@ index, not the argument.
   the backend is asleep.
 - `sportshub:secs` — per-section collapse state (`{"<tab>|<heading>": 1|0}`,
   1 = open). Both states are stored since v166, because most sections now
-  default closed; an absent key means "use the tab's default".
+  default closed; an absent key means "use the tab's default". **v177: the
+  `nfl|…` and `cfb|…` entries are wiped at every launch** (`SEC_RESET_ON_LOAD`)
+  so those two tabs always start with just the week's slate open — taps still
+  stick within a visit. Every other tab persists across restarts.
 - `sportshub:railoff` — leagues the user has filtered OUT of the top rail
   (array of sport keys). Only the hidden ones are stored, so a league you've
   never touched — including one whose season starts next week — shows by default.

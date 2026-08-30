@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v176';
+const APP_VERSION = 'v177';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -6544,6 +6544,32 @@ function secKey(scope, h) {
 // Board, 🔥 Best Bets) carry `acc-open` and stay open wherever they sit.
 const SEC_OPEN_DEFAULT = { eagles: 1, redsox: 1, nfl: 1, cfb: 1 };
 
+// Tabs that go BACK to that default on every app launch (v177). The owner
+// asked the NFL and CFB tabs to "start with the week's slate open and
+// everything else collapsed" — but a saved open state wins over the default
+// (by design: that's what makes a collapse survive a repaint), so a section
+// expanded once stayed expanded on every future visit and the tab drifted
+// back to fully open.
+//
+// The fix is scoped rather than a change to how persistence works, because
+// persistence is still doing a real job WITHIN a visit: these tabs repaint
+// constantly (async news, power board, playoff picture landing at different
+// times) and a section that folded itself mid-scroll would be worse than the
+// drift. So taps still stick while the app is open; the next launch starts
+// clean. Nothing outside these two tabs is touched — Fantasy, AI Picks and the
+// team tabs keep their choices across restarts.
+const SEC_RESET_ON_LOAD = ['nfl', 'cfb'];
+function resetTabSections() {
+  try {
+    const m = getSecs();
+    let changed = false;
+    Object.keys(m).forEach((k) => {
+      if (SEC_RESET_ON_LOAD.includes(k.split('|')[0])) { delete m[k]; changed = true; }
+    });
+    if (changed) localStorage.setItem(SECS_KEY, JSON.stringify(m));
+  } catch (_) {}
+}
+
 // Turn a container's headers into tap-to-expand accordion sections.
 // Headers with class "acc-open" start expanded (in addition to the first
 // openCount). Idempotent: safe to re-run after any partial re-render.
@@ -7382,11 +7408,44 @@ function injectJumpNav(name) {
 // sleeping backend costs the sharp-money row and nothing else.
 const BB_MAX_GAMES = 16; // enrichment cap: stops a full CFB Saturday firing 60 profile fetches
 
+// Paint a week's slate into `box`, grouped by day. Shared by the NFL and CFB
+// tabs so the two can't drift.
+//
+// 🚨 The order has to be imposed, not inherited. The first cut walked
+// `Object.entries(byDay)` over a map built in ESPN's array order, so the day
+// headings came out in whatever order the feed happened to list its games —
+// which on a college week put **Saturday below Sunday**. Both levels are now
+// sorted by kickoff: the days by their earliest game, and the games inside a
+// day by start time. The ET calendar date is the grouping key (an en-CA
+// date sorts as a string), with the pretty label kept alongside it.
+function paintSlate(sport, games, box) {
+  const byDay = new Map();
+  games.forEach((g) => {
+    const d = new Date(g.date);
+    const key = d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    if (!byDay.has(key)) {
+      byDay.set(key, { label: d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'America/New_York' }), games: [] });
+    }
+    byDay.get(key).games.push(g);
+  });
+  [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([, day]) => {
+    box.appendChild(el('div', 'nfl-day', day.label));
+    const grid = el('div', 'games-grid');
+    day.games
+      .sort((a, b) => Date.parse(a.date) - Date.parse(b.date))
+      .forEach((g) => grid.appendChild(gameCard(sport, g, { odds: true })));
+    box.appendChild(grid);
+  });
+}
+
 async function enrichSlate(sport, host, games) {
   if (!host) return;
   // Finals have no line left to read; the Game Report in the modal still
-  // carries their closing numbers.
-  const open = (games || []).filter((g) => g.id && gameState(g) !== 'final');
+  // carries their closing numbers. Sorted by kickoff so that when the cap
+  // below bites it keeps the games that haven't started yet, not whichever
+  // ones ESPN happened to list first.
+  const open = (games || []).filter((g) => g.id && gameState(g) !== 'final')
+    .slice().sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
   const slate = open.slice(0, BB_MAX_GAMES);
   if (!slate.length) return;
 
@@ -7514,17 +7573,7 @@ async function renderCFBWeek() {
     return;
   }
   box.innerHTML = '';
-  const byDay = {};
-  games.forEach((g) => {
-    const key = new Date(g.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
-    (byDay[key] = byDay[key] || []).push(g);
-  });
-  Object.entries(byDay).forEach(([day, arr]) => {
-    box.appendChild(el('div', 'nfl-day', day));
-    const grid = el('div', 'games-grid');
-    arr.forEach((g) => grid.appendChild(gameCard('cfb', g, { odds: true })));
-    box.appendChild(grid);
-  });
+  paintSlate('cfb', games, box);
   // Not awaited — the slate is already on screen; the model read lands on top
   // of it whenever the backend answers (or gives up).
   enrichSlate('cfb', box, games);
@@ -7632,17 +7681,7 @@ async function renderNFLWeek() {
     return;
   }
   box.innerHTML = '';
-  const byDay = {};
-  events.forEach((g) => {
-    const key = new Date(g.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
-    (byDay[key] = byDay[key] || []).push(g);
-  });
-  Object.entries(byDay).forEach(([day, arr]) => {
-    box.appendChild(el('div', 'nfl-day', day));
-    const grid = el('div', 'games-grid');
-    arr.forEach((g) => grid.appendChild(gameCard('nfl', g, { odds: true })));
-    box.appendChild(grid);
-  });
+  paintSlate('nfl', events, box);
   // Not awaited — the slate is already on screen; the model read lands on top
   // of it whenever the backend answers (or gives up).
   enrichSlate('nfl', box, events);
@@ -7833,6 +7872,10 @@ startLiveRail();
 // grading so a stale preseason pending pick can't be graded into the record on
 // the way past. Last season's NFL games are kept.
 clearNflPreseason();
+
+// NFL + CFB start each launch with just the week's slate open (see
+// SEC_RESET_ON_LOAD). Must run before any tab renders.
+resetTabSections();
 
 // fold any finished picks from earlier days into the running model record
 gradePending();
