@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v175';
+const APP_VERSION = 'v176';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -525,6 +525,10 @@ function gameCard(sport, g, opts = {}) {
       <span class="${cls}">${label}</span>
     </div>${row(g.away)}${row(g.home)}
     ${g.tv ? `<div class="game-tv">📺 ${esc(g.tv)}</div>` : ''}${oddsLine}${tapHint}`;
+  // The id lets a later pass find its own card again — enrichSlate matches on
+  // it rather than on position, so an async model read can't land on the
+  // wrong game if the slate repainted while it waited.
+  if (g.id) card.dataset.gid = g.id;
   if (interactive && g.id) card.onclick = () => openGameDetail(sport, g.id, g);
   return card;
 }
@@ -7359,37 +7363,55 @@ function injectJumpNav(name) {
     (b.onclick = () => document.getElementById(b.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
 }
 
-// ======================= Betting board (shared) ===========================
-// The gambling read for a whole slate in one scan, used by the NFL and CFB
-// tabs. Everything here already existed per-game inside the modal's Game
-// Report; this puts the same three numbers — the book's line, the model's
-// price, and where the money is — side by side for every game on the card, so
-// the week can be read without opening fifteen modals.
+// ================ Model read folded onto the slate (shared) ===============
+// v176 merged the old standalone "Betting Board" INTO the weekly slate on the
+// NFL and CFB tabs. It listed the same games a second time — same source
+// array, same order, just a different card shape — so a week meant scrolling
+// two near-identical lists. Now the gambling read (the book's line, the
+// model's price and its gap vs the market, and where the money is) is folded
+// onto the slate cards themselves.
 //
-// It obeys the v157 rule: the Render backend is raced under a hard cap and the
-// board renders without it, so a sleeping backend costs the sharp-money row
-// and nothing else.
-const BB_MAX_GAMES = 16; // keeps a full CFB Saturday from firing 60 profile fetches
+// Nothing was dropped in the merge, and two things the board silently lost
+// came back: it truncated the display at BB_MAX_GAMES and it excluded finals
+// entirely. The slate shows EVERY game; the cap is now an ENRICHMENT cap, so
+// on a big college Saturday the games past it still appear, just without the
+// model strip.
+//
+// It obeys the v157 rule twice over: the slate is already painted before this
+// runs, and the Render backend is raced under a hard cap on top of that — so a
+// sleeping backend costs the sharp-money row and nothing else.
+const BB_MAX_GAMES = 16; // enrichment cap: stops a full CFB Saturday firing 60 profile fetches
 
-async function renderBettingBoard(sport, host, games) {
+async function enrichSlate(sport, host, games) {
   if (!host) return;
   // Finals have no line left to read; the Game Report in the modal still
   // carries their closing numbers.
   const open = (games || []).filter((g) => g.id && gameState(g) !== 'final');
   const slate = open.slice(0, BB_MAX_GAMES);
-  if (!slate.length) {
-    host.innerHTML = `<div class="empty">${(games || []).length ? 'Every game on this slate is final — open a card for its closing report.' : 'No games on the board right now.'}</div>`;
-    return;
-  }
-  host.innerHTML = '<div class="empty">📊 Pulling lines &amp; money…</div>';
+  if (!slate.length) return;
+
+  // The note goes in first as a placeholder so the section doesn't reflow when
+  // the backend answers (or doesn't).
+  const note = el('div', 'ai-why bb-note');
+  note.textContent = '📊 Reading lines & money…';
+  host.insertBefore(note, host.firstChild);
+
   const reportP = getBettingReport(sport).catch(() => null);
   const report = await raceReport(reportP, SHARP_WAIT.picks);
   const preds = await Promise.all(slate.map((g) => (g.seasonType === 1
     ? Promise.resolve(null)
     : predictGame(sport, g, { splits: splitsFor(report, g) }).catch(() => null))));
 
+  // The slate may have been repainted (tab switch, refresh) while we waited.
+  // Match by game id rather than by index so a stale strip can never land on
+  // the wrong card.
+  const cards = {};
+  host.querySelectorAll('.game-card[data-gid]').forEach((c) => { cards[c.dataset.gid] = c; });
+
   let withSplits = 0, edges = 0;
-  const rows = slate.map((g, i) => {
+  slate.forEach((g, i) => {
+    const card = cards[g.id];
+    if (!card || card.querySelector('.bb-strip')) return;
     const p = preds[i];
     const info = normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
     const sp = splitsFor(report, g);
@@ -7397,17 +7419,20 @@ async function renderBettingBoard(sport, host, games) {
     const gap = p && info ? marketGap(p, info) : null;
     const isEdge = !!(p && info && info.favName && p.winner.name !== info.favName && (gap == null || gap >= 5));
     if (isEdge) edges++;
-    const st = gameState(g);
-    const when = st === 'live' ? (g.statusText || 'LIVE')
-      : new Date(g.date).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
 
-    const ml = (v) => (Number(v) > 0 ? `+${v}` : `${v}`);
-    let lineTxt = info?.details || '';
-    if (!lineTxt && info && (info.hML != null || info.aML != null)) {
-      lineTxt = [info.aML != null ? `${g.away.abbr || 'Away'} ${ml(info.aML)}` : '',
-                 info.hML != null ? `${g.home.abbr || 'Home'} ${ml(info.hML)}` : ''].filter(Boolean).join(' / ');
+    // gameCard only prints the line on SCHEDULED games. The old board printed
+    // it on live ones too, so add it back when the card hasn't got one.
+    let lineRow = '';
+    if (!card.querySelector('.game-odds')) {
+      const ml = (v) => (Number(v) > 0 ? `+${v}` : `${v}`);
+      let lineTxt = info?.details || '';
+      if (!lineTxt && info && (info.hML != null || info.aML != null)) {
+        lineTxt = [info.aML != null ? `${g.away.abbr || 'Away'} ${ml(info.aML)}` : '',
+                   info.hML != null ? `${g.home.abbr || 'Home'} ${ml(info.hML)}` : ''].filter(Boolean).join(' / ');
+      }
+      const bits = [lineTxt, info?.ou != null ? `O/U ${info.ou}` : ''].filter(Boolean).join(' · ');
+      if (bits) lineRow = `<div class="bb-line">📊 ${esc(bits)}</div>`;
     }
-    const lineBits = [lineTxt, info?.ou != null ? `O/U ${info.ou}` : '', g.tv || ''].filter(Boolean).join(' · ');
 
     let modelTxt;
     if (g.seasonType === 1) modelTxt = '<span class="bb-muted">🤖 Preseason — the model sits these out</span>';
@@ -7420,13 +7445,15 @@ async function renderBettingBoard(sport, host, games) {
       modelTxt = `🤖 <b>${esc(p.winner.name)}</b> ${p.conf}%${tot} ${gapTag}`;
     }
     const sharpRows = sharpSignals(g, sp, null).map((t) => `<div class="bb-sharp">${t}</div>`).join('');
-    return `<div class="bb-row${isEdge ? ' edge' : ''}">
-      <div class="bb-top"><span class="bb-match">${rankHTML(g.away)}${esc(g.away.abbr || g.away.name)} @ ${rankHTML(g.home)}${esc(g.home.abbr || g.home.name)}</span><span class="bb-when${st === 'live' ? ' live' : ''}">${esc(when)}</span></div>
-      <div class="bb-line">${lineBits ? `📊 ${esc(lineBits)}` : '<span class="bb-muted">No line posted yet</span>'}</div>
-      <div class="bb-model">${modelTxt}</div>${sharpRows}</div>`;
-  }).join('');
+    const strip = el('div', 'bb-strip' + (isEdge ? ' edge' : ''));
+    strip.innerHTML = `${lineRow}<div class="bb-model">${modelTxt}</div>${sharpRows}`;
+    // Sit above the "tap for game report →" hint so the hint stays last.
+    const hint = card.querySelector('.tap-hint');
+    if (hint) card.insertBefore(strip, hint); else card.appendChild(strip);
+    if (isEdge) card.classList.add('bb-edge-card');
+  });
 
-  // Say plainly what the board is standing on. A missing backend is stated,
+  // Say plainly what the read is standing on. A missing backend is stated,
   // never papered over — the lines are ESPN's either way.
   const moneyNote = !BETTING_SPORTS.has(sport)
     ? 'No betting-splits feed for this league.'
@@ -7434,10 +7461,12 @@ async function renderBettingBoard(sport, host, games) {
         ? `Dollars-vs-tickets from DraftKings via VSiN on ${withSplits} of ${slate.length} games.`
         : 'DraftKings splits loaded but none matched this slate yet.')
       : 'Splits feed asleep or unreachable — lines and model prices only.';
-  host.innerHTML = `<div class="ai-why" style="margin:2px 0 8px">Lines are ESPN's. ${esc(moneyNote)} ${edges ? `⚡ = the model disagrees with the book by 5+ points (${edges} today).` : 'No model-vs-book edges on this slate.'} For fun — not betting advice.</div>${rows}` +
-    // Only say "top N" when the BOARD actually truncated. Finals are excluded
-    // above by design, not hidden, so they must not inflate this count.
-    (open.length > slate.length ? `<div class="ai-why" style="margin-top:8px">Showing the top ${slate.length} of ${open.length} games with a line — tap any card above for the rest.</div>` : '');
+  // Only mention the cap when it actually bit. Finals are excluded by design,
+  // not hidden, so they must never inflate this count.
+  const capNote = open.length > slate.length
+    ? ` Model read shown on the first ${slate.length} of ${open.length} games with a line — tap any other card for its own report.`
+    : '';
+  note.innerHTML = `Lines are ESPN's. ${esc(moneyNote)} ${edges ? `⚡ = the model disagrees with the book by 5+ points (${edges} today).` : 'No model-vs-book edges on this slate.'}${esc(capNote)} For fun — not betting advice.`;
 }
 
 // =========================== College football tab =========================
@@ -7446,7 +7475,8 @@ async function renderBettingBoard(sport, host, games) {
 // surfaces the NFL tab carries, sized to the part of college football the
 // owner actually watches.
 async function renderCFB() {
-  const navItems = [['cfb-sec-week', 'Ranked Games'], ['cfb-sec-betting', 'Betting'],
+  // No "Betting" chip: v176 folded the betting board into the ranked slate.
+  const navItems = [['cfb-sec-week', 'Ranked Games'],
     ['cfb-sec-rank', 'Top 25'], ['cfb-sec-playoff', 'Playoff Field'], ['cfb-sec-news', 'News']];
   const navEl = $('#cfb-nav');
   navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
@@ -7475,7 +7505,6 @@ async function renderCFBWeek() {
     <div class="muted" style="margin-top:4px;font-size:.85rem">Ranked teams only — a game shows up here (and on the Home slate) when a Top 25 team is playing in it.</div>`;
   if (setMode && games.length) setMode(true);
 
-  renderBettingBoard('cfb', $('#cfb-betting'), games);
   renderCFBPlayoff();
 
   if (!games.length) {
@@ -7496,6 +7525,9 @@ async function renderCFBWeek() {
     arr.forEach((g) => grid.appendChild(gameCard('cfb', g, { odds: true })));
     box.appendChild(grid);
   });
+  // Not awaited — the slate is already on screen; the model read lands on top
+  // of it whenever the backend answers (or gives up).
+  enrichSlate('cfb', box, games);
 }
 
 // The poll itself. Movement is computed against each team's previous rank, so
@@ -7561,7 +7593,8 @@ async function renderCFBNews() {
 // slate, league headlines, a model-flavored Power Board, and the playoff
 // picture. Everything degrades to honest empty-states when feeds are down.
 async function renderNFL() {
-  const navItems = [['nfl-sec-week', 'Week'], ['nfl-sec-betting', 'Betting'], ['nfl-sec-news', 'News'], ['nfl-sec-power', 'Power Board'], ['nfl-sec-playoff', 'Playoffs']];
+  // No "Betting" chip: v176 folded the betting board into the weekly slate.
+  const navItems = [['nfl-sec-week', 'Week'], ['nfl-sec-news', 'News'], ['nfl-sec-power', 'Power Board'], ['nfl-sec-playoff', 'Playoffs']];
   const navEl = $('#nfl-nav');
   navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
   navEl.querySelectorAll('button').forEach((b) =>
@@ -7594,8 +7627,6 @@ async function renderNFLWeek() {
     ${stype !== 2 && stype !== 3 && kick > 0 ? `<div class="nfl-kick">🏈 Kickoff in <b>${kick} day${kick === 1 ? '' : 's'}</b> — Thu Sep 10</div>` : ''}
     ${stype === 1 ? '<div class="muted" style="margin-top:4px;font-size:.85rem">Preseason results don\'t feed the AI model — backups play, nothing predictive.</div>' : ''}`;
   if (setMode && events.length) setMode(true);
-  // The betting board reads the same slate — no second scoreboard fetch.
-  renderBettingBoard('nfl', $('#nfl-betting'), events);
   if (!events.length) {
     box.innerHTML = `<div class="empty">${json ? 'No games on this week\'s slate.' : 'Scoreboard unreachable right now.'}</div>`;
     return;
@@ -7612,6 +7643,9 @@ async function renderNFLWeek() {
     arr.forEach((g) => grid.appendChild(gameCard('nfl', g, { odds: true })));
     box.appendChild(grid);
   });
+  // Not awaited — the slate is already on screen; the model read lands on top
+  // of it whenever the backend answers (or gives up).
+  enrichSlate('nfl', box, events);
 }
 
 async function renderNFLNews() {

@@ -368,7 +368,57 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v175** (backend **b13-pregame-lines**).
+Current version as of this writing: **v176** (backend **b13-pregame-lines**).
+
+- **📊 The Betting Board is now the slate (v176)** — the owner: *"the betting
+  board info, while great, is just a similar this week's slate for NFL and CFB
+  right? How can we add the betting board to the slate to make it one without
+  losing anything."* Correct, and literally so: `renderNFLWeek` fetched the
+  scoreboard once and passed **the same `events` array** to both the day-grouped
+  slate and `renderBettingBoard`. Same games, same order, two card shapes, two
+  scrolls. `renderBettingBoard` is **deleted**; the gambling read is folded onto
+  the slate cards themselves by **`enrichSlate(sport, host, games)`**.
+  - **Two things the old board silently LOST came back.** It capped the display
+    at `BB_MAX_GAMES` (16) and it **excluded finals entirely**. The slate shows
+    **every** game; the cap is now an *enrichment* cap, so on a big college
+    Saturday the games past it still appear, just without a model strip. The
+    "showing top N" note only fires when the cap actually bit.
+  - **It matches cards by game id, never by index.** `gameCard` now stamps
+    `data-gid`, and `enrichSlate` looks each card up by it — the read is async,
+    so a slate that repainted while it waited (tab switch, refresh) can't get a
+    strip attached to the wrong game. It also refuses to double-strip a card.
+  - **The v157 rule, twice.** The slate is fully painted **before** `enrichSlate`
+    is called (it's deliberately not awaited), and the Render backend is raced
+    under `SHARP_WAIT.picks` on top of that. Measured with a backend that never
+    answers: all three games on screen with **zero strips**, then the model read
+    landing at the 8s timeout with an honest "splits feed asleep or unreachable".
+  - **The line comes back on LIVE cards.** `gameCard` prints its odds line only
+    on `scheduled` games; the old board printed it on live ones too. The strip
+    adds it back, but **only when the card hasn't already got one**, so a
+    scheduled game never shows its line twice.
+  - The strip inserts **above** `.tap-hint`, so "tap for game report →" stays the
+    last line and the whole card still opens the modal. An edge marks the card
+    itself (`.game-card.bb-edge-card`) instead of a separate bordered row.
+  - Section/nav bookkeeping: the `#nfl-betting`/`#cfb-betting` divs and their
+    `-sec-betting` headings are gone, the "Betting" nav chip is gone from both
+    tabs, and the slate headings now read "… &amp; Betting Board". The slate is
+    section 1 on both tabs, so with `SEC_OPEN_DEFAULT` at 1 it is the section
+    that opens by default — the betting read used to be section 2 and therefore
+    collapsed.
+  - CSS: `.bb-row`/`.bb-top`/`.bb-match`/`.bb-when` are **removed** (they styled
+    the standalone row); `.bb-strip`, `.bb-note` and `.game-card.bb-edge-card`
+    replace them. `.bb-line`/`.bb-model`/`.bb-gap`/`.bb-sharp`/`.bb-muted` are
+    unchanged and still used.
+  - Verified in headless Chromium at 390px **and** 1280px in both themes —
+    **113 checks**: the standalone section and its chip gone, all three games
+    rendering (final included), the strip on the priced and live games but not
+    the final, pick/confidence/gap/projected-total/sharp-money content, the
+    live-card line restored and the scheduled-card line not duplicated, the
+    tap-hint staying last, every card still tappable, the coverage note
+    counting "1 of 2" honestly, CFB rank chips surviving, no horizontal
+    overflow, the backend-asleep timing above, and the section still
+    collapsible and open by default. The eight prior suites
+    (105/53/44/40/16/10/14/32) still pass.
 
 - **🚨 Kept players were being auto-filled onto the Draft Board (v174)** — the
   owner asked why Chase Brown, a rival's R6 keeper, was sitting on their draft
@@ -1073,7 +1123,9 @@ index, not the argument.
     (~November) and falls back to the **AP poll**, and the card's wording changes
     to match which one it's reading.
 
-  **📊 Betting Board (new, shared by the NFL and CFB tabs, `renderBettingBoard`)**
+  **📊 Betting Board (new, shared by the NFL and CFB tabs, `renderBettingBoard`
+  — SUPERSEDED in v176: this function is gone and the read is folded onto the
+  slate cards by `enrichSlate`)**
   — the "gambling info" half of the ask. Everything on it already existed
   *per-game* inside the modal's Game Report; this puts the same three numbers —
   the book's line, the model's price and gap vs the market, and where the money
@@ -2296,7 +2348,8 @@ index, not the argument.
   `renderCFBWeek`/`renderCFBRankings`/`renderCFBPlayoff`/`renderCFBNews`, ids
   `#cfb-*`, curated nav so `injectJumpNav` skips it, hero watermark 🎓. Sections:
   **Ranked Games This Week** (grouped by day, standard tappable `gameCard` with
-  odds + the new `#N` rank chip), **📊 Betting Board**, **🏆 Top 25** (poll name,
+  odds + the new `#N` rank chip, **and the betting read folded onto each card**
+  since v176), **🏆 Top 25** (poll name,
   record, first-place votes, weekly movement from each team's `previous` rank,
   others-receiving-votes footer), **Playoff Field** (poll top 12 + dashed cut,
   explicitly NOT a bracket — see the v161 note) and **league headlines**. The
@@ -2304,13 +2357,18 @@ index, not the argument.
   Picks, trends and line tracking are ranked-only too, from one flag
   (`LEAGUES.cfb.top25`). Ranks come from the scoreboard's `curatedRank` with the
   `/rankings` feed as backfill, so either source alone keeps the slate working.
-- **📊 Betting Board** (v161, `renderBettingBoard`) — shared by the NFL and CFB
-  tabs: for every non-final game on the slate, the book's line + total + TV, the
-  model's pick/confidence/projected total, its gap vs the de-vigged market (⚡ at
-  5+ points), and the DK sharp-money row when splits match. Races the backend
-  under `SHARP_WAIT.picks` and renders without it (v157 rule), capped at
-  `BB_MAX_GAMES` (16). The header line always states what the board is standing
-  on — including "splits feed asleep or unreachable" when it is.
+- **📊 Betting read on the slate** (v161 as a standalone board; **merged into
+  the slate in v176**, `enrichSlate`) — shared by the NFL and CFB tabs. After
+  the slate paints, each non-final card gains a strip carrying the model's
+  pick/confidence/projected total, its gap vs the de-vigged market (⚡ at 5+
+  points), the DK sharp-money row when splits match, and the book's line if the
+  card hasn't already printed it (live games). A note at the top of the slate
+  states what the read is standing on — including "splits feed asleep or
+  unreachable" when it is. Races the backend under `SHARP_WAIT.picks` and is
+  never awaited (v157 rule). `BB_MAX_GAMES` (16) caps **enrichment**, not
+  display: every game shows, the ones past the cap just have no strip.
+  **There is no `renderBettingBoard` and no `#nfl-betting`/`#cfb-betting`
+  section any more** — don't go looking for them.
 - **AI Picks** — a multi-factor logistic model (`predictGame`): record, scoring
   margin, recent form, home/road split, rest, plus matchup factors (MLB starter
   ERA/WHIP, team OPS). **As of v164 it is a conviction ladder** — Best Bets

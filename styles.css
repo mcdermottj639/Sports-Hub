@@ -832,16 +832,16 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 }
 .cfb-votes { color: var(--muted); font-weight: 600; font-size: 12px; }
 
-/* --- betting board (v161, NFL + CFB tabs) ------------------------------ */
-.bb-row {
-  border: 1px solid var(--line); border-radius: 10px; background: var(--card);
-  padding: 9px 11px; margin-bottom: 8px;
+/* --- betting read on the slate (v161; folded into the cards in v176) ----
+   Was a standalone "Betting Board" section listing the same games a second
+   time. It's now a strip appended inside each game card on the NFL + CFB
+   tabs, so the model's price sits on the game it prices.                   */
+.bb-strip {
+  margin-top: 7px; padding-top: 6px;
+  border-top: 1px dashed var(--line);
 }
-.bb-row.edge { border-color: var(--gold); }
-.bb-top { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; }
-.bb-match { font-weight: 700; display: flex; align-items: baseline; gap: 4px; min-width: 0; }
-.bb-when { color: var(--muted); font-size: 12px; flex: none; }
-.bb-when.live { color: var(--live); font-weight: 700; }
+.game-card.bb-edge-card { border-color: var(--gold); }
+.bb-note { margin: 2px 0 10px; }
 .bb-line { color: var(--muted); font-size: 13px; margin-top: 3px; }
 .bb-model { font-size: 13px; margin-top: 4px; }
 .bb-gap {

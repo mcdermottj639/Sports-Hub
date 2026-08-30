@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=175" />
+  <link rel="stylesheet" href="styles.css?v=176" />
   <script>
     /* Set the theme before first paint to avoid a flash. Uses the saved
        preference if present, else follows the OS light/dark setting. */
@@ -100,10 +100,10 @@
     <section id="nfl" class="tab-panel" role="tabpanel" aria-labelledby="tab-nfl" tabindex="0">
       <div id="nfl-hero" class="featured-card nfl-hero">Loading NFL…</div>
       <div id="nfl-nav" class="eagles-nav"></div>
-      <h2 class="section-title" id="nfl-sec-week">This Week&rsquo;s Slate</h2>
+      <!-- The betting board used to be its own section here; v176 folded it
+           into the slate above so the week is one list, not two. -->
+      <h2 class="section-title" id="nfl-sec-week">This Week&rsquo;s Slate &amp; Betting Board</h2>
       <div id="nfl-week"></div>
-      <h2 class="section-title" id="nfl-sec-betting">📊 Betting Board</h2>
-      <div id="nfl-betting"></div>
       <h2 class="section-title" id="nfl-sec-news">Top NFL Headlines</h2>
       <div id="nfl-news"></div>
       <h2 class="section-title" id="nfl-sec-power">⚡ Power Board</h2>
@@ -115,10 +115,10 @@
     <section id="cfb" class="tab-panel" role="tabpanel" aria-labelledby="tab-cfb" tabindex="0">
       <div id="cfb-hero" class="featured-card cfb-hero">Loading college football…</div>
       <div id="cfb-nav" class="eagles-nav"></div>
-      <h2 class="section-title" id="cfb-sec-week">Ranked Games This Week</h2>
+      <!-- The betting board used to be its own section here; v176 folded it
+           into the slate above so the week is one list, not two. -->
+      <h2 class="section-title" id="cfb-sec-week">Ranked Games &amp; Betting Board</h2>
       <div id="cfb-week"></div>
-      <h2 class="section-title" id="cfb-sec-betting">📊 Betting Board</h2>
-      <div id="cfb-betting"></div>
       <h2 class="section-title" id="cfb-sec-rank">🏆 Top 25</h2>
       <div id="cfb-rankings"></div>
       <h2 class="section-title" id="cfb-sec-playoff">Playoff Field</h2>
@@ -234,6 +234,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=175" defer></script>
+  <script src="app.js?v=176" defer></script>
 </body>
 </html>
