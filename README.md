@@ -1,14 +1,14 @@
 # 🏟️ Sports-Hub
 
-A personal multi-sport hub — **NFL (Go Birds 🦅), NBA, and MLB** — with live scores, standings, and a prediction game. **Runs entirely in the browser**, just like a static site: no server, no login, no API key.
+A personal multi-sport hub — **NFL (Go Birds 🦅), college football (Top 25), NBA, and MLB** — with live scores, standings, and a prediction game. **Runs entirely in the browser**, just like a static site: no server, no login, no API key.
 
 **Live:** https://mcdermottj639.github.io/Sports-Hub/
 
 ## Features
 
 - **Home** — the Eagles up top (record + today's game), plus today's games across every sport (your favorites float to the top).
-- **Scores** — browse any sport's slate for any date.
-- **Standings** — division/conference tables, your teams highlighted.
+- **🏈 NFL** — the weekly slate, a betting board (line + model price + where the money is), league headlines, a power board and the playoff picture.
+- **🎓 CFB** — college football, **Top 25 only**: the ranked slate, the poll with weekly movement, the projected playoff field, a betting board and league news. A game appears anywhere in the app only when a ranked team is playing in it.
 - **Predictions** — pick winners of upcoming games; they grade automatically once final. Picks save in your browser.
 - **🧪 Labs** — standalone experiments: an NFL mock draft simulator, a sports trivia lab, a fantasy mock draft, and a **Workout Lab** (a 3-day training split with guided sessions, rest timers and load tracking).
 

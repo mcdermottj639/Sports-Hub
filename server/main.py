@@ -32,7 +32,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b10-fparticles-nfl-filter"
+SERVER_VERSION = "b11-cfb-betting"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -920,7 +920,14 @@ def fantasy_football_rankings(year: int = 2026, limit: int = 150, scoring: str =
 #     tier has no disk), so history resets on redeploy: fine for intraday
 #     movement, which is all the frontend shows.
 # =============================================================================
-BETTING_SPORTS = {"mlb": "baseball/mlb", "nfl": "football/nfl", "nba": "basketball/nba"}
+BETTING_SPORTS = {"mlb": "baseball/mlb", "nfl": "football/nfl", "nba": "basketball/nba",
+                  "cfb": "football/college-football"}
+# ESPN's college-football scoreboard needs a nudge: without groups=80 (FBS) and
+# a raised limit it returns a small curated subset, so most of Saturday's board
+# would never get a line snapshot.
+SB_QUERY = {"cfb": "?groups=80&limit=300"}
+# VSiN files its splits under its own sport slugs, which don't all match ours.
+VSIN_SLUG = {"cfb": "ncaaf"}
 LINES_POLL_SECONDS = int(os.getenv("LINES_POLL_SECONDS", "900"))
 VSIN_TTL_SECONDS = int(os.getenv("VSIN_TTL_SECONDS", "600"))
 
@@ -950,7 +957,8 @@ def _snap_lines_once():
     """Snapshot current ESPN lines for every betting sport (append on change)."""
     for sport, path in BETTING_SPORTS.items():
         try:
-            j = _draft_get(f"https://site.api.espn.com/apis/site/v2/sports/{path}/scoreboard")
+            j = _draft_get("https://site.api.espn.com/apis/site/v2/sports/"
+                           f"{path}/scoreboard{SB_QUERY.get(sport, '')}")
         except Exception:
             continue
         now = int(time.time())
@@ -1115,11 +1123,12 @@ def _vsin_splits(sport: str) -> dict:
     hit = _VSIN_CACHE.get(sport)
     if hit and now - hit["ts"] < VSIN_TTL_SECONDS:
         return hit["data"]
+    slug = VSIN_SLUG.get(sport, sport)
     urls = [
-        f"https://data.vsin.com/{sport}/betting-splits/",
-        f"https://data.vsin.com/{sport}/betting-splits/?division=DK",
+        f"https://data.vsin.com/{slug}/betting-splits/",
+        f"https://data.vsin.com/{slug}/betting-splits/?division=DK",
         "https://data.vsin.com/betting-splits/",
-        f"https://www.vsin.com/betting-resources/{sport}/",
+        f"https://www.vsin.com/betting-resources/{slug}/",
     ]
     attempts, games, headers, used, forensics = [], [], [], None, {}
     for u in urls:

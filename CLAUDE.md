@@ -12,7 +12,8 @@ Guidance for Claude (and humans) working on this repo. Read this first.
 ## What this is
 
 **Sports-Hub** is a personal, multi-sport web app for the owner (a Philadelphia
-Eagles superfan; also follows Red Sox, NFL, MLB, NBA, and golf). It's a **pure
+Eagles superfan; also follows Red Sox, NFL, **college football (Top 25)**, MLB,
+NBA, and golf). It's a **pure
 static browser app** — HTML/CSS/vanilla JS, no build step,
 no framework, no backend, no API keys. It ships from this repo via **GitHub
 Pages** and runs entirely in the user's browser.
@@ -357,7 +358,120 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v160** (backend **b10-fparticles-nfl-filter**).
+Current version as of this writing: **v161** (backend **b11-cfb-betting**).
+
+- **🎓 College Football (Top 25) + NFL flipped to live (v161)** — two owner asks
+  in one change: score college football "like the other sports, just the top 25,
+  with all the information we have," and get the NFL's stats and gambling data
+  off its offseason settings before the regular season starts.
+
+  **The Top-25 gate is one line of config, enforced in one place.** `LEAGUES.cfb`
+  (`football/college-football`, emoji 🎓) carries two flags nothing else has:
+  `top25: true` and `sbQuery: 'groups=80&limit=300'`. The query matters — ESPN's
+  bare CFB scoreboard returns a small curated subset, so without it most of
+  Saturday never loads. The filter itself lives in **`getGames`**, which is the
+  single door every consumer already goes through, so Home, AI Picks, the trends
+  section, line tracking and the betting board are all ranked-only for free and
+  can never drift apart. Ranks come from **two independent sources** so one
+  failing never empties the slate: the scoreboard's own `curatedRank` (already
+  fetched, 99 = unranked → null, stamped onto `teamObj.rank`) and, as backfill,
+  the `/rankings` feed. Verified: with the rankings endpoint returning 500, the
+  ranked slate still builds correctly from `curatedRank` alone.
+  - **Ordering:** `rankScore` puts ranked-vs-ranked games first, then by best
+    rank — so the marquee game leads the slate instead of whatever ESPN sent
+    first.
+  - **`trackLines` runs AFTER the filter.** It used to see the raw list; on a
+    college Saturday that would have written ~70 games into the day's
+    localStorage key for games the app never shows.
+  - **`rankHTML`** puts a gold `#3` chip on every game card. It's generic (reads
+    `team.rank`), and the pro leagues never send that field, so nothing else
+    changes.
+
+  **The CFB tab** mirrors the NFL tab's shape: hero (season phase + week, and a
+  plain statement of the Top-25 rule), **Ranked Games This Week** grouped by day,
+  a **Betting Board**, the **Top 25** table (poll name, record, first-place
+  votes, and weekly movement computed from each team's `previous` rank), the
+  **Playoff Field**, and league headlines with the standard in-app summary popup.
+  - **Playoff Field is labelled honestly and is not a bracket.** The 12-team
+    field reserves five spots for conference champions, which no free feed
+    resolves, so it renders the poll's top 12 with a dashed cut and says exactly
+    that. `cfbRankings()` prefers the **CFP committee rankings** when they exist
+    (~November) and falls back to the **AP poll**, and the card's wording changes
+    to match which one it's reading.
+
+  **📊 Betting Board (new, shared by the NFL and CFB tabs, `renderBettingBoard`)**
+  — the "gambling info" half of the ask. Everything on it already existed
+  *per-game* inside the modal's Game Report; this puts the same three numbers —
+  the book's line, the model's price and gap vs the market, and where the money
+  is — side by side for a whole slate, so a week reads in one scan. It obeys the
+  **v157 rule**: the Render backend is raced under `SHARP_WAIT.picks` and the
+  board renders without it, so a sleeping backend costs the 💰 row and nothing
+  else. Measured with the backend hanging forever: the slate still painted in
+  **1.8s**, and the board came back with lines + model prices and an explicit
+  "splits feed asleep or unreachable" note. Capped at `BB_MAX_GAMES` (16) so a
+  full college Saturday can't fire 60 profile fetches; finals are excluded
+  (their closing numbers are in the modal), and the "showing top N" note only
+  appears when the board actually truncated.
+
+  **CFB model constants — principled, NOT fitted, and guarded accordingly.**
+  There is zero graded CFB history in this app, so every number is a documented
+  first pass: `PD_SCALE.cfb` **14** (double the NFL's 7 — ranked teams routinely
+  win by 30, so the same differential gap means much less), `MODEL_W.cfb` with
+  **record 1.3** (no parity mechanism; the talent gap is enormous and
+  persistent) and **homeEdge 0.42** (CFB home teams really do win ~57-60%, vs
+  the NFL's ~55%), `MODEL_SHRINK.cfb` **0.8** and `CONF_CAP.cfb` **90**,
+  `TOT_EDGE_MIN.cfb` **6** and `TOTALS.cfb` `[46.5, 62.5]` (college totals sit
+  near 55 with far more spread than the NFL's ~45). The shrink is the cheap
+  precaution the MLB lesson bought: it is monotonic, so it changes **no pick**,
+  only the stated confidence and the edge sizing that keys off `probHome`.
+  - ⚠️ **Worth knowing before tuning `homeEdge`:** `predictGame` damps the
+    empirical home/road split by `min(homeGP, roadGP)/10` and hands the
+    remainder to the generic home edge. A 12-game college season gives a team
+    only ~6 home games, so that shrink **maxes out around 0.6** and the generic
+    edge always contributes — unlike MLB, where it vanishes by May. Measured on
+    two identical teams with matching home and road records: CFB lands at
+    **53.4%** vs the NFL's 52.8%. Re-measure from graded results before
+    touching any of this.
+  - Sharp money (v160) reaches CFB picks like any other sport — verified it
+    moves an even game 53% → 58% and that a sub-deadband split is ignored.
+
+  **Backend `b11-cfb-betting`** — `BETTING_SPORTS` gains `cfb`, plus two small
+  maps beside it: **`SB_QUERY`** (the same `groups=80&limit=300` the frontend
+  needs, so the line-movement daemon snapshots the real board rather than a
+  handful of games) and **`VSIN_SLUG`** (VSiN files college football under
+  **`ncaaf`**, not `cfb`). Verified the mlb/nfl/nba URLs come out byte-identical
+  to before. ⚠️ **The VSiN `ncaaf` path is unverified live** — the sandbox is
+  egress-blocked from vsin.com, same as always. **First on-device check:
+  `/api/betting/cfb/report?debug=1` → `attempts` + `source`.** The scrape
+  already degrades to "unavailable + reason" rather than wrong numbers.
+
+  **NFL flipped to live.** `STAT_SEASON` was **hardcoded to 2025**, which meant
+  that on kickoff weekend the Eagles tab and Team Research would still have been
+  serving last season's numbers. It is now computed (`footballSeason()` — rolls
+  over in July), and every core-stats read goes through new **`fbSeasonData()`**,
+  which asks for the live season FIRST and falls back to the last completed one,
+  **returning which season answered** so the UI can say so. The Eagles stats
+  header now reads `(2026)` when real data exists and `(2025 — last season)`
+  when it doesn't — no code change needed on kickoff weekend. `SCHEDULE_SEASON`
+  and its `(2026-27)` label are computed too, as are the Power Board's
+  prior-season fallback and its three hardcoded "2026"/"2025" strings.
+  - The NFL tab also gained the Betting Board (nav chip + section), and
+    `renderNFLWeek` now reads the shared `scoreboard()` helper so the board
+    reuses the same slate rather than fetching it twice.
+  - **Deliberately unchanged:** the AI Picks and game-modal **preseason skips**
+    stay. Backups play; those results predict nothing. They self-resolve on
+    Sep 10.
+
+  Verified in headless Chromium at 390px in **both themes** with ESPN and the
+  backend fully stubbed — **101 checks** across three suites: the Top-25 gate
+  (Home, tab, betting board and AI Picks all drop an unranked-vs-unranked game
+  while keeping both ranked ones), rank badges, the poll table (movement,
+  first-place votes, others receiving votes), the playoff cut line, the betting
+  board (line, total, model price, market gap, 💰 row, splits-coverage note, no
+  bogus truncation note), the game modal, and four degradation states (rankings
+  feed down, backend hanging, every feed down, and both NFL stat-season
+  branches). No console errors.
+
 
 - **💰 Sharp money is now a model input, not just a display (v160)** — the owner
   pointed at the Game Report's Big Money card (COL 45% of dollars on 25% of
@@ -1401,13 +1515,17 @@ Current version as of this writing: **v160** (backend **b10-fparticles-nfl-filte
   `/{path}/scoreboard`, `/summary?event=`, `/teams`, `/{id}/roster`,
   `/{id}/schedule`, `/news`, `/standings?level=3`, athlete gamelogs, team
   statistics/leaders/depthcharts.
-  Sport paths: `football/nfl`, `baseball/mlb`, `basketball/nba`, `golf/pga`.
+  Sport paths: `football/nfl`, `football/college-football`, `baseball/mlb`,
+  `basketball/nba`, `golf/pga`. College football also uses `/rankings` (AP /
+  Coaches / CFP polls) and needs `?groups=80&limit=300` on its scoreboard —
+  see `LEAGUES.cfb.sbQuery`; the bare call returns a small curated subset.
   (Soccer / FIFA World Cup was removed in v125 once the 2026 Cup ended — the app
   no longer tracks any soccer competition.)
 - `fetchJSON(url, ttl)` — in-memory cache by URL with TTL; 9s abort. All data goes through it.
 - `LEAGUES` — per-sport config (label, emoji, espnPath, `fav` favorite teams, type).
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
-- Tabs: Home, Eagles, **🏈 NFL** (league-wide lens, v145), **Red Sox**, AI Picks, Fantasy, **Labs**, About. `showTab()` +
+- Tabs: Home, Eagles, **🏈 NFL** (league-wide lens, v145), **🎓 CFB** (college
+  football, Top 25 only, v161), **Red Sox**, AI Picks, Fantasy, **Labs**, About. `showTab()` +
   `renderers{}` map drive rendering. (**Labs** — its own top-level tab as of
   v107, holding the Labs experiments: the standalone `draft.html`/`trivia.html`/
   `workout.html` links plus the in-app **Fantasy Mock Draft** rendered into `#labs-mock`; its
@@ -1493,6 +1611,25 @@ Current version as of this writing: **v160** (backend **b10-fparticles-nfl-filte
   rankings, Schedule (2026-27), Depth Chart (Offense/Defense/ST, **Field formation
   view** + List), Player Leaders, By the Numbers, Coaching Staff. Section order and
   jump-nav defined in `renderEagles`.
+- **🎓 CFB tab** (v161) — college football, **Top 25 only**. `renderCFB` +
+  `renderCFBWeek`/`renderCFBRankings`/`renderCFBPlayoff`/`renderCFBNews`, ids
+  `#cfb-*`, curated nav so `injectJumpNav` skips it, hero watermark 🎓. Sections:
+  **Ranked Games This Week** (grouped by day, standard tappable `gameCard` with
+  odds + the new `#N` rank chip), **📊 Betting Board**, **🏆 Top 25** (poll name,
+  record, first-place votes, weekly movement from each team's `previous` rank,
+  others-receiving-votes footer), **Playoff Field** (poll top 12 + dashed cut,
+  explicitly NOT a bracket — see the v161 note) and **league headlines**. The
+  Top-25 gate itself is NOT in this tab: it lives in `getGames`, so Home, AI
+  Picks, trends and line tracking are ranked-only too, from one flag
+  (`LEAGUES.cfb.top25`). Ranks come from the scoreboard's `curatedRank` with the
+  `/rankings` feed as backfill, so either source alone keeps the slate working.
+- **📊 Betting Board** (v161, `renderBettingBoard`) — shared by the NFL and CFB
+  tabs: for every non-final game on the slate, the book's line + total + TV, the
+  model's pick/confidence/projected total, its gap vs the de-vigged market (⚡ at
+  5+ points), and the DK sharp-money row when splits match. Races the backend
+  under `SHARP_WAIT.picks` and renders without it (v157 rule), capped at
+  `BB_MAX_GAMES` (16). The header line always states what the board is standing
+  on — including "splits feed asleep or unreachable" when it is.
 - **AI Picks** — a multi-factor logistic model (`predictGame`): record, scoring
   margin, recent form, home/road split, rest, plus matchup factors (MLB starter
   ERA/WHIP, team OPS). **Shows ONLY edge games** (model vs. line) since the full

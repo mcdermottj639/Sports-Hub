@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v160';
+const APP_VERSION = 'v161';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -16,6 +16,13 @@ const FANTASY_API = (() => {
 
 const LEAGUES = {
   nfl:    { label: 'NFL',    emoji: '🏈', espnPath: 'football/nfl',   fav: ['Philadelphia Eagles'], type: 'team' },
+  // College football (v161). ESPN's CFB scoreboard is enormous — ~130 FBS teams
+  // play on a Saturday — so this league is deliberately TOP-25 ONLY: `top25`
+  // makes getGames drop any game without a ranked team, everywhere at once
+  // (Home slate, AI Picks, trends, the betting board). groups=80 = FBS only,
+  // and the default limit misses most of the slate, hence sbQuery.
+  cfb:    { label: 'CFB',    emoji: '🎓', espnPath: 'football/college-football', fav: [], type: 'team',
+            top25: true, sbQuery: 'groups=80&limit=300' },
   mlb:    { label: 'MLB',    emoji: '⚾', espnPath: 'baseball/mlb',    fav: ['Boston Red Sox'], type: 'team' },
   nba:    { label: 'NBA',    emoji: '🏀', espnPath: 'basketball/nba', fav: [], type: 'team' },
   golf:   { label: 'Golf',   emoji: '⛳', espnPath: 'golf/pga', fav: [], type: 'golf' },
@@ -24,10 +31,10 @@ const FEATURED = { sport: 'nfl', name: 'Philadelphia Eagles' };
 
 // Roughly which months each sport is active, used to sort in-season first.
 const SEASON_MONTHS = {
-  nfl: [8, 9, 10, 11, 0, 1], mlb: [2, 3, 4, 5, 6, 7, 8, 9], nba: [9, 10, 11, 0, 1, 2, 3, 4, 5],
-  golf: [0, 1, 2, 3, 4, 5, 6, 7],
+  nfl: [8, 9, 10, 11, 0, 1], cfb: [7, 8, 9, 10, 11, 0], mlb: [2, 3, 4, 5, 6, 7, 8, 9],
+  nba: [9, 10, 11, 0, 1, 2, 3, 4, 5], golf: [0, 1, 2, 3, 4, 5, 6, 7],
 };
-const BASE_ORDER = ['nfl', 'mlb', 'nba', 'golf'];
+const BASE_ORDER = ['nfl', 'cfb', 'mlb', 'nba', 'golf'];
 function sortedSports(opts = {}) {
   const m = new Date().getMonth();
   let list = Object.keys(LEAGUES);
@@ -124,6 +131,10 @@ function teamObj(c) {
     winner: c?.winner === true,      // ESPN's result flag (covers shootout wins)
     probables: c?.probables || null, // MLB probable starters
     leaders: c?.leaders || null,     // NFL/NBA team leaders
+    // Poll rank straight off the scoreboard (college football). ESPN sends 99
+    // for "unranked", so that becomes null and everything downstream can just
+    // test truthiness. The pro leagues never send this, so it stays null there.
+    rank: (() => { const r = Number(c?.curatedRank?.current); return r >= 1 && r <= 25 ? r : null; })(),
   };
 }
 // TV listing off the scoreboard event — geoBroadcasts (national/local networks)
@@ -204,13 +215,78 @@ function normStandings(json) {
 
 // --- data access ----------------------------------------------------------
 async function getGames(sport, dateStr) {
-  const path = LEAGUES[sport].espnPath;
-  const q = dateStr ? `?dates=${dateStr}` : '';
-  const json = await fetchJSON(`${SITE}/${path}/scoreboard${q}`);
-  const games = (json.events || []).map(normEvent);
+  const cfg = LEAGUES[sport];
+  const raw = (await scoreboard(sport, dateStr))?.games || [];
+  // Filter BEFORE tracking lines: a college Saturday puts ~70 FBS games on the
+  // board and only the ranked ones are ever shown, so tracking the rest would
+  // just bloat the day's localStorage key for games nothing can open.
+  const games = cfg.top25 ? await onlyRanked(sport, raw) : raw;
   if (dateStr === ymd(sportsDate())) trackLines(sport, games); // today only
   return games;
 }
+// Raw scoreboard read, kept separate from getGames so the tab renderers can
+// also see the payload's season/week metadata (which the game list drops).
+async function scoreboard(sport, dateStr) {
+  const cfg = LEAGUES[sport];
+  const parts = [cfg.sbQuery, dateStr ? `dates=${dateStr}` : ''].filter(Boolean);
+  const json = await fetchJSON(`${SITE}/${cfg.espnPath}/scoreboard${parts.length ? `?${parts.join('&')}` : ''}`);
+  return { json, games: (json.events || []).map(normEvent) };
+}
+
+// --- college football: the Top 25 gate ------------------------------------
+// CFB is ranked-teams-only in this app (see LEAGUES.cfb). Ranks come from two
+// places: the scoreboard's own curatedRank (free, already fetched, and what
+// ESPN shows on its own scoreboard) and — as a backfill — the rankings feed,
+// which also powers the poll table on the CFB tab. Either source alone is
+// enough, so a failure of one never empties the slate.
+async function cfbRankings() {
+  const json = await fetchJSON(`${SITE}/football/college-football/rankings`, 30 * 60000).catch(() => null);
+  const polls = (json?.rankings || []).filter((r) => (r.ranks || []).length);
+  if (!polls.length) return null;
+  // The CFP committee rankings are the real bracket once they start (~Nov);
+  // before that the AP poll is the standard read.
+  const pick = (re) => polls.find((p) => re.test(`${p.name || ''} ${p.shortName || ''}`));
+  const poll = pick(/college football playoff|^cfp\b/i) || pick(/\bAP\b|associated press/i) || polls[0];
+  const byId = new Map(), byName = new Map();
+  const entries = (poll.ranks || []).map((r) => {
+    const t = r.team || {};
+    const name = t.location && t.name ? `${t.location} ${t.name}` : (t.displayName || t.location || t.nickname || '');
+    if (t.id != null) byId.set(String(t.id), r.current);
+    if (name) byName.set(name.toLowerCase(), r.current);
+    return {
+      rank: r.current, prev: r.previous ?? null, points: r.points ?? null, votes: r.firstPlaceVotes ?? null,
+      id: t.id != null ? String(t.id) : null, name, abbr: t.abbreviation || null,
+      logo: t.logos?.[0]?.href || t.logo || null, record: r.recordSummary || r.record?.summary || '',
+    };
+  }).filter((e) => e.rank);
+  return {
+    poll: poll.name || poll.shortName || 'Top 25',
+    asOf: json?.rankings?.[0]?.occurrence?.displayValue || json?.season?.year || '',
+    entries, byId, byName,
+    others: (poll.others || []).map((o) => o.team?.displayName).filter(Boolean),
+  };
+}
+// Keep only games with a ranked team, and stamp the rank on both sides so the
+// cards and the tab can label them (#3 Ohio State) even when the scoreboard's
+// curatedRank is missing for one team.
+async function onlyRanked(sport, games) {
+  const rk = await cfbRankings().catch(() => null);
+  const rankOf = (t) => t.rank
+    ?? (rk && t.id != null ? rk.byId.get(String(t.id)) : null)
+    ?? (rk && t.name ? rk.byName.get(t.name.toLowerCase()) : null)
+    ?? null;
+  const out = [];
+  games.forEach((g) => {
+    const hr = rankOf(g.home), ar = rankOf(g.away);
+    if (!hr && !ar) return;
+    g.home.rank = hr || null;
+    g.away.rank = ar || null;
+    out.push(g);
+  });
+  // Best game first: two ranked teams beat one, and lower ranks beat higher.
+  return out.sort((a, b) => rankScore(a) - rankScore(b));
+}
+const rankScore = (g) => (g.home.rank && g.away.rank ? 0 : 100) + Math.min(g.home.rank || 99, g.away.rank || 99);
 
 // Device-local line tracking: remember the first line this device saw for each
 // game today (opener proxy) + the latest, so the Game Report can show movement
@@ -366,6 +442,8 @@ const favSet = (sport) => (LEAGUES[sport].fav || []).map((t) => t.toLowerCase())
 const isFav = (sport, g) =>
   favSet(sport).includes((g.home.name || '').toLowerCase()) || favSet(sport).includes((g.away.name || '').toLowerCase());
 
+// Poll rank chip (college football only — the pro leagues never send a rank).
+const rankHTML = (team) => (team.rank ? `<span class="rank-badge">#${team.rank}</span>` : '');
 function logoHTML(team) {
   if (team.logo) return `<img class="logo" src="${esc(team.logo)}" alt="" onerror="this.style.display='none'"/>`;
   const initials = (team.abbr || (team.name || '?').split(' ').pop()).slice(0, 3).toUpperCase();
@@ -386,7 +464,7 @@ function gameCard(sport, g, opts = {}) {
     const w = win && win !== 'TIE' && win === team.name;
     const score = st === 'scheduled' ? '–' : (team.score != null ? team.score : '–');
     return `<div class="team-row ${w ? 'winner' : ''}">
-      <span class="team">${logoHTML(team)}${esc(team.name || 'TBD')}</span>
+      <span class="team">${logoHTML(team)}${rankHTML(team)}${esc(team.name || 'TBD')}</span>
       <span class="score">${score}</span></div>`;
   };
   const tapHint = interactive ? '<div class="tap-hint">tap for game report →</div>' : '';
@@ -961,13 +1039,23 @@ async function getGolfEvent() {
 // log-odds, so every pick comes with an explainable breakdown.
 const logistic = (z) => 1 / (1 + Math.exp(-z));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const PD_SCALE = { nfl: 7, nba: 6, mlb: 2.2 }; // typical per-game margin used to scale run/point differential
+// Typical per-game margin used to scale run/point differential. College
+// football is the outlier: ranked teams routinely win by 30+, so the same
+// point-differential gap means far less than it would in the NFL.
+const PD_SCALE = { nfl: 7, cfb: 14, nba: 6, mlb: 2.2 };
 // Per-sport factor weights (log-odds toward the stronger side). Baseball is
 // pitching-dominant with a tiny home edge (~52-53% home win rate), so it can't
 // share football's team-strength weights — record/home are damped here and the
 // starting-pitcher matchup (weighted up in matchupFactor) carries the load.
 const MODEL_W = {
   mlb:     { record: 0.6, margin: 0.9, form: 0.4, split: 0.7, homeEdge: 0.12, sharp: 0.30 },
+  // College football (v161) pulls the two dials the other way from baseball.
+  // Record carries more because the talent gap between programs is enormous and
+  // persistent — unlike the NFL there is no parity mechanism — and home field is
+  // genuinely worth more (CFB home teams win ~57-60%, vs the NFL's ~55%);
+  // logistic(0.42) ≈ 60%. Nothing here is fit to graded results yet: there are
+  // none. See MODEL_SHRINK and CONF_CAP for the guardrails that go with that.
+  cfb:     { record: 1.3, margin: 1.0, form: 0.4, split: 1.0, homeEdge: 0.42, sharp: 0.20 },
   default: { record: 1.1, margin: 0.9, form: 0.4, split: 1.0, homeEdge: 0.28, sharp: 0.20 },
 };
 // Rough league-average starter ERA — the anchor for the pitcher-aware total.
@@ -983,7 +1071,12 @@ const MLB_AVG_ERA = 4.10;
 // untouched. What it fixes is (a) honest confidence and (b) edge sizing, since
 // marketGap is measured off probHome: inflated probabilities were manufacturing
 // "edges" that went 10-12 against the line.
-const MODEL_SHRINK = { mlb: 0.5, default: 1 };
+// cfb 0.8: college has NO graded history in this app, and its inputs (huge
+// margins against wildly uneven schedules) are exactly the shape that produced
+// MLB's 2x-too-wide confidence. A mild shrink is the cheap precaution — it is
+// monotonic, so it changes no pick, only the stated confidence and the edge
+// sizing that keys off probHome. Revisit once a season of picks has graded.
+const MODEL_SHRINK = { mlb: 0.5, cfb: 0.8, default: 1 };
 // Park run environment, 100 = neutral (3-year public run factors, rounded).
 // Static by design — no endpoint needed, and parks move slowly.
 const MLB_PARK = {
@@ -1000,7 +1093,7 @@ const PARK_WEIGHT = 0.7;
 // picks were wildly overconfident (its 80-84% bucket won ~22%, its 90%+ bucket
 // only ~73%) — a single baseball game tops out around 65-70% even best-vs-worst,
 // so MLB confidence is capped well below the football/basketball ceiling.
-const CONF_CAP = { mlb: 72, nfl: 85, default: 92 };
+const CONF_CAP = { mlb: 72, nfl: 85, cfb: 90, default: 92 };
 // NFL cap note: the NFL side of the model has NO validated calibration data yet
 // (every graded NFL pick predates both the confidence meta and the v138
 // look-ahead fix), and the biggest market favorites only win ~90%. 85 is a
@@ -1288,7 +1381,7 @@ async function matchupFactor(sport, g) {
       return top ? { name: top.athlete?.displayName || top.athlete?.shortName, val: top.displayValue } : null;
     };
     const h = key(g.home.leaders), a = key(g.away.leaders);
-    if (h && a) notes.push(`${sport === 'nfl' ? 'QB' : 'Leader'}: ${h.name} (${h.val}) vs ${a.name} (${a.val})`);
+    if (h && a) notes.push(`${sport === 'nfl' || sport === 'cfb' ? 'QB' : 'Leader'}: ${h.name} (${h.val}) vs ${a.name} (${a.val})`);
   }
   return { factors, notes, starters };
 }
@@ -1415,7 +1508,7 @@ function aiFactors(pred) {
 // The backend bundles VSiN's DraftKings splits + its own ESPN line snapshots;
 // everything degrades gracefully when it's unreachable (model grades and
 // device-tracked movement still render).
-const BETTING_SPORTS = new Set(['mlb', 'nfl', 'nba']);
+const BETTING_SPORTS = new Set(['mlb', 'nfl', 'nba', 'cfb']);
 // Remembers a failed/timed-out backend report so every game card opened during
 // an outage (or a long cold start) doesn't sit on its own 45s request — the
 // report degrades to model-only, which gameReportHTML already handles.
@@ -1866,7 +1959,9 @@ async function renderPredictions() {
   // Totals edge: model's projected total vs the posted O/U, sport-scaled floor.
   // MLB raised 1.0 → 1.5 (v138): at 1.0 the model fired 23 totals picks in a
   // month and went 13-10 — near coin-flip volume off a season-average total.
-  const TOT_EDGE_MIN = { mlb: 1.5, nba: 6, nfl: 4 };
+  // CFB totals sit near 55 with far more spread than the NFL's ~45, so the
+  // floor scales with them rather than inheriting the NFL's 4.
+  const TOT_EDGE_MIN = { mlb: 1.5, nba: 6, nfl: 4, cfb: 6 };
   const rows = playable.map((g, i) => {
     const p = preds[i];
     const info = p ? normOdds(g.odds, g.home.name, g.away.name) : null;
@@ -1993,7 +2088,7 @@ async function renderPredictions() {
 // "Trends to pay attention to" — team form/scoring pulled from cached profiles,
 // plus MLB starting-pitcher and hot-hitter props. Fills the space under the
 // edges so AI Picks is useful even on a day with no edges.
-const TOTALS = { mlb: [7.5, 9.5, 'runs'], nba: [216, 233, 'pts'], nfl: [40.5, 48.5, 'pts'] };
+const TOTALS = { mlb: [7.5, 9.5, 'runs'], nba: [216, 233, 'pts'], nfl: [40.5, 48.5, 'pts'], cfb: [46.5, 62.5, 'pts'] };
 async function renderAiTrends(container, sport, games, rows) {
   if (!games.length) return;
   // unique teams in today's slate
@@ -2903,7 +2998,8 @@ async function renderTeamResearch() {
   c.innerHTML = '<div class="muted">Loading projected starters…</div>';
   const [rosterR, dcR, newsR] = await Promise.all([
     fetchJSON(`${SITE}/football/nfl/teams/${id}/roster`, 12 * 3600000).catch(() => null),
-    safeJSON(`${FBCORE}/seasons/${STAT_SEASON}/teams/${id}/depthcharts`, 24 * 3600000),
+    fbSeasonData((y) => `${FBCORE}/seasons/${y}/teams/${id}/depthcharts`, 24 * 3600000,
+      (d) => (d.items || []).length).then((r) => r.data),
     fetchJSON(`${SITE}/football/nfl/news?team=${id}`, 30 * 60000).catch(() => null),
   ]);
   const idMap = {};
@@ -5193,8 +5289,27 @@ function makeAccordion(container, headerSel, openCount = 0) {
 // --- EAGLES ---------------------------------------------------------------
 const NFL_TEAM = `${SITE}/football/nfl/teams/${EAGLES.teamId}`;
 const FBCORE = 'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl';
-const STAT_SEASON = 2025; // last completed season (stats/leaders/depth)
-const SCHEDULE_SEASON = 2026; // upcoming 2026-27 season schedule
+// The season ESPN files football stats under. It rolls over in the summer, so
+// from July onward we ask for the new one. (v161: this was hardcoded to 2025 —
+// which meant that on kickoff weekend the Eagles tab and Team Research would
+// still have been serving last season's numbers.)
+const footballSeason = (d = new Date()) => (d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1);
+const STAT_SEASON = footballSeason();      // live season (stats/leaders/depth)
+const SCHEDULE_SEASON = STAT_SEASON;       // schedule year = the live season
+const SCHEDULE_LABEL = `${SCHEDULE_SEASON}-${String((SCHEDULE_SEASON + 1) % 100).padStart(2, '0')}`;
+// Current-season stats, leaders and depth charts don't exist until games are
+// played, so every core-stats read asks for the live season FIRST and falls
+// back to the last completed one. It returns which season actually answered so
+// the UI can label it honestly rather than passing last year's numbers off as
+// this year's — and it flips itself over the moment real data lands, with no
+// code change needed on kickoff weekend.
+async function fbSeasonData(urlFor, ttl, hasData) {
+  for (const yr of [STAT_SEASON, STAT_SEASON - 1]) {
+    const data = await safeJSON(urlFor(yr), ttl);
+    if (data && (!hasData || hasData(data))) return { data, season: yr };
+  }
+  return { data: null, season: STAT_SEASON };
+}
 const refId = (ref) => (ref || '').match(/\/(?:athletes|teams)\/(\d+)/)?.[1];
 const safeJSON = (url, ttl) => fetchJSON(url, ttl).catch(() => null);
 
@@ -5480,7 +5595,8 @@ function fieldHTML(entries, unit) {
 // Rendered as Offense / Defense / Special Teams sub-tabs, Field or List view.
 async function renderEaglesDepth(idMap, groups) {
   const elx = $('#eagles-depth');
-  const dc = await safeJSON(`${FBCORE}/seasons/${STAT_SEASON}/teams/${EAGLES.teamId}/depthcharts`, 24 * 3600000);
+  const dc = (await fbSeasonData((y) => `${FBCORE}/seasons/${y}/teams/${EAGLES.teamId}/depthcharts`,
+    24 * 3600000, (d) => (d.items || []).length)).data;
   let entries = []; // { unit, label, ordered, players:[{name,jersey}] }
   const seen = new Set();
   (dc?.items || []).forEach((u) => {
@@ -5536,9 +5652,11 @@ async function renderEaglesDepth(idMap, groups) {
 
 // Team stats with league rankings.
 async function renderEaglesTeamStats() {
-  $('#eagles-stats-season').textContent = `(${STAT_SEASON})`;
   const elx = $('#eagles-teamstats');
-  const data = await safeJSON(`${FBCORE}/seasons/${STAT_SEASON}/types/2/teams/${EAGLES.teamId}/statistics`, 6 * 3600000);
+  const { data, season } = await fbSeasonData(
+    (y) => `${FBCORE}/seasons/${y}/types/2/teams/${EAGLES.teamId}/statistics`, 6 * 3600000,
+    (d) => (d?.splits?.categories || []).some((c) => (c.stats || []).some((st) => st.rank)));
+  $('#eagles-stats-season').textContent = `(${season}${season < STAT_SEASON ? ' — last season' : ''})`;
   const cats = data?.splits?.categories || [];
   const flat = [];
   cats.forEach((c) => (c.stats || []).forEach((s) => { if (s.rank) flat.push(s); }));
@@ -5558,7 +5676,8 @@ async function renderEaglesTeamStats() {
 // Statistical leaders (passing/rushing/receiving, etc).
 async function renderEaglesLeaders(idMap) {
   const elx = $('#eagles-leaders');
-  const data = await safeJSON(`${FBCORE}/seasons/${STAT_SEASON}/types/2/teams/${EAGLES.teamId}/leaders`, 6 * 3600000);
+  const { data } = await fbSeasonData((y) => `${FBCORE}/seasons/${y}/types/2/teams/${EAGLES.teamId}/leaders`,
+    6 * 3600000, (d) => (d?.categories || []).some((c) => (c.leaders || []).length));
   const cats = (data?.categories || []).filter((c) => (c.leaders || []).length);
   if (!cats.length) { elx.innerHTML = '<div class="empty">Player leaders will appear during the season.</div>'; return; }
   const rows = cats.slice(0, 8).map((c) => {
@@ -5572,7 +5691,7 @@ async function renderEaglesLeaders(idMap) {
 
 // Full schedule + results + W/L trend.
 async function renderEaglesSchedule() {
-  $('#eagles-sched-season').textContent = '(2026-27)';
+  $('#eagles-sched-season').textContent = `(${SCHEDULE_LABEL})`;
   const elx = $('#eagles-schedule');
   let data = await safeJSON(`${SITE}/football/nfl/teams/${EAGLES.teamId}/schedule?season=${SCHEDULE_SEASON}`, 6 * 3600000);
   if (!data?.events?.length) data = await safeJSON(`${SITE}/football/nfl/teams/${EAGLES.teamId}/schedule`, 6 * 3600000);
@@ -5877,7 +5996,7 @@ function setMode(live) {
 // (Eagles has its own curated nav, so it's skipped here.)
 function injectJumpNav(name) {
   const panel = document.getElementById(name);
-  if (!panel || name === 'eagles' || name === 'redsox' || name === 'nfl' || name === 'home') return;
+  if (!panel || name === 'eagles' || name === 'redsox' || name === 'nfl' || name === 'cfb' || name === 'home') return;
   // Derive each chip label from the heading text WITHOUT any nested controls
   // (e.g. the Standings/Power toggle inside the "League" heading) so labels stay
   // clean. Empty sections set their box to '' and emit no .section-title, so they
@@ -5902,12 +6021,209 @@ function injectJumpNav(name) {
     (b.onclick = () => document.getElementById(b.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
 }
 
+// ======================= Betting board (shared) ===========================
+// The gambling read for a whole slate in one scan, used by the NFL and CFB
+// tabs. Everything here already existed per-game inside the modal's Game
+// Report; this puts the same three numbers — the book's line, the model's
+// price, and where the money is — side by side for every game on the card, so
+// the week can be read without opening fifteen modals.
+//
+// It obeys the v157 rule: the Render backend is raced under a hard cap and the
+// board renders without it, so a sleeping backend costs the sharp-money row
+// and nothing else.
+const BB_MAX_GAMES = 16; // keeps a full CFB Saturday from firing 60 profile fetches
+
+async function renderBettingBoard(sport, host, games) {
+  if (!host) return;
+  // Finals have no line left to read; the Game Report in the modal still
+  // carries their closing numbers.
+  const open = (games || []).filter((g) => g.id && gameState(g) !== 'final');
+  const slate = open.slice(0, BB_MAX_GAMES);
+  if (!slate.length) {
+    host.innerHTML = `<div class="empty">${(games || []).length ? 'Every game on this slate is final — open a card for its closing report.' : 'No games on the board right now.'}</div>`;
+    return;
+  }
+  host.innerHTML = '<div class="empty">📊 Pulling lines &amp; money…</div>';
+  const reportP = getBettingReport(sport).catch(() => null);
+  const report = await raceReport(reportP, SHARP_WAIT.picks);
+  const preds = await Promise.all(slate.map((g) => (g.seasonType === 1
+    ? Promise.resolve(null)
+    : predictGame(sport, g, { splits: splitsFor(report, g) }).catch(() => null))));
+
+  let withSplits = 0, edges = 0;
+  const rows = slate.map((g, i) => {
+    const p = preds[i];
+    const info = normOdds(g.odds, g.home.name, g.away.name);
+    const sp = splitsFor(report, g);
+    if (sp) withSplits++;
+    const gap = p && info ? marketGap(p, info) : null;
+    const isEdge = !!(p && info && info.favName && p.winner.name !== info.favName && (gap == null || gap >= 5));
+    if (isEdge) edges++;
+    const st = gameState(g);
+    const when = st === 'live' ? (g.statusText || 'LIVE')
+      : new Date(g.date).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+
+    const ml = (v) => (Number(v) > 0 ? `+${v}` : `${v}`);
+    let lineTxt = info?.details || '';
+    if (!lineTxt && info && (info.hML != null || info.aML != null)) {
+      lineTxt = [info.aML != null ? `${g.away.abbr || 'Away'} ${ml(info.aML)}` : '',
+                 info.hML != null ? `${g.home.abbr || 'Home'} ${ml(info.hML)}` : ''].filter(Boolean).join(' / ');
+    }
+    const lineBits = [lineTxt, info?.ou != null ? `O/U ${info.ou}` : '', g.tv || ''].filter(Boolean).join(' · ');
+
+    let modelTxt;
+    if (g.seasonType === 1) modelTxt = '<span class="bb-muted">🤖 Preseason — the model sits these out</span>';
+    else if (!p) modelTxt = '<span class="bb-muted">🤖 Not enough game data yet</span>';
+    else {
+      const gapTag = gap == null ? ''
+        : `<span class="bb-gap${isEdge ? ' edge' : ''}">${gap > 0 ? '+' : ''}${gap} vs market</span>`;
+      const tot = p.projTotal != null && info?.ou != null
+        ? ` · total ${p.projTotal.toFixed(1)} vs ${info.ou}` : '';
+      modelTxt = `🤖 <b>${esc(p.winner.name)}</b> ${p.conf}%${tot} ${gapTag}`;
+    }
+    const sharpRows = sharpSignals(g, sp, null).map((t) => `<div class="bb-sharp">${t}</div>`).join('');
+    return `<div class="bb-row${isEdge ? ' edge' : ''}">
+      <div class="bb-top"><span class="bb-match">${rankHTML(g.away)}${esc(g.away.abbr || g.away.name)} @ ${rankHTML(g.home)}${esc(g.home.abbr || g.home.name)}</span><span class="bb-when${st === 'live' ? ' live' : ''}">${esc(when)}</span></div>
+      <div class="bb-line">${lineBits ? `📊 ${esc(lineBits)}` : '<span class="bb-muted">No line posted yet</span>'}</div>
+      <div class="bb-model">${modelTxt}</div>${sharpRows}</div>`;
+  }).join('');
+
+  // Say plainly what the board is standing on. A missing backend is stated,
+  // never papered over — the lines are ESPN's either way.
+  const moneyNote = !BETTING_SPORTS.has(sport)
+    ? 'No betting-splits feed for this league.'
+    : report ? (withSplits
+        ? `Dollars-vs-tickets from DraftKings via VSiN on ${withSplits} of ${slate.length} games.`
+        : 'DraftKings splits loaded but none matched this slate yet.')
+      : 'Splits feed asleep or unreachable — lines and model prices only.';
+  host.innerHTML = `<div class="ai-why" style="margin:2px 0 8px">Lines are ESPN's. ${esc(moneyNote)} ${edges ? `⚡ = the model disagrees with the book by 5+ points (${edges} today).` : 'No model-vs-book edges on this slate.'} For fun — not betting advice.</div>${rows}` +
+    // Only say "top N" when the BOARD actually truncated. Finals are excluded
+    // above by design, not hidden, so they must not inflate this count.
+    (open.length > slate.length ? `<div class="ai-why" style="margin-top:8px">Showing the top ${slate.length} of ${open.length} games with a line — tap any card above for the rest.</div>` : '');
+}
+
+// =========================== College football tab =========================
+// Top 25 only, by design (see LEAGUES.cfb): the ranked slate, the poll itself,
+// the projected playoff field, the betting board and league news — the same
+// surfaces the NFL tab carries, sized to the part of college football the
+// owner actually watches.
+async function renderCFB() {
+  const navItems = [['cfb-sec-week', 'Ranked Games'], ['cfb-sec-betting', 'Betting'],
+    ['cfb-sec-rank', 'Top 25'], ['cfb-sec-playoff', 'Playoff Field'], ['cfb-sec-news', 'News']];
+  const navEl = $('#cfb-nav');
+  navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
+  navEl.querySelectorAll('button').forEach((b) =>
+    (b.onclick = () => { const t = document.getElementById(b.dataset.target); if (t?._accSet) t._accSet(true); t?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+  makeAccordion(document.getElementById('cfb'), '.section-title', 2);
+  renderCFBWeek();
+  renderCFBRankings();
+  renderCFBNews();
+}
+
+// Hero + this week's ranked slate + the betting board built from it.
+async function renderCFBWeek() {
+  const heroEl = $('#cfb-hero'), box = $('#cfb-week');
+  let sb = null;
+  try { sb = await scoreboard('cfb'); } catch (_) {}
+  const all = sb?.games || [];
+  const games = all.length ? await onlyRanked('cfb', all).catch(() => []) : [];
+  const stype = Number(sb?.json?.season?.type ?? sb?.json?.leagues?.[0]?.season?.type) || null;
+  const week = sb?.json?.week?.number ?? null;
+  const phase = stype === 3 ? 'Bowls & Playoff'
+    : stype === 2 ? `Regular Season${week ? ` · Week ${week}` : ''}`
+    : `${footballSeason()} Season`;
+  heroEl.innerHTML = `
+    <h2 style="margin:0">College Football</h2><div class="muted">${esc(phase)}</div>
+    <div class="muted" style="margin-top:4px;font-size:.85rem">Ranked teams only — a game shows up here (and on the Home slate) when a Top 25 team is playing in it.</div>`;
+  if (setMode && games.length) setMode(true);
+
+  renderBettingBoard('cfb', $('#cfb-betting'), games);
+  renderCFBPlayoff();
+
+  if (!games.length) {
+    box.innerHTML = `<div class="empty">${all.length
+      ? 'No Top 25 teams on this week\'s board yet.'
+      : sb ? 'No games on the board right now.' : 'Scoreboard unreachable right now.'}</div>`;
+    return;
+  }
+  box.innerHTML = '';
+  const byDay = {};
+  games.forEach((g) => {
+    const key = new Date(g.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
+    (byDay[key] = byDay[key] || []).push(g);
+  });
+  Object.entries(byDay).forEach(([day, arr]) => {
+    box.appendChild(el('div', 'nfl-day', day));
+    const grid = el('div', 'games-grid');
+    arr.forEach((g) => grid.appendChild(gameCard('cfb', g, { odds: true })));
+    box.appendChild(grid);
+  });
+}
+
+// The poll itself. Movement is computed against each team's previous rank, so
+// the table shows who is climbing without needing a second feed.
+async function renderCFBRankings() {
+  const box = $('#cfb-rankings');
+  const rk = await cfbRankings().catch(() => null);
+  if (!rk || !rk.entries.length) {
+    box.innerHTML = '<div class="empty">Rankings feed unreachable right now — the ranked slate above falls back to the ranks ESPN stamps on each game.</div>';
+    return;
+  }
+  const head = `<div class="ai-why" style="margin:2px 0 8px">${esc(rk.poll)}${rk.asOf ? ` · ${esc(String(rk.asOf))}` : ''}. Every other section on this tab is filtered to these teams.</div>`;
+  box.innerHTML = head + rk.entries.map((e) => {
+    const mv = e.prev && e.prev > 0 && e.prev !== e.rank ? e.prev - e.rank : 0;
+    const mvTxt = mv > 0 ? `▲${mv}` : mv < 0 ? `▼${-mv}` : '—';
+    return `<div class="pw-row">
+      <span class="pw-rank">${e.rank}</span>
+      <span class="pw-team">${e.logo ? `<img src="${esc(e.logo)}" alt="" loading="lazy">` : ''}${esc(e.name)}${e.votes ? ` <span class="cfb-votes">(${e.votes})</span>` : ''}</span>
+      <span class="pw-rec">${esc(e.record || '')}</span>
+      <span class="pw-diff ${mv > 0 ? 'up' : mv < 0 ? 'dn' : ''}">${mvTxt}</span>
+    </div>`;
+  }).join('') + (rk.others.length
+    ? `<div class="ai-why" style="margin-top:8px">Also receiving votes: ${esc(rk.others.slice(0, 8).join(', '))}</div>` : '');
+}
+
+// Projected playoff field. The 12-team bracket takes the five highest-ranked
+// conference champions plus seven at-large teams, which no free feed resolves —
+// so this is honestly labelled a read of the poll's top 12, not a bracket.
+async function renderCFBPlayoff() {
+  const box = $('#cfb-playoff');
+  if (!box) return;
+  const rk = await cfbRankings().catch(() => null);
+  if (!rk || rk.entries.length < 12) { box.innerHTML = '<div class="empty">Appears once a full poll is out.</div>'; return; }
+  const isCFP = /playoff|cfp/i.test(rk.poll);
+  const note = isCFP
+    ? 'The committee\'s current top 12. The real bracket reserves five spots for conference champions, so seeding will shift — this is the field as ranked, not an official bracket.'
+    : `Read off the ${esc(rk.poll)} — the committee's own rankings don't start until November. Top 12 make the playoff.`;
+  box.innerHTML = `<div class="ai-why" style="margin:2px 0 8px">${note}</div>` +
+    rk.entries.slice(0, 16).map((e, i) => `${i === 12 ? '<div class="npo-cut"></div>' : ''}<div class="npo-row">
+      <span class="npo-seed">${i < 12 ? e.rank : '—'}</span>
+      <span class="pw-team">${e.logo ? `<img src="${esc(e.logo)}" alt="" loading="lazy">` : ''}${esc(e.name)}</span>
+      <span class="pw-rec">${esc(e.record || '')}</span></div>`).join('') +
+    '<div class="ai-why" style="margin-top:6px">Dashed line = the cut. Below it: first teams out.</div>';
+}
+
+async function renderCFBNews() {
+  const nb = $('#cfb-news');
+  let arts = [];
+  try { arts = (await fetchJSON(`${SITE}/football/college-football/news?limit=12`, 5 * 60000))?.articles || []; } catch (_) {}
+  if (!arts.length) { nb.innerHTML = '<div class="empty">No college football news right now.</div>'; return; }
+  nb.innerHTML = arts.slice(0, 12).map((a, idx) => {
+    const img = a.images?.[0]?.url;
+    const when = a.published ? new Date(a.published).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+    return `<div class="news-item" data-news="${idx}">
+      ${img ? `<img src="${esc(img)}" alt="" onerror="this.style.display='none'">` : ''}
+      <div><div class="nh">${esc(a.headline || '')}</div><div class="nd">${esc(a.description || '')}</div><div class="nt">${when} · tap for summary</div></div></div>`;
+  }).join('');
+  nb.querySelectorAll('.news-item').forEach((it) => { it.onclick = () => openNewsSummary(arts[+it.dataset.news]); });
+}
+
 // ============================== NFL tab ===================================
 // League-wide NFL lens (the Eagles tab stays the team deep-dive): weekly
 // slate, league headlines, a model-flavored Power Board, and the playoff
 // picture. Everything degrades to honest empty-states when feeds are down.
 async function renderNFL() {
-  const navItems = [['nfl-sec-week', 'Week'], ['nfl-sec-news', 'News'], ['nfl-sec-power', 'Power Board'], ['nfl-sec-playoff', 'Playoffs']];
+  const navItems = [['nfl-sec-week', 'Week'], ['nfl-sec-betting', 'Betting'], ['nfl-sec-news', 'News'], ['nfl-sec-power', 'Power Board'], ['nfl-sec-playoff', 'Playoffs']];
   const navEl = $('#nfl-nav');
   navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
   navEl.querySelectorAll('button').forEach((b) =>
@@ -5924,9 +6240,10 @@ async function renderNFL() {
 // which is exactly the view the daily Home slate can't give.
 async function renderNFLWeek() {
   const heroEl = $('#nfl-hero'), box = $('#nfl-week');
-  let json = null;
-  try { json = await fetchJSON(`${SITE}/football/nfl/scoreboard`, 60000); } catch (_) {}
-  const events = (json?.events || []).map(normEvent);
+  let sb = null;
+  try { sb = await scoreboard('nfl'); } catch (_) {}
+  const json = sb?.json || null;
+  const events = sb?.games || [];
   const stype = Number(json?.season?.type ?? json?.leagues?.[0]?.season?.type) || events.find((g) => g.seasonType)?.seasonType || null;
   const week = json?.week?.number ?? null;
   const kick = daysUntil(NFL_KICKOFF);
@@ -5939,6 +6256,8 @@ async function renderNFLWeek() {
     ${stype !== 2 && stype !== 3 && kick > 0 ? `<div class="nfl-kick">🏈 Kickoff in <b>${kick} day${kick === 1 ? '' : 's'}</b> — Thu Sep 10</div>` : ''}
     ${stype === 1 ? '<div class="muted" style="margin-top:4px;font-size:.85rem">Preseason results don\'t feed the AI model — backups play, nothing predictive.</div>' : ''}`;
   if (setMode && events.length) setMode(true);
+  // The betting board reads the same slate — no second scoreboard fetch.
+  renderBettingBoard('nfl', $('#nfl-betting'), events);
   if (!events.length) {
     box.innerHTML = `<div class="empty">${json ? 'No games on this week\'s slate.' : 'Scoreboard unreachable right now.'}</div>`;
     return;
@@ -5985,7 +6304,7 @@ async function renderNFLPower() {
   const played = rows.some((r) => (r.wins + r.losses) > 0);
   let src = 'live';
   if (!rows.length || !played) {
-    const prev = await getStandings('nfl', 2025).catch(() => []);
+    const prev = await getStandings('nfl', STAT_SEASON - 1).catch(() => []);
     if (prev.length && prev.some((r) => r.wins + r.losses > 0)) { rows = prev; src = 'prior'; }
   }
   if (!rows.length) {
@@ -6000,8 +6319,8 @@ async function renderNFLPower() {
     return { ...r, g, wp, dpg, score: wp + dpg / 28 }; // ~14 pts/gm diff ≈ a .500 swing
   }).sort((a, b) => b.score - a.score);
   const note = src === 'prior'
-    ? 'No 2026 games yet — ranked on final 2025 record + point diff until real games count.'
-    : 'Ranked on 2026 record + per-game point differential (the same signals the AI model reads).';
+    ? `No ${STAT_SEASON} games yet — ranked on final ${STAT_SEASON - 1} record + point diff until real games count.`
+    : `Ranked on ${STAT_SEASON} record + per-game point differential (the same signals the AI model reads).`;
   pb.innerHTML = `<div class="ai-why" style="margin:2px 0 8px">${note}</div>` + scored.map((r, i) => {
     const barPct = clamp(((r.score + 0.45) / 1.9) * 100, 4, 100);
     const d = r.dpg ? (r.dpg > 0 ? '+' : '') + r.dpg.toFixed(1) : '—';
@@ -6014,7 +6333,7 @@ async function renderNFLPower() {
     </div>`;
   }).join('');
   if (src === 'prior' || !played) {
-    po.innerHTML = '<div class="empty">Appears once 2026 regular-season games count — the Power Board carries the offseason read for now.</div>';
+    po.innerHTML = `<div class="empty">Appears once ${STAT_SEASON} regular-season games count — the Power Board carries the offseason read for now.</div>`;
     return;
   }
   const conf = { AFC: [], NFC: [] };
@@ -6034,7 +6353,7 @@ async function renderNFLPower() {
     }).join('');
 }
 
-const renderers = { home: renderHome, eagles: renderEagles, nfl: renderNFL, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, labs: () => {}, about: () => {} };
+const renderers = { home: renderHome, eagles: renderEagles, nfl: renderNFL, cfb: renderCFB, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, labs: () => {}, about: () => {} };
 function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => {

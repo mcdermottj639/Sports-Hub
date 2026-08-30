@@ -7,11 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Sports-Hub" />
   <title>Sports-Hub</title>
-  <meta name="description" content="Personal multi-sport hub — a daily overview of NFL, NBA and MLB, plus AI picks." />
+  <meta name="description" content="Personal multi-sport hub — a daily overview of NFL, college football, NBA and MLB, plus AI picks." />
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=160" />
+  <link rel="stylesheet" href="styles.css?v=161" />
   <script>
     /* Set the theme before first paint to avoid a flash. Uses the saved
        preference if present, else follows the OS light/dark setting. */
@@ -43,6 +43,7 @@
     <button id="tab-home" data-tab="home" class="active" role="tab" aria-selected="true" aria-controls="home">Home</button>
     <button id="tab-eagles" data-tab="eagles" role="tab" aria-selected="false" aria-controls="eagles">🦅 Eagles</button>
     <button id="tab-nfl" data-tab="nfl" role="tab" aria-selected="false" aria-controls="nfl">🏈 NFL</button>
+    <button id="tab-cfb" data-tab="cfb" role="tab" aria-selected="false" aria-controls="cfb">🎓 CFB</button>
     <button id="tab-redsox" data-tab="redsox" role="tab" aria-selected="false" aria-controls="redsox">⚾ Red Sox</button>
     <button id="tab-predictions" data-tab="predictions" role="tab" aria-selected="false" aria-controls="predictions">🤖 AI Picks</button>
     <button id="tab-fantasy" data-tab="fantasy" role="tab" aria-selected="false" aria-controls="fantasy">Fantasy</button>
@@ -89,12 +90,29 @@
       <div id="nfl-nav" class="eagles-nav"></div>
       <h2 class="section-title" id="nfl-sec-week">This Week&rsquo;s Slate</h2>
       <div id="nfl-week"></div>
+      <h2 class="section-title" id="nfl-sec-betting">📊 Betting Board</h2>
+      <div id="nfl-betting"></div>
       <h2 class="section-title" id="nfl-sec-news">Top NFL Headlines</h2>
       <div id="nfl-news"></div>
       <h2 class="section-title" id="nfl-sec-power">⚡ Power Board</h2>
       <div id="nfl-power"></div>
       <h2 class="section-title" id="nfl-sec-playoff">Playoff Picture</h2>
       <div id="nfl-playoff"></div>
+    </section>
+
+    <section id="cfb" class="tab-panel" role="tabpanel" aria-labelledby="tab-cfb" tabindex="0">
+      <div id="cfb-hero" class="featured-card cfb-hero">Loading college football…</div>
+      <div id="cfb-nav" class="eagles-nav"></div>
+      <h2 class="section-title" id="cfb-sec-week">Ranked Games This Week</h2>
+      <div id="cfb-week"></div>
+      <h2 class="section-title" id="cfb-sec-betting">📊 Betting Board</h2>
+      <div id="cfb-betting"></div>
+      <h2 class="section-title" id="cfb-sec-rank">🏆 Top 25</h2>
+      <div id="cfb-rankings"></div>
+      <h2 class="section-title" id="cfb-sec-playoff">Playoff Field</h2>
+      <div id="cfb-playoff"></div>
+      <h2 class="section-title" id="cfb-sec-news">Top College Football Headlines</h2>
+      <div id="cfb-news"></div>
     </section>
 
     <section id="redsox" class="tab-panel" role="tabpanel" aria-labelledby="tab-redsox" tabindex="0">
@@ -180,7 +198,7 @@
     <section id="about" class="tab-panel" role="tabpanel" aria-labelledby="tab-about" tabindex="0">
       <div class="setup-card">
         <h2>About Sports-Hub</h2>
-        <p>A personal hub for <strong>NFL 🦅, NBA and MLB</strong> — a daily overview of every game, an Eagles deep-dive, an AI prediction game, and fantasy tracking, all in your browser.</p>
+        <p>A personal hub for <strong>NFL 🦅, college football (Top 25), NBA and MLB</strong> — a daily overview of every game, an Eagles deep-dive, an AI prediction game, and fantasy tracking, all in your browser.</p>
         <p class="muted">Live data comes from ESPN’s free public sports feed, fetched directly in your browser. No login, no API key, nothing to configure.</p>
         <h3>Make it yours</h3>
         <p>Edit the <code>LEAGUES</code> block near the top of <code>app.js</code> to change favorite teams or add a league.</p>
@@ -201,6 +219,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=160" defer></script>
+  <script src="app.js?v=161" defer></script>
 </body>
 </html>

@@ -778,6 +778,36 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .npo-seed { width: 24px; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }
 .npo-cut { border-top: 2px dashed var(--gold); margin: 6px 0; opacity: .6; }
 
+/* --- college football (v161) ------------------------------------------- */
+.featured-card.cfb-hero::after { content: "🎓"; }
+/* Poll rank chip on a game card / betting row. Only CFB ever sets team.rank. */
+.rank-badge {
+  font-size: 11px; font-weight: 800; color: var(--gold); flex: none;
+  font-variant-numeric: tabular-nums; margin-right: 1px;
+}
+.cfb-votes { color: var(--muted); font-weight: 600; font-size: 12px; }
+
+/* --- betting board (v161, NFL + CFB tabs) ------------------------------ */
+.bb-row {
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+  padding: 9px 11px; margin-bottom: 8px;
+}
+.bb-row.edge { border-color: var(--gold); }
+.bb-top { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; }
+.bb-match { font-weight: 700; display: flex; align-items: baseline; gap: 4px; min-width: 0; }
+.bb-when { color: var(--muted); font-size: 12px; flex: none; }
+.bb-when.live { color: var(--live); font-weight: 700; }
+.bb-line { color: var(--muted); font-size: 13px; margin-top: 3px; }
+.bb-model { font-size: 13px; margin-top: 4px; }
+.bb-gap {
+  display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  background: rgba(128, 128, 128, .16);
+}
+.bb-gap.edge { color: var(--gold); background: rgba(197, 160, 50, .18); box-shadow: inset 0 0 0 1px var(--gold); }
+.bb-sharp { font-size: 12px; margin-top: 4px; color: var(--accent); }
+.bb-muted { color: var(--muted); }
+
 /* ==========================================================================
    LIGHT MODE — "Editorial / Premium" theme (Design 3).
    Active only when <html data-theme="light">. Dark mode is the default and is
