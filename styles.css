@@ -1323,3 +1323,36 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .sec-all[hidden] { display: none; }
 :root[data-theme="light"] .sec-all { border-color: var(--line); }
 :root[data-theme="light"] .sec-all:hover { border-color: var(--muted); }
+
+/* ==========================================================================
+   DESKTOP READING LAYOUT (v173)
+   #ai-picks used to be a .games-grid — a multi-column grid meant for game
+   cards. Once it became a ladder (headings, notes, cards, panels read top to
+   bottom) that grid scattered the pieces into separate columns: a section
+   heading in column 2, its cards in column 4, and three columns of whitespace.
+   It is a single flowing column now, and on a wide screen the CARDS pair up
+   two-across while everything that isn't a card spans the full width — so the
+   reading order is always heading → its cards → next heading.
+   Phone layout is untouched: all of this is behind a min-width.
+   ========================================================================== */
+.ai-flow { display: block; }
+
+@media (min-width: 860px) {
+  #ai-picks, #home-board {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; align-items: start;
+  }
+  /* Only the cards sit side by side. Headings, notes, the stat bar, folds,
+     trend lists and the backtest panel all span, so nothing can be orphaned
+     into a column away from the section it belongs to. */
+  #ai-picks > *:not(.brd-card),
+  #home-board > *:not(.brd-card) { grid-column: 1 / -1; }
+
+  /* The three backtest cards read far better side by side than as full-width
+     strips with a couple of rows in each. */
+  .bt-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 9px; align-items: start; }
+  .bt-card { margin-bottom: 0; }
+
+  /* A 940px-wide card with two words in it reads as an empty band. Cap the
+     long-form prose so line length stays comfortable. */
+  .brd-note, .ai-note, .ai-flow > .empty { max-width: 760px; }
+}

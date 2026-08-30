@@ -368,7 +368,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v174** (backend **b13-pregame-lines**).
+Current version as of this writing: **v175** (backend **b13-pregame-lines**).
 
 - **🚨 Kept players were being auto-filled onto the Draft Board (v174)** — the
   owner asked why Chase Brown, a rival's R6 keeper, was sitting on their draft
@@ -460,6 +460,33 @@ Current version as of this writing: **v174** (backend **b13-pregame-lines**).
   - ⚠️ Still unverified live: the sandbox reaches web *search* but not ESPN, so
     these are search-snippet confirmations. Spot-check the board on device.
 
+- **🖥️ Desktop layout + collapse-all + mouse-reachable nav (v175)** — the owner
+  uses the app on a PC as well as the phone, and two things were phone-only by
+  construction:
+  - **The tab rail was a horizontal scroller with no way to scroll it.** v163
+    made `.tabs` one `overflow-x: auto` line, which a thumb swipes but a mouse
+    cannot. On desktop (`min-width: 700px`) it now **wraps to a centered block**
+    — there is room for all nine tabs, so scrolling isn't needed at all. And
+    `wheelScrollsSideways('.tabs, .live-rail, .rail-leagues')` maps a plain
+    vertical wheel to horizontal scroll on the three rails that still scroll,
+    so a trackpad works without holding shift.
+  - **AI Picks and The Board were one 1500px-wide column.** At `min-width:
+    860px` both become a **two-column grid** (`.brd-card` children side by
+    side; everything else spans `1 / -1`), the backtest cards reflow with
+    `auto-fit`, and prose/notes are capped at 760px so a sentence doesn't run
+    the whole width. `.ai-flow { display: block }` is the mobile base so the
+    grid only ever exists on desktop.
+  - **Collapse all / Expand all** button (`.sec-all`) in AI Picks — the ladder
+    is long and the owner wanted one control instead of nine chevrons. It
+    writes through `setSecState`, so its result persists like a manual toggle.
+  - ⚠️ **Layout test lesson:** the first cut asserted every non-card element was
+    full *width*, which failed on the deliberately capped prose. The real
+    signature of "parked in a column" is the **left-edge offset**, not the
+    width — assert the thing you actually mean.
+  - Verified in headless Chromium at 390px and 1280px in both themes —
+    **32 checks** on the desktop layout plus the existing 105/53/44/40/16/10/14
+    suites still green.
+
 ## ⏳ Open measurements — read these BEFORE touching model constants
 
 Several fixes are shipped but **unverified against results**, because the data
@@ -504,6 +531,36 @@ index, not the argument.
 - **7 soccer entries** (World Cup, league removed in v125) still count toward
   the all-time headline record.
 
+
+- **🚨 Desktop layout — AI Picks was scattering itself across columns (v173)** —
+  the owner sent a photo of the app on a PC: a narrow strip of content with
+  three columns of whitespace beside it. Root cause: **`#ai-picks` carried
+  `class="games-grid"`** (`repeat(auto-fill, minmax(250px, 1fr))`), a grid built
+  for game cards. That was fine when the tab WAS a grid of cards, but v164 made
+  it a ladder — heading, note, cards, panel, read top to bottom — and a
+  multi-column grid drops those into whatever cell comes next. A section
+  heading landed in column 2 while its cards landed in column 4.
+  - `#ai-picks` is now `.ai-flow`: a plain block on phones, and on **≥860px** a
+    two-column grid where **only `.brd-card` sits in a column** — everything
+    else (`grid-column: 1 / -1`) spans, so a heading can never be separated
+    from the cards it introduces. `#home-board` gets the same treatment, which
+    turns The Board into an actual two-across board instead of full-width
+    strips with one line of text in each.
+  - `.bt-wrap` becomes `auto-fit, minmax(300px, 1fr)` on desktop, so the three
+    backtest cards sit side by side rather than stacking as wide thin bands.
+  - Long prose (`.brd-note`, `.ai-note`) is capped at **760px** — a 940px line
+    of body text is past comfortable reading length.
+  - **Phone layout is untouched** — every rule is behind `min-width: 860px`,
+    and the suite asserts cards stay full width at 390px.
+  - ⚠️ **The test that matters checks the LEFT EDGE, not the width.** The first
+    version asserted every non-card element was as wide as the container, which
+    failed on the deliberately capped prose. What actually indicates the bug is
+    an element *parked in a second column*, i.e. offset from the container's
+    left edge.
+  - Verified — **32 checks** at 1440/1024/760/420/390px: no heading or note
+    offset into a column, cards two-across on desktop and full width on a
+    phone, the first heading preceding the first card, `#ai-picks` no longer
+    carrying `games-grid`, plus the existing desktop-nav checks.
 
 - **Collapse-all + desktop nav (v172)** — two usability gaps the owner hit:
   - **⌄ Expand all / ⌃ Collapse all on AI Picks.** The tab is a long ladder and
