@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v170';
+const APP_VERSION = 'v171';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1325,8 +1325,22 @@ const PD_SCALE = { nfl: 7, cfb: 14, nba: 6, mlb: 2.2 };
 // pitching-dominant with a tiny home edge (~52-53% home win rate), so it can't
 // share football's team-strength weights — record/home are damped here and the
 // starting-pitcher matchup (weighted up in matchupFactor) carries the load.
+// The home%-minus-road% gap a TYPICAL pair of teams already shows, used to
+// centre the home/road split so it measures the pairing's deviation rather than
+// the league's baseline. MLB only for now: it is the one sport with a graded
+// sample big enough to have exposed the problem (242 labelled picks). NFL, CFB
+// and NBA keep the old formula until their records say otherwise — measure,
+// then fit, same as v126/v138.
+const HR_GAP = { mlb: 0.06 };   // MLB home teams win ~.530, road ~.470
 const MODEL_W = {
-  mlb:     { record: 0.6, margin: 0.9, form: 0.4, split: 0.7, homeEdge: 0.12, sharp: 0.30 },
+  // ⚠️ These are PRE-shrink coefficients: MODEL_SHRINK[sport] multiplies the
+  // whole factor sum before the logistic, so a coefficient's effect on the
+  // quoted probability is HALVED for MLB (shrink 0.5). v126 set homeEdge to
+  // 0.12 because logistic(0.12) = 53.0% — the real MLB home rate — but v138
+  // then added the shrink in a later session and nobody re-checked, so the
+  // effective edge silently became logistic(0.06) = 51.5%. Doubled to 0.24 so
+  // the POST-shrink figure is the 53% that was intended all along.
+  mlb:     { record: 0.6, margin: 0.9, form: 0.4, split: 0.7, homeEdge: 0.24, sharp: 0.30 },
   // College football (v161) pulls the two dials the other way from baseball.
   // Record carries more because the talent gap between programs is enormous and
   // persistent — unlike the NFL there is no parity mechanism — and home field is
@@ -1336,8 +1350,15 @@ const MODEL_W = {
   cfb:     { record: 1.3, margin: 1.0, form: 0.4, split: 1.0, homeEdge: 0.42, sharp: 0.20 },
   default: { record: 1.1, margin: 0.9, form: 0.4, split: 1.0, homeEdge: 0.28, sharp: 0.20 },
 };
-// Rough league-average starter ERA — the anchor for the pitcher-aware total.
-const MLB_AVG_ERA = 4.10;
+// Anchor for the pitcher-aware total. This compares each probable STARTER's
+// ERA against a baseline, so the baseline has to be the average STARTER's ERA —
+// not the league-wide figure, which includes relievers and runs lower. It was
+// set to 4.10 (league overall) while being described as a starter anchor, so
+// every game got a spurious `(0.2 + 0.2) * 0.6 = +0.24` runs added, and the
+// graded record showed exactly that: 32 of 43 totals picks were OVER
+// (p = 0.0019 against a 50/50 split), implying a +0.28 to +0.40 run bias at a
+// realistic spread — the same order this error produces.
+const MLB_SP_ERA = 4.30;
 // Log-odds shrink applied to the combined factor score before it becomes a
 // probability (v138). Fit against the owner's first graded month (119 pregame
 // MLB picks): the model's stated confidence was ~2x too wide — its 70%+ picks
@@ -1354,6 +1375,11 @@ const MLB_AVG_ERA = 4.10;
 // MLB's 2x-too-wide confidence. A mild shrink is the cheap precaution — it is
 // monotonic, so it changes no pick, only the stated confidence and the edge
 // sizing that keys off probHome. Revisit once a season of picks has graded.
+// ⚠️ This multiplies the ENTIRE factor sum, so every weight in MODEL_W is a
+// pre-shrink coefficient — see the note there. CFB's 0.8 has the same effect
+// on its homeEdge (0.42 -> an effective 58.3%, not the ~60% its comment
+// claims), but CFB has no graded results yet, so it is left alone: measure,
+// then fit.
 const MODEL_SHRINK = { mlb: 0.5, cfb: 0.8, default: 1 };
 // Park run environment, 100 = neutral (3-year public run factors, rounded).
 // Static by design — no endpoint needed, and parks move slowly.
@@ -1734,9 +1760,27 @@ async function predictGame(sport, g, opts) {
       // A 3-1 home record says almost nothing — blend the split with the
       // generic home edge until both sides have ~10 games of sample.
       const shrink = clamp(Math.min(hf.homeGP ?? 0, af.roadGP ?? 0) / 10, 0, 1);
-      add('Home/road split', w.split * shrink * (hf.homeWP - af.roadWP),
-        `home ${(hf.homeWP * 100).toFixed(0)}% vs road ${(af.roadWP * 100).toFixed(0)}%${shrink < 1 ? ' (small sample, damped)' : ''}`);
-      if (shrink < 1) add('Home field', w.homeEdge * (1 - shrink), 'standard home edge');
+      // 🚨 The split used to REPLACE the home edge once it had a full sample,
+      // and a raw home%-minus-road% is not a home-field term — for two average
+      // teams it is the league's own home/road gap (~.530 vs .470 in MLB), so
+      // it delivered 0.7 * 0.06 = 51.0% where reality is ~53%. Mid-season the
+      // model therefore gave home teams a 1-point edge instead of 3, and the
+      // graded record shows it: near-even AWAY picks went 6-14 (30%) while the
+      // same bucket's home picks went 7-6.
+      // Fixed by CENTERING the split on that typical gap — so it measures how
+      // much this pairing differs from a normal one — and letting the generic
+      // home edge always apply. Only sports with a graded sample get this;
+      // the rest keep the old path until there's evidence (see HR_GAP).
+      const hrGap = HR_GAP[sport];
+      if (hrGap != null) {
+        add('Home/road split', w.split * shrink * ((hf.homeWP - af.roadWP) - hrGap),
+          `home ${(hf.homeWP * 100).toFixed(0)}% vs road ${(af.roadWP * 100).toFixed(0)}% (vs a typical ${(hrGap * 100).toFixed(0)}-pt gap)`);
+        add('Home field', w.homeEdge, 'standard home edge');
+      } else {
+        add('Home/road split', w.split * shrink * (hf.homeWP - af.roadWP),
+          `home ${(hf.homeWP * 100).toFixed(0)}% vs road ${(af.roadWP * 100).toFixed(0)}%${shrink < 1 ? ' (small sample, damped)' : ''}`);
+        if (shrink < 1) add('Home field', w.homeEdge * (1 - shrink), 'standard home edge');
+      }
     } else { add('Home field', w.homeEdge, 'standard home edge'); }
     const day = 86400000;
     const hr = g.date && hf.lastDate ? clamp(Math.round((new Date(g.date) - new Date(hf.lastDate)) / day), 0, 10) : null;
@@ -1790,7 +1834,7 @@ async function predictGame(sport, g, opts) {
     ? (hf.ppg + hf.papg + af.ppg + af.papg) / 2 : null;
   if (sport === 'mlb' && projTotal != null) {
     if (mu.starters && mu.starters.hERA != null && mu.starters.aERA != null) {
-      const adj = ((mu.starters.hERA - MLB_AVG_ERA) + (mu.starters.aERA - MLB_AVG_ERA)) * 0.6;
+      const adj = ((mu.starters.hERA - MLB_SP_ERA) + (mu.starters.aERA - MLB_SP_ERA)) * 0.6;
       projTotal += adj;
     }
     // Park (v138): the first month of graded totals picked OVER 17 times in 23,
@@ -2367,7 +2411,12 @@ async function gradePending() {
     try { games = await getGames(sport, date, { allRanks: true }); } catch (_) { return; }
     const byId = {}; games.forEach((g) => (byId[g.id] = g));
     ids.forEach((id) => {
-      const g = byId[id.replace(/:t$/, '')]; if (!g || gameState(g) !== 'final') return;
+      // Strip ANY market suffix, not just totals: ATS picks are keyed `:s`
+      // (v164) and this only stripped `:t`, so every deferred ATS pick looked
+      // up a game id that doesn't exist, silently failed to grade, and was
+      // purged at the 14-day cutoff. The live path in renderPredictions graded
+      // them fine, which is why the tests missed it.
+      const g = byId[id.replace(/:(t|s)$/, '')]; if (!g || gameState(g) !== 'final') return;
       const entry = p[id];
       if (entry.a) { // ATS pick: did the side we took cover? (push → drop)
         const hit = atsResult(g, entry.hsp, !!entry.home);
@@ -2517,6 +2566,38 @@ function backtestPanel(det) {
   return box;
 }
 
+// Projected-total bias, measured on EVERY priced game (v171).
+//
+// v159 stored `pt` on graded totals PICKS to size the OVER skew — but a pick
+// only exists when |proj - line| already cleared TOT_EDGE_MIN, so that sample
+// is truncated by construction and overstates the bias. The unbiased estimate
+// needs the difference for every game the model priced, pick or no pick.
+// That is what this records: one small number per game, keyed by game id so
+// repeated renders can't double-count, purged after 30 days.
+const TOTBIAS_KEY = 'sportshub:totbias';
+function recordTotalBias(gameId, proj, ou) {
+  if (!gameId || proj == null || ou == null) return;
+  const x = Math.round((proj - Number(ou)) * 100) / 100;
+  if (!isFinite(x)) return;
+  try {
+    const o = JSON.parse(localStorage.getItem(TOTBIAS_KEY) || '{}');
+    if (o[gameId] != null) return;                       // one sample per game
+    o[gameId] = { d: Number(ymd(sportsDate())), x };
+    const cut = Number(ymd(new Date(Date.now() - 30 * 86400000)));
+    Object.keys(o).forEach((k) => { if (Number(o[k].d) < cut) delete o[k]; });
+    localStorage.setItem(TOTBIAS_KEY, JSON.stringify(o));
+  } catch (_) {}
+}
+// Mean of those differences: how many runs the model's total sits above (+) or
+// below (-) the book's, across everything it priced.
+function totalBiasStats() {
+  try {
+    const v = Object.values(JSON.parse(localStorage.getItem(TOTBIAS_KEY) || '{}'));
+    if (!v.length) return { n: 0, mean: null };
+    return { n: v.length, mean: v.reduce((a, r) => a + r.x, 0) / v.length };
+  } catch (_) { return { n: 0, mean: null }; }
+}
+
 // Clear NFL PRESEASON results before Week 1 (v170). Preseason predicts
 // nothing — backups play most of the snaps — so those games have no business
 // in a record the model is judged on. The model has refused to pick them since
@@ -2606,7 +2687,16 @@ function reportCard(det) {
     }
     if (t.biasN) {
       const b = t.biasSum / t.biasN;
-      tRow += `<div class="rep-row"><span class="rep-l">Model total vs the book</span><span class="rep-v">${b > 0 ? '+' : ''}${b.toFixed(1)} runs${t.biasN < 10 ? ' <span class="rep-cf">thin</span>' : ''}</span></div>`;
+      tRow += `<div class="rep-row"><span class="rep-l">…on graded picks only</span><span class="rep-v">${b > 0 ? '+' : ''}${b.toFixed(1)} runs${t.biasN < 10 ? ' <span class="rep-cf">thin</span>' : ''}</span></div>`;
+    }
+    // The unbiased read: every game the model priced, not just the ones that
+    // cleared the threshold and became picks. A pick only exists when
+    // |proj - line| was already large, so measuring bias on picks measures the
+    // threshold rather than the model.
+    const tb = totalBiasStats();
+    if (tb.n) {
+      tRow += `<div class="rep-row"><span class="rep-l">Model total vs the book</span><span class="rep-v">${tb.mean > 0 ? '+' : ''}${tb.mean.toFixed(2)} runs <span class="rep-cf">${tb.n} games</span></span></div>`;
+      tRow += '<div class="ai-why" style="padding:2px 0">Across every game priced in the last 30 days. The row above sees only graded picks, so it overstates the skew.</div>';
     }
   }
   // ATS gets the same treatment totals do: its own record, plus the model's
@@ -2759,6 +2849,10 @@ async function buildBoard(sport, games, opts = {}) {
     let tot = null;
     if (p?.projTotal != null && info?.ou != null) {
       const diff = p.projTotal - Number(info.ou);
+      // Sample EVERY priced game: the floor below decides what becomes a PICK,
+      // so measuring bias only on picks measures the floor, not the model.
+      // Scheduled games only, so re-rendering a final can't skew it.
+      if (sport === 'mlb' && gameState(g) === 'scheduled') recordTotalBias(g.id, p.projTotal, info.ou);
       const floor = TOT_EDGE_MIN[sport] ?? 1;
       if (isFinite(diff) && Math.abs(diff) >= floor) {
         // Totals are tiered on the same ladder as the moneyline, in units of

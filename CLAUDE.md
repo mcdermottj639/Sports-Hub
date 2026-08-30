@@ -360,7 +360,55 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v170** (backend **b13-pregame-lines**).
+Current version as of this writing: **v171** (backend **b13-pregame-lines**).
+
+- **🚨 Two model bugs found by measuring, not guessing (v171)** — the owner
+  asked to fix the totals OVER bias and to work out why low-confidence picks
+  lose. Both traced to concrete errors, neither to a weight that needed taste:
+  - **`MLB_AVG_ERA` was a starter anchor set to the LEAGUE figure.** The comment
+    said "league-average starter ERA"; the value 4.10 is the league-wide ERA,
+    which includes relievers and runs lower than starters'. So every game got a
+    spurious `(0.2 + 0.2) × 0.6 = +0.24` runs. Renamed **`MLB_SP_ERA = 4.30`**.
+    Sizing check from the export: 32 of 43 totals picks OVER is **p = 0.0019**
+    against 50/50, and inverting that split for a normal proj−line error gives
+    a bias of **+0.28 to +0.40 runs** at sd 1.0–1.25 — the same order this
+    error produces.
+  - **🚨 Home field was broken twice over, and the second one is the lesson.**
+    (a) Once both teams had 10+ home/road games `shrink` hit 1 and the generic
+    home edge was **dropped entirely**, leaving only `w.split × (homeWP −
+    roadWP)`. But that raw difference IS the league's own home/road gap for an
+    average pair, so it delivered **51.0%** where MLB home teams win ~53%.
+    Fixed with **`HR_GAP`** (mlb 0.06): the split is centred on the typical gap
+    so it measures the pairing's deviation, and the home edge always applies.
+    (b) The test then showed **51.5%, not 53%** — because **`MODEL_SHRINK.mlb`
+    (0.5, v138) multiplies the whole factor sum**, halving a `homeEdge` that
+    v126 had calibrated to exactly 53% *before the shrink existed*. Two changes,
+    each right on its own, silently cancelling across sessions. `homeEdge` is
+    now **0.24** so the POST-shrink figure is the intended 53%.
+    **Every weight in `MODEL_W` is a pre-shrink coefficient — a note now says
+    so in both places.** CFB has the same mismatch (0.42 → an effective 58.3%,
+    not the ~60% its comment claims) and is deliberately left alone: no graded
+    CFB results yet.
+  - **What the record showed:** in the 50–54% bucket, AWAY picks went **6-14
+    (30%)** while home picks went 7-6. That is the signature of an
+    under-weighted home edge, and it is what pointed at both bugs.
+  - **🚨 ATS picks never graded (v164 regression, mine).** `gradePending`
+    stripped only `:t`, so a `:s` ATS entry looked up a game id that doesn't
+    exist, silently failed, and was purged at the 14-day cutoff. The live path
+    in `renderPredictions` graded them fine, which is exactly why the tests
+    missed it — they exercised the wrong path. Now strips `/:(t|s)$/`.
+  - **🚨 The bias instrument was measuring the threshold, not the model.**
+    v159's `pt` is stored only on graded totals PICKS, and a pick exists only
+    when |proj − line| already cleared `TOT_EDGE_MIN` — a truncated sample that
+    overstates the skew by construction. New **`recordTotalBias`** samples every
+    priced MLB game (one per game id, 30-day purge, `sportshub:totbias`) and
+    `totalBiasStats()` feeds an honest row in the report card, with the old
+    picks-only figure relabelled beside it. **Next session: read that number to
+    see whether `MLB_SP_ERA` fixed it.**
+  - Verified — **10 checks**: two identical average teams pricing at 53.0% (the
+    quantitative assertion that caught the shrink interaction), the home-field
+    factor surviving a full sample, the bias recorder deduping by game and
+    ignoring junk, and both market suffixes stripping to a game id.
 
 - **🚨 Record re-read at n=433 — the v159 calibration conclusion did NOT hold
   (v170)** — the owner exported the live tally again. What it says, and the
