@@ -24,13 +24,13 @@ body {
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 22px;
+  padding: 8px 16px;
   background: linear-gradient(90deg, var(--eagles-green), var(--eagles-green-light));
   box-shadow: 0 2px 16px rgba(0,0,0,.35);
 }
 .brand { display: flex; align-items: center; gap: 10px; }
-.brand-mark { font-size: 26px; }
-.topbar h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
+.brand-mark { font-size: 21px; }
+.topbar h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
 .badge {
   font-size: 12px; font-weight: 700; padding: 5px 11px; border-radius: 999px;
   background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.2);
@@ -40,20 +40,41 @@ body {
 .head-right { display: flex; align-items: center; gap: 8px; }
 .version { font-size: 11px; font-weight: 700; color: rgba(255,255,255,.75); background: rgba(0,0,0,.2); border: 1px solid rgba(255,255,255,.2); padding: 3px 8px; border-radius: 999px; }
 
+/* Tab rail (v163): ONE line that scrolls sideways, replacing the old
+   flex-wrap grid. Nine wrapped 44px buttons cost ~150px of chrome on a
+   390px phone; this costs ~56px and still reaches every tab in one swipe
+   (deliberately no "More" sheet — nothing lives two taps deep). */
 .tabs {
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 8px 8px;
+  display: flex; flex-wrap: nowrap; gap: 2px; padding: 5px 10px 0;
   position: sticky; top: 0; z-index: 5;
-  background: rgba(14,20,22,.92); backdrop-filter: blur(8px);
+  overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  background: rgba(14,20,22,.94); backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(255,255,255,.06);
 }
+.tabs::-webkit-scrollbar { display: none; }
 .tabs button {
   background: transparent; color: var(--muted); border: none;
-  display: inline-flex; align-items: center; justify-content: center;
-  min-height: 44px; padding: 8px 14px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  flex: 0 0 auto; min-width: 60px; position: relative;
+  display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+  min-height: 50px; padding: 5px 9px 8px; border-radius: 10px;
   cursor: pointer; white-space: nowrap;
 }
+.tabs button .ic { font-size: 19px; line-height: 1; }
+.tabs button .lb { font-size: 10.5px; font-weight: 700; }
 .tabs button:hover { color: var(--text); }
-.tabs button.active { background: var(--eagles-green); color: #fff; }
+.tabs button.active { background: transparent; color: var(--text); }
+.tabs button.active .lb { font-weight: 800; }
+.tabs button.active::after {
+  content: ""; position: absolute; left: 12px; right: 12px; bottom: 0;
+  height: 3px; border-radius: 3px 3px 0 0; background: var(--accent);
+}
+/* 🔴 pip on a tab whose sport has a game in progress (set by renderLiveRail). */
+.tabs button[data-live="1"] .ic::after {
+  content: ""; position: absolute; top: 3px; right: 11px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--live); border: 1.5px solid var(--bg);
+}
 
 /* Visible keyboard focus ring (mouse/touch taps don't trigger :focus-visible). */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -180,13 +201,16 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
 .pred-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; }
 .pred-score { font-weight: 800; color: var(--accent); }
-.ai-statbar { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 4px; }
-.ai-stat { background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: var(--radius); padding: 12px 10px; text-align: center; }
+/* Five tiles (v164): moneyline, vs-the-line, spread, totals, plays today.
+   auto-fit keeps them readable on a 390px phone (they wrap to 2–3 per row)
+   without a media query. */
+.ai-statbar { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; margin-bottom: 4px; }
+.ai-stat { background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: var(--radius); padding: 10px 8px; text-align: center; }
 .ai-stat.edge { border-color: rgba(58,210,159,.5); background: rgba(58,210,159,.08); }
-.ai-stat-v { font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.1; }
+.ai-stat-v { font-size: 19px; font-weight: 800; color: var(--text); line-height: 1.1; }
 .ai-stat.edge .ai-stat-v { color: var(--accent); }
-.ai-stat-l { font-size: 12px; font-weight: 700; color: var(--silver); margin-top: 3px; }
-.ai-stat-s { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.ai-stat-l { font-size: 11px; font-weight: 700; color: var(--silver); margin-top: 3px; }
+.ai-stat-s { font-size: 9.5px; color: var(--muted); margin-top: 2px; }
 .edge-gap { margin-left: 8px; font-size: 11px; font-weight: 700; color: var(--gold); white-space: nowrap; }
 
 /* Game Report (modal): model vs market, line movement, DK money splits */
@@ -809,6 +833,191 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .bb-muted { color: var(--muted); }
 
 /* ==========================================================================
+   LIVE RAIL (v163) — one card per in-progress game, above the masthead.
+   Left half is the score; the right half is that sport's own gamecast, so a
+   glance answers "who's on base / where's the ball" without opening anything.
+   The whole rail is hidden (element `hidden`) when nothing is live.
+   ========================================================================== */
+.live-rail {
+  display: flex; gap: 8px; padding: 6px 12px 8px;
+  overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.live-rail::-webkit-scrollbar { display: none; }
+.live-rail[hidden] { display: none; }
+.lrc {
+  flex: 0 0 262px; background: var(--card); border: 1px solid rgba(255,255,255,.08);
+  border-radius: 13px; padding: 7px 9px 7px 10px; display: flex; gap: 9px;
+  position: relative; overflow: hidden; cursor: pointer;
+  transition: transform .08s ease;
+}
+.lrc:hover { transform: translateY(-2px); }
+.lrc.fav { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.lrc-stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--live); }
+.lrc-l { flex: 1; min-width: 0; }
+.lrc-tag {
+  display: flex; align-items: center; gap: 4px; margin-bottom: 3px;
+  font-size: 8.5px; font-weight: 800; letter-spacing: .9px; color: var(--live);
+}
+.lrc-dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--live);
+  box-shadow: 0 0 0 3px rgba(255,77,77,.22); animation: pulse 1.4s infinite;
+}
+.lrc-row { display: flex; align-items: center; gap: 6px; padding: 1.5px 0; }
+.lrc-row .lrc-lo { width: 17px; height: 17px; flex: 0 0 17px; border-radius: 50%; object-fit: contain; }
+.lrc-row .lrc-nm { font-size: 12.5px; font-weight: 650; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lrc-row .lrc-sc { font-size: 15px; font-weight: 850; font-variant-numeric: tabular-nums; }
+.lrc-row.lead .lrc-nm, .lrc-row.lead .lrc-sc { color: var(--accent); }
+/* gamecast column */
+.lrc-gc {
+  flex: 0 0 82px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 3px; padding-left: 8px;
+  border-left: 1px solid rgba(255,255,255,.08);
+}
+.lrc-st { font-size: 9.5px; font-weight: 800; color: var(--muted); white-space: nowrap; }
+.lrc-cnt { font-size: 10.5px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.lrc-big { font-size: 16px; font-weight: 850; letter-spacing: -.5px; }
+/* baseball: bases diamond + outs */
+.lrc-dia { position: relative; width: 48px; height: 40px; }
+.lrc-dia i {
+  position: absolute; width: 12px; height: 12px; border-radius: 2px;
+  background: var(--card-2); border: 1.5px solid rgba(255,255,255,.18);
+  transform: rotate(45deg);
+}
+.lrc-dia i.on { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 7px rgba(255,209,102,.7); }
+.lrc-dia i.hp { width: 8px; height: 8px; opacity: .5; }
+.lrc-dia .b2 { top: 0; left: 50%; margin-left: -6px; }
+.lrc-dia .b1 { right: 0; top: 13px; }
+.lrc-dia .b3 { left: 0; top: 13px; }
+.lrc-dia .hp { bottom: 0; left: 50%; margin-left: -4px; }
+.lrc-outs { display: flex; gap: 3.5px; align-items: center; }
+.lrc-outs u { width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--muted); opacity: .5; }
+.lrc-outs u.on { background: var(--live); border-color: var(--live); opacity: 1; }
+/* football: field strip + ball spot */
+.lrc-fld {
+  width: 72px; height: 19px; border-radius: 3px; position: relative; overflow: hidden;
+  background: #1f4d38; border: 1px solid rgba(255,255,255,.12);
+}
+.lrc-fld .ez { position: absolute; top: 0; bottom: 0; width: 11%; background: rgba(0,0,0,.34); }
+.lrc-fld .ez.l { left: 0; } .lrc-fld .ez.r { right: 0; }
+.lrc-fld .rz { position: absolute; top: 0; bottom: 0; width: 16%; background: rgba(255,77,77,.55); }
+.lrc-fld s { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,.28); text-decoration: none; }
+.lrc-fld b {
+  position: absolute; top: 50%; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%; background: var(--gold); border: 1px solid rgba(0,0,0,.35);
+  box-shadow: 0 0 6px rgba(255,209,102,.9);
+}
+.lrc-dd { font-size: 9.5px; font-weight: 800; color: var(--text); white-space: nowrap; }
+.lrc-rz { font-size: 8px; font-weight: 800; letter-spacing: .4px; color: var(--live); }
+
+/* ==========================================================================
+   THE BOARD (v164) — the model's plays against the book. Rendered on Home
+   (top tiers only, cross-sport) and again on AI Picks (every tier). One card
+   component, one CSS block, so the two views can never drift apart.
+   ========================================================================== */
+.brd-note {
+  font-size: 10.5px; line-height: 1.45; color: var(--muted);
+  padding: 6px 8px; border-radius: 8px; margin: 0 0 9px;
+  background: rgba(255,209,102,.09); border: 1px solid rgba(255,209,102,.28);
+}
+.brd-note b { color: var(--gold); }
+.brd-card {
+  background: var(--card); border: 1px solid rgba(255,255,255,.08); border-radius: 13px;
+  padding: 9px 11px 10px; margin-bottom: 8px; position: relative; overflow: hidden;
+  cursor: pointer; transition: transform .08s ease;
+}
+.brd-card:hover { transform: translateY(-2px); }
+.brd-card.t1 { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.brd-rib { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
+.brd-card.t2 .brd-rib { background: rgba(58,210,159,.45); }
+.brd-card.tot .brd-rib { background: var(--gold); }
+.brd-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; gap: 8px; }
+.brd-tier {
+  font-size: 9px; font-weight: 800; letter-spacing: .7px; padding: 2.5px 7px;
+  border-radius: 999px; background: var(--accent); color: #06241b; white-space: nowrap;
+}
+.brd-tier.t2 { background: rgba(58,210,159,.18); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(58,210,159,.45); }
+.brd-tier.t3 { background: var(--card-2); color: var(--muted); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
+.brd-tier.tot { background: var(--gold); color: #3a2c00; }
+.brd-meta { font-size: 9.5px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.brd-mu { font-size: 14px; font-weight: 750; margin-bottom: 6px; letter-spacing: -.1px; }
+.brd-pick { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; flex-wrap: wrap; }
+.brd-pick .p { font-size: 13px; font-weight: 800; color: var(--accent); }
+.brd-pick .p.tot { color: var(--gold); }
+.brd-pick .cf { font-size: 10.5px; font-weight: 800; padding: 2px 6px; border-radius: 6px; background: var(--card-2); color: var(--muted); }
+.brd-pick .gp { margin-left: auto; font-size: 10.5px; font-weight: 800; color: var(--gold); }
+.brd-bar { height: 4px; border-radius: 4px; background: var(--card-2); overflow: hidden; margin-bottom: 6px; }
+.brd-bar i { display: block; height: 100%; background: var(--accent); }
+.brd-row { font-size: 10.5px; color: var(--muted); line-height: 1.5; }
+.brd-row b { color: var(--text); }
+.brd-row.sharp { color: var(--accent); }
+.brd-more {
+  display: block; width: 100%; text-align: center; font: inherit; font-size: 11.5px;
+  font-weight: 700; color: var(--muted); padding: 9px; cursor: pointer;
+  border: 1px dashed rgba(255,255,255,.14); border-radius: 10px; background: transparent;
+}
+.brd-more b { display: block; color: var(--accent); font-weight: 800; margin-top: 2px; }
+.brd-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+
+/* Ladder section headings on AI Picks */
+.lad-sec {
+  display: flex; align-items: center; gap: 7px; margin: 15px 0 8px;
+  font-size: 11.5px; font-weight: 800; letter-spacing: .6px;
+  text-transform: uppercase; color: var(--muted);
+}
+.lad-sec.hot { color: var(--accent); }
+.lad-sec .n {
+  font-size: 9.5px; font-weight: 700; padding: 1.5px 6px; border-radius: 999px;
+  background: var(--card-2); color: var(--muted); text-transform: none; letter-spacing: 0;
+}
+.lad-fold { background: var(--card); border: 1px solid rgba(255,255,255,.08); border-radius: 11px; margin-bottom: 8px; }
+.lad-fold > summary {
+  list-style: none; cursor: pointer; padding: 10px 11px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12px; font-weight: 750;
+}
+.lad-fold > summary::-webkit-details-marker { display: none; }
+.lad-fold > summary .cv { font-size: 11px; font-weight: 700; color: var(--muted); }
+.lad-fold[open] > summary .cv { transform: rotate(90deg); }
+.lad-body { padding: 0 11px 9px; }
+.lad-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0;
+  border-top: 1px solid rgba(255,255,255,.06); font-size: 11.5px;
+}
+.lad-row .lm { flex: 1; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lad-row .lp { font-weight: 800; color: var(--muted); white-space: nowrap; }
+.lad-row .lg { font-size: 10px; font-weight: 800; color: var(--muted); min-width: 34px; text-align: right; }
+
+/* ==========================================================================
+   BACKTESTING (v164) — the calibration chart + per-tier record on AI Picks.
+   ========================================================================== */
+.bt-card { background: var(--card); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 11px; margin-bottom: 9px; }
+.bt-h { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 800; margin-bottom: 9px; gap: 8px; }
+.bt-h span { font-size: 10px; font-weight: 700; color: var(--muted); }
+.bt-cal { display: flex; align-items: flex-end; gap: 7px; height: 76px; }
+.bt-c { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; height: 100%; justify-content: flex-end; }
+.bt-b { width: 100%; display: flex; gap: 2px; align-items: flex-end; height: 100%; }
+.bt-b i { flex: 1; border-radius: 2px 2px 0 0; display: block; min-height: 2px; }
+.bt-b i.said { background: rgba(143,163,160,.4); }
+.bt-b i.act { background: var(--accent); }
+.bt-b i.act.bad { background: #e56b6b; }
+.bt-l { font-size: 8.5px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.bt-leg { display: flex; gap: 11px; justify-content: center; margin-top: 7px; font-size: 9px; color: var(--muted); }
+.bt-leg u { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 3px; vertical-align: -1px; }
+.bt-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5.5px 0; border-top: 1px solid rgba(255,255,255,.06); font-size: 11.5px; }
+.bt-row:first-of-type { border-top: none; }
+.bt-row .rl { color: var(--muted); }
+.bt-row .rv { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bt-tag { font-size: 9.5px; font-weight: 800; margin-left: 5px; }
+.bt-tag.gd { color: var(--accent); } .bt-tag.bd { color: #e56b6b; }
+.bt-tag.wn { color: var(--gold); } .bt-tag.nu { color: var(--muted); }
+.bt-warn {
+  font-size: 10.5px; line-height: 1.45; color: var(--gold); margin-top: 8px;
+  background: rgba(255,209,102,.09); border: 1px solid rgba(255,209,102,.3);
+  border-radius: 8px; padding: 7px 8px;
+}
+
+/* ==========================================================================
    LIGHT MODE — "Editorial / Premium" theme (Design 3).
    Active only when <html data-theme="light">. Dark mode is the default and is
    left completely untouched (base :root above). Warm-paper background, hairline
@@ -990,3 +1199,46 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-theme="light"] .theme-toggle {
   background: var(--card-2); border-color: var(--line); color: var(--text);
 }
+
+/* --- v163/v164: live rail, tab rail, the Board, backtesting ---------------
+   The variable swap above already recolors most of this; these rules fix the
+   spots that hardcoded dark-only values (white hairlines, dark chips/tracks)
+   and give the light theme its gold-underline nav instead of a green one. */
+:root[data-theme="light"] .tabs {
+  background: rgba(247, 244, 238, .96);
+  border-bottom: 1px solid var(--line);
+}
+:root[data-theme="light"] .tabs button.active::after { background: var(--gold); }
+:root[data-theme="light"] .tabs button[data-live="1"] .ic::after { border-color: var(--bg); }
+
+:root[data-theme="light"] .lrc,
+:root[data-theme="light"] .brd-card,
+:root[data-theme="light"] .lad-fold,
+:root[data-theme="light"] .bt-card {
+  border-color: var(--line);
+  box-shadow: 0 1px 2px rgba(0,0,0,.05);
+}
+:root[data-theme="light"] .brd-card.t1 { box-shadow: 0 0 0 1px var(--accent) inset, 0 1px 3px rgba(0,0,0,.07); }
+:root[data-theme="light"] .lrc-gc { border-left-color: var(--line); }
+:root[data-theme="light"] .lrc-dia i { background: #eae4d6; border-color: #c9c0ac; }
+:root[data-theme="light"] .lrc-fld { background: #2f6b4d; border-color: #2a5b42; }
+:root[data-theme="light"] .brd-mu { font-family: Georgia, "Times New Roman", serif; font-weight: 700; }
+:root[data-theme="light"] .brd-more { border-color: var(--line); }
+:root[data-theme="light"] .lad-row,
+:root[data-theme="light"] .bt-row { border-top-color: var(--line); }
+:root[data-theme="light"] .bt-b i.said { background: #d8d1c0; }
+:root[data-theme="light"] .bt-b i.act.bad { background: var(--live); }
+:root[data-theme="light"] .brd-tier.t3 { box-shadow: inset 0 0 0 1px var(--line); }
+:root .lrc-lo.placeholder {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--card-2); border-radius: 50%; font-size: 8px; color: var(--muted);
+}
+
+/* ATS (v164) — the spread market gets its own colour so a moneyline play and
+   a spread play on the same game can't be misread as the same call. */
+.brd-card.ats .brd-rib { background: #6ba8ff; }
+.brd-tier.ats { background: #6ba8ff; color: #06203f; }
+.brd-pick .p.ats { color: #6ba8ff; }
+:root[data-theme="light"] .brd-card.ats .brd-rib { background: #2f6bbf; }
+:root[data-theme="light"] .brd-tier.ats { background: #2f6bbf; color: #fff; }
+:root[data-theme="light"] .brd-pick .p.ats { color: #2f6bbf; }

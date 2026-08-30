@@ -119,6 +119,8 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 ## Files
 
 - `index.html` — single page, all tabs/sections. Asset URLs carry `?v=N` cache-busting.
+  Holds `#live-rail` (above the masthead), the icon-over-label tab rail, and
+  `#home-board` (🎲 The Board, between My Teams and Today's Games).
 - `app.js` (~2100 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
 - `styles.css` — all styling. **Dark theme is the default** (base `:root` CSS vars at top:
   `--accent` #3ad29f green, `--gold`, `--eagles-green` #004C54, etc.). A **light theme**
@@ -358,7 +360,114 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v162** (backend **b11-cfb-betting**).
+Current version as of this writing: **v164** (backend **b11-cfb-betting**).
+
+- **📐 Three markets, tracked apart — ML · spread · totals (v164)** — the owner
+  asked for an against-the-spread record for NFL and CFB ("spread matters a lot
+  more in football than it did in baseball"), then for totals to be a first-class
+  citizen everywhere too. The model now plays and grades **three separate
+  markets**, and they are never blended:
+  - **Moneyline** — unchanged. Same pick, same confidence, same `probHome`.
+  - **📐 Against the spread** (`atsCall`, football only via `ATS_SPORTS`). The
+    projected margin is derived from the model's OWN win probability rather than
+    rebuilt from scoring rates — `margin = PD_SD[sport] × Φ⁻¹(pHome)` via
+    `projMarginFor`/`invNorm` (Acklam) — **so the ATS call can never contradict
+    the moneyline call**. `PD_SD` (nfl **13.5** / cfb **16.5**) and
+    `ATS_EDGE_MIN` (nfl **2** / cfb **3**) are the only new assumptions and are
+    the first things to re-fit once there's a sample. Stored `:s` / `a:1`,
+    graded by `atsResult` (home covers when `homeMargin + homeSpread > 0`; an
+    exact push is dropped ungraded).
+  - **🎯 Totals** — now tiered on the same ladder as the moneyline, in units of
+    the sport's own floor (2× floor = best bet, 1× = edge), rendered as full
+    cards instead of one-line text rows, and split **per sport** in the report.
+  - `normOdds` gained a numeric, **home-oriented `spread`** (negative = home
+    favored), from ESPN's own `spread` field or parsed out of the details string
+    and flipped by abbreviation. Magnitude-gated so an MLB moneyline details
+    string ("SEA -231") is never mistaken for a spread.
+  - `tallyStats` returns `aw/al/an` (ATS) beside `tw/tl/tn` (totals);
+    `tallyDetails` adds `atsBySport` and `totalsBySport`. The AI stat bar is
+    **five tiles** (Moneyline · vs the line · Spread · Totals · Plays today) and
+    the header line reads `ML … · vs line … · ATS … · totals …`.
+  - **Why kept apart:** a model can pick winners well and still lose to the
+    number. One blended figure hides exactly which half works.
+
+- **🎲 The Board on Home + the conviction ladder (v164)** — the owner wanted the
+  model's plays against the book on the front page, with the deeper read behind
+  the AI tab. The model used to emit a **binary** — `isEdge` (disagrees with the
+  book AND the de-vigged gap clears 5 points) or nothing — so a 4-point
+  disagreement was computed and thrown away. Same math, now graded into tiers:
+  - **`EDGE_BAR`** = best **10+** / edge **5–9** / lean **2–5**; `pickTier()`
+    returns null when the model is with the book or inside the noise band.
+    `MIN_EDGE_GAP` still equals the edge bar, so **the vs-line record means
+    exactly what it always meant** — leans are picks but are not edges.
+  - **`buildBoard(sport, games, opts)`** is the single shared computation. Home
+    and AI Picks both render from it, so the two views can never disagree about
+    what the model said for the same game. It is **pure** — renders nothing,
+    records nothing. `recordPick` stays in `renderPredictions`, so a pick is
+    stored exactly once, by the caller that waited the full sharp-money leash.
+  - **Home `#home-board`** (`renderHomeBoard`, cross-sport — AI Picks is
+    per-sport by design and a board that only showed MLB wouldn't be a board):
+    up to 4 moneyline plays, 2 spreads, 2 totals, then a footer with the lean
+    and pass counts linking to the tab. Not awaited, so the slate paints first.
+  - **`SHARP_WAIT.board` = 3000** (vs `picks` 8000). The v157 rule applied to
+    the front page: a Render cold start is 30–60s so 8s wouldn't catch one
+    either — the only case the longer wait wins is a warm-but-slow backend, and
+    8s of "crunching…" on the home screen is a bad trade. Home and AI can
+    therefore differ on the sharp factor in a narrow window; `reportDownUntil`
+    makes that rare, and the tab that *records* is the one that waits longest.
+  - **The board states its own record in its header** (`boardNote()`): edges are
+    the model's least validated output (44.7% all-time as of v159, under the
+    52.4% break-even). Promoting picks to the front page without that number
+    would be the app lying to its owner.
+  - **AI Picks** is now a ladder: Best Bets → Edges → 👀 Leans (folded) → 📐 ATS
+    → 🎯 Totals → ✅ Passes (folded, count only) → 📊 Backtesting → report card
+    → trends.
+  - **`backtestPanel(det)`** — the visual history: a **calibration chart**
+    (claimed vs actual per bucket, the overconfident bar turning red with a
+    "discount anything above N%" line), **record by tier**, and **by sport ×
+    three markets**.
+  - **🚨 Plumbing that makes the ladder measurable:** graded picks used to store
+    only a yes/no edge flag, so "did gap-10 picks beat gap-5 picks?" was
+    unanswerable about games already played. Picks now store **`gp`** (the gap)
+    and **`tr`** (the tier) — through `recordPick` → pending → both grading
+    paths → the tally. The by-tier row therefore reads **"collecting"** until
+    new picks grade; it is deliberately **never back-filled** from a gap that
+    was never saved. **Next session: read that split before touching
+    `EDGE_BAR`** — measure, then fit, per the v126/v138/v159 method.
+
+- **📱 Layout: live rail + one-line tab rail (v163)** — the owner's nav was
+  "too big": nine `flex-wrap`ped 44px buttons cost **~150px** of chrome on a
+  390px phone, three rows deep, before a single score.
+  - **`.tabs` is now ONE line that scrolls sideways** (`flex-wrap: nowrap` +
+    `overflow-x: auto`), icon over label, ~56px tall. Deliberately **no "More"
+    sheet** — the option that inspired this buried Red Sox, AI Picks, Fantasy,
+    Labs and About two taps deep, and Red Sox is a favorite team. One swipe
+    beats two taps. Buttons now wrap `<span class="ic">`/`<span class="lb">`,
+    so the click handler resolves `e.target.closest('button[data-tab]')` — a tap
+    lands on the span, not the button.
+  - **`#live-rail`** (`renderLiveRail`, above the masthead, chrome not a tab):
+    one card per in-progress game across every in-season team sport, your teams
+    first. Left half is the score; the right half is that sport's **own
+    gamecast** — `mgcBaseball` (bases diamond + count + outs), `mgcFootball`
+    (field strip with the ball spot, possession + down & distance, red-zone
+    band on the attacking half), `mgcGeneric` (period + clock). Taps open the
+    game modal. Refreshes every **60s**, paused while the page is hidden.
+  - **It hides ENTIRELY when nothing is live** (element stays `hidden`). A
+    permanent 0–0 strip is worse than no strip: chrome is ~186px with live
+    games and **~102px without**, vs ~208px before.
+  - **🔴 pips** on tabs whose sport has a live game (`paintLivePips`); Eagles
+    and Red Sox pip only for THEIR game (`liveFavSports`), Home never pips.
+  - Masthead trimmed 58px → ~46px.
+  - Verified in headless Chromium at 390px in **both themes** with ESPN and the
+    backend fully stubbed — **98 checks**: rail gamecasts (bases lit, count,
+    outs, ball yard line, red-zone side, down & distance), rail hidden + chrome
+    budget with nothing live, tab pips, one-row/scrollable/height of the tab
+    rail, tapping a label span, the Home board in both themes (tiers, ATS card,
+    totals card, honest note, no horizontal overflow), the AI ladder, the
+    five-tile stat bar, the backtest panel (red overconfidence bar, per-tier
+    record, all three markets per sport), and the ATS unit math (cover, push,
+    dog covers, spread orientation, MLB moneyline not read as a spread, floor,
+    non-ATS sports). No console errors.
 
 - **🚨 The Top-25 gate could have orphaned graded CFB picks (v162)** — found
   while answering "does the model track college football the same way?". It
@@ -1585,7 +1694,11 @@ Current version as of this writing: **v162** (backend **b11-cfb-betting**).
 
 ## Features built (high level)
 
-- **Home** — the app's front door and full daily overview. Top Headlines
+- **Home** — the app's front door and full daily overview. Above everything
+  sits the **live rail** (v163, chrome — see the layout note). Order: My Teams →
+  **🎲 The Board** (v164: the model's best plays against the book across every
+  in-season sport — moneyline, spread and totals — with its own record stated in
+  the header) → Top Headlines → Today's Games. Top Headlines
   (numbered story strip, **up to 10** as of v111, from in-season leagues' lead
   stories — leads first, then up to 5 more per league, deduped; tap → in-app
   summary popup — headlines stay tappable; the strip stays a horizontal scroll on
@@ -1670,8 +1783,10 @@ Current version as of this writing: **v162** (backend **b11-cfb-betting**).
   on — including "splits feed asleep or unreachable" when it is.
 - **AI Picks** — a multi-factor logistic model (`predictGame`): record, scoring
   margin, recent form, home/road split, rest, plus matchup factors (MLB starter
-  ERA/WHIP, team OPS). **Shows ONLY edge games** (model vs. line) since the full
-  slate is on Home. Stat bar tracks **all-time model record** and **vs-the-line
+  ERA/WHIP, team OPS). **As of v164 it is a conviction ladder** — Best Bets
+  (gap 10+) → Edges (5–9) → Leans (2–5, folded) → 📐 ATS → 🎯 Totals → ✅ passes
+  (folded) → 📊 backtesting → report card → trends. The top of that ladder is
+  mirrored on Home's 🎲 Board via the shared `buildBoard`. Stat bar tracks **all-time model record** and **vs-the-line
   record**; below the edges are **Team Trends** and **Player Prop trends**.
   Records persist + auto-grade: see "AI record" below. **v83 additions:**
   - **Calibration meta** — every pick now stores its confidence, and graded
@@ -1995,14 +2110,19 @@ Current version as of this writing: **v162** (backend **b11-cfb-betting**).
 
 ## localStorage keys
 
-- `sportshub:aitally` — graded pick results (all-time + vs-line record). v83+:
+- `sportshub:aitally` — graded pick results (all-time + vs-line record). Three
+  markets share the store, keyed apart and counted apart: moneyline (`{gameId}`),
+  totals (`{gameId}:t`, `t:1`) and ATS (`{gameId}:s`, `a:1`). v83+:
   entries also carry `{s, d, cf, p, m}` (sport, date, confidence, pick,
   matchup) for the Report Card; older `{c,e}`-only entries remain valid.
   v159+ totals entries carry `pt` (the model's projected total); v160+ side
   entries carry `sh` (points the sharp-money factor moved the pick, signed
-  toward the side taken — absent when there was no qualifying split).
+  toward the side taken — absent when there was no qualifying split); v164+
+  entries carry `gp` (model-vs-market gap) and `tr` (ladder tier), and ATS
+  entries carry `pm` (the model's projected margin).
 - `sportshub:pending` — ungraded picks awaiting results (v83+ includes `conf`;
-  v160+ includes `sh`).
+  v160+ includes `sh`; v164+ includes `gp`/`tr`, plus `:s` ATS rows carrying
+  `hsp` (the home-oriented spread) so they can be graded without re-fetching odds).
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
 - `sportshub:lines:{YYYYMMDD}` — device-local line tracking for today's games
   (first-seen + latest ML/O-U per game; movement fallback for Game Reports).

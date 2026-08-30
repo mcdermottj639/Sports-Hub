@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=162" />
+  <link rel="stylesheet" href="styles.css?v=164" />
   <script>
     /* Set the theme before first paint to avoid a flash. Uses the saved
        preference if present, else follows the OS light/dark setting. */
@@ -27,6 +27,12 @@
   </script>
 </head>
 <body>
+  <!-- Live rail (v163): one card per in-progress game, each carrying that
+       sport's own gamecast (bases/count/outs, field position + down, clock).
+       Rendered by renderLiveRail(); stays hidden entirely when nothing is
+       live, so it never costs a dead strip of chrome. -->
+  <div id="live-rail" class="live-rail" hidden aria-label="Live games"></div>
+
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">🦅</span>
@@ -40,15 +46,15 @@
   </header>
 
   <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
-    <button id="tab-home" data-tab="home" class="active" role="tab" aria-selected="true" aria-controls="home">Home</button>
-    <button id="tab-eagles" data-tab="eagles" role="tab" aria-selected="false" aria-controls="eagles">🦅 Eagles</button>
-    <button id="tab-nfl" data-tab="nfl" role="tab" aria-selected="false" aria-controls="nfl">🏈 NFL</button>
-    <button id="tab-cfb" data-tab="cfb" role="tab" aria-selected="false" aria-controls="cfb">🎓 CFB</button>
-    <button id="tab-redsox" data-tab="redsox" role="tab" aria-selected="false" aria-controls="redsox">⚾ Red Sox</button>
-    <button id="tab-predictions" data-tab="predictions" role="tab" aria-selected="false" aria-controls="predictions">🤖 AI Picks</button>
-    <button id="tab-fantasy" data-tab="fantasy" role="tab" aria-selected="false" aria-controls="fantasy">Fantasy</button>
-    <button id="tab-labs" data-tab="labs" role="tab" aria-selected="false" aria-controls="labs">🧪 Labs</button>
-    <button id="tab-about" data-tab="about" role="tab" aria-selected="false" aria-controls="about">About</button>
+    <button id="tab-home" data-tab="home" class="active" role="tab" aria-selected="true" aria-controls="home"><span class="ic" aria-hidden="true">🏠</span><span class="lb">Home</span></button>
+    <button id="tab-eagles" data-tab="eagles" role="tab" aria-selected="false" aria-controls="eagles"><span class="ic" aria-hidden="true">🦅</span><span class="lb">Eagles</span></button>
+    <button id="tab-nfl" data-tab="nfl" role="tab" aria-selected="false" aria-controls="nfl"><span class="ic" aria-hidden="true">🏈</span><span class="lb">NFL</span></button>
+    <button id="tab-cfb" data-tab="cfb" role="tab" aria-selected="false" aria-controls="cfb"><span class="ic" aria-hidden="true">🎓</span><span class="lb">CFB</span></button>
+    <button id="tab-redsox" data-tab="redsox" role="tab" aria-selected="false" aria-controls="redsox"><span class="ic" aria-hidden="true">⚾</span><span class="lb">Red Sox</span></button>
+    <button id="tab-predictions" data-tab="predictions" role="tab" aria-selected="false" aria-controls="predictions"><span class="ic" aria-hidden="true">🤖</span><span class="lb">AI Picks</span></button>
+    <button id="tab-fantasy" data-tab="fantasy" role="tab" aria-selected="false" aria-controls="fantasy"><span class="ic" aria-hidden="true">🏆</span><span class="lb">Fantasy</span></button>
+    <button id="tab-labs" data-tab="labs" role="tab" aria-selected="false" aria-controls="labs"><span class="ic" aria-hidden="true">🧪</span><span class="lb">Labs</span></button>
+    <button id="tab-about" data-tab="about" role="tab" aria-selected="false" aria-controls="about"><span class="ic" aria-hidden="true">ℹ️</span><span class="lb">About</span></button>
   </nav>
 
   <main>
@@ -56,6 +62,7 @@
       <div id="home-headline"></div>
       <h2 class="section-title" style="margin-top:6px">My Teams</h2>
       <div id="featured" class="featured-card">Loading your teams…</div>
+      <div id="home-board"></div>
       <h2 class="section-title">Today’s Games</h2>
       <div id="home-games" class="games-grid"></div>
     </section>
@@ -219,6 +226,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=162" defer></script>
+  <script src="app.js?v=164" defer></script>
 </body>
 </html>
