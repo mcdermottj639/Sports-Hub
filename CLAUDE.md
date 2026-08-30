@@ -368,7 +368,60 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v172** (backend **b13-pregame-lines**).
+Current version as of this writing: **v173** (backend **b13-pregame-lines**).
+
+- **🔒 Keeper sheet closed + 24 stale pro teams fixed (v173)** — the owner sent
+  the commissioner's FINAL keeper sheet and reported (a) kept players still
+  showing up in mock drafts and (b) "lots of players on wrong teams".
+  - **One keeper was genuinely missing: Chris Olave (Samrizz, R5).** Every other
+    row on the sheet already matched `LEAGUE_KEEPERS` exactly — all 11 other
+    teams, both slots, every round. `LEAGUE_KEEPERS` is now **22** players.
+    That single omission is the whole of the "names still in the pool" report:
+    a keeper absent from the list is never pulled off the board, so Olave was
+    draftable by any CPU team in every sim.
+  - **24 team labels in `MOCK_POOL_RAW` were stale**, verified division by
+    division (8 parallel subagents, one per NFL division, working from web
+    search since the sandbox can't reach ESPN or any fantasy site). The
+    headline moves: **A.J. Brown PHI → NE** (traded for a 2028 1st; he is an R1
+    target in `TURN_ROUNDS`), **Rachaad White TB → WSH** (he is a *keeper*, so
+    his label was wrong on the keepers card), **Tua Tagovailoa MIA → ATL**,
+    **David Montgomery DET → HOU**, **Geno Smith LV → NYJ** with **Justin
+    Fields NYJ → KC** (the same trade, cross-checked by two independent
+    agents), plus Jakobi Meyers→JAX, Keenan Allen→IND, Najee Harris→NYG,
+    Isiah Pacheco→DET, Jonnu Smith→GB, Chig Okonkwo→WSH, Christian Kirk→SF,
+    Jauan Jennings→MIN, Jarquez Hunter→MIA, Rashid Shaheed→SEA, Darnell
+    Mooney→NYG, Wan'Dale Robinson→TEN, Brian Robinson Jr.→ATL, Romeo Doubs→NE,
+    Dontayvion Wicks→PHI, Emanuel Wilson→SEA, Younghoe Koo→NYJ, Jason
+    Sanders→NYG.
+  - **⚠️ Agent output is a lead, not a fact.** One agent blanket-confirmed
+    "Tua Tagovailoa MIA" as correct off a stale depth-chart snippet while
+    another agent, working a different division, reported Atlanta had acquired
+    him. A direct search settled it (ATL). **When two divisions disagree about
+    a player, or an agent confirms by omission rather than by evidence, verify
+    it yourself before writing it in.** The A.J. Brown move was likewise
+    re-checked directly because it changes an R1 target.
+  - **3 players removed from the board** — undraftable, so offering them is
+    worse than leaving a stale label: **Nick Chubb** (retired Aug 21 2026),
+    **Jayden Higgins** (torn ACL, out for 2026), **Ricky Pearsall**
+    (season-ending PCL surgery, Aug 1). Pool 227 → **224**, still well clear of
+    the 180 picks a 12×15 draft needs.
+  - **4 unsigned free agents relabelled `FA`** rather than deleted — **Stefon
+    Diggs, Deebo Samuel, Austin Ekeler, Zach Ertz**. They have no 2026 team but
+    could still sign, so they stay draftable with an honest label. The team
+    string is display-only, so `FA` is safe (it is already what the generated
+    filler players use).
+  - **The Draft-Turn Plan's R6 group was stale as a consequence** — it listed
+    Deebo Samuel and Brian Robinson Jr. as "100% available" targets. Deebo has
+    no team and B-Rob is now Bijan's backup in Atlanta, so both were swapped for
+    **Jaylen Warren** and **Jayden Reed** and the note says why. The rest of
+    `TURN_ROUNDS` was deliberately left alone: its availability percentages come
+    from measured sims (v156) and re-planning was not the ask.
+  - Verified by driving the REAL `mockStart`/`mockSimRest` out of `app.js`
+    across **300 full 12×15 drafts = 54,000 picks**: **0 duplicate picks, 0
+    filler picks, 0 kept players ever drafted**, and all **6,600** keeper
+    placements landing at the correct manager AND round.
+  - ⚠️ Still unverified live: the sandbox reaches web *search* but not ESPN, so
+    these are search-snippet confirmations. Spot-check the board on device.
 
 ## ⏳ Open measurements — read these BEFORE touching model constants
 

@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v172';
+const APP_VERSION = 'v173';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3622,9 +3622,14 @@ const NFL_POS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST'];
 // (how many years a player has been held) doesn't affect the draft board, so
 // it isn't modeled. Names must match MOCK_POOL_RAW spelling so the mock draft
 // can pull them off the board.
-// ✅ COMPLETE as of the commissioner's Aug-2026 sheet: all 12 teams have
-// reported. Cummish (Hurd) reported NO keepers — that's a real answer, not a
-// missing one, so it has no rows here and `LEAGUE_ORDER` still names the team.
+// ✅ COMPLETE and reconciled against the commissioner's FINAL Aug-2026 sheet
+// (v173): all 12 teams reported, 22 players. Cummish (Hurd) reported NO keepers
+// — that's a real answer, not a missing one, so it has no rows here and
+// `LEAGUE_ORDER` still names the team.
+// ⚠️ A keeper missing from THIS list is silently draftable by every CPU team in
+// the mock sim — that's exactly how Chris Olave (Samrizz, R5) stayed in the
+// pool until v173. When a new sheet arrives, diff every row, not just the
+// teams you think changed.
 // Append/edit here and everything downstream (turn-plan strikeouts, the keepers
 // card, the mock draft pool, the ⭐ board merges) updates from this one list.
 const LEAGUE_TEAMS_TOTAL = 12;
@@ -3646,6 +3651,7 @@ const LEAGUE_KEEPERS = [
   { team: 'Christel', n: 'Jaylen Waddle', p: 'WR', r: 5 },
   { team: 'Christel', n: "De'Von Achane", p: 'RB', r: 11 },
   { team: 'Samrizz', n: 'Justin Jefferson', p: 'WR', r: 8 },
+  { team: 'Samrizz', n: 'Chris Olave', p: 'WR', r: 5 },
   { team: 'Cheeky Clapz', n: 'Kyle Pitts', p: 'TE', r: 9 },
   { team: 'Cheeky Clapz', n: 'Seahawks D/ST', p: 'DST', r: 15 },
   { team: 'Goff Hits Women', n: 'Bhayshul Tuten', p: 'RB', r: 10 },
@@ -3714,9 +3720,9 @@ const TURN_ROUNDS = [
     { label: 'RB volume', tier: 4, players: [{ n: 'David Montgomery', p: 'RB' }, { n: 'Tony Pollard', p: 'RB' }, { n: 'RJ Harvey', p: 'RB' }] },
     { label: 'WR upside', tier: 4, players: [{ n: 'Jakobi Meyers', p: 'WR' }, { n: 'Jordan Addison', p: 'WR' }, { n: 'Xavier Worthy', p: 'WR' }] },
   ] },
-  { r: 6, pick: '#63', tag: 'bonus pick — Kyren’s old slot', note: 'This pick is live again now that Kyren isn’t kept. Only 4 picks after your #58, so the R5 names thin fast (Montgomery 49%, Addison 63%, Worthy 40%) — behind them sits a wall of players who are on the board in 100% of sims. Take volume.', groups: [
-    { label: 'RB volume swings — 100% available', tier: 4, players: [{ n: "D'Andre Swift", p: 'RB' }, { n: 'Isiah Pacheco', p: 'RB' }, { n: 'Brian Robinson Jr.', p: 'RB' }] },
-    { label: 'WR upside — 100% available', tier: 4, players: [{ n: 'Rome Odunze', p: 'WR' }, { n: 'Chris Godwin', p: 'WR' }, { n: 'Deebo Samuel', p: 'WR' }] },
+  { r: 6, pick: '#63', tag: 'bonus pick — Kyren’s old slot', note: 'This pick is live again now that Kyren isn’t kept. Only 4 picks after your #58, so the R5 names thin fast (Montgomery 49%, Addison 63%, Worthy 40%) — behind them sits a wall of players who are on the board in 100% of sims. Take volume. (v173: Deebo Samuel and Brian Robinson Jr. were dropped from this round — Deebo is an unsigned free agent and B-Rob is now Bijan&rsquo;s backup in Atlanta.)', groups: [
+    { label: 'RB volume swings — 100% available', tier: 4, players: [{ n: "D'Andre Swift", p: 'RB' }, { n: 'Isiah Pacheco', p: 'RB' }, { n: 'Jaylen Warren', p: 'RB' }] },
+    { label: 'WR upside — 100% available', tier: 4, players: [{ n: 'Rome Odunze', p: 'WR' }, { n: 'Chris Godwin', p: 'WR' }, { n: 'Jayden Reed', p: 'WR' }] },
   ] },
   { r: 7, pick: '#82', keeper: 'Trey McBride', kpos: 'TE' },
   { r: 8, pick: '#87', tag: 'skip the QB run — stack RB/WR', note: 'This used to be your QB1 window. Others will spend R8–R10 chasing Nix/Baker/Herbert — you have Maye for an 11th. Take the best RB/WR they pass over.', groups: [
@@ -4590,7 +4596,7 @@ Saquon Barkley|RB|PHI
 Jeremiyah Love|RB|ARI
 Nico Collins|WR|HOU
 Brian Thomas Jr.|WR|JAX
-A.J. Brown|WR|PHI
+A.J. Brown|WR|NE
 Drake London|WR|ATL
 Derrick Henry|RB|BAL
 Brock Bowers|TE|LV
@@ -4640,37 +4646,36 @@ Patrick Mahomes|QB|KC
 Joe Burrow|QB|CIN
 RJ Harvey|RB|DEN
 Tony Pollard|RB|TEN
-David Montgomery|RB|DET
+David Montgomery|RB|HOU
 Travis Hunter|WR|JAX
 Xavier Worthy|WR|KC
 Jordan Addison|WR|MIN
-Jakobi Meyers|WR|LV
+Jakobi Meyers|WR|JAX
 T.J. Hockenson|TE|MIN
 Mark Andrews|TE|BAL
 D'Andre Swift|RB|CHI
-Isiah Pacheco|RB|KC
-Brian Robinson Jr.|RB|WSH
+Isiah Pacheco|RB|DET
+Brian Robinson Jr.|RB|ATL
 Rome Odunze|WR|CHI
 Chris Godwin|WR|TB
-Stefon Diggs|WR|NE
+Stefon Diggs|WR|FA
 Bo Nix|QB|DEN
 Baker Mayfield|QB|TB
 Kaleb Johnson|RB|PIT
 Tyrone Tracy Jr.|RB|NYG
 Jaylen Warren|RB|PIT
 Khalil Shakir|WR|BUF
-Deebo Samuel|WR|WSH
+Deebo Samuel|WR|FA
 Keon Coleman|WR|BUF
-Ricky Pearsall|WR|SF
 Dallas Goedert|TE|PHI
 David Njoku|TE|LAC
 Evan Engram|TE|DEN
 Caleb Williams|QB|CHI
 Kyler Murray|QB|MIN
-Justin Fields|QB|NYJ
-Najee Harris|RB|LAC
+Justin Fields|QB|KC
+Najee Harris|RB|NYG
 Rhamondre Stevenson|RB|NE
-Jauan Jennings|WR|SF
+Jauan Jennings|WR|MIN
 Cooper Kupp|WR|SEA
 Jordan Mason|RB|MIN
 Tyler Warren|TE|IND
@@ -4686,14 +4691,14 @@ Juwan Johnson|TE|NO
 Kyle Pitts|TE|ATL
 Brenton Strange|TE|JAX
 Jayden Reed|WR|GB
-Keenan Allen|WR|LAC
+Keenan Allen|WR|IND
 Tank Bigsby|RB|PHI
 Josh Downs|WR|IND
 Michael Wilson|WR|ARI
 Tyjae Spears|RB|TEN
 Marvin Mims Jr.|WR|DEN
 Braelon Allen|RB|NYJ
-Rashid Shaheed|WR|NO
+Rashid Shaheed|WR|SEA
 Trey Benson|RB|ARI
 Blake Corum|RB|LAR
 Jaylen Wright|RB|MIA
@@ -4703,23 +4708,21 @@ Jordan Love|QB|GB
 Jared Goff|QB|DET
 Michael Pittman Jr.|WR|PIT
 Emeka Egbuka|WR|TB
-Darnell Mooney|WR|ATL
+Darnell Mooney|WR|NYG
 Matthew Golden|WR|GB
 Zach Charbonnet|RB|SEA
-Rachaad White|RB|TB
+Rachaad White|RB|WSH
 Javonte Williams|RB|DAL
 Luther Burden III|WR|CHI
 Tucker Kraft|TE|GB
-Chig Okonkwo|TE|TEN
-Jonnu Smith|TE|PIT
+Chig Okonkwo|TE|WSH
+Jonnu Smith|TE|GB
 Dalton Schultz|TE|HOU
-Nick Chubb|RB|HOU
 Tre Harris|WR|LAC
-Jayden Higgins|WR|HOU
 Rashod Bateman|WR|BAL
 Isaiah Likely|TE|NYG
 Alec Pierce|WR|IND
-Austin Ekeler|RB|WSH
+Austin Ekeler|RB|FA
 Jake Ferguson|TE|DAL
 Terrance Ferguson|TE|LAR
 Quentin Johnston|WR|LAC
@@ -4730,13 +4733,13 @@ Trevor Lawrence|QB|JAX
 C.J. Stroud|QB|HOU
 Aaron Rodgers|QB|PIT
 Ray Davis|RB|BUF
-Romeo Doubs|WR|GB
+Romeo Doubs|WR|NE
 Malik Washington|WR|MIA
 Hunter Henry|TE|NE
 Elijah Arroyo|TE|SEA
 Xavier Legette|WR|CAR
 Dylan Sampson|RB|CLE
-Wan'Dale Robinson|WR|NYG
+Wan'Dale Robinson|WR|TEN
 Michael Penix Jr.|QB|ATL
 Cam Ward|QB|TEN
 Jaxson Dart|QB|NYG
@@ -4751,31 +4754,31 @@ Daniel Jones|QB|IND
 Jack Bech|WR|LV
 Mason Taylor|TE|NYJ
 DJ Giddens|RB|IND
-Christian Kirk|WR|HOU
-Tua Tagovailoa|QB|MIA
+Christian Kirk|WR|SF
+Tua Tagovailoa|QB|ATL
 Tyler Shough|QB|NO
 Kimani Vidal|RB|LAC
 Pat Freiermuth|TE|PIT
 Greg Dulcich|TE|MIA
-Dontayvion Wicks|WR|GB
+Dontayvion Wicks|WR|PHI
 Jalen Tolbert|WR|MIA
 Devin Neal|RB|NO
 Elic Ayomanor|WR|TEN
 Matthew Stafford|QB|LAR
 Harold Fannin Jr.|TE|CLE
-Jarquez Hunter|RB|LAR
+Jarquez Hunter|RB|MIA
 DeMario Douglas|WR|NE
 Sam Darnold|QB|SEA
 Shedeur Sanders|QB|CLE
 Roschon Johnson|RB|CHI
-Zach Ertz|TE|WSH
+Zach Ertz|TE|FA
 Tommy Tremble|TE|CAR
 Ollie Gordon II|RB|MIA
-Geno Smith|QB|LV
+Geno Smith|QB|NYJ
 Jacoby Brissett|QB|ARI
 Sean Tucker|RB|TB
 Bryce Young|QB|CAR
-Emanuel Wilson|RB|GB
+Emanuel Wilson|RB|SEA
 Brandon Aubrey|K|DAL
 Jake Bates|K|DET
 Cameron Dicker|K|LAC
@@ -4784,9 +4787,9 @@ Chris Boswell|K|PIT
 Jake Elliott|K|PHI
 Ka'imi Fairbairn|K|HOU
 Tyler Bass|K|BUF
-Younghoe Koo|K|ATL
+Younghoe Koo|K|NYJ
 Wil Lutz|K|DEN
-Jason Sanders|K|MIA
+Jason Sanders|K|NYG
 Evan McPherson|K|CIN
 Eagles D/ST|DST|PHI
 Ravens D/ST|DST|BAL
