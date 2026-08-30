@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=171" />
+  <link rel="stylesheet" href="styles.css?v=172" />
   <script>
     /* Set the theme before first paint to avoid a flash. Uses the saved
        preference if present, else follows the OS light/dark setting. */
@@ -159,6 +159,9 @@
         <div id="ai-score" class="pred-score"></div>
       </div>
       <p class="muted">The model’s full read: best bets, edges, leans, spread and totals — plus its own record and calibration below. Today’s scores live in the rail at the top of the screen. For fun — not betting advice.</p>
+      <!-- Collapse/expand every section on this tab at once (v172). Wired and
+           labelled by applySections, which knows the current open/closed count. -->
+      <button type="button" class="sec-all" hidden></button>
       <div id="ai-picks" class="games-grid"></div>
     </section>
 
@@ -231,6 +234,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=171" defer></script>
+  <script src="app.js?v=172" defer></script>
 </body>
 </html>

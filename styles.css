@@ -53,6 +53,15 @@ body {
   border-bottom: 1px solid rgba(255,255,255,.06);
 }
 .tabs::-webkit-scrollbar { display: none; }
+/* On a desktop the scroller solves a problem that doesn't exist: there's room
+   for every tab, and a mouse has no sideways swipe — the hidden scrollbar made
+   the last tabs (Fantasy, Labs, About) effectively unreachable. Above phone
+   width the rail simply wraps instead, so nothing is ever off-screen. Wrapping
+   rather than a wider one-line rail means it can never cut off, whatever the
+   label lengths or font. */
+@media (min-width: 700px) {
+  .tabs { flex-wrap: wrap; overflow-x: visible; justify-content: center; padding-bottom: 4px; }
+}
 .tabs button {
   background: transparent; color: var(--muted); border: none;
   flex: 0 0 auto; min-width: 60px; position: relative;
@@ -1301,3 +1310,16 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .sa-row.hot .sa-bar i { background: var(--accent); }
 .sa-c { color: var(--muted); font-size: 11px; }
 .sa-note { font-size: 10.5px; line-height: 1.45; color: var(--muted); margin-top: 4px; }
+
+/* Collapse-all / expand-all (v172) — a quiet full-width control, so it reads as
+   a utility for the sections below it rather than another thing to act on. */
+.sec-all {
+  display: block; width: 100%; margin: 2px 0 10px; padding: 8px;
+  font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  color: var(--muted); background: transparent;
+  border: 1px dashed rgba(255,255,255,.14); border-radius: 10px;
+}
+.sec-all:hover { color: var(--text); border-color: rgba(255,255,255,.28); }
+.sec-all[hidden] { display: none; }
+:root[data-theme="light"] .sec-all { border-color: var(--line); }
+:root[data-theme="light"] .sec-all:hover { border-color: var(--muted); }

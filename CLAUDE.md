@@ -360,7 +360,38 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v171** (backend **b13-pregame-lines**).
+Current version as of this writing: **v172** (backend **b13-pregame-lines**).
+
+- **Collapse-all + desktop nav (v172)** — two usability gaps the owner hit:
+  - **⌄ Expand all / ⌃ Collapse all on AI Picks.** The tab is a long ladder and
+    v166 folds most of it by default, so opening (or closing) it a section at a
+    time was tedious. `wireSectionToggle(panel)` runs from `applySections`, so
+    the label is derived from the CURRENT open/closed count on every render —
+    the AI tab rebuilds its sections constantly (async trends, a sport change),
+    and a remembered label would go stale. The action is whatever is not
+    already true of every section, so one tap always changes something and a
+    half-open tab has an unambiguous next step. Each section is set with
+    `persist:true`, so a bulk choice survives exactly like an individual tap.
+    **A tab opts in just by having a `.sec-all` button in its markup** — there
+    is no list to keep in sync. Hidden below 2 sections.
+  - **🚨 On a PC the tab rail was partly unreachable.** v163 made it a
+    one-line horizontal scroller with `scrollbar-width: none` — fine on a phone
+    (swipe), broken with a mouse: no sideways gesture, no visible scrollbar, so
+    Fantasy/Labs/About simply could not be reached. Two fixes: **above 700px
+    the rail wraps** (`flex-wrap: wrap`, no overflow) so nothing is ever
+    off-screen — wrapping rather than a wider single line means it can't cut
+    off whatever the labels or font do — and **`wheelScrollsSideways()`**
+    translates a vertical wheel into horizontal scrolling on `.tabs`,
+    `.live-rail` and `.rail-leagues` for narrow desktop windows. It only claims
+    the gesture while the rail actually overflows AND the scroll actually
+    moved, so a trackpad's real horizontal swipe still works and the page keeps
+    scrolling once the rail hits its end.
+  - Verified — **33 checks**: the toggle (expand → collapse → expand, the label
+    flipping, aria-expanded, persistence across a tab switch and a reload, the
+    half-open case, and no stray control on other tabs) and desktop nav at
+    1280/1024/760px (no overflow, no tab cut off, the LAST tab clickable) plus
+    a 420px window where the wheel scrolls the rail and is not swallowed at
+    the end.
 
 - **🚨 Two model bugs found by measuring, not guessing (v171)** — the owner
   asked to fix the totals OVER bias and to work out why low-confidence picks

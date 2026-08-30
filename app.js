@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v171';
+const APP_VERSION = 'v172';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -6559,6 +6559,35 @@ function applySections(name) {
   if (!panel) return;
   makeAccordion(panel, '.section-title, .lad-sec, .ai-section-head',
     SEC_OPEN_DEFAULT[name] ?? 1, name);
+  wireSectionToggle(panel);
+}
+
+// Collapse-all / expand-all for a whole tab (v172). Re-wired on every render —
+// the AI Picks tab rebuilds its sections constantly (async trends, a sport
+// change), so the label has to be derived from the CURRENT state each time
+// rather than remembered. A tab opts in simply by having a `.sec-all` button
+// in its markup; there is no list to keep in sync.
+//
+// The action is whatever is NOT already true of every section: if anything is
+// collapsed the button expands, otherwise it collapses. That way one tap
+// always changes something, and a half-open tab has an unambiguous next step.
+function wireSectionToggle(panel) {
+  const btn = panel.querySelector(':scope > .sec-all');
+  if (!btn) return;
+  const heads = [...panel.querySelectorAll('.acc-h')].filter((h) => h._accSet);
+  // One section is not worth a bulk control, and zero means nothing rendered.
+  if (heads.length < 2) { btn.hidden = true; return; }
+  const closed = heads.filter((h) => !h.classList.contains('open')).length;
+  const expand = closed > 0;
+  btn.hidden = false;
+  btn.textContent = expand ? `⌄ Expand all ${heads.length} sections` : `⌃ Collapse all ${heads.length} sections`;
+  btn.setAttribute('aria-expanded', String(!expand));
+  btn.onclick = () => {
+    // persist:true on each, so the choice survives the next render exactly the
+    // way an individual tap does.
+    heads.forEach((h) => h._accSet(expand, true));
+    wireSectionToggle(panel);   // relabel for the state we just moved to
+  };
 }
 
 // --- EAGLES ---------------------------------------------------------------
@@ -7640,6 +7669,30 @@ function showTab(name) {
     .then(() => { injectJumpNav(name); applySections(name); })
     .catch((e) => console.error(e));
 }
+// Horizontal rails (tabs, the live slate, the league filters) scroll sideways.
+// A phone swipes them; a mouse has no sideways gesture and the scrollbars are
+// hidden, so on a desktop a plain wheel over one of these does nothing and the
+// content past the edge is unreachable. Translate vertical wheel to horizontal
+// there — only while the rail actually overflows, and only when the wheel is
+// predominantly vertical, so a trackpad's real horizontal swipe still works
+// normally and the page keeps scrolling when the rail has nothing hidden.
+function wheelScrollsSideways(sel) {
+  document.querySelectorAll(sel).forEach((rail) => {
+    if (rail.dataset.wheelWired) return;
+    rail.dataset.wheelWired = '1';
+    rail.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;      // already horizontal
+      if (rail.scrollWidth <= rail.clientWidth + 1) return;       // nothing hidden
+      const before = rail.scrollLeft;
+      rail.scrollLeft += e.deltaY;
+      // Only claim the gesture if it actually moved — at either end the page
+      // should go on scrolling rather than the wheel dying over the rail.
+      if (rail.scrollLeft !== before) e.preventDefault();
+    }, { passive: false });
+  });
+}
+wheelScrollsSideways('.tabs, .live-rail, .rail-leagues');
+
 // The tab buttons wrap an icon and a label span (v163), so a tap lands on the
 // span, not the button — resolve to the button before reading its dataset.
 $('#tabs').addEventListener('click', (e) => {
