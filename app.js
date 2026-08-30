@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v161';
+const APP_VERSION = 'v162';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -214,13 +214,17 @@ function normStandings(json) {
 }
 
 // --- data access ----------------------------------------------------------
-async function getGames(sport, dateStr) {
+// opts.allRanks skips the Top-25 gate. Exactly one caller wants that — grading
+// (see gradePending). The filter decides what to SHOW and what to PICK; it must
+// never decide what gets GRADED, or a pick could be quietly orphaned by a poll
+// that moved after it was made.
+async function getGames(sport, dateStr, opts = {}) {
   const cfg = LEAGUES[sport];
   const raw = (await scoreboard(sport, dateStr))?.games || [];
   // Filter BEFORE tracking lines: a college Saturday puts ~70 FBS games on the
   // board and only the ranked ones are ever shown, so tracking the rest would
   // just bloat the day's localStorage key for games nothing can open.
-  const games = cfg.top25 ? await onlyRanked(sport, raw) : raw;
+  const games = cfg.top25 && !opts.allRanks ? await onlyRanked(sport, raw) : raw;
   if (dateStr === ymd(sportsDate())) trackLines(sport, games); // today only
   return games;
 }
@@ -1768,7 +1772,13 @@ async function gradePending() {
   await Promise.all(Object.entries(groups).map(async ([key, ids]) => {
     const [sport, date] = key.split('|');
     let games = [];
-    try { games = await getGames(sport, date); } catch (_) { return; }
+    // allRanks: grade against the UNFILTERED board. A CFB pick is made off the
+    // ranked slate, but a team can fall out of the poll between kickoff and the
+    // next time this runs — and if the re-fetched slate is re-filtered against
+    // the new poll, that game disappears and the pick is silently purged at the
+    // 14-day cutoff. Those are exactly the picks worth learning from (upsets
+    // involving bubble teams), so grading ignores the gate entirely.
+    try { games = await getGames(sport, date, { allRanks: true }); } catch (_) { return; }
     const byId = {}; games.forEach((g) => (byId[g.id] = g));
     ids.forEach((id) => {
       const g = byId[id.replace(/:t$/, '')]; if (!g || gameState(g) !== 'final') return;

@@ -358,7 +358,45 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v161** (backend **b11-cfb-betting**).
+Current version as of this writing: **v162** (backend **b11-cfb-betting**).
+
+- **🚨 The Top-25 gate could have orphaned graded CFB picks (v162)** — found
+  while answering "does the model track college football the same way?". It
+  does — `recordPick`/`recordResult`/`gradePending`/`tallyDetails` are all
+  sport-generic, so a 🎓 CFB row, its confidence buckets, its O/U split, the
+  `sh` sharp-money split and the export all worked from day one with no CFB
+  code. But **grading went through `getGames`, which applies v161's Top-25
+  filter**, and that filter reads the CURRENT poll.
+  - **The failure:** you pick #22 Wake Forest on Saturday. They lose (or just
+    slide) and the Sunday poll drops them. `gradePending` re-fetches Saturday's
+    board on Monday, `onlyRanked` re-filters it against the NEW poll, the game
+    is no longer there, and the pick sits unmatched until the 14-day cutoff
+    purges it. Silent, and biased: it eats precisely the bubble-team and upset
+    picks a calibration sample most needs.
+  - Whether it actually fires depends on something unverifiable from here —
+    whether ESPN's historical scoreboard keeps `curatedRank` as of kickoff or
+    re-stamps it to today's rank. Rather than bet on the answer, the rule is
+    now explicit: **the filter decides what to SHOW and what to PICK; it must
+    never decide what gets GRADED.** `getGames` takes `opts.allRanks`, and
+    `gradePending` — the only caller that passes it — grades against the
+    unfiltered board.
+  - `renderPredictions` still grades finals inline off the filtered slate, which
+    is fine: that's same-day, when the poll can't have moved yet, and anything
+    it misses `gradePending` now catches later regardless.
+  - Verified with a fixture built to trigger exactly this: a finished game whose
+    ranked team is *absent from the current poll* still grades, keeping `cf`,
+    `sh`, the edge flag and the sport stamp, and lands in the Report Card's
+    by-sport, bucket, totals and sharp-money sections (19 checks). Nothing about
+    the pick-side behaviour changed — the earlier 101 checks still pass.
+
+  **What this means for tuning through the season:** CFB accumulates a graded
+  record with the same meta every other sport stores, so the v126/v138/v159
+  method applies unchanged — let it run, hit **📋 Copy my record data**, and
+  read the CFB slice before touching `MODEL_W.cfb`. The constants that will
+  want attention first are `CONF_CAP.cfb` (90 is a guess), `MODEL_SHRINK.cfb`
+  (0.8, chosen blind) and `TOT_EDGE_MIN.cfb` (6). **Measure, then fit — do not
+  refit on a sample the shrink itself produced.**
+
 
 - **🎓 College Football (Top 25) + NFL flipped to live (v161)** — two owner asks
   in one change: score college football "like the other sports, just the top 25,
