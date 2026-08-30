@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v178';
+const APP_VERSION = 'v179';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -743,9 +743,19 @@ function marketGap(pred, info) {
   const mktPick = pred.homePick ? mkt : 1 - mkt;
   return Math.round((pickProb - mktPick) * 100);
 }
-function marketCompare(pred, favName, info) {
+// `sport`/`g` are optional — when given, the banner can also say whether the
+// model splits from the book on the SPREAD. Agreeing on the winner while
+// disagreeing on the number is the normal case for a big favourite, and a
+// bare "✅ Model agrees with the line" hid exactly that.
+function marketCompare(pred, favName, info, sport, g) {
   if (!pred || !favName) return '';
-  if (pred.winner.name === favName) return `✅ Model agrees with the line (${favName})`;
+  if (pred.winner.name === favName) {
+    const ats = (sport && g) ? atsCall(sport, g, pred, info) : null;
+    if (ats && ats.team !== pred.winner.name) {
+      return `✅ Model agrees on the winner (${esc(favName)}) — but makes it ${esc(favName)} by ${Math.abs(pred.projMargin).toFixed(0)}, so it likes <b>${esc(ats.label)}</b> against the spread`;
+    }
+    return `✅ Model agrees with the line (${esc(favName)})`;
+  }
   const mkt = marketHomeProb(info);
   let probs = '';
   if (mkt != null && pred.probHome != null) {
@@ -773,9 +783,9 @@ const gradeHue = (letter) =>
   letter[0] === 'A' ? 'var(--accent)' : letter[0] === 'B' ? '#8fd14f'
   : letter[0] === 'C' ? 'var(--gold)' : letter[0] === 'D' ? '#ff9f43' : '#ff5a5a';
 
-function oddsSectionHTML(info, awayAbbr, homeAbbr, pred) {
+function oddsSectionHTML(info, awayAbbr, homeAbbr, pred, sport, g) {
   if (!info) return '';
-  const cmp = marketCompare(pred, info.favName, info);
+  const cmp = marketCompare(pred, info.favName, info, sport, g);
   const ml = (v) => (v == null ? '—' : (Number(v) > 0 ? `+${v}` : `${v}`));
   return `<div class="md-section-title acc-open">Betting Odds${info.provider ? ` · ${info.provider}` : ''}</div>
     <div class="odds-grid">
@@ -868,10 +878,12 @@ function renderGameDetail(sport, data, pred, extra, g, report) {
 
   const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g?.odds;
   const oddsInfo = normOdds(rawO, home.team?.displayName, away.team?.displayName, home.team?.abbreviation, away.team?.abbreviation);
-  html += oddsSectionHTML(oddsInfo, away.team?.abbreviation, home.team?.abbreviation, pred);
+  html += oddsSectionHTML(oddsInfo, away.team?.abbreviation, home.team?.abbreviation, pred, sport, g);
   html += report || '';
 
-  html += aiPickHead(pred);
+  // Pass the game + odds so the pick block can show the spread and total
+  // plays beside the moneyline rather than leaving them to look contradictory.
+  html += aiPickHead(pred, sport, g, oddsInfo);
   html += aiFactors(pred);
   html += extra || '';
 
@@ -1879,12 +1891,43 @@ async function predictGame(sport, g, opts) {
     breakdown, notes, sharp, thin: !(hf && af) };
 }
 
-function aiPickHead(pred) {
+// 🚨 v179: this used to say just "Pick: USC Trojans 90%", which reads as THE
+// pick — so a card showing "USC to win" above and "take SJSU +37.5" in the
+// report looked like the app contradicting itself. It isn't: those are two
+// different bets off ONE projection ("USC by about 22"). USC by 22 wins the
+// game, and USC by 22 does not cover 37.5, so both are true at once and the
+// spread is where the disagreement with the book lives.
+//
+// So every play now names its own market, and the spread + total plays sit
+// beside the moneyline instead of being scattered across two cards.
+function aiPickHead(pred, sport, g, info) {
   if (!pred) return '';
+  const ats = (sport && g && info) ? atsCall(sport, g, pred, info) : null;
+  const rows = [`<div class="ai-play"><span class="ai-mkt">Moneyline</span>
+    <span class="ai-sel"><b>${esc(pred.winner.name)}</b> to win</span>
+    <span class="ai-conf">${pred.conf}%</span></div>`];
+  if (ats) {
+    rows.push(`<div class="ai-play"><span class="ai-mkt">Spread</span>
+      <span class="ai-sel"><b>${esc(ats.label)}</b></span>
+      <span class="ai-edge">${Math.abs(ats.edge).toFixed(1)} pts</span></div>`);
+  }
+  if (pred.projTotal != null && info?.ou != null) {
+    const lean = pred.projTotal > info.ou ? 'OVER' : pred.projTotal < info.ou ? 'UNDER' : null;
+    if (lean) {
+      rows.push(`<div class="ai-play"><span class="ai-mkt">Total</span>
+        <span class="ai-sel"><b>${lean} ${info.ou}</b></span>
+        <span class="ai-edge">${Math.abs(pred.projTotal - info.ou).toFixed(1)} pts</span></div>`);
+    }
+  }
+  // Spell out the reconciliation whenever the two plays land on opposite
+  // teams — the exact thing that looked like a bug.
+  const split = ats && ats.team !== pred.winner.name
+    ? `<div class="ai-why">Both from the same projection: ${esc(pred.winner.name)} by about ${Math.abs(pred.projMargin).toFixed(0)} — enough to win the game, not enough to cover ${Math.abs(ats.spread)}.</div>`
+    : '';
   return `<div class="md-section-title acc-open">🤖 AI Pick</div>
-    <div class="ai-pick">Pick: <b>${esc(pred.winner.name)}</b> <span class="ai-conf">${pred.conf}%</span></div>
-    <div class="conf-bar"><span style="width:${pred.conf}%"></span></div>
-    ${pred.projTotal != null ? `<div class="ai-why">Model total: ${pred.projTotal.toFixed(1)}</div>` : ''}
+    <div class="ai-plays">${rows.join('')}</div>
+    <div class="conf-bar"><span style="width:${pred.conf}%"></span></div>${split}
+    ${pred.projTotal != null ? `<div class="ai-why">Model total: ${pred.projTotal.toFixed(1)}${pred.projMargin != null ? ` · model margin: ${esc(pred.winner.name === g?.home?.name ? (g?.home?.abbr || 'home') : (g?.away?.abbr || 'away'))} by ${Math.abs(pred.projMargin).toFixed(1)}` : ''}</div>` : ''}
     ${pred.thin ? '<div class="ai-why">Not enough games played yet for full analysis.</div>' : ''}`;
 }
 function aiFactors(pred) {

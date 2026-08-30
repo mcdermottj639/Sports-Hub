@@ -368,7 +368,43 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v178** (backend **b13-pregame-lines**).
+Current version as of this writing: **v179** (backend **b13-pregame-lines**).
+
+- **🚨 The AI Pick card looked like it was contradicting itself (v179)** — the
+  owner, on USC -37.5: *"this is saying the spread actual is -37 but should be
+  -22 and u still pick the favorite. what why isnt this the other way u just
+  showed value for the dog"*. Nothing was wrong with the model; the card was
+  **unreadable**. It said `Pick: USC Trojans 90%` — no market named — directly
+  above a report row saying take SJSU +37.5. Two different bets off ONE
+  projection: *USC by about 22* both wins the game and fails to cover 37.5.
+  - **Every play now names its market.** `aiPickHead(pred, sport, g, info)`
+    renders a row per market — **Moneyline** (…to win), **Spread**, **Total** —
+    instead of one unlabelled "Pick:". The spread and total plays used to live
+    only in the Game Report, two cards away from the moneyline.
+  - **When the two plays land on opposite teams the card reconciles them
+    explicitly:** "Both from the same projection: USC Trojans by about 22 —
+    enough to win the game, not enough to cover 37.5." That sentence is the
+    entire fix for the confusion; without it the reader has to know that a
+    moneyline and a spread are different bets.
+  - **The odds banner stopped hiding the disagreement.** "✅ Model agrees with
+    the line (USC)" was true of the *winner* while the model disagreed by 15.5
+    points on the number. `marketCompare` takes optional `sport`/`g` and now
+    reads "agrees on the winner … but makes it USC by 22, so it likes SJSU
+    +37.5 against the spread". The outright-disagreement (⚡) path is unchanged.
+  - **⚠️ Correction to the v178 note:** that entry implied USC -37.5 was the
+    saturated case. **It was not.** The real `pHome` is **0.909**, projecting
+    22.0 points — well under the 33.9 ceiling — so the 15.5 points of value is
+    a genuine read and the guard correctly did **not** fire. The v178 guard is
+    still right and still needed; it just does not apply to this game. The
+    mistake was inferring saturation from the displayed 90% (which is
+    `CONF_CAP.cfb` barely biting on a raw 91) plus the F moneyline grade,
+    without computing the margin. **Compute the margin before calling a game
+    pinned.**
+  - Verified — **22 checks**: the three labelled rows in order, the
+    reconciliation sentence appearing only when the plays split, the favourite-
+    covers case, the noise band producing no spread row, degradation with no
+    odds at all, MLB getting no spread row, all three banner states, and no row
+    overflowing. The ten prior suites still pass.
 
 - **📐 The model's spread on the Game Report + a saturation guard, and DK
   splits for college teams (v178)** — the owner asked, looking at USC -37.5 vs
