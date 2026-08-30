@@ -9,6 +9,14 @@ Guidance for Claude (and humans) working on this repo. Read this first.
 > don't wait to be asked. When you bump `APP_VERSION`, also update the
 > "Current version" line below if it's drifted.
 
+> ## 🧮 Before you touch ANY model constant
+> Several model fixes are shipped but not yet verified against results. There
+> is a checklist of exactly what to read, where, and what "it worked" looks
+> like — search this file for **"⏳ Open measurements"** (it sits just under
+> the "Current version" line). The rule that section enforces is the
+> one this repo has followed since v126: **measure, then fit — and never refit
+> on a sample the change itself produced.**
+
 ## What this is
 
 **Sports-Hub** is a personal, multi-sport web app for the owner (a Philadelphia
@@ -361,6 +369,51 @@ Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
 Current version as of this writing: **v172** (backend **b13-pregame-lines**).
+
+## ⏳ Open measurements — read these BEFORE touching model constants
+
+Several fixes are shipped but **unverified against results**, because the data
+that would verify them didn't exist when they shipped. The repo's method is
+*measure, then fit* — and never refit on a sample the change itself produced.
+So: let the games run, hit **📋 Copy my record data** (AI Picks → Model Report
+Card), and read the numbers below before changing any weight.
+
+**Earliest useful re-read: ~14 September 2026** (two weeks of games after the
+v171 fixes shipped on 30 Aug). Sooner than that and every split is noise.
+Each row's full reasoning is in the version entry it names — this table is the
+index, not the argument.
+
+> **This is already scheduled — nobody has to remember it.** A one-shot Routine
+> (`trig_01MpcJyXPQSzJcTiDYL1j9Ns`, "Sports-Hub: re-read the model record
+> (v171 fixes)") fires **14 Sep 2026 13:00 UTC** into a fresh session, with
+> push + email notification. It carries this checklist in its prompt and knows
+> to ask the owner for the export first. **The record lives in localStorage on
+> the owner's phone, so no session can read it unaided** — the export button is
+> the only way it ever gets off the device. If you re-run this analysis
+> earlier, cancel or re-date that Routine so it doesn't ask twice.
+
+| # | What to read | Where | Ships as fixed? | What "it worked" looks like |
+|---|---|---|---|---|
+| 1 | **Model total vs the book** | Report Card → Totals (the *all priced games* row, not the picks-only one) | v171 `MLB_SP_ERA` 4.10→4.30 | near **0.00 runs**. Still ~+0.3 → the anchor needs more. |
+| 2 | **OVER / UNDER split** | same section | same fix | moves off **74% OVER** toward even. It was 73% at v159 and 74% at v170 — park factors did NOT fix it. |
+| 3 | **50–54% bucket, home vs away** | export, split by side | v171 `HR_GAP` + `homeEdge` 0.12→0.24 | away picks stop going **6-14 (30%)**. This is what pointed at both v171 bugs. |
+| 4 | **Overall calibration gap** | Report Card → By confidence | v171 | better than **−6.1** at n=109, and the buckets become *ordered* (they are not today: 50–54 wins 27.8%, 55–59 wins 75%). |
+| 5 | **Record by tier** | Backtesting → Record by tier | v164 stored `gp`/`tr` | reads a real W-L instead of "collecting". **Do not touch `EDGE_BAR` before this has ~20 graded picks.** |
+| 6 | **ATS record** | Backtesting → by sport | v171 fixed grading (`:s` was never stripped, so ATS never graded at all) | any non-zero number. `PD_SD` (13.5/16.5) and `ATS_EDGE_MIN` (2/3) are guesses and are the first things to re-fit. |
+| 7 | **Sharp money split** | Report Card → 💰 Sharp money | v160 stored `sh` | 20+ graded picks. At the v170 export there were **3**. Nothing to conclude until then. |
+
+**Known and deliberately NOT fixed:**
+- **`MIN_EDGE_GAP`** — edges are **18-21 (46.2%)** all-time, under the 52.4%
+  break-even, and that is now two independent samples (v159: 44.7%). Still not
+  enough to move the bar on: the fix is to find out *why*, not to raise the
+  threshold and hope.
+- **CFB carries the same shrink mismatch v171 fixed for MLB** — `homeEdge` 0.42
+  × `MODEL_SHRINK.cfb` 0.8 = an effective **58.3%**, not the ~60% its comment
+  claims. Left alone because there are **zero graded CFB results**. Fix it the
+  same way MLB's was — from a sample, not from the comment.
+- **7 soccer entries** (World Cup, league removed in v125) still count toward
+  the all-time headline record.
+
 
 - **Collapse-all + desktop nav (v172)** — two usability gaps the owner hit:
   - **⌄ Expand all / ⌃ Collapse all on AI Picks.** The tab is a long ladder and
