@@ -360,7 +360,48 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v164** (backend **b11-cfb-betting**).
+Current version as of this writing: **v165** (backend **b11-cfb-betting**).
+
+- **Every section folds, and remembers (v165)** — the owner noticed the Fantasy
+  tab had no way to collapse anything. `makeAccordion` had existed since v60-odd
+  but was only ever called on four tabs (Eagles, Red Sox, NFL, CFB); Fantasy —
+  the longest tab in the app — plus Home, AI Picks and the trends sections were
+  never wired up. Now a single **`applySections(tab)`** runs after every tab
+  render (from `showTab`), so nothing can be missed, over `.section-title`,
+  `.lad-sec` and `.ai-section-head`.
+  - **State persists** (`sportshub:secs`). Fantasy's sections finish rendering
+    asynchronously and repaint constantly, so a collapse that pops back open on
+    the next repaint isn't a collapse. Only **collapsed** sections are stored,
+    so untouched sections follow the tab default and newly added sections
+    appear open.
+  - **The key is the heading's TEXT, not its id** — `injectJumpNav` assigns
+    *positional* ids (`fantasy-sec-3`) to headings that lack one, and those
+    shift whenever an async section lands earlier or later, which would
+    reattach a saved state to a different section. A real id from the markup is
+    used when there is one (`AUTO_ID` tells them apart).
+  - **The content walk stops at any sibling that contains its own heading.**
+    Several sections render into their own wrapper (`#home-board`,
+    `#fantasy-waivers`, `#fantasy-strength`…) — without this, collapsing "My
+    Teams" would have taken 🎲 The Board down with it.
+  - **Clicks on controls inside a heading don't fold the section** (the League
+    heading carries a Standings/Power toggle). The chevron is now a real
+    `<button>` with `aria-expanded`, so sections are keyboard-reachable; the
+    heading itself stays a heading, because `role="button"` on an element that
+    contains a button would be invalid.
+  - **`.no-acc`** marks a page title that is not a section: "Fantasy Tracker"
+    (its "body" is the sport chip row) and "🤖 AI Picks — Today" (the record
+    line). Folding either would hide a control, not content.
+  - **Defaults are unchanged** — `SEC_OPEN_DEFAULT` keeps Eagles/Red Sox/NFL/CFB
+    at "first two open", and every other tab starts fully expanded, so turning
+    this on hides nothing the owner was used to seeing. Labs and About are a
+    single short card each with no `.section-title` at all; there is nothing
+    there to fold and a chevron on a five-line card is noise.
+  - Verified in headless Chromium at 390px — **43 checks**: chevrons on every
+    tab that has sections, collapse → persists across a tab switch **and** a
+    full reload → re-expanding clears the stored override, the nested-control
+    guard, heading-text clicks still toggling, the Eagles default preserved,
+    the jump nav surviving collapsed sections, and Labs/About correctly having
+    nothing to collapse. No console errors.
 
 - **📐 Three markets, tracked apart — ML · spread · totals (v164)** — the owner
   asked for an against-the-spread record for NFL and CFB ("spread matters a lot
@@ -2132,6 +2173,9 @@ Current version as of this writing: **v164** (backend **b11-cfb-betting**).
 - `sportshub:fparticles` — last good FantasyPros article list (`{at, items}`), so
   the 📰 Fantasy Advice section paints instantly and still shows something when
   the backend is asleep.
+- `sportshub:secs` — sections the user has collapsed (`{"<tab>|<heading>": 1}`).
+  Only collapsed ones are stored, so the absence of a key means "use the tab's
+  default" and a newly added section always appears open.
 - `sportshub:theme` — chosen color theme (`'light'` | `'dark'`). Absent = follow the
   OS `prefers-color-scheme`. Read by the inline `<head>` script and by `applyTheme`.
 - Note: localStorage is **per browser/device** — the home-screen PWA and Safari

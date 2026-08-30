@@ -258,6 +258,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .rep-d { color: var(--muted); font-size: 11px; flex: none; width: 32px; text-align: right; }
 
 .ai-section-head { grid-column: 1 / -1; font-size: 13px; font-weight: 800; color: var(--silver); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 -2px; }
+.ai-section-head.acc-h, .lad-sec.acc-h { display: flex; align-items: center; }
 .ai-section-head.edge { color: var(--accent); }
 .ai-note { grid-column: 1 / -1; background: var(--card); border: 1px solid rgba(255,255,255,.07); border-radius: var(--radius); padding: 14px 16px; color: var(--silver); font-size: 13.5px; line-height: 1.5; }
 .trend-list { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
@@ -296,8 +297,17 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .jump-nav .chip { flex: 0 0 auto; }
 .section-title { scroll-margin-top: 64px; }
 .acc-h { cursor: pointer; }
-.acc-h .sec-chev { float: right; font-size: 12px; color: var(--muted); transition: transform .15s ease; }
-.acc-h.open .sec-chev { transform: rotate(90deg); display: inline-block; }
+/* The chevron is a real button (v165) so sections are keyboard-reachable and
+   announce their state; the whole heading row stays tappable for pointers. */
+.acc-h { cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.acc-h .sec-chev {
+  margin-left: auto; flex: 0 0 auto; font: inherit; font-size: 12px; line-height: 1;
+  color: var(--muted); background: transparent; border: none; cursor: pointer;
+  padding: 6px 4px; min-width: 28px; min-height: 28px;
+  transition: transform .15s ease;
+}
+.acc-h.open .sec-chev { transform: rotate(90deg); }
+.acc-h .sec-chev:hover { color: var(--text); }
 .pick-btns { display: flex; gap: 8px; margin-top: 10px; }
 .pick-btns button {
   flex: 1; background: var(--card-2); color: var(--text); border: 1px solid rgba(255,255,255,.1);

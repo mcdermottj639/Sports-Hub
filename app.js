@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v164';
+const APP_VERSION = 'v165';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1075,7 +1075,7 @@ async function renderHome() {
   renderHomeHeadline();
   // The board runs the model over every in-season slate, so it's deliberately
   // NOT awaited — the scores paint first and the board fills in behind them.
-  renderHomeBoard().catch((e) => {
+  renderHomeBoard().then(() => applySections('home')).catch((e) => {
     console.error(e);
     const box = $('#home-board');
     if (box) box.innerHTML = '<h2 class="section-title">🎲 The Board</h2>'
@@ -2831,7 +2831,8 @@ async function renderPredictions() {
     container.appendChild(reportCard(det));
   }
 
-  renderAiTrends(container, sport, playable, rows);
+  await renderAiTrends(container, sport, playable, rows);
+  applySections('predictions');
 }
 
 // "Trends to pay attention to" — team form/scoring pulled from cached profiles,
@@ -4769,6 +4770,7 @@ async function renderFantasy() {
     }
     renderFantasyFootball();
     injectJumpNav('fantasy');
+    applySections('fantasy');
     // Haven't checked config yet? Learn it, and upgrade to the live view if a
     // league exists (deferred so the prep view still paints instantly).
     if (cfg === undefined) leagueConfig().then((c) => {
@@ -5252,6 +5254,7 @@ async function renderFootballLive() {
   const pp = box.querySelector('#fbl-prep');
   if (pp) pp.onclick = () => { fanState.footballView = 'prep'; renderFantasy(); };
   injectJumpNav('fantasy');
+  applySections('fantasy');
 }
 
 // Format a category value (ERA/WHIP → 2dp, rate stats → .XXX, counting → int).
@@ -5661,6 +5664,7 @@ function renderAddDrop(sport) {
   // finish after the initial jump-nav is built, so refresh it now that their
   // headings exist. This is the terminal call in each async flow.
   injectJumpNav('fantasy');
+  applySections('fantasy');
 }
 
 // Opponent overview: a head-to-head SEASON comparison — my team vs this week's
@@ -6019,20 +6023,105 @@ $('#fan-reset').addEventListener('click', () => {
   renderFantasy();
 });
 
+// ===================== Collapsible sections (v165) ========================
+// Every section in the app folds away. This used to be four tabs only (Eagles,
+// Red Sox, NFL, CFB); Fantasy — the longest tab in the app — had no way to
+// collapse anything, and neither did Home, AI Picks, Labs or About.
+//
+// Three things the old version couldn't do, all of which matter once Fantasy
+// is in scope:
+//   1. REMEMBER. Fantasy re-renders constantly (its sections finish async), and
+//      a collapse that pops back open on the next repaint isn't a collapse. The
+//      choice is stored per tab + heading and survives re-render and restart.
+//   2. NOT EAT CONTROL TAPS. Some headings carry their own controls — the
+//      League heading has a Standings/Power toggle inside it — so a click that
+//      lands on a nested button/select/link must not also fold the section.
+//   3. BE REACHABLE BY KEYBOARD. The chevron is now a real <button> with
+//      aria-expanded. The heading itself stays a heading (putting role="button"
+//      on an element that contains a button would be invalid), so pointer users
+//      can still tap anywhere on the row.
+const SECS_KEY = 'sportshub:secs';
+const getSecs = () => { try { return JSON.parse(localStorage.getItem(SECS_KEY) || '{}'); } catch (_) { return {}; } };
+// Only COLLAPSED sections are stored, so a section the user has never touched
+// falls back to the tab's default and newly added sections appear open.
+function setSecClosed(key, closed) {
+  try {
+    const m = getSecs();
+    if (closed) m[key] = 1; else delete m[key];
+    localStorage.setItem(SECS_KEY, JSON.stringify(m));
+  } catch (_) {}
+}
+// Stable identity for a section, so a collapse survives a re-render and a
+// restart. Its own id is used only when that id came from the markup —
+// injectJumpNav assigns POSITIONAL ids (`fantasy-sec-3`) to headings that
+// lack one, and those shift whenever an async section lands earlier or later,
+// which would silently reattach a saved state to a different section. Heading
+// text is the stable identity in that case.
+const AUTO_ID = /-sec-\d+$/;
+function secKey(scope, h) {
+  if (h.id && !AUTO_ID.test(h.id)) return `${scope}|#${h.id}`;
+  const c = h.cloneNode(true);
+  c.querySelectorAll('.sec-chev, button, select, .chips').forEach((n) => n.remove());
+  return `${scope}|${(c.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60)}`;
+}
+// How many sections a tab leaves open when the user has expressed no
+// preference. The four long team tabs keep their existing behaviour (first two
+// open); everything else starts fully expanded, so turning this on doesn't
+// silently hide anything the owner is used to seeing.
+const SEC_OPEN_DEFAULT = { eagles: 2, redsox: 2, nfl: 2, cfb: 2 };
+
 // Turn a container's headers into tap-to-expand accordion sections.
-// Headers with class "acc-open" start expanded (in addition to first openCount).
-function makeAccordion(container, headerSel, openCount = 0) {
+// Headers with class "acc-open" start expanded (in addition to the first
+// openCount). Idempotent: safe to re-run after any partial re-render.
+function makeAccordion(container, headerSel, openCount = 0, scope = null) {
   if (!container) return;
-  [...container.querySelectorAll(headerSel)].forEach((h, idx) => {
+  const saved = scope ? getSecs() : null;
+  [...container.querySelectorAll(headerSel)].filter((h) => !h.classList.contains('no-acc')).forEach((h, idx) => {
+    // Walk forward to the next heading — but stop early at any sibling that
+    // CONTAINS a heading of its own. Several sections are rendered into their
+    // own wrapper div (#home-board, #fantasy-waivers, #fantasy-strength…), and
+    // without this the section above them would swallow them whole: collapsing
+    // "My Teams" would take The Board with it.
     const content = []; let n = h.nextElementSibling;
-    while (n && !n.matches(headerSel)) { content.push(n); n = n.nextElementSibling; }
+    while (n && !n.matches(headerSel) && !n.querySelector(headerSel)) { content.push(n); n = n.nextElementSibling; }
     h.classList.add('acc-h');
-    if (!h.querySelector('.sec-chev')) h.insertAdjacentHTML('beforeend', '<span class="sec-chev">▸</span>');
-    const set = (o) => { h.classList.toggle('open', o); content.forEach((c) => { c.style.display = o ? '' : 'none'; }); };
-    set(idx < openCount || h.classList.contains('acc-open'));
-    h.onclick = () => set(!h.classList.contains('open'));
+    let chev = h.querySelector('.sec-chev');
+    if (!chev) {
+      chev = el('button', 'sec-chev', '▸');
+      chev.type = 'button';
+      chev.setAttribute('aria-label', 'Collapse or expand this section');
+      h.appendChild(chev);
+    }
+    const key = scope ? secKey(scope, h) : null;
+    const set = (o, persist) => {
+      h.classList.toggle('open', o);
+      chev.setAttribute('aria-expanded', String(o));
+      content.forEach((c) => { c.style.display = o ? '' : 'none'; });
+      if (persist && key) setSecClosed(key, !o);
+    };
+    // Saved choice wins; otherwise fall back to the tab's default.
+    const dflt = idx < openCount || h.classList.contains('acc-open');
+    set(key && saved && saved[key] ? false : dflt, false);
+    const toggle = () => set(!h.classList.contains('open'), true);
+    h.onclick = (e) => {
+      // A tap on a control that lives inside the heading (the League tab's
+      // Standings/Power toggle, a chip row, a link) is not a request to fold
+      // the section — unless it's our own chevron.
+      if (e.target !== chev && e.target.closest('button, select, input, a, .chips')) return;
+      toggle();
+    };
     h._accSet = set;
   });
+}
+
+// Run the accordion over a whole tab panel. Called after every tab render and
+// again when Fantasy's async sections land, so late-arriving headings fold too
+// and an already-collapsed section stays collapsed through a repaint.
+function applySections(name) {
+  const panel = document.getElementById(name);
+  if (!panel) return;
+  makeAccordion(panel, '.section-title, .lad-sec, .ai-section-head',
+    SEC_OPEN_DEFAULT[name] ?? Infinity, name);
 }
 
 // --- EAGLES ---------------------------------------------------------------
@@ -6266,7 +6355,7 @@ async function renderEagles() {
     (b.onclick = () => { const t = document.getElementById(b.dataset.target); if (t?._accSet) t._accSet(true); t?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
 
   // collapsible sections (scannable; tap a header to expand)
-  makeAccordion(document.getElementById('eagles'), '.section-title', 2);
+  applySections('eagles');
 
   // fire off the heavier analytics in parallel; each renders independently
   renderEaglesDepth(idMap, groups);
@@ -6555,7 +6644,7 @@ async function renderRedSox() {
   navEl.innerHTML = navItems.map(([tg, l]) => `<button class="chip" data-target="${tg}">${l}</button>`).join('');
   navEl.querySelectorAll('button').forEach((b) => (b.onclick = () => { const elx = document.getElementById(b.dataset.target); if (elx?._accSet) elx._accSet(true); elx?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
 
-  makeAccordion(document.getElementById('redsox'), '.section-title', 2);
+  applySections('redsox');
 
   renderRedSoxRoster(allPlayers, idMap);
   renderRedSoxTeamStats();
@@ -6863,7 +6952,7 @@ async function renderCFB() {
   navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
   navEl.querySelectorAll('button').forEach((b) =>
     (b.onclick = () => { const t = document.getElementById(b.dataset.target); if (t?._accSet) t._accSet(true); t?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
-  makeAccordion(document.getElementById('cfb'), '.section-title', 2);
+  applySections('cfb');
   renderCFBWeek();
   renderCFBRankings();
   renderCFBNews();
@@ -6977,7 +7066,7 @@ async function renderNFL() {
   navEl.innerHTML = navItems.map(([t, l]) => `<button class="chip" data-target="${t}">${l}</button>`).join('');
   navEl.querySelectorAll('button').forEach((b) =>
     (b.onclick = () => { const t = document.getElementById(b.dataset.target); if (t?._accSet) t._accSet(true); t?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
-  makeAccordion(document.getElementById('nfl'), '.section-title', 2);
+  applySections('nfl');
   // each section fetches + renders independently, in parallel
   renderNFLWeek();
   renderNFLNews();
@@ -7110,7 +7199,9 @@ function showTab(name) {
     b.classList.toggle('active', on);
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
-  Promise.resolve(renderers[name]()).then(() => injectJumpNav(name)).catch((e) => console.error(e));
+  Promise.resolve(renderers[name]())
+    .then(() => { injectJumpNav(name); applySections(name); })
+    .catch((e) => console.error(e));
 }
 // The tab buttons wrap an icon and a label span (v163), so a tap lands on the
 // span, not the button — resolve to the button before reading its dataset.
