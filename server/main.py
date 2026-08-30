@@ -32,7 +32,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b12-move-history"
+SERVER_VERSION = "b13-pregame-lines"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -975,6 +975,15 @@ def _snap_lines_once():
                     continue
                 on_board.add(eid)
                 comp = (ev.get("competitions") or [{}])[0]
+                # PRE-GAME ONLY (b13). Once a game starts the book posts live
+                # in-game prices that track the score; appending those would
+                # bury the pre-game movement the frontend counts. Stop
+                # recording at first pitch — the snapshots already taken stay,
+                # so the pre-game history survives into the game itself.
+                st = ((ev.get("status") or {}).get("type") or {}).get("state") \
+                    or ((comp.get("status") or {}).get("type") or {}).get("state")
+                if st and st != "pre":
+                    continue
                 odds = (comp.get("odds") or [{}])[0] or {}
                 snap = {
                     "t": now,

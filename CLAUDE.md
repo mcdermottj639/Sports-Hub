@@ -360,7 +360,72 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v168** (backend **b12-move-history**).
+Current version as of this writing: **v170** (backend **b13-pregame-lines**).
+
+- **🚨 Record re-read at n=433 — the v159 calibration conclusion did NOT hold
+  (v170)** — the owner exported the live tally again. What it says, and the
+  correction it forces:
+  - **v159 recorded that post-v138 picks were nearly calibrated** (gap −2.2,
+    Brier .2311 beating a .2400 base-rate baseline) on **n=80**. At **n=109**
+    that is gone: post-v138 MLB is **56.0% actual vs 62.0% claimed (−6.1)**,
+    Brier **.2435** against an always-56% baseline of **.2464** — statistically
+    indistinguishable from quoting a constant. **The shrink helped (pre-v127
+    was −24.6) but the model is still overconfident, and v159's read was an
+    artefact of a smaller sample.** Do not cite it.
+  - **Confidence is not ordered.** Post-v138, by bucket: 50–54% wins **27.8%**
+    (5-13), 55–59% wins **75%**, 60–64% wins **45.5%**, 65–72% wins **68.4%**.
+    Higher confidence does not mean more likely to win. Per-bucket n is 18–38 so
+    individual rows are noisy, but the least-confident bucket losing 5-13 is a
+    real signal that near-even games carry a systematic bias worth finding.
+  - **Headline vs reality:** all-time reads 241-149 (61.8%), but **130 of those
+    are unlabelled legacy entries** that went 94-36 (72.3%) under the old leaky
+    `teamProfile`. The honest MLB number is **143-111 (56.3%)**.
+  - **Edges: 18-21 (46.2%)**, still under the 52.4% break-even, consistent with
+    v159's 44.7% at a larger n. `MIN_EDGE_GAP` still should not be touched on
+    this evidence — but it is now two independent samples saying the same thing.
+  - **🚨 The OVER bias is UNFIXED.** Totals are 20-23 with **74% of picks OVER**
+    (32 of 43) — essentially unchanged from v159's 73%, so v138's `MLB_PARK`
+    did not solve it. The standing hypothesis remains the best lead:
+    `MLB_AVG_ERA` is a hardcoded 4.10 league anchor, but the ERAs compared
+    against it are STARTERS' ERAs, whose population mean sits above league
+    average — so `matchupFactor` adds runs on average instead of centring.
+  - **Sharp money: 3 graded picks.** Nothing to conclude; the factor is still
+    unmeasured.
+  - **NFL: ZERO entries in the whole record**, which is why `clearNflPreseason`
+    is preventive rather than corrective — it removes nothing today.
+  - **7 soccer entries** still count toward the all-time headline even though
+    the league was removed in v125.
+
+- **🏈 NFL preseason cleared from the record (v170)** — owner ask: make sure
+  preseason doesn't count before Week 1. Audit first, because most of it was
+  already right:
+  - **The model was already clean.** `teamProfile` drops preseason games
+    (`isPreseasonEv`, v145), AI Picks refuses to pick them, the game modal sits
+    them out (v146), and every core stats/leaders URL is `/types/2/` — regular
+    season only. Nothing needed fixing there.
+  - **The stored RECORD was not.** `sportshub:aitally` still held NFL entries
+    from before those guards existed. **`clearNflPreseason()`** drops NFL
+    entries — graded and pending, moneyline/ATS/totals alike — dated in the
+    **July 1 → kickoff window**, on every load.
+  - **Last season is KEPT — the owner's explicit call.** The first cut wiped
+    everything before kickoff so the season would open 0-0; asked whether to
+    keep prior seasons, the answer was keep. Worth knowing when reading that
+    record: every NFL pick in it predates the v138 look-ahead fix and the v83
+    confidence meta, which is why `CONF_CAP.nfl` is a flat **85** guess rather
+    than a fitted number. It is history, not calibration data.
+  - **Surgical and idempotent:** only entries inside that window are ever
+    removed, so it can run every load and can never touch an in-season result,
+    last season's playoffs, or any other sport. MLB's 400+ graded picks — the
+    data the model was actually tuned on — and CFB are untouched.
+  - The window is derived from `NFL_KICKOFF`, a hand-maintained constant, so
+    each new season clears that season's preseason once the date moves forward.
+  - ⚠️ **Test fixtures must seed NFL history IN season.** This runs at boot and
+    rewrites localStorage, so a suite seeding NFL results in August watches its
+    own fixture disappear — which is exactly what happened while writing it.
+  - Verified — **16 checks**: preseason moneyline/ATS/pending entries dropped,
+    last season and Week 1 kept, February playoffs and a June stray kept, MLB
+    and CFB untouched, the by-sport records reflecting the survivors, and
+    idempotency.
 
 - **🔪 Sharp Action — moves per side (v167, backend `b12-move-history`)** — the
   owner sent a screenshot of a paid product showing *"Under: 6 sharp moves ·
@@ -404,27 +469,57 @@ Current version as of this writing: **v168** (backend **b12-move-history**).
     **both** snapshots carry it, so a value appearing for the first time (a
     v166 record has no `sp`, a v167 one does) is the app learning something,
     not the line moving.
+  - **🚨 PRE-GAME ONLY (v169 / `b13`).** Once a game starts the book posts LIVE
+    in-game prices that track the score — that is the game happening, not money
+    moving on it, and appending them would bury the pre-game read entirely (a
+    late blowout drags the price hundreds of points). Both recorders now stop
+    at first pitch: `trackLines` skips anything not `scheduled`, and
+    `_snap_lines_once` skips any event whose status state isn't `pre`. What was
+    already stored **stays**, so the pre-game history is still there to look at
+    during and after the game, and the card says so.
+  - **The favourite is now derivable from the details string** (v169). MLB
+    often ships no raw moneylines AND no `favorite` flag, leaving `favName`
+    null — which silently darkens the de-vigged market probability, the edge
+    sizing that keys off it, and the move counter. `normOdds` falls back to the
+    abbreviation in the details text ("BOS -141" → BOS is favoured), and
+    `moveHistory`'s enricher fills a missing side as well as a missing price.
   - **Honest by construction:** the card says "this undercounts" and names its
     source (server snapshots vs this device). It renders nothing at all when
     neither source has anything.
-  - **The card says how many books ESPN listed (v168)** when there aren't
-    enough to compare ("ESPN listed 1 sportsbook for this game — comparing
-    books needs at least 2"). It explains its own absence instead of leaving a
-    silent gap, and it answers the open question about `pickcenter` by being
-    *looked at* rather than by opening a JS console on a phone.
-  - ⚠️ **`pickcenter`'s real shape is UNVERIFIED** — the sandbox can't reach
+  - **🚨 The counter was blind on all of MLB (v169).** The reported card read
+    *"No line changes seen yet across 2 checks"* directly under the app's own
+    `📈 BOS -116 → BOS -141`. Cause: ESPN's MLB scoreboard sends **no raw
+    moneylines** — `hML`/`aML` are null and the price exists only inside the
+    `details` string. `countMoves` read only `hML`/`aML`/`ou`/`sp`, so the one
+    market MLB actually publishes was never examined. Snapshots now store
+    **`dML`** (the favourite's price, already dug out by `normOdds`) and
+    **`fh`** (which side is favoured), and `countMoves` reads them: a shorter
+    price = money on the favourite. A snapshot pair where the favourite
+    **flipped** is skipped — the two numbers describe different teams.
+    `moveHistory` also **parses `details` at read time** for pre-v169 records
+    and for everything the backend sends, using the game object to map the
+    abbreviation to a side, so existing records count immediately.
+  - **`pickcenter` ANSWERED for MLB (v168/v169): exactly ONE book.** The
+    multi-book comparison therefore never renders there, and the v168 note
+    saying so was dropped — true once, noise on every card after. The code is
+    **kept**: football quotes far more books and whether `pickcenter` carries
+    several for NFL/CFB is still unverified. Worth checking in season.
+  - ⚠️ **`pickcenter`'s shape beyond MLB is UNVERIFIED** — the sandbox can't reach
     ESPN, so provider count and open/current sub-objects were coded defensively
     against several plausible shapes but never confirmed. **On-device check: set
     localStorage `sportshub:debugbooks` to `'1'` and open any game** — the
     console prints the raw providers and what got parsed out. If ESPN sends one
     provider with no opener, the multi-book half silently doesn't render.
-  - Verified in headless Chromium — **28 checks**: the direction counter (both
+  - Verified in headless Chromium — **40 checks**: the direction counter (both
     ways on all three markets, the pair-counting fix, empty and single-entry
     histories), the consensus reader (moves with openers, the split-across-books
     fallback, single book, absent `pickcenter`, junk providers), the device
     history accumulating, the pre-v167 first+last backfill counting its move,
-    a newly-populated field NOT counting as one, the card naming its source,
-    and the card being absent entirely with no data. No console errors.
+    a newly-populated field NOT counting as one, the MLB details-only path
+    (both directions plus a flipped favourite being skipped), live prices NOT
+    being recorded while the pre-game history stays visible mid-game, the card
+    naming its source, and the card being absent entirely with no data. No
+    console errors.
 
 - **The rail became the slate · league filters · collapse-by-default (v166)** —
   three owner asks in one change, and one of them needed a decision:
@@ -837,6 +932,8 @@ Current version as of this writing: **v168** (backend **b12-move-history**).
   exported the graded tally again (**402 entries**, up from v138's 289) and asked
   how the model is doing. Analysis of that export, and the one change it
   justified:
+  - ⚠️ **SUPERSEDED at n=433 — see the v170 re-read above.** The conclusion
+    below was drawn on n=80 and did not survive a larger sample.
   - **The v138 calibration fix worked.** Splitting the record by era (the
     export's `d` dates vs the v127/v138 ship dates): pre-v127 picks claimed
     **73.4%** and won **54.3%** (gap **−19.1**), with a Brier of **.2792** —

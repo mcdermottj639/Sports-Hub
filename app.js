@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v168';
+const APP_VERSION = 'v170';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -295,7 +295,7 @@ const rankScore = (g) => (g.home.rank && g.away.rank ? 0 : 100) + Math.min(g.hom
 // Device-local line tracking: remember the first line this device saw for each
 // game today (opener proxy) + the latest, so the Game Report can show movement
 // even when the backend tracker is unreachable. One key per sports-day.
-const MOVE_FIELDS = ['hML', 'aML', 'ou', 'sp', 'details'];
+const MOVE_FIELDS = ['hML', 'aML', 'ou', 'sp', 'dML', 'details'];
 // Two snapshots differ only where BOTH carry the field. A value appearing for
 // the first time (a v166 record has no `sp`, a v167 one does) is the app
 // learning something, not the line moving.
@@ -310,10 +310,22 @@ function trackLines(sport, games) {
     const all = JSON.parse(localStorage.getItem(key) || '{}');
     let changed = false;
     games.forEach((g) => {
+      // PRE-GAME ONLY. Once a game starts, books post live in-game prices that
+      // swing with the score — that's the game happening, not money moving on
+      // it, and appending those would drown the pre-game read this card exists
+      // to show. Recording simply stops at first pitch; what was already
+      // stored stays put, so the pre-game history is still there to look at
+      // during and after the game.
+      if (gameState(g) !== 'scheduled') return;
       const info = normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
       if (!info) return;
+      // dML/fh: on MLB, ESPN's scoreboard carries NO raw moneylines — the
+      // price exists only inside the details string ("BOS -141"). normOdds
+      // already digs it out, so store it, or the move counter is blind on the
+      // entire sport (which is exactly what shipped in v167).
       const snap = { t: Date.now(), hML: info.hML ?? null, aML: info.aML ?? null,
-                     ou: info.ou ?? null, sp: info.spread ?? null, details: info.details ?? null };
+                     ou: info.ou ?? null, sp: info.spread ?? null, details: info.details ?? null,
+                     dML: info.dML ?? null, fh: info.favHome ?? null };
       const k = `${sport}:${g.id}`;
       // hist (v167) keeps every observed CHANGE, not just first + last, so the
       // app can count how many times a line moved and in which direction.
@@ -648,9 +660,21 @@ async function openGameDetail(sport, id, g) {
 function normOdds(o, homeName, awayName, homeAbbr, awayAbbr) {
   if (!o) return null;
   const hML = o.homeTeamOdds?.moneyLine, aML = o.awayTeamOdds?.moneyLine;
-  const favName = o.homeTeamOdds?.favorite ? homeName : o.awayTeamOdds?.favorite ? awayName
-    : (typeof hML === 'number' && typeof aML === 'number') ? (hML < aML ? homeName : awayName) : null;
   const details = o.details ?? o.spread ?? null;
+  let favName = o.homeTeamOdds?.favorite ? homeName : o.awayTeamOdds?.favorite ? awayName
+    : (typeof hML === 'number' && typeof aML === 'number') ? (hML < aML ? homeName : awayName) : null;
+  // Last resort: the details string names the favorite itself ("BOS -141").
+  // MLB often ships nothing else — no raw moneylines and no favorite flag —
+  // and without a favorite the de-vigged market probability, the edge sizing
+  // that keys off it, and the sharp-money move counter all go dark.
+  if (!favName && typeof details === 'string') {
+    const fm = details.match(/([A-Za-z]{2,4})\s*-\d/);
+    if (fm) {
+      const ab = fm[1].toUpperCase();
+      if (homeAbbr && ab === String(homeAbbr).toUpperCase()) favName = homeName;
+      else if (awayAbbr && ab === String(awayAbbr).toUpperCase()) favName = awayName;
+    }
+  }
   // MLB scoreboards often carry NO raw moneylines — just the favorite string
   // ("SEA -231"). A 3+ digit number there is a moneyline (spreads are small),
   // so keep it as a fallback for implied-probability math.
@@ -1910,6 +1934,14 @@ function countMoves(hist) {
     // routine on MLB (its scoreboard often carries no raw moneylines at all).
     if (a.hML != null && b.hML != null && a.hML !== b.hML) (b.hML < a.hML ? out.homeIn++ : out.awayIn++);
     else if (a.aML != null && b.aML != null && a.aML !== b.aML) (b.aML < a.aML ? out.awayIn++ : out.homeIn++);
+    // MLB path: only the favorite's price is published, so the move is read off
+    // that one number. A shorter (more negative) price = money on the favorite.
+    // Skipped when the favorite flipped between snapshots — then the two prices
+    // describe different teams and the comparison is meaningless.
+    else if (a.dML != null && b.dML != null && a.dML !== b.dML && a.fh != null && a.fh === b.fh) {
+      const towardFav = b.dML < a.dML;
+      (a.fh === towardFav ? out.homeIn++ : out.awayIn++);
+    }
     // Spread is home-oriented: more negative = home laying more points.
     if (a.sp != null && b.sp != null && a.sp !== b.sp) (b.sp < a.sp ? out.spHome++ : out.spAway++);
   }
@@ -1925,10 +1957,26 @@ function moveHistory(sport, g, report) {
   // move, so synthesize a two-point history from them rather than showing
   // nothing until the next change happens to land. Without this, a line the
   // app has watched move all day counts as zero moves.
+  // Snapshots written before v168 — and everything the backend sends — carry
+  // the MLB price only as text ("BOS -141"). Recover it here, where the game
+  // object is in scope to say which side that abbreviation is, so existing
+  // records start counting immediately instead of waiting for fresh ones.
+  const enrich = (sn) => {
+    // Fill in whichever of the two is missing: the price, the side, or both.
+    // A snapshot can carry dML with no fh when ESPN sent a price but no
+    // favourite flag, and that is just as unusable as having neither.
+    if (!sn || typeof sn.details !== 'string' || (sn.dML != null && sn.fh != null)) return sn;
+    const m = sn.details.match(/([A-Za-z]{2,4})\s*([+-]\d{3,4})\b/);
+    if (!m || Math.abs(Number(m[2])) < 100) return sn;
+    const ab = m[1].toUpperCase();
+    const fh = ab === String(g.home.abbr || '').toUpperCase() ? true
+      : ab === String(g.away.abbr || '').toUpperCase() ? false : null;
+    return fh == null ? sn : { ...sn, dML: sn.dML ?? Number(m[2]), fh };
+  };
   const from = (rec, src) => {
     if (!rec) return null;
-    if (rec.hist?.length > 1) return { hist: rec.hist, src };
-    if (rec.first && rec.last && snapsDiffer(rec.first, rec.last)) return { hist: [rec.first, rec.last], src };
+    if (rec.hist?.length > 1) return { hist: rec.hist.map(enrich), src };
+    if (rec.first && rec.last && snapsDiffer(rec.first, rec.last)) return { hist: [enrich(rec.first), enrich(rec.last)], src };
     return null;
   };
   const be = from(report?.movement?.[String(g.id)], 'server');
@@ -2067,12 +2115,11 @@ function gameReportHTML(sport, g, pred, info, report, data) {
   // actually see it. Two independent sources, either of which may be absent.
   const mh = moveHistory(sport, g, report);
   const con = bookConsensus(data);
-  // How many sportsbooks ESPN actually listed for this game. Shown in plain
-  // text when there aren't enough for a consensus, so the card explains its
-  // own absence instead of leaving a silent gap — and so the question "does
-  // pickcenter carry more than one book?" can be answered by looking at the
-  // app rather than by opening a console on a phone.
-  const nBooks = bookLines(data).length;
+  // ANSWERED on device (v168): ESPN lists exactly ONE sportsbook per MLB game,
+  // so the multi-book comparison never renders there and saying so on every
+  // card was just noise. bookConsensus is kept because football is a different
+  // market with far more books quoted — whether pickcenter carries several for
+  // NFL/CFB is still unverified, and it costs nothing to find out in season.
   if (mh || con) {
     const rows = [];
     const bar = (v, max) => `<span class="sa-bar"><i style="width:${max ? clamp((v / max) * 100, 0, 100) : 0}%"></i></span>`;
@@ -2090,9 +2137,9 @@ function gameReportHTML(sport, g, pred, info, report, data) {
       if (c.homeIn || c.awayIn) rows.push(pair('Moneyline', g.home.abbr || 'Home', c.homeIn, g.away.abbr || 'Away', c.awayIn));
       if (c.spHome || c.spAway) rows.push(pair('Spread', g.home.abbr || 'Home', c.spHome, g.away.abbr || 'Away', c.spAway));
       if (!rows.length) rows.push(`<div class="ai-why">No line changes seen yet across ${c.n} check${c.n === 1 ? '' : 's'}.</div>`);
-      rows.push(`<div class="sa-note">${mh.src === 'server'
-        ? 'Counted from the backend\'s line snapshots — it only polls while it\'s awake, so this undercounts.'
-        : 'Counted from what this device saw while the app was open — not a continuous feed, so this undercounts.'}</div>`);
+      rows.push(`<div class="sa-note">Pre-game line only — live in-game prices are ignored. ${mh.src === 'server'
+        ? 'Counted from the backend\'s snapshots, which only poll while it\'s awake, so this undercounts.'
+        : 'Counted from what this device saw while the app was open, so this undercounts.'}</div>`);
     }
     if (con) {
       const bits = [];
@@ -2106,11 +2153,6 @@ function gameReportHTML(sport, g, pred, info, report, data) {
         ${bits.length ? bits.map((b) => `<div class="sa-row"><span class="sa-txt">${b}</span></div>`).join('') : ''}
         ${split.length ? split.map((b) => `<div class="sa-row"><span class="sa-txt">${b}</span></div>`).join('')
           : (!bits.length ? '<div class="ai-why">All books are on the same number right now.</div>' : '')}</div>`);
-    }
-    if (!con) {
-      rows.push(`<div class="sa-note">${nBooks === 1
-        ? 'ESPN listed 1 sportsbook for this game — comparing books needs at least 2.'
-        : 'ESPN listed no sportsbook prices for this game, so there are no books to compare.'}</div>`);
     }
     parts.push(`<div class="gr-sub">🔪 Sharp Action — where the line keeps moving</div>${rows.join('')}`);
   }
@@ -2473,6 +2515,45 @@ function backtestPanel(det) {
       ${det.ats?.n ? '' : '<div class="bt-warn">ATS is new in v164 and football is the reason it exists — a model can pick winners well and still lose to the number. All three records are kept separately from here on.</div>'}`));
   }
   return box;
+}
+
+// Clear NFL PRESEASON results before Week 1 (v170). Preseason predicts
+// nothing — backups play most of the snaps — so those games have no business
+// in a record the model is judged on. The model has refused to pick them since
+// v145, but picks graded before that guard existed are still in the tally.
+//
+// Scope is deliberately narrow: only the window between July 1 and kickoff,
+// which is exactly the preseason. Last season's games (Sep–Feb) are KEPT — the
+// owner's call, made explicitly. Worth knowing when reading that record: every
+// NFL pick in it predates the v138 look-ahead fix and the v83 confidence meta,
+// which is why CONF_CAP.nfl is a flat 85 guess rather than a fitted number. It
+// is history, not calibration data.
+//
+// Idempotent and surgical: it only ever removes entries inside that window, so
+// it can run on every load, can never touch an in-season or prior-season
+// result, and leaves every other sport alone (MLB's 400+ graded picks are the
+// data the model was actually tuned on).
+function clearNflPreseason() {
+  const cut = Number(String(NFL_KICKOFF).replace(/-/g, ''));      // 20260910
+  if (!isFinite(cut)) return 0;
+  const from = Number(String(cut).slice(0, 4) + '0701');          // 20260701
+  let dropped = 0;
+  const prune = (key) => {
+    try {
+      const o = JSON.parse(localStorage.getItem(key) || '{}');
+      let changed = false;
+      Object.keys(o).forEach((id) => {
+        const r = o[id] || {};
+        const sp = r.s ?? r.sport;                 // tally uses s, pending uses sport
+        const d = Number(r.d ?? r.date);           // tally uses d, pending uses date
+        if (sp === 'nfl' && isFinite(d) && d >= from && d < cut) { delete o[id]; changed = true; dropped++; }
+      });
+      if (changed) localStorage.setItem(key, JSON.stringify(o));
+    } catch (_) {}
+  };
+  prune(TALLY_KEY);
+  prune(PENDING_KEY);
+  return dropped;
 }
 
 // 📜 Model Report Card — a tap-to-expand panel under the stat bar: record by
@@ -7532,6 +7613,11 @@ showTab('home');
 // a timer (paused while the page is hidden) so it stays current no matter
 // which tab you're on.
 startLiveRail();
+
+// Drop NFL preseason results (see the note on clearNflPreseason). Runs before
+// grading so a stale preseason pending pick can't be graded into the record on
+// the way past. Last season's NFL games are kept.
+clearNflPreseason();
 
 // fold any finished picks from earlier days into the running model record
 gradePending();
