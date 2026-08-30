@@ -12,8 +12,8 @@ Guidance for Claude (and humans) working on this repo. Read this first.
 > ## 🧮 Before you touch ANY model constant
 > Several model fixes are shipped but not yet verified against results. There
 > is a checklist of exactly what to read, where, and what "it worked" looks
-> like — search this file for **"⏳ Open measurements"** (it sits just under
-> the "Current version" line). The rule that section enforces is the
+> like — search this file for **"⏳ Open measurements"** (it sits below the
+> "Current version" line and the changelog entries under it). The rule that section enforces is the
 > one this repo has followed since v126: **measure, then fit — and never refit
 > on a sample the change itself produced.**
 
