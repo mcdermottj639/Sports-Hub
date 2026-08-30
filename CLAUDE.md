@@ -368,7 +368,44 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v173** (backend **b13-pregame-lines**).
+Current version as of this writing: **v174** (backend **b13-pregame-lines**).
+
+- **🚨 Kept players were being auto-filled onto the Draft Board (v174)** — the
+  owner asked why Chase Brown, a rival's R6 keeper, was sitting on their draft
+  board. **`autoFillNflBoard` had no keeper filter at all.** It shipped in v128,
+  ten versions before `LEAGUE_KEEPERS` existed (v148), and was never taught the
+  rule that the ⭐ turn-target merge and the player modal's Draft Plans card
+  (v158) both already follow. So every auto-fill — live ESPN ranks or the
+  built-in fallback alike — seeded **all 22 kept players** onto the board.
+  Measured on the fallback path: `kept=22`, i.e. every keeper in the league was
+  being added.
+  - **The filter goes at the MERGE point, not inside either source.** Both
+    `nflFallbackRanks()` and the backend's ranking payload flow through the same
+    loop in `autoFillNflBoard`, so one `keptEntry(p.name)` guard covers both and
+    the two paths cannot drift apart.
+  - **The owner's OWN keepers are filtered too** (McBride, Maye). The board is
+    the list of players to DRAFT; a keeper never enters the draft regardless of
+    who holds him. This matches what the v158 Draft Plans card already told the
+    user at the player level.
+  - **`pruneKeptFromBoard()` cleans boards the bug already polluted.** The bad
+    names are in the owner's `localStorage`, so fixing the writer alone would
+    have left them there forever. It runs from `renderFantasyFootball` (a no-op
+    once clean, and it must run on render rather than once at boot because the
+    board is also hand-editable), and the board note **names the players it
+    removed** — a list that silently shrinks under the owner is worse than the
+    bug.
+  - **Non-destructive as before:** hand-added names the ranks don't know are
+    untouched, and tiers the owner edited are never clobbered.
+  - Verified against the real functions with a stubbed `localStorage` —
+    **12 checks**: fresh auto-fill adds no keeper while still adding normal
+    players, Chase Brown specifically absent, the owner's own keeper excluded,
+    prune removing exactly the kept rows and being idempotent, a hand-typed
+    name surviving, and an edited tier surviving an auto-fill. The v173
+    300-draft sim (54,000 picks) still passes clean.
+  - **Lesson for the next keeper-aware feature:** `LEAGUE_KEEPERS` now has FOUR
+    consumers (turn-plan strikeouts, the mock sim pool, the Draft Plans card,
+    the board auto-fill). Anything new that produces a list of draftable players
+    must call `keptEntry` — grep for it before shipping.
 
 - **🔒 Keeper sheet closed + 24 stale pro teams fixed (v173)** — the owner sent
   the commissioner's FINAL keeper sheet and reported (a) kept players still

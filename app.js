@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v173';
+const APP_VERSION = 'v174';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3485,10 +3485,31 @@ function nflFallbackRanks() {
   });
 }
 
+// 🚨 A kept player must never reach the draft board (v173). This board is the
+// list of players the owner intends to DRAFT, and all 22 `LEAGUE_KEEPERS` —
+// rivals' and the owner's own — are off the board before the draft starts. The
+// ⭐ turn-target merge (v148) and the player modal's Draft Plans card (v158)
+// both already refuse kept players; `autoFillNflBoard` predates
+// `LEAGUE_KEEPERS` (it shipped in v128) and was never taught the rule, so every
+// auto-fill quietly seeded ~20 undraftable names — Chase Brown, Ja'Marr Chase,
+// Puka, Bowers, JSN — onto the board. Filtering happens at the MERGE point, not
+// inside either source, so it covers ESPN's live ranks and the built-in
+// fallback with one guard that can't drift apart.
+// Removes kept players already saved on the board by a pre-v173 auto-fill.
+// Returns the names removed so the UI can say what happened rather than
+// silently shrinking the list under the owner.
+function pruneKeptFromBoard() {
+  const board = loadNflBoard();
+  const gone = board.filter((p) => keptEntry(p.name)).map((p) => p.name);
+  if (gone.length) saveNflBoard(board.filter((p) => !keptEntry(p.name)));
+  return gone;
+}
+
 // Fill the board from real fantasy draft rankings. Prefers ESPN's live ranks
 // (via the backend — the browser can't read ESPN's fantasy API directly), and
 // falls back to the built-in board when the backend is unreachable, so it never
-// comes up empty. Merges WITHOUT clobbering the user's own picks/edited tiers.
+// comes up empty. Merges WITHOUT clobbering the user's own picks/edited tiers,
+// and never adds a player somebody in the league is keeping.
 async function autoFillNflBoard() {
   let players = null, source = 'espn';
   try {
@@ -3498,19 +3519,20 @@ async function autoFillNflBoard() {
   if (!players) { players = nflFallbackRanks(); source = 'builtin'; }
   const board = loadNflBoard();
   const have = new Set(board.map((p) => (p.name || '').toLowerCase()));
-  let added = 0;
+  let added = 0, kept = 0;
   players.forEach((p) => {
     if (!p.name || !NFL_POS.includes(p.pos) || have.has(p.name.toLowerCase())) return;
+    if (keptEntry(p.name)) { kept++; return; } // off the board — never enters the draft
     board.push({ name: p.name, pos: p.pos, tier: Math.min(5, Math.max(1, p.tier || 3)) });
     have.add(p.name.toLowerCase());
     added++;
   });
   if (added) {
     saveNflBoard(board);
-    try { localStorage.setItem(NFLRANK_META_KEY, JSON.stringify({ at: Date.now(), source })); } catch (_) {}
-    return { ok: true, added, source };
+    try { localStorage.setItem(NFLRANK_META_KEY, JSON.stringify({ at: Date.now(), source, kept })); } catch (_) {}
+    return { ok: true, added, kept, source };
   }
-  return { ok: false, added: 0, source, msg: 'Every ranked player is already on your board.' };
+  return { ok: false, added: 0, kept, source, msg: 'Every ranked player is already on your board.' };
 }
 
 // --- 📰 Latest fantasy advice (FantasyPros) ---------------------------------
@@ -3810,6 +3832,11 @@ const daysUntil = (iso) => Math.ceil((new Date(iso + 'T12:00:00') - new Date()) 
 function renderFantasyFootball() {
   const box = $('#fantasy-football');
   if (!box) return;
+  // Clean out any kept player a pre-v173 auto-fill left behind. Runs every
+  // render, but it's a no-op once the board is clean, and it has to run here
+  // rather than once at boot because the board is also editable by hand.
+  const pruned = pruneKeptFromBoard();
+  if (pruned.length) fanState.bdPruned = pruned;
   const board = loadNflBoard();
   const filter = fanState.nflFilter || 'ALL';
   // First open with an empty board: pull ESPN's real draft rankings once, then
@@ -3841,11 +3868,15 @@ function renderFantasyFootball() {
     : '<div class="muted" style="padding:8px 2px">No targets yet — add players below, or tap a suggestion.</div>';
 
   const rMeta = loadNflRankMeta();
-  const rankNote = !rMeta
+  const rankNote = (!rMeta
     ? "Tap to pre-fill the board from real fantasy draft ranks (then edit tiers freely)."
     : (rMeta.source === 'builtin'
       ? "Pre-filled from a built-in ranked board (ESPN live ranks weren't reachable). Tiers are editable — tap to add any missing names."
-      : "Ranked from ESPN's real fantasy draft ranks. Tiers are editable — tap to add any missing names.");
+      : "Ranked from ESPN's real fantasy draft ranks. Tiers are editable — tap to add any missing names."))
+    + " League keepers are never added — they don't enter the draft."
+    + (fanState.bdPruned && fanState.bdPruned.length
+      ? ` <b style="color:#e0655f">Removed ${fanState.bdPruned.length} kept player${fanState.bdPruned.length === 1 ? '' : 's'}</b> an earlier auto-fill had added: ${fanState.bdPruned.map((n) => esc(n)).join(', ')}.`
+      : '');
   const filterChips = ['ALL', 'QB', 'RB', 'WR', 'TE'].map((f) =>
     `<button class="chip${f === filter ? ' active' : ''}" data-filter="${f}">${f === 'ALL' ? 'All' : f}</button>`).join('');
   const sugg = Object.entries(NFL_SUGGEST).map(([pos, names]) =>
