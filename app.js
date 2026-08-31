@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v183';
+const APP_VERSION = 'v184';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3223,6 +3223,64 @@ function slateDateFor(g) {
   return ymd(et);
 }
 
+// 🚨 v184 — EVERY posted game is logged, not just the ones the owner opened.
+// v183 fixed "a game you tap is tracked"; the owner's follow-up was blunter:
+// "every posted game is logged and saved for optimizing in the future. Not just
+// ones I click." That is the right instinct and it is what the model's own
+// method needs — the record is what every constant in this file gets fitted
+// against (see "⏳ Open measurements"), and a record built only from games the
+// owner happened to tap is a SELECTED sample. Interesting games get tapped;
+// boring ones don't. Fitting a model on the interesting half is how you get a
+// number that looks good and predicts nothing.
+//
+// So this walks a whole slate and writes a pick for every eligible game.
+//
+//   • It goes through buildBoard + commitRow like every other writer, so a
+//     game logged here is identical to one logged from the tab or the modal.
+//   • It waits the FULL SHARP_WAIT.picks leash even when its caller displayed
+//     at a shorter one (Home's board uses 3s). `sh` must mean "the sharp factor
+//     moved this pick N points", never "we didn't wait" — so the recording pass
+//     re-runs the model rather than reusing rows built on a short leash. Team
+//     schedules are already in fetchJSON's cache by then, so the cost is CPU,
+//     not another round of requests.
+//   • PREGAME AND LIVE ONLY, same rule as the modal: freshly predicting a game
+//     that already ended is look-ahead (v138), and a game picked pregame is
+//     graded by gradePending on boot regardless of which tab is open.
+//
+// `slateLogged` lets a repaint skip work it already did — but a game is only
+// marked done once its LINE was actually posted, because the ATS and totals
+// picks can't exist without one. A game seen before its number is up is
+// retried on the next render instead of being silently written off with only
+// its moneyline.
+const slateLogged = new Set();
+// Runaway guard, not a policy: after the Top-25 gate a CFB Saturday is ~25
+// games and the NFL is 16, so this never bites in practice — it exists so a
+// feed that suddenly returns everything can't fan out into hundreds of
+// profile fetches. If it ever does bite, the ceiling is the thing to raise.
+const SLATE_LOG_MAX = 60;
+// Passes are serialized: Home builds a board for every in-season sport at once,
+// and the NFL/CFB tabs fire their own. Running them concurrently would stack
+// dozens of predictGame calls on top of whatever the user is waiting for.
+let slateLogQueue = Promise.resolve();
+function recordSlate(sport, games) {
+  const todo = (games || []).filter((g) => g.id && g.seasonType !== 1
+    && gameState(g) !== 'final' && !slateLogged.has(g.id));
+  if (!todo.length || !LEAGUES[sport] || LEAGUES[sport].type === 'golf') return slateLogQueue;
+  slateLogQueue = slateLogQueue.then(async () => {
+    try {
+      const { rows } = await buildBoard(sport, todo.slice(0, SLATE_LOG_MAX), { wait: SHARP_WAIT.picks });
+      rows.forEach((r) => {
+        if (!r.p) return;
+        commitRow(r, slateDateFor(r.g));
+        // Only "done" once there was a line to read — otherwise come back for
+        // the spread and total once the book posts them.
+        if (r.info) slateLogged.add(r.g.id);
+      });
+    } catch (_) { /* logging must never break a render */ }
+  }).catch(() => {});
+  return slateLogQueue;
+}
+
 // 🚨 v183 — recording from the game modal, so a game you LOOK at is a game the
 // model is held to. The modal is where the owner actually reads a pick (the
 // slate cards open it from Home, NFL and CFB), but it never wrote anything, and
@@ -3369,6 +3427,11 @@ async function renderHomeBoard() {
   const sports = sortedSports({ teamOnly: true });
   const built = await Promise.allSettled(sports.map(async (s) => {
     const games = await getGames(s, ymd(sportsDate()));
+    // v184: Home is the one surface that sees EVERY in-season sport, so it's
+    // where the day's full slate gets logged — no tab visit required. It gets
+    // the uncapped list (BOARD_SPORT_CAP trims what's DISPLAYED) and its own
+    // full-leash pass, because the board itself displays at SHARP_WAIT.board.
+    recordSlate(s, games);
     return buildBoard(s, games.slice(0, BOARD_SPORT_CAP), { wait: SHARP_WAIT.board });
   }));
   const rows = [];
@@ -7798,6 +7861,12 @@ async function enrichSlate(sport, host, games) {
   const open = (games || []).filter((g) => g.id && gameState(g) !== 'final')
     .slice().sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
   const slate = open.slice(0, BB_MAX_GAMES);
+  // v184: log the WHOLE slate, not just the BB_MAX_GAMES the strips cover.
+  // The cap is a display-cost cap — the record has no reason to inherit it,
+  // and a record that stops at the 16th game of a college Saturday is a
+  // sample selected by kickoff time. Not awaited: the strips are what the
+  // user is waiting for.
+  recordSlate(sport, open);
   if (!slate.length) return;
 
   // The note goes in first as a placeholder so the section doesn't reflow when

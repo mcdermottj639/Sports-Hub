@@ -368,7 +368,74 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v183** (backend **b13-pregame-lines**).
+Current version as of this writing: **v184** (backend **b13-pregame-lines**).
+
+- **📈 EVERY posted game is logged now, not just the ones the owner taps
+  (v184)** — the follow-up to v183, in the owner's words: *"every posted game is
+  logged and saved for optimizing in the future. Not just ones I click."*
+  - **Why this is the right instinct and not just more data.** The record is
+    what every constant in `app.js` gets fitted against (see **⏳ Open
+    measurements**), and a record built only from games the owner tapped is a
+    **selected sample** — interesting games get tapped, boring ones don't.
+    Fitting on the interesting half produces a number that looks good and
+    predicts nothing. Logging the whole slate makes the sample unselected.
+  - **`recordSlate(sport, games)`** walks a slate and writes a pick for every
+    eligible game, through the same `buildBoard` → `commitRow` path as the tab
+    and the modal, so a game logged here is identical to one logged anywhere
+    else. Wired into exactly two places:
+    1. **`enrichSlate`** (the NFL/CFB week slate) — over the FULL list, not the
+       `BB_MAX_GAMES` (16) the strips cover. **That cap is a display-cost cap
+       and the record has no reason to inherit it**: a record that stops at the
+       16th game of a college Saturday is a sample selected by kickoff time.
+       The display is still capped (verified: 22 games logged, 16 strips drawn).
+    2. **`renderHomeBoard`** — the one surface that sees EVERY in-season sport,
+       so the day's full cross-sport slate is logged with no tab visit at all.
+       It gets the uncapped list (`BOARD_SPORT_CAP` trims what's *displayed*).
+  - **It re-runs the model at the full `SHARP_WAIT.picks` leash even when its
+    caller displayed at a shorter one** (Home's board shows at 3s). `sh` has to
+    mean "the sharp factor moved this pick N points", never "we didn't wait", or
+    open measurement #7 is quietly corrupted. Team schedules are in fetchJSON's
+    cache by then, so the second pass costs CPU, not requests.
+  - **Pregame and live only**, same rule as v183 — never a final, because
+    freshly predicting a finished game is look-ahead (v138) and a game picked
+    pregame is graded by `gradePending` on boot anyway.
+  - **🚨 `slateLogged` marks a game done only once its LINE was posted.** The
+    moneyline pick needs no odds, but the ATS and totals picks cannot exist
+    without a number — so a game seen before the book posts is retried on the
+    next render instead of being silently written off with only its moneyline.
+    Getting this backwards would have quietly lost the spread pick on every
+    game the owner happened to look at early.
+  - Passes are **serialized** (`slateLogQueue`): Home builds a board for every
+    in-season sport at once and the NFL/CFB tabs fire their own, so running them
+    concurrently would stack dozens of `predictGame` calls behind whatever the
+    user is waiting for. `SLATE_LOG_MAX` (60) is a **runaway guard, not a
+    policy** — after the Top-25 gate a CFB Saturday is ~25 games and the NFL is
+    16, so it never bites; it exists so a feed that suddenly returns everything
+    can't fan out into hundreds of profile fetches.
+  - **⚠️ READ THIS BEFORE THE NEXT CALIBRATION PASS: the record changes
+    composition at v184.** Everything before it was picks the owner's own
+    browsing surfaced; everything after is the full slate. Both are honest, but
+    they are **not the same population** — the new sample carries far more
+    near-even and low-interest games, so a raw before/after comparison of win%
+    will look like the model got worse when it only got a fuller test. Split by
+    date at the v184 ship when reading any of the open measurements, exactly as
+    v159/v170 split at v127/v138.
+  - Verified in headless Chromium with ESPN and the backend stubbed — **27 new
+    checks** across two suites (plus v183's 37 still green, 64 total): all 24
+    games of an oversized slate logged with their spread picks while the total
+    correctly stays unlogged under the 6-pt bar, finals and preseason skipped,
+    **a game with no line yet logged and then RETRIED once the line posts**, an
+    already-logged slate firing zero new fetches on a repaint, the runaway
+    ceiling, overlapping passes logging each game exactly once, golf skipped,
+    and end to end: opening the CFB tab logging all 22 posted games while
+    drawing only 16 strips, and Home logging a whole 9-game MLB slate with no
+    tab visit and no taps (totals logged, no ATS since baseball isn't an ATS
+    sport). No console errors.
+  - ⚠️ **Test-fixture note:** the first cut stubbed every `/teams/*/schedule`
+    with a hardcoded team id, so `teamProfile` matched nothing, every profile
+    came back empty and `projTotal` was null — which made the "no total logged"
+    assertion **pass for the wrong reason**. A schedule fixture must echo the
+    team id it was asked for.
 
 - **🚨 A game you LOOK at is now a game the model is held to (v183)** — the
   owner opened the CFB tab, tapped SJSU @ USC, read all three markets on the
@@ -893,6 +960,12 @@ that would verify them didn't exist when they shipped. The repo's method is
 *measure, then fit* — and never refit on a sample the change itself produced.
 So: let the games run, hit **📋 Copy my record data** (AI Picks → Model Report
 Card), and read the numbers below before changing any weight.
+
+> **⚠️ v184 changed what's IN the record.** From v184 the app logs EVERY
+> posted game, not just the ones the owner opened, so the sample after that
+> ship carries far more near-even and low-interest games than the sample
+> before it. Split by date at the v184 ship before comparing any win% across
+> it — a fuller test will otherwise read as a worse model.
 
 **Earliest useful re-read: ~14 September 2026** (two weeks of games after the
 v171 fixes shipped on 30 Aug). Sooner than that and every split is noise.
@@ -3036,7 +3109,10 @@ index, not the argument.
   tab only ever renders TODAY's slate, so before this a game looked at on the
   NFL/CFB tab on any other day was computed, shown and thrown away. Pregame and
   live games only; the modal never manufactures a pick for a game that's already
-  final.
+  final. **v184: EVERY posted game is logged** (`recordSlate`, called from
+  `enrichSlate` and `renderHomeBoard`) — no tap required, and uncapped by the
+  display caps, so the record is an unselected sample. Three writers now, one
+  write path (`commitRow`), all deduping on the pick's own key.
 - **Auto-update** — `sw.js` is a network-first service worker that fetches app
   files with `cache:'no-store'`, so launches pull the newest deploy (with an
   offline cache fallback). Registered at the end of `app.js`. This replaced the
