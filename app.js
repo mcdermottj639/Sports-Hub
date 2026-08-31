@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v185';
+const APP_VERSION = 'v186';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2869,9 +2869,35 @@ function reportCard(det) {
   };
   const bRows = ['50–54%', '55–59%', '60–64%', '65–69%', '70%+'].filter((k) => det.buckets[k])
     .map((k) => calRow(k, det.buckets[k])).join('');
-  const sRows = Object.entries(det.sports)
+  const pend = pendingSummary();
+  // 🚨 v186 — EVERY in-season sport gets a row here, even with nothing graded.
+  // The section used to list only sports with a graded W-L, so a sport the app
+  // is actively tracking was simply ABSENT — which reads as "not tracked", and
+  // is why the owner asked three separate times why CFB wasn't on this card.
+  // The honest answer ("it's tracked, it just has no finished games yet") is
+  // something the card should say for itself instead of leaving a hole.
+  const seasonKeys = (() => { try { return sortedSports({ teamOnly: true }); } catch (_) { return []; } })();
+  const sportKeys = [...new Set([...Object.keys(det.sports), ...seasonKeys, ...Object.keys(pend.by)])];
+  const sRows = sportKeys
+    .map((s) => [s, det.sports[s] || { w: 0, n: 0 }])
     .sort((a, b) => b[1].n - a[1].n)
-    .map(([s, r]) => row(`${LEAGUES[s]?.emoji || ''} ${LEAGUES[s]?.label || s}`, r)).join('');
+    .map(([s, r]) => {
+      const nm = `${LEAGUES[s]?.emoji || ''} ${esc(LEAGUES[s]?.label || s)}`;
+      if (r.n) return row(nm, r);
+      const q = pend.by[s]?.n || 0;
+      return `<div class="rep-row"><span class="rep-l">${nm}</span><span class="rep-v"><span class="rep-cf">${
+        q ? `${q} logged · awaiting first result` : 'no finished games yet'}</span></span></div>`;
+    }).join('');
+  // ⏳ rows: picks that are logged but haven't been graded yet. "Recent model
+  // results" is where the owner looks for recent model ACTIVITY, and a list
+  // that only ever shows finished games can be days stale in football.
+  const pendRows = pend.list.slice(0, 6).map((e) => {
+    const d = String(e.date || '');
+    const dd = d.length === 8 ? `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}` : '';
+    const mark = e.a ? '📐' : e.t ? '🎯' : '';
+    const pk = e.t ? `${e.pick} ${e.line}` : e.pick;
+    return `<div class="rep-pick" style="opacity:.72"><span class="rep-i">⏳${mark}</span><span class="rep-m">${esc(e.m || '')}</span><span class="rep-p">${esc(pk || '')}${e.conf ? ` <span class="rep-cf">${e.conf}%</span>` : ''}</span><span class="rep-d">${dd}</span></div>`;
+  }).join('');
   const recent = det.recent.map((r) => {
     const d = String(r.d || '');
     const dd = d.length === 8 ? `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}` : '';
@@ -2937,23 +2963,14 @@ function reportCard(det) {
   // GRADED record, which by definition can't show a pick made an hour ago —
   // so a slate that was just logged looked identical to one that wasn't logged
   // at all. This section is the app answering "did you store my game?".
-  const pend = pendingSummary();
+  // (`pend` is built further up, because By sport needs it too.)
   const pRows = Object.entries(pend.by).sort((a, b) => b[1].n - a[1].n).map(([s, r]) => {
     const bits = [r.ml ? `${r.ml} moneyline` : '', r.ats ? `${r.ats} spread` : '', r.tot ? `${r.tot} total${r.tot === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
     return `<div class="rep-row"><span class="rep-l">${LEAGUES[s]?.emoji || ''} ${esc(LEAGUES[s]?.label || s)}</span><span class="rep-v">${r.n} <span class="rep-cf">${esc(bits)}</span></span></div>`;
   }).join('');
-  // Name the games, don't just count them — "22 picks" and "SJSU @ USC · USC
-  // Trojans 90%" are very different kinds of reassurance.
-  const pList = pend.list.slice(0, 8).map((e) => {
-    const d = String(e.date || '');
-    const dd = d.length === 8 ? `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}` : '';
-    const mark = e.a ? '📐' : e.t ? '🎯' : '';
-    const pk = e.t ? `${e.pick} ${e.line}` : e.pick;
-    return `<div class="rep-pick"><span class="rep-i">⏳${mark}</span><span class="rep-m">${esc(e.m || '')}</span><span class="rep-p">${esc(pk || '')}${e.conf ? ` <span class="rep-cf">${e.conf}%</span>` : ''}</span><span class="rep-d">${dd}</span></div>`;
-  }).join('');
   const pendSec = pend.total
-    ? `<div class="rep-sec">📥 Logged, awaiting results</div>${pRows}${pList}
-       <div class="ai-why" style="padding:4px 0 2px">${pend.total} pick${pend.total === 1 ? '' : 's'} stored and waiting on final scores. ${pend.total > 8 ? 'Showing the 8 most recent. ' : ''}They join the record above automatically once the games finish — grading runs every time you open the app. A sport shows up here the moment its slate is logged and in the record above only once it has <b>graded</b> results, which is why a league you've only just started tracking appears in one and not the other.</div>`
+    ? `<div class="rep-sec">📥 Logged, awaiting results</div>${pRows}
+       <div class="ai-why" style="padding:4px 0 2px">${pend.total} pick${pend.total === 1 ? '' : 's'} stored and waiting on final scores — they're listed with a ⏳ under Recent picks below, and join the record automatically once the games finish. Grading runs every time you open the app.</div>`
     : `<div class="rep-sec">📥 Logged, awaiting results</div>
        <div class="ai-why" style="padding:4px 0 2px">Nothing waiting — every stored pick has been graded. New games are logged automatically whenever you open Home or a league tab; only games that haven't started yet can be picked, so a slate that has already finished logs nothing.</div>`;
   box.innerHTML = `
@@ -2967,8 +2984,8 @@ function reportCard(det) {
       ${tRow ? `<div class="rep-sec">Totals</div>${tRow}` : ''}
       ${aRow ? `<div class="rep-sec">📐 Against the spread (new in v164)</div>${aRow}` : ''}
       ${shRow ? `<div class="rep-sec">💰 Sharp money (new in v160)</div>${shRow}` : ''}
-      ${recent ? `<div class="rep-sec">Recent picks (⚡ = against the line · 🎯 = totals · 📐 = spread)</div>${recent}` : ''}
-      ${!bRows && !recent ? '<div class="ai-why" style="padding:6px 0">Detail builds as new picks grade — earlier picks only counted toward the totals.</div>' : ''}
+      ${recent || pendRows ? `<div class="rep-sec">Recent picks (⏳ = not graded yet · ⚡ = against the line · 🎯 = totals · 📐 = spread)</div>${pendRows}${recent}` : ''}
+      ${!bRows && !recent && !pendRows ? '<div class="ai-why" style="padding:6px 0">Detail builds as new picks grade — earlier picks only counted toward the totals.</div>' : ''}
       <button class="rep-export" type="button" style="margin-top:12px;width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit;cursor:pointer">📋 Copy my record data</button>
       <textarea class="rep-export-ta" readonly hidden style="width:100%;height:90px;margin-top:6px;font:12px/1.4 monospace;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px;box-sizing:border-box"></textarea>
       <div class="ai-why" style="margin-top:4px">Exports your graded picks so they can be analyzed for model tuning. Nothing leaves your device on its own.</div>

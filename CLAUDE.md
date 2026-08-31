@@ -368,7 +368,44 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v185** (backend **b13-pregame-lines**).
+Current version as of this writing: **v186** (backend **b13-pregame-lines**).
+
+- **🎓 CFB has a ROW in By sport now, whether or not it has graded games
+  (v186)** — the owner, on the third ask: *"What did u do. I just wanted cfb to
+  show here. Why can't I see recent model results."* Fair. Each previous version
+  explained the absence instead of removing it.
+  - **`By sport` only listed sports with a graded W-L**, so a sport the app was
+    actively tracking was simply **missing from the list** — and a missing row
+    reads as "not tracked", not as "tracked, nothing finished yet". That is the
+    whole reason the question got asked three times. It now lists **every
+    in-season sport** (`sortedSports({teamOnly:true})`) unioned with everything
+    graded and everything pending, so CFB is on the card from the moment the
+    season starts:
+
+    ```
+    ⚾ MLB    148-115 (56%)
+    🎓 CFB    4 logged · awaiting first result
+    🏈 NFL    no finished games yet
+    ```
+
+    A zero-graded sport states which of the two it is — logged and waiting, or
+    genuinely nothing yet — rather than leaving a hole for the reader to
+    interpret.
+  - **Pending picks moved into Recent picks**, marked ⏳, above the graded rows.
+    "Recent model results" is where the owner looks for recent model ACTIVITY,
+    and a list that only ever shows *finished* games is days stale in football
+    by construction. v185's separate 8-game list was dropped as redundant; the
+    📥 section keeps the per-sport counts and now points at the ⏳ rows.
+  - **Lesson worth keeping:** v183, v184 and v185 each answered the question
+    correctly and none of them *removed* it. When a user asks the same thing
+    three times, the fix is almost never another explanation — it is to change
+    the thing that made the question necessary.
+  - Verified in both themes — **38 checks** (12 new): the CFB row present with
+    zero graded picks and reading "4 logged · awaiting first result", NFL/NBA
+    listed as "no finished games yet", the graded MLB row still a real W-L,
+    ⏳ rows under Recent picks with a legend that explains them, and By sport
+    still listing in-season sports when nothing at all is pending. The
+    v183/v184 suites (30/7/19/8) still pass — 102 checks total.
 
 - **📥 "Logged, awaiting results" — the card can finally answer "did you store
   my game?" (v185)** — the owner, on the Report Card after v183/v184 shipped:
