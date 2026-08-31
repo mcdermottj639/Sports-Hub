@@ -368,7 +368,63 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v179** (backend **b13-pregame-lines**).
+Current version as of this writing: **v180** (backend **b13-pregame-lines**).
+
+- **🚨 RED ALERT tier (v180)** — the owner's rule: *"most of the value will be
+  found in spreads for football. If we ever have an underdog on the Vegas DK
+  line and our model picks them to win, that's a red alert play moved to the
+  top of the board."*
+  - **The thing to understand before touching this: EVERY tier was already a
+    dog-picked-to-win.** `pickTier` returns null the moment
+    `pred.winner.name === info.favName`, so `best`/`edge`/`lean` never differed
+    by *side* — only by how big the probability gap was. A new tier is only
+    meaningful if it means something stronger, so what separates ALERT is **how
+    big a dog**: `ALERT_DOG_ML = +150` (the book giving them ~40% or less)
+    on the side the model picked, via the new `pickedPrice(pred, info)`.
+  - The gap ladder is **not** bypassed — a long price with only a 4-point gap
+    is still a lean. And the arithmetic makes alert a strict subset of what was
+    `best`: a 40% book price against a >50% model price is already a 10+ gap.
+  - **`isEdge` deliberately still includes `alert`.** It is carved OUT of
+    `best`, so leaving it out would silently drop the strongest plays from the
+    vs-line record and break comparability with its own history.
+  - Sorts above everything on Home (`plays` sorts by tier first, then gap) and
+    leads the AI Picks ladder, open by default (`.lad-sec.alert`). Red card
+    border — deliberately the only red on the board, and rare enough that red
+    never becomes wallpaper. **The light theme needs its own `.t0` rule**: the
+    `[data-theme="light"]` block resets `.brd-card`'s border-color after the
+    base rule, so without it the alert renders as an ordinary paper card
+    (caught by test).
+  - The Report Card's by-tier row picks it up for free — it iterates
+    `TIER_ORDER` — so the tier is tracked from here forward and reads
+    "collecting" until it grades.
+  - Verified — **25 checks**: +215 → alert, exactly +150 → alert, +145 and
+    +110 → best (not alert), model-agrees → no tier, no moneylines posted →
+    falls back to edge, a long price with a 4-pt gap → still a lean, and end to
+    end in both themes: the alert first on The Board, red in each theme,
+    leading and open on the ladder, stored on the pick, and a Red Alert row in
+    the by-tier record.
+
+- **"A favourite winning by more than the spread is still an edge" — already
+  true, and measured (v180)**. The owner flagged it; `atsCall` has always
+  handled it, because `edge = projMargin + spread` and a positive edge means
+  the model likes the HOME side to cover. Confirmed against the real function:
+  the model projecting PHI by 16.9 against a book asking −9.5 produces
+  **PHI −9.5, 7.4 points of value**. The v178 saturation guard cannot suppress
+  it either — that only fires when the book's number is *beyond* the model's
+  ceiling, which is the dog direction.
+  - ⚠️ **The MONEYLINE is asymmetric here and deliberately left alone.** In the
+    same game the moneyline gap is **13 points** (the book underprices PHI) and
+    `pickTier` still returns **null**, because it refuses any pick on the
+    book's favourite. Flipping that would change what the vs-line record has
+    always meant, and — more importantly — the model is *measurably
+    overconfident* (gap −6.1 at n=109, buckets not ordered; see ⏳ Open
+    measurements). An overconfident model would manufacture favourite-side
+    "edges" constantly, and they would mostly be that miscalibration rather
+    than value. **Fix the calibration first, then revisit.**
+  - ⚠️ **Test-expectation note:** two suites asserted on `Best Bets` by name and
+    broke when the fixture's +215 dog correctly became an alert — the code was
+    right, the assertions were stale. Any new assertion about the top of the
+    ladder should accept `Red Alert|Best Bets`.
 
 - **🚨 The AI Pick card looked like it was contradicting itself (v179)** — the
   owner, on USC -37.5: *"this is saying the spread actual is -37 but should be

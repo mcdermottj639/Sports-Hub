@@ -997,6 +997,12 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 }
 .brd-card:hover { transform: translateY(-2px); }
 .brd-card.t1 { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+/* 🚨 Red alert (v180) — a live plus-money dog the model has winning outright.
+   Deliberately the only red-bordered card on the board: it should be findable
+   without reading, and it is rare enough that red never becomes wallpaper. */
+.brd-card.t0 { border-color: #ff5a5a; box-shadow: 0 0 0 1px #ff5a5a inset; }
+.brd-card.t0 .brd-rib { background: #ff5a5a; }
+.brd-card.t0 .brd-tier { background: #ff5a5a; color: #2a0707; }
 .brd-rib { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
 .brd-card.t2 .brd-rib { background: rgba(58,210,159,.45); }
 .brd-card.tot .brd-rib { background: var(--gold); }
@@ -1035,6 +1041,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   text-transform: uppercase; color: var(--muted);
 }
 .lad-sec.hot { color: var(--accent); }
+.lad-sec.alert { color: #ff5a5a; }
 .lad-sec .n {
   font-size: 9.5px; font-weight: 700; padding: 1.5px 6px; border-radius: 999px;
   background: var(--card-2); color: var(--muted); text-transform: none; letter-spacing: 0;
@@ -1288,6 +1295,14 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   box-shadow: 0 1px 2px rgba(0,0,0,.05);
 }
 :root[data-theme="light"] .brd-card.t1 { box-shadow: 0 0 0 1px var(--accent) inset, 0 1px 3px rgba(0,0,0,.07); }
+/* The light block above resets .brd-card's border-color, so the red alert has
+   to reclaim it here or it renders as an ordinary card on paper. */
+:root[data-theme="light"] .brd-card.t0 {
+  border-color: #c0392b;
+  box-shadow: 0 0 0 1px #c0392b inset, 0 1px 3px rgba(0,0,0,.07);
+}
+:root[data-theme="light"] .brd-card.t0 .brd-rib { background: #c0392b; }
+:root[data-theme="light"] .brd-card.t0 .brd-tier { background: #c0392b; color: #fff; }
 :root[data-theme="light"] .lrc-gc { border-left-color: var(--line); }
 :root[data-theme="light"] .lrc-dia i { background: #eae4d6; border-color: #c9c0ac; }
 :root[data-theme="light"] .lrc-fld { background: #2f6b4d; border-color: #2a5b42; }

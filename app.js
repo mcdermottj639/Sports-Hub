@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v179';
+const APP_VERSION = 'v180';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2918,12 +2918,36 @@ const MIN_EDGE_GAP = EDGE_BAR.edge;
 // CFB totals sit near 55 with far more spread than the NFL's ~45, so the
 // floor scales with them rather than inheriting the NFL's 4.
 const TOT_EDGE_MIN = { mlb: 1.5, nba: 6, nfl: 4, cfb: 6 };
+// 🚨 RED ALERT (v180) — the owner's rule: "if we ever have an underdog on the
+// Vegas DK line and our model picks them to win, that's a red alert play moved
+// to the top of the board."
+//
+// Worth knowing before tuning this: EVERY tier below is ALREADY a
+// dog-picked-to-win. pickTier returns null the moment the model agrees with
+// the book's favourite, so `best`/`edge`/`lean` differ only in how big the
+// probability gap is — they are all the model taking the underdog outright.
+// A separate tier is only meaningful if it means something stronger, so what
+// separates ALERT is HOW BIG A DOG: the book has to be pricing this side as a
+// real underdog, not a coin-flip that happens to be a nominal favourite.
+//
+// ALERT_DOG_ML = +150 → the book gives them ~40% or less and the model says
+// they win outright. Note the arithmetic makes every alert a superset case of
+// `best`: a 40% book price against a >50% model price is already a 10+ gap.
+const ALERT_DOG_ML = 150;
+// The book's price on the side the model picked, or null when no moneylines
+// were posted (routine on MLB, where the price lives only in the details text).
+function pickedPrice(pred, info) {
+  const ml = pred?.homePick ? info?.hML : info?.aML;
+  const v = Number(ml);
+  return (ml == null || !isFinite(v)) ? null : v;
+}
 const TIER_META = {
+  alert: { label: '🚨 RED ALERT', cls: 't0', head: '🚨 Red Alert', note: 'live dog the model has winning outright' },
   best: { label: '🔥 BEST BET', cls: 't1', head: '🔥 Best Bets', note: 'gap 10+' },
   edge: { label: '⚡ EDGE', cls: 't2', head: '⚡ Edges', note: 'gap 5–9' },
   lean: { label: '👀 LEAN', cls: 't3', head: '👀 Leans', note: 'gap 2–5 · under the bar' },
 };
-const TIER_ORDER = ['best', 'edge', 'lean'];
+const TIER_ORDER = ['alert', 'best', 'edge', 'lean'];
 
 // Which tier a game's model-vs-market disagreement lands in. null = the model
 // is with the book (a pass), the gap is inside the noise band, or there's no
@@ -2931,6 +2955,12 @@ const TIER_ORDER = ['best', 'edge', 'lean'];
 function pickTier(pred, info, gap) {
   if (!pred || !info || !info.favName) return null;
   if (pred.winner.name === info.favName) return null;      // model agrees → no play
+  // 🚨 A genuine plus-money dog the model has winning outright, not just
+  // covering. Rarest thing the model produces and the owner's top-of-board
+  // play. Checked BEFORE the gap ladder so it can never be filed as a plain
+  // best bet.
+  const price = pickedPrice(pred, info);
+  if (price != null && price >= ALERT_DOG_ML && (gap == null || gap >= EDGE_BAR.best)) return 'alert';
   if (gap == null) return 'edge';                          // spread-only, no MLs: can't size it
   if (gap >= EDGE_BAR.best) return 'best';
   if (gap >= EDGE_BAR.edge) return 'edge';
@@ -3012,7 +3042,12 @@ async function buildBoard(sport, games, opts = {}) {
     const ats = atsCall(sport, g, p, info);
     // isEdge keeps its old meaning — a QUALIFIED edge, i.e. what the vs-line
     // record counts. Leans are picks, but they are not edges.
-    return { g, sport, p, info, gap, tier, tot, ats, isEdge: tier === 'best' || tier === 'edge' };
+    // isEdge keeps its meaning across v180: a QUALIFIED edge, i.e. what the
+    // vs-line record counts. 'alert' is a strict subset of what used to be
+    // 'best', so it must stay inside isEdge or the record would silently drop
+    // the strongest plays and stop being comparable to its own history.
+    return { g, sport, p, info, gap, tier, tot, ats,
+      isEdge: tier === 'alert' || tier === 'best' || tier === 'edge' };
   });
   return { rows, playable, report };
 }
@@ -3138,8 +3173,11 @@ async function renderHomeBoard() {
   // Finals are done — their numbers belong in the modal, not on a board of
   // things to look at.
   const live = rows.filter((r) => gameState(r.g) !== 'final');
-  const plays = live.filter((r) => r.tier === 'best' || r.tier === 'edge')
-    .sort((a, b) => (b.gap ?? -1) - (a.gap ?? -1) || (b.p?.conf || 0) - (a.p?.conf || 0));
+  // 🚨 Red alerts sort ABOVE everything, whatever their gap — that's the
+  // owner's rule, and it's why they sort by tier first rather than by gap.
+  const plays = live.filter((r) => r.tier === 'alert' || r.tier === 'best' || r.tier === 'edge')
+    .sort((a, b) => (b.tier === 'alert' ? 1 : 0) - (a.tier === 'alert' ? 1 : 0)
+      || (b.gap ?? -1) - (a.gap ?? -1) || (b.p?.conf || 0) - (a.p?.conf || 0));
   // Football is a spread market first, so ATS calls sit on the board beside
   // the moneyline plays rather than being buried a tab away.
   const spreads = live.filter((r) => r.ats).sort((a, b) => Math.abs(b.ats.edge) - Math.abs(a.ats.edge));
@@ -3283,7 +3321,7 @@ async function renderPredictions() {
   const upcoming = rows.filter((r) => gameState(r.g) !== 'final');
   const byTier = (t) => upcoming.filter((r) => r.tier === t)
     .sort((a, b) => (b.gap ?? -1) - (a.gap ?? -1) || (b.p?.conf || 0) - (a.p?.conf || 0));
-  const best = byTier('best'), edges = byTier('edge'), leans = byTier('lean');
+  const alerts = byTier('alert'), best = byTier('best'), edges = byTier('edge'), leans = byTier('lean');
   const passes = upcoming.filter((r) => r.p && r.info?.favName && !r.tier);
   const gradedEdges = rows.filter((r) => r.isEdge && gameState(r.g) === 'final');
   const upTot = upcoming.filter((r) => r.tot).length;
@@ -3310,8 +3348,9 @@ async function renderPredictions() {
   const section = (key, list) => {
     if (!list.length) return;
     const m = TIER_META[key];
-    // Best Bets is the quick view on this tab, so it stays open by default.
-    const h = el('div', `lad-sec${key === 'best' ? ' hot acc-open' : ''}`);
+    // Red Alert and Best Bets are the quick view on this tab, so they stay
+    // open by default; the rest of the ladder folds.
+    const h = el('div', `lad-sec${key === 'alert' ? ' alert acc-open' : key === 'best' ? ' hot acc-open' : ''}`);
     h.innerHTML = `${m.head} <span class="n">${m.note}</span> <span class="n">${list.length}</span>`;
     container.appendChild(h);
     list.forEach((r) => {
@@ -3320,8 +3359,11 @@ async function renderPredictions() {
       container.appendChild(card);
     });
   };
-  if (best.length || edges.length) {
+  if (alerts.length || best.length || edges.length) {
     container.appendChild(el('div', 'brd-note', boardNote()));
+    // 🚨 Red alerts lead the ladder — the owner's rule. They are a strict
+    // subset of what used to be 'best', so nothing is lost from that section.
+    section('alert', alerts);
     section('best', best);
     section('edge', edges);
   } else if (anyLines) {
