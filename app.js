@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v186';
+const APP_VERSION = 'v187';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1062,8 +1062,16 @@ function liveRailCard(sport, g) {
       + (info?.details ? `<div class="lrc-st">${esc(info.details)}</div>` : '');
     tag = `<div class="lrc-tag off">${cfg.emoji} ${cfg.label}</div>`;
   }
+  // v187: the model's tier badge + pick on the rail card. It comes from the
+  // read The Board already computed (MODEL_TODAY), so the rail costs nothing
+  // extra and can't disagree with the board about the same game.
+  const mdl = g.id ? MODEL_TODAY.byGame.get(String(g.id)) : null;
+  const mdlHTML = mdl
+    ? `<div class="lrc-mdl"><span class="lrc-tier ${mdl.cls}">${esc(mdl.label)}</span>
+        <span class="lrc-pick">${esc(mdl.pick)}</span></div>`
+    : '';
   card.innerHTML = `<span class="lrc-stripe"></span>
-    <div class="lrc-l">${tag}${row(g.away, hs)}${row(g.home, as)}</div>
+    <div class="lrc-l">${tag}${row(g.away, hs)}${row(g.home, as)}${mdlHTML}</div>
     <div class="lrc-gc">${gc}</div>`;
   if (g.id) card.onclick = () => openGameDetail(sport, g.id, g);
   return card;
@@ -1080,8 +1088,8 @@ const setRailOff = (set) => { try { localStorage.setItem(RAIL_OFF_KEY, JSON.stri
 function paintRailLeagues(sportsToday, counts) {
   const box = $('#rail-leagues');
   if (!box) return;
-  // With one league on the card there's nothing to filter between, so the row
-  // would just be a button that hides everything — not worth the chrome.
+  // With one league on the card there's nothing to filter between, so the
+  // column would just be a button that hides everything — not worth the chrome.
   if (sportsToday.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
   const off = getRailOff();
   box.innerHTML = '';
@@ -1089,7 +1097,7 @@ function paintRailLeagues(sportsToday, counts) {
     const cfg = LEAGUES[sp];
     const on = !off.has(sp);
     const b = el('button', 'rl-pill' + (on ? ' on' : ''),
-      `${cfg.emoji} ${cfg.label}${counts[sp] ? ` <span class="rl-n">${counts[sp]}</span>` : ''}`);
+      `${cfg.label}${counts[sp] ? ` <span class="rl-n">${counts[sp]}</span>` : ''}`);
     b.type = 'button';
     b.setAttribute('aria-pressed', String(on));
     b.title = `${on ? 'Hide' : 'Show'} ${cfg.label} games`;
@@ -1151,16 +1159,24 @@ async function renderLiveRail() {
     return new Date(a.g.date || 0) - new Date(b.g.date || 0);
   });
 
+  const wrap = $('#rail-wrap');
   rail.innerHTML = '';
   if (!shown.length) {
     // Distinguish "no games today" from "you filtered them all out" — the
-    // second is a state the owner created and can undo from the row above.
+    // second is a state the owner created and can undo from the column beside
+    // the rail (v187: the bubbles live inside it now, not on a bar of their own).
     rail.hidden = !all.length;
-    if (all.length) rail.appendChild(el('div', 'lrc-none', 'All leagues hidden — tap a league above to bring its games back.'));
+    if (wrap) wrap.hidden = !all.length;
+    if (all.length) rail.appendChild(el('div', 'lrc-none', 'All leagues hidden — tap a league beside the rail to bring its games back.'));
+    if (typeof paintRailToggle === 'function') paintRailToggle();
     return;
   }
   shown.forEach(({ sport, g }) => rail.appendChild(liveRailCard(sport, g)));
   rail.hidden = false;
+  if (wrap) wrap.hidden = false;
+  // The collapse state is the owner's, so re-assert it after every repaint —
+  // otherwise the 30s refresh would quietly re-open a rail they folded.
+  if (typeof paintRailToggle === 'function') paintRailToggle();
 }
 
 // 🔴 pip on the tab of any sport with a game in progress, so the rail isn't the
@@ -1230,7 +1246,7 @@ async function renderHome() {
   renderHomeHeadline();
   // The board runs the model over every in-season slate, so it's deliberately
   // NOT awaited — the scores paint first and the board fills in behind them.
-  renderHomeBoard().then(() => applySections('home')).catch((e) => {
+  renderHomeBoard().then(() => { applySections('home'); injectJumpNav('home'); }).catch((e) => {
     console.error(e);
     const box = $('#home-board');
     if (box) box.innerHTML = '<h2 class="section-title">🎲 The Board</h2>'
@@ -3216,7 +3232,14 @@ async function buildBoard(sport, games, opts = {}) {
     // vs-line record counts. 'alert' is a strict subset of what used to be
     // 'best', so it must stay inside isEdge or the record would silently drop
     // the strongest plays and stop being comparable to its own history.
-    return { g, sport, p, info, gap, tier, tot, ats,
+    // v187: the raw reads ride alongside the qualifying ones so a card can
+    // name all three markets EVERY time — including "shown, not recorded"
+    // when the number is under the bar, and "no play" when the model is
+    // pinned or the book posted nothing. Recording still reads ats/tot only,
+    // so nothing here can change what enters the record.
+    const atsR = atsRead(sport, g, p, info);
+    const totR = totalRead(sport, p, info);
+    return { g, sport, p, info, gap, tier, tot, ats, atsR, totR,
       isEdge: tier === 'alert' || tier === 'best' || tier === 'edge' };
   });
   return { rows, playable, report };
@@ -3385,9 +3408,89 @@ async function recordFromModal(sport, g) {
 
 // One board card. `compact` (Home) drops the factor breakdown; the AI tab
 // keeps it. Tapping opens the same game modal a slate card does.
+// ===================== the three-market block (v187) =======================
+// Every card names ALL THREE markets, every time. A market the model has no
+// play in says so — "no play", "no line posted", "under the bar — shown, not
+// recorded" — rather than vanishing, because an absent row and an absent
+// market look identical and only one of them is the model's fault.
+//
+// The edge number carries the heat ramp (heatCls), so the colour means the
+// same thing in all three: how far past that market's own bar this is. Under
+// 1× there is no ring, which is how the colour and the threshold stay honest
+// with each other.
+function marketRowsHTML(r) {
+  const { g, sport, p, info, gap } = r;
+  const row = (k, pick, edge, cls) =>
+    `<div class="mkt-row"><span class="mkt-k">${k}</span>` +
+    `<span class="mkt-p">${pick}</span>` +
+    `<span class="ai-edge ${cls || 'h0'}">${edge}</span></div>`;
+
+  // --- moneyline ---
+  let ml;
+  if (!p) ml = row('MONEYLINE', 'no model read', '—');
+  else if (!info?.favName) ml = row('MONEYLINE', `${esc(p.winner.name)} · ${p.conf}%`, '—');
+  else if (gap == null) ml = row('MONEYLINE', `${esc(p.winner.name)} · ${p.conf}%`, '—');
+  else ml = row('MONEYLINE', `${esc(p.winner.name)} to win · ${p.conf}%`,
+    `${gap > 0 ? '+' : ''}${gap}`, heatCls(Math.max(0, gap), EDGE_BAR.edge));
+
+  // --- spread ---
+  let sp;
+  const ar = r.atsR;
+  if (!ATS_SPORTS.has(sport)) sp = row('SPREAD', `no spread market — ${LEAGUES[sport]?.label || sport}`, '—');
+  else if (info?.spread == null) sp = row('SPREAD', 'no line posted', '—');
+  else if (!ar) sp = row('SPREAD', 'no model read', '—');
+  else if (ar.pinned) sp = row('SPREAD', `no play — model tops out near ${Math.abs(ar.proj).toFixed(1)}`, '—');
+  else sp = row('SPREAD',
+    `${esc(ar.label)} · model ${esc(ar.abbr)} by ${Math.abs(ar.proj).toFixed(1)}`,
+    Math.abs(ar.edge).toFixed(1), heatCls(ar.edge, ATS_EDGE_MIN[sport] ?? 2));
+
+  // --- total ---
+  let to;
+  const tr = r.totR;
+  if (info?.ou == null) to = row('TOTAL', 'no total posted', '—');
+  else if (!tr) to = row('TOTAL', 'no model read', '—');
+  else to = row('TOTAL', `${tr.side} ${tr.line} · model ${tr.proj.toFixed(1)}`,
+    Math.abs(tr.diff).toFixed(1), heatCls(tr.diff, TOT_EDGE_MIN[sport] ?? 1));
+
+  // The one sentence that reconciles a split: all three come off ONE
+  // projection, so a card showing the model on the favourite's ML and the
+  // dog's spread is not contradicting itself, and should say why.
+  const notes = [];
+  if (ar && !ar.pinned && !ar.qualifies) notes.push(`Spread read is under the ${ATS_EDGE_MIN[sport] ?? 2}-pt ${(LEAGUES[sport]?.label || sport)} bar — shown, not recorded.`);
+  if (tr && !tr.qualifies) notes.push(`Total read is under the ${TOT_EDGE_MIN[sport] ?? 1}-pt bar — shown, not recorded.`);
+  if (ar?.pinned) notes.push(`The model tops out around ${Math.abs(ar.proj).toFixed(1)} points in ${LEAGUES[sport]?.label || sport}, so it cannot price a number this big.`);
+  if (p && ar && !ar.pinned && ar.team !== p.winner.name) {
+    notes.push(`Both come off one projection: ${esc(p.winner.name)} to win, but by less than the ${Math.abs(ar.homeSpread)} the book is asking.`);
+  }
+
+  return `<div class="mkt-box">${ml}${sp}${to}</div>` +
+    (notes.length ? `<div class="mkt-note">${notes.join(' ')}</div>` : '');
+}
+
+// The model's confidence against the market's own implied number for the same
+// side. A bar alone says "68% — of what?"; the tick says what the book thinks,
+// and the distance between them IS the play.
+function confVsMarketHTML(r) {
+  const { p, info } = r;
+  if (!p?.conf) return '';
+  const mkt = marketHomeProb(info);
+  const mktPick = mkt == null ? null
+    : Math.round((p.winner.name === r.g.home.name ? mkt : 1 - mkt) * 100);
+  return `<div class="cvm"><div class="cvm-bar"><i style="width:${p.conf}%"></i>` +
+    (mktPick != null ? `<u style="left:${mktPick}%"></u>` : '') + `</div>` +
+    `<span class="cvm-l">MODEL ${p.conf}%${mktPick != null ? ` · MKT ${mktPick}%` : ''}</span></div>`;
+}
+
 function boardCard(r, opts = {}) {
   const { g, sport, p, info, gap, tier } = r;
-  const meta = TIER_META[tier] || TIER_META.edge;
+  // A game can reach the board on its SPREAD or its TOTAL while the model is
+  // with the book on the winner. Falling through to the Edge badge would have
+  // called that an edge it isn't — the badge names the market that actually
+  // put the card here.
+  const meta = TIER_META[tier]
+    || (r.ats ? { label: '📐 SPREAD', cls: 'ats' }
+      : r.tot ? { label: r.tot.tier === 'best' ? '🔥 TOTAL' : '🎯 TOTAL', cls: 'tot' }
+      : TIER_META.edge);
   const cfg = LEAGUES[sport];
   const card = el('div', `brd-card ${meta.cls}`);
   const when = gameState(g) === 'final' ? 'Final' : gameState(g) === 'live' ? (g.statusText || 'LIVE') : scheduledLabel(g);
@@ -3406,10 +3509,11 @@ function boardCard(r, opts = {}) {
     <div class="brd-pick"><span class="p">${esc(p.winner.name)}</span>
       <span class="cf">${p.conf}%</span>
       ${gap != null ? `<span class="gp">+${gap} vs market</span>` : ''}</div>
-    <div class="brd-bar"><i style="width:${p.conf}%"></i></div>
+    ${confVsMarketHTML(r)}
     ${bookBits ? `<div class="brd-row">${bookBits}</div>` : ''}
+    ${marketRowsHTML(r)}
     ${why ? `<div class="brd-row">${why}</div>` : ''}
-    ${p.sharp ? `<div class="brd-row${p.sharp.agree ? ' sharp' : ''}">💰 ${p.sharp.handle}% of dollars vs ${p.sharp.bets}% of bets on ${esc(p.sharp.abbr)} — sharp side ${p.sharp.agree ? 'agrees' : 'disagrees'}</div>` : ''}`;
+    ${p.sharp ? `<div class="brd-row mkt-sharp${p.sharp.agree ? ' sharp' : ''}">💰 ${p.sharp.handle}% of dollars vs ${p.sharp.bets}% of bets on ${esc(p.sharp.abbr)} — sharp side ${p.sharp.agree ? 'agrees' : 'disagrees'}</div>` : ''}`;
   if (g.id) card.onclick = () => openGameDetail(sport, g.id, g);
   return card;
 }
@@ -3480,6 +3584,56 @@ function boardNote() {
   return `Where the model disagrees with the book. <b>Edges are ${ts.eh}-${ts.el} (${pct}%)</b> all-time — ${pct >= 53 ? 'above' : 'under'} the 52.4% break-even, so this is a watchlist, not advice.`;
 }
 
+// ===================== the day's model read (v187) =========================
+// The Board already prices every in-season slate. Stashing what it found means
+// the rail and the bottom bar can state the model's read WITHOUT running the
+// model a second time — no extra ESPN calls, and the three surfaces can't
+// disagree about what the model said, which is the same reason buildBoard is
+// shared by Home and AI Picks in the first place.
+const MODEL_TODAY = { byGame: new Map(), line: '' };
+const RAIL_TIER = {
+  alert: { cls: 'alert', label: 'RED ALERT' }, best: { cls: 'best', label: 'BEST BET' },
+  edge: { cls: 'edge', label: 'EDGE' }, lean: { cls: 'lean', label: 'LEAN' },
+};
+function noteModelToday(rows) {
+  rows.forEach((r) => {
+    if (!r.g?.id || !r.p) return;
+    const t = RAIL_TIER[r.tier];
+    // A game with no side play still has a read worth carrying — the spread or
+    // the total that put it on the board.
+    const pick = t ? `${(r.p.winner.abbr || r.p.winner.name)} ${r.p.conf}%`
+      : r.ats ? r.ats.label
+      : r.tot ? `${r.tot.side} ${r.tot.line}`
+      : null;
+    if (!pick) return;
+    MODEL_TODAY.byGame.set(String(r.g.id), {
+      cls: t ? t.cls : r.ats ? 'edge' : 'edge',
+      label: t ? t.label : r.ats ? 'SPREAD' : 'TOTAL',
+      pick,
+    });
+  });
+}
+// One line for the bottom bar: what the model has today, and whether the money
+// is on the same side. Counts only, because a bar that names a pick is a bar
+// that is wrong the moment the slate turns over.
+function paintBotBar(rows) {
+  const live = rows.filter((r) => gameState(r.g) !== 'final');
+  const n = (t) => live.filter((r) => r.tier === t).length;
+  const bits = [];
+  const a = n('alert'), b = n('best'), e = n('edge'), l = n('lean');
+  if (a) bits.push(`${a} red alert${a === 1 ? '' : 's'}`);
+  if (b) bits.push(`${b} best bet${b === 1 ? '' : 's'}`);
+  if (e) bits.push(`${e} edge${e === 1 ? '' : 's'}`);
+  if (l) bits.push(`${l} lean${l === 1 ? '' : 's'}`);
+  const agree = live.filter((r) => r.p?.sharp?.agree).length;
+  if (agree) bits.push(`sharp agrees on ${agree}`);
+  MODEL_TODAY.line = bits.length ? bits.join(' · ')
+    : live.length ? 'Model is with the book across today’s board.'
+    : 'No games left to price today.';
+  const readEl = $('#bb-read');
+  if (readEl) readEl.textContent = MODEL_TODAY.line;
+}
+
 // ===================== Home: 🎲 The Board (v164) ===========================
 // The top of the ladder, across every in-season sport — the thing worth
 // looking at before the slate. AI Picks is per-sport by design (its chips);
@@ -3506,6 +3660,11 @@ async function renderHomeBoard() {
   }));
   const rows = [];
   built.forEach((b) => { if (b.status === 'fulfilled') rows.push(...b.value.rows); });
+  // Hand the day's read to the rail and the bottom bar before anything is
+  // filtered for display — they speak for the whole slate, not the top of it.
+  noteModelToday(rows);
+  paintBotBar(rows);
+  renderLiveRail().catch(() => {});
   // Finals are done — their numbers belong in the modal, not on a board of
   // things to look at.
   const live = rows.filter((r) => gameState(r.g) !== 'final');
@@ -3538,9 +3697,28 @@ async function renderHomeBoard() {
     return;
   }
   box.appendChild(el('div', 'brd-note', boardNote()));
-  plays.slice(0, BOARD_HOME_MAX).forEach((r) => box.appendChild(boardCard(r, { compact: true })));
-  spreads.slice(0, BOARD_ATS_MAX).forEach((r) => box.appendChild(atsCard(r)));
-  totals.slice(0, BOARD_TOT_MAX).forEach((r) => box.appendChild(totalsCard(r)));
+  // v187: ONE card per game. Every card now names all three markets, so a
+  // game with an edge on the moneyline AND a spread play used to appear
+  // twice — the same two-near-identical-lists problem v176 took off the
+  // NFL/CFB slates. The order is unchanged (tier, then gap), and a game that
+  // reaches the board only on its spread or its total still reaches it.
+  const seen = new Set();
+  const shownRows = [];
+  const take = (list, max) => {
+    let n = 0;
+    for (const r of list) {
+      if (n >= max) break;
+      const k = r.g.id || `${r.sport}:${r.g.away.name}@${r.g.home.name}`;
+      n++;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      shownRows.push(r);
+    }
+  };
+  take(plays, BOARD_HOME_MAX);
+  take(spreads, BOARD_ATS_MAX);
+  take(totals, BOARD_TOT_MAX);
+  shownRows.forEach((r) => box.appendChild(boardCard(r, { compact: true })));
   const hidden = Math.max(0, plays.length - BOARD_HOME_MAX)
     + Math.max(0, spreads.length - BOARD_ATS_MAX) + Math.max(0, totals.length - BOARD_TOT_MAX);
   const bits = [];
@@ -3603,6 +3781,10 @@ async function renderPredictions() {
       ? 'Preseason only today — the model sits these out (backups play; results don\'t predict anything).'
       : 'No games today for this sport.'));
     renderTally('');
+    // A sport with no slate still has to clear the previous sport's ladder off
+    // the jump rail — otherwise the rail lists sections that aren't there.
+    applySections('predictions');
+    injectJumpNav('predictions');
     return;
   }
 
@@ -3753,6 +3935,7 @@ async function renderPredictions() {
 
   await renderAiTrends(container, sport, playable, rows);
   applySections('predictions');
+  injectJumpNav('predictions');
 }
 
 // "Trends to pay attention to" — team form/scoring pulled from cached profiles,
@@ -7120,7 +7303,9 @@ function applySections(name) {
 // collapsed the button expands, otherwise it collapses. That way one tap
 // always changes something, and a half-open tab has an unambiguous next step.
 function wireSectionToggle(panel) {
-  const btn = panel.querySelector(':scope > .sec-all');
+  // v187: the button moved into the tab's control row, so it is no longer a
+  // direct child of the panel.
+  const btn = panel.querySelector('.sec-all');
   if (!btn) return;
   const heads = [...panel.querySelectorAll('.acc-h')].filter((h) => h._accSet);
   // One section is not worth a bulk control, and zero means nothing rendered.
@@ -7128,13 +7313,15 @@ function wireSectionToggle(panel) {
   const closed = heads.filter((h) => !h.classList.contains('open')).length;
   const expand = closed > 0;
   btn.hidden = false;
-  btn.textContent = expand ? `⌄ Expand all ${heads.length} sections` : `⌃ Collapse all ${heads.length} sections`;
+  btn.textContent = expand ? `⌄ ALL ${heads.length}` : `⌃ ALL ${heads.length}`;
+  btn.setAttribute('title', expand ? `Expand all ${heads.length} sections` : `Collapse all ${heads.length} sections`);
   btn.setAttribute('aria-expanded', String(!expand));
   btn.onclick = () => {
     // persist:true on each, so the choice survives the next render exactly the
     // way an individual tap does.
     heads.forEach((h) => h._accSet(expand, true));
     wireSectionToggle(panel);   // relabel for the state we just moved to
+    wireScrollSpy.run?.();      // every section just moved; re-spy
   };
 }
 
@@ -7370,6 +7557,7 @@ async function renderEagles() {
 
   // collapsible sections (scannable; tap a header to expand)
   applySections('eagles');
+  injectJumpNav('eagles');
 
   // fire off the heavier analytics in parallel; each renders independently
   renderEaglesDepth(idMap, groups);
@@ -7659,6 +7847,7 @@ async function renderRedSox() {
   navEl.querySelectorAll('button').forEach((b) => (b.onclick = () => { const elx = document.getElementById(b.dataset.target); if (elx?._accSet) elx._accSet(true); elx?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
 
   applySections('redsox');
+  injectJumpNav('redsox');
 
   renderRedSoxRoster(allPlayers, idMap);
   renderRedSoxTeamStats();
@@ -7846,9 +8035,73 @@ function setMode(live) {
 
 // Build a "jump to section" widget bar at the top of a tab from its headings.
 // (Eagles has its own curated nav, so it's skipped here.)
+// v187: one control row per tab. The per-tab sport chips, the section jump
+// rail and the collapse-all control were three separate strips stacked above
+// the content; they are one row now. The row wraps rather than scrolling —
+// a chip past the right edge is a chip that isn't there, which is exactly how
+// three tabs went missing for a version.
+function buildControlRow(name) {
+  const panel = document.getElementById(name);
+  if (!panel) return null;
+  let row = panel.querySelector(':scope > .ctl-row');
+  if (!row) {
+    row = el('div', 'ctl-row');
+    row.innerHTML = '<div class="ctl-chips"></div>';
+    panel.insertBefore(row, panel.firstChild);
+  }
+  const chips = row.querySelector('.ctl-chips');
+  // Adopt whatever this tab already had: its sport chips, its hand-built nav
+  // (#eagles-nav and friends) and the generated jump rail. Moving the nodes
+  // keeps their ids, so every renderer that fills them by id still does.
+  panel.querySelectorAll(':scope > .controls > .chips, :scope > .fantasy-head > .chips, :scope > .chips, :scope > .eagles-nav, :scope > .jump-nav')
+    .forEach((n) => { if (n.parentElement !== chips) chips.appendChild(n); });
+  // The collapse-all button lived only in the AI Picks markup. Every tab has
+  // sections, so every tab gets the control — wireSectionToggle hides it again
+  // wherever there are fewer than two.
+  let all = panel.querySelector('.sec-all');
+  if (!all) { all = el('button', 'sec-all'); all.type = 'button'; all.hidden = true; }
+  if (all.parentElement !== row) row.appendChild(all);
+  return row;
+}
+
+// Scroll-spy: the jump rail flags the section you are actually in. A rail that
+// only ever jumps forgets to say where you already are, which on a ten-section
+// team page is the question you have.
+let spyWired = false;
+function wireScrollSpy() {
+  if (spyWired) return;
+  spyWired = true;
+  const run = () => {
+    const panel = document.querySelector('.tab-panel.active');
+    if (!panel) return;
+    const chips = [...panel.querySelectorAll('.ctl-row .chip[data-target]')];
+    if (!chips.length) return;
+    let here = null;
+    chips.forEach((c) => {
+      const t = document.getElementById(c.dataset.target);
+      // 70px clears the sticky tab grid, so a heading level with the rail
+      // counts as reached rather than as still ahead.
+      if (t && t.getBoundingClientRect().top - 70 <= 0) here = c;
+    });
+    chips.forEach((c) => c.classList.toggle('here', c === here));
+  };
+  window.addEventListener('scroll', run, { passive: true });
+  window.addEventListener('resize', run, { passive: true });
+  wireScrollSpy.run = run;
+  run();
+}
+
 function injectJumpNav(name) {
   const panel = document.getElementById(name);
-  if (!panel || name === 'eagles' || name === 'redsox' || name === 'nfl' || name === 'cfb' || name === 'home') return;
+  if (!panel) return;
+  buildControlRow(name);
+  wireScrollSpy();
+  // The team and league tabs build their own nav from a fixed section list
+  // (paintTeamNav and friends), so the generated rail would duplicate it.
+  if (name === 'eagles' || name === 'redsox' || name === 'nfl' || name === 'cfb') {
+    wireScrollSpy.run?.();
+    return;
+  }
   // Derive each chip label from the heading text WITHOUT any nested controls
   // (e.g. the Standings/Power toggle inside the "League" heading) so labels stay
   // clean. Empty sections set their box to '' and emit no .section-title, so they
@@ -7857,20 +8110,32 @@ function injectJumpNav(name) {
   // rebuilds the bar in place.
   // Skip headings inside a hidden wrapper (e.g. the baseball sections while the
   // Football preseason view is showing) so they don't become dead chips.
-  const titles = [...panel.querySelectorAll('.section-title')].filter((h) => h.offsetParent !== null);
+  // The same header set applySections turns into accordions, so the rail can
+  // never list a section that doesn't fold or miss one that does — AI Picks'
+  // ladder is built from .lad-sec, not .section-title, and had no rail at all.
+  const titles = [...panel.querySelectorAll('.section-title, .lad-sec, .ai-section-head')]
+    .filter((h) => h.offsetParent !== null && !h.classList.contains('no-acc'));
   const items = titles.map((h, i) => {
     if (!h.id) h.id = `${name}-sec-${i}`;
     const clone = h.cloneNode(true);
-    clone.querySelectorAll('.chips, button').forEach((n) => n.remove());
+    clone.querySelectorAll('.chips, button, .season-tag, .n').forEach((n) => n.remove());
     const label = clone.textContent.trim().replace(/\s+/g, ' ').replace(/[🤖🦅]/g, '').trim();
     return { id: h.id, label };
   }).filter((x) => x.label);
-  let nav = panel.querySelector(':scope > .jump-nav');
-  if (items.length < 2) { if (nav) nav.remove(); return; }
-  if (!nav) { nav = el('div', 'jump-nav'); panel.insertBefore(nav, panel.firstChild); }
+  const chips = panel.querySelector(':scope > .ctl-row .ctl-chips');
+  let nav = panel.querySelector('.jump-nav');
+  if (items.length < 2) { if (nav) nav.remove(); wireScrollSpy.run?.(); return; }
+  if (!nav) { nav = el('div', 'jump-nav'); (chips || panel).appendChild(nav); }
   nav.innerHTML = items.map((it) => `<button class="chip" data-target="${it.id}">${it.label}</button>`).join('');
   nav.querySelectorAll('button').forEach((b) =>
-    (b.onclick = () => document.getElementById(b.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
+    (b.onclick = () => {
+      const t = document.getElementById(b.dataset.target);
+      // Jumping to a folded section and landing on a bare heading is a dead
+      // end — open it on the way, the way the team tabs already did.
+      if (t?._accSet) t._accSet(true, true);
+      t?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }));
+  wireScrollSpy.run?.();
 }
 
 // ================ Model read folded onto the slate (shared) ===============
@@ -7993,9 +8258,14 @@ async function enrichSlate(sport, host, games) {
         ? ` · total ${p.projTotal.toFixed(1)} vs ${info.ou}` : '';
       modelTxt = `🤖 <b>${esc(p.winner.name)}</b> ${p.conf}%${tot} ${gapTag}`;
     }
-    const sharpRows = sharpSignals(g, sp, null).map((t) => `<div class="bb-sharp">${t}</div>`).join('');
+    const sharpRows = sharpSignals(g, sp, null).map((t) => `<div class="bb-sharp mkt-sharp">${t}</div>`).join('');
+    // v187: the same three-market block the board cards carry. The slate is
+    // where a week is actually read, and a strip that named only the winner
+    // made the spread and the total look like they hadn't been priced.
+    const markets = p ? marketRowsHTML({ g, sport, p, info, gap,
+      atsR: atsRead(sport, g, p, info), totR: totalRead(sport, p, info) }) : '';
     const strip = el('div', 'bb-strip' + (isEdge ? ' edge' : ''));
-    strip.innerHTML = `${lineRow}<div class="bb-model">${modelTxt}</div>${sharpRows}`;
+    strip.innerHTML = `${lineRow}<div class="bb-model">${modelTxt}</div>${markets}${sharpRows}`;
     // Sit above the "tap for game report →" hint so the hint stays last.
     const hint = card.querySelector('.tap-hint');
     if (hint) card.insertBefore(strip, hint); else card.appendChild(strip);
@@ -8032,6 +8302,7 @@ async function renderCFB() {
   navEl.querySelectorAll('button').forEach((b) =>
     (b.onclick = () => { const t = document.getElementById(b.dataset.target); if (t?._accSet) t._accSet(true); t?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
   applySections('cfb');
+  injectJumpNav('cfb');
   renderCFBWeek();
   renderCFBRankings();
   renderCFBNews();
@@ -8139,6 +8410,7 @@ async function renderNFL() {
   navEl.querySelectorAll('button').forEach((b) =>
     (b.onclick = () => { const t = document.getElementById(b.dataset.target); if (t?._accSet) t._accSet(true); t?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
   applySections('nfl');
+  injectJumpNav('nfl');
   // each section fetches + renders independently, in parallel
   renderNFLWeek();
   renderNFLNews();
@@ -8303,25 +8575,101 @@ state.aiSport = sortedSports({ teamOnly: true })[0];
 const verEl = $('#app-version');
 if (verEl) verEl.textContent = APP_VERSION;
 
-// --- light / dark theme -----------------------------------------------------
-// The <head> inline script sets data-theme before first paint (saved pref, else
-// OS setting). Here we wire the header toggle and keep the meta theme-color and
-// the button icon in sync. Saving a pref opts out of following the OS.
+// --- palettes ---------------------------------------------------------------
+// v187: light/dark became four named palettes, all tokenised in styles.css.
+// The <head> inline script picks one before first paint (saved pref, else the
+// OS setting, warm either way). Here we wire the header button, keep the meta
+// theme-color in sync, and carry `data-theme` alongside `data-palette` so the
+// light/dark rules underneath the palette layer still resolve — three of the
+// four grounds are paper, Dusk is the dark one.
+//
+// Dusk IS the dark mode, so the old 🌙/☀️ toggle isn't gone, it's absorbed:
+// cycling to Dusk is what turning the lights off means now.
 const THEME_KEY = 'sportshub:theme';
+const PALETTE_KEY = 'sportshub:palette';
+const PALETTES = ['sand', 'terracotta', 'paper', 'dusk'];
+const PALETTE_DARK = { dusk: 1 };
+const PALETTE_META = { sand: '#f5efe6', terracotta: '#fbf0ec', paper: '#f3f2f2', dusk: '#241f1d' };
 const themeMeta = document.querySelector('meta[name="theme-color"]');
-const effectiveTheme = () => (document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
-function applyTheme(t) {
-  document.documentElement.setAttribute('data-theme', t);
-  if (themeMeta) themeMeta.setAttribute('content', t === 'light' ? '#f7f4ee' : '#004c54');
-  const btn = $('#theme-toggle');
+const effectivePalette = () => {
+  const p = document.documentElement.getAttribute('data-palette');
+  return PALETTES.includes(p) ? p : 'sand';
+};
+const effectiveTheme = () => (PALETTE_DARK[effectivePalette()] ? 'dark' : 'light');
+function applyPalette(p) {
+  if (!PALETTES.includes(p)) p = 'sand';
+  const root = document.documentElement;
+  root.setAttribute('data-palette', p);
+  root.setAttribute('data-theme', PALETTE_DARK[p] ? 'dark' : 'light');
+  if (themeMeta) themeMeta.setAttribute('content', PALETTE_META[p]);
+  const btn = $('#palette-toggle');
   if (btn) {
-    const dark = t !== 'light';
-    btn.textContent = dark ? '☀️' : '🌙';
-    btn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
-    btn.setAttribute('title', dark ? 'Light mode' : 'Dark mode');
+    btn.textContent = p.toUpperCase();
+    btn.setAttribute('aria-label', `Palette: ${p}. Tap for the next one.`);
   }
 }
-applyTheme(effectiveTheme());
+// Kept as a thin alias: applyTheme('light'|'dark') still means something, it
+// just resolves to a palette now. Anything that used to call it keeps working.
+function applyTheme(t) {
+  applyPalette(t === 'light' ? 'sand' : 'dusk');
+  try { localStorage.setItem(PALETTE_KEY, effectivePalette()); } catch (e) {}
+}
+applyPalette(effectivePalette());
+
+$('#palette-toggle')?.addEventListener('click', () => {
+  const next = PALETTES[(PALETTES.indexOf(effectivePalette()) + 1) % PALETTES.length];
+  try { localStorage.setItem(PALETTE_KEY, next); } catch (e) {}
+  applyPalette(next);
+});
+
+// --- rail collapse ----------------------------------------------------------
+// The rail is the single biggest piece of chrome on the screen. On a phone
+// it's ~99px of the ~224px above the content, so it gets a switch — collapsed
+// it still says how many games it's holding, which is the part you'd miss.
+const RAIL_HIDE_KEY = 'sportshub:railhidden';
+let railHidden = false;
+try { railHidden = localStorage.getItem(RAIL_HIDE_KEY) === '1'; } catch (e) {}
+function paintRailToggle() {
+  const wrap = $('#rail-wrap'), btn = $('#rail-toggle');
+  const n = document.querySelectorAll('#live-rail .lrc').length;
+  // Nothing to collapse when there's nothing in it — the wrapper stays hidden
+  // and the button goes with it, exactly as the bare rail used to.
+  if (btn) {
+    btn.hidden = !n;
+    btn.textContent = railHidden ? `⌄ ${n} GAME${n === 1 ? '' : 'S'}` : '⌃ RAIL';
+    btn.setAttribute('aria-expanded', String(!railHidden));
+  }
+  if (wrap) wrap.hidden = !n || railHidden;
+}
+$('#rail-toggle')?.addEventListener('click', () => {
+  railHidden = !railHidden;
+  try { localStorage.setItem(RAIL_HIDE_KEY, railHidden ? '1' : '0'); } catch (e) {}
+  paintRailToggle();
+});
+
+// --- 💰 sharp toggle --------------------------------------------------------
+// One switch that takes the sharp-money read off every surface at once, for
+// when you want the model's own number and nothing else. Display only — the
+// splits are still fetched and still recorded, so the record can't drift
+// depending on whether the block was showing.
+const SHARP_KEY = 'sportshub:sharp';
+let sharpOn = true;
+try { sharpOn = localStorage.getItem(SHARP_KEY) !== '0'; } catch (e) {}
+function paintSharpToggle() {
+  document.documentElement.setAttribute('data-sharp', sharpOn ? 'on' : 'off');
+  const btn = $('#sharp-toggle');
+  if (btn) {
+    btn.classList.toggle('on', sharpOn);
+    btn.setAttribute('aria-pressed', String(sharpOn));
+    btn.setAttribute('title', sharpOn ? 'Hide the sharp-money read' : 'Show the sharp-money read');
+  }
+}
+$('#sharp-toggle')?.addEventListener('click', () => {
+  sharpOn = !sharpOn;
+  try { localStorage.setItem(SHARP_KEY, sharpOn ? '1' : '0'); } catch (e) {}
+  paintSharpToggle();
+});
+paintSharpToggle();
 
 // Labs: launch the fantasy mock draft (in the About → Labs card).
 $('#labs-mock-start')?.addEventListener('click', () => {
@@ -8330,17 +8678,21 @@ $('#labs-mock-start')?.addEventListener('click', () => {
   $('#labs-mock')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
-$('#theme-toggle')?.addEventListener('click', () => {
-  const next = effectiveTheme() === 'light' ? 'dark' : 'light';
-  try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
-  applyTheme(next);
-});
-// Follow the OS theme while the user hasn't picked an explicit preference.
+// Follow the OS light/dark setting while the user hasn't picked a palette
+// explicitly — Sand when it's light out, Dusk when it isn't. THEME_KEY is
+// still honoured so an install that saved a light/dark pref before v187 keeps
+// its side of the choice instead of being dragged back to following the OS.
 try {
   window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
-    if (!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? 'light' : 'dark');
+    if (localStorage.getItem(PALETTE_KEY) || localStorage.getItem(THEME_KEY)) return;
+    applyPalette(e.matches ? 'sand' : 'dusk');
   });
 } catch (e) {}
+
+$('#bb-go')?.addEventListener('click', () => {
+  showTab('predictions');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
 
 // back-to-top button
 const toTop = $('#to-top');

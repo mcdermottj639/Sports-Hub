@@ -1421,3 +1421,532 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
      long-form prose so line length stays comfortable. */
   .brd-note, .ai-note, .ai-flow > .empty { max-width: 760px; }
 }
+
+/* ==========================================================================
+   MODERNIST — the feel & function pass (v187).
+   Four palettes, tokenised. Chosen with <html data-palette="sand|paper|
+   terracotta|dusk">; `data-theme` still rides alongside (light for the three
+   paper grounds, dark for Dusk) so the Editorial light block above keeps
+   doing its job of un-hardcoding the dark-only values, and the ramps below
+   then say what the colour actually is.
+
+   Appended last on purpose: `[data-palette]` and `[data-theme]` are the same
+   specificity, so source order is what decides, and every rule here wins.
+
+   The system is Modernist — flat, zero radius, 2px rules, Archivo, flush
+   left. Nothing floats; the dividers do the organising.
+   ========================================================================== */
+
+/* --- the four grounds ---------------------------------------------------- */
+:root[data-palette="paper"] {
+  --gr: #f3f2f2; --sf: #eae9e9; --sf2: #eae7e7;
+  --ink: #201e1d; --ink2: #444141; --gy: #605d5d;
+  --mu: #7d7979; --mu2: #9b9797; --tr: #d7d3d3; --tr2: #bab6b6;
+  --ac: #ec3013; --ac6: #dd2b0f; --ac7: #ae1800; --wm: #c26a00;
+  --base: 32, 30, 29;
+}
+:root[data-palette="sand"] {
+  --gr: #f5efe6; --sf: #ece4d7; --sf2: #e6dccb;
+  --ink: #241f19; --ink2: #4a4137; --gy: #6b6154;
+  --mu: #8a8073; --mu2: #a89e90; --tr: #ddd3c4; --tr2: #c6bcab;
+  --ac: #ec3013; --ac6: #dd2b0f; --ac7: #ae1800; --wm: #c26a00;
+  --base: 36, 31, 25;
+}
+:root[data-palette="terracotta"] {
+  --gr: #fbf0ec; --sf: #ffe0d9; --sf2: #ffd6cc;
+  --ink: #4d170e; --ink2: #7c1405; --gy: #9e3526;
+  --mu: #b06a5c; --mu2: #c99184; --tr: #ffc4b8; --tr2: #ff9783;
+  --ac: #dd2b0f; --ac6: #ae1800; --ac7: #7c1405; --wm: #c26a00;
+  --base: 77, 23, 14;
+}
+:root[data-palette="dusk"] {
+  --gr: #241f1d; --sf: #2f2926; --sf2: #383029;
+  --ink: #f8f4f4; --ink2: #ddd6d2; --gy: #b6aca6;
+  --mu: #9b8f88; --mu2: #7d726c; --tr: #453c37; --tr2: #5c524c;
+  --ac: #ff563c; --ac6: #ff9783; --ac7: #ffc4b8; --wm: #ffb066;
+  --base: 248, 244, 244;
+}
+
+/* Ink-on-ground alpha ramp. One `--base` triple per palette drives all of
+   them, so a new palette is nine numbers and nothing else. */
+:root[data-palette] {
+  --l07: rgba(var(--base), .07); --l12: rgba(var(--base), .12);
+  --l15: rgba(var(--base), .15); --l2:  rgba(var(--base), .2);
+  --l25: rgba(var(--base), .25); --l3:  rgba(var(--base), .3);
+  --l32: rgba(var(--base), .32); --l35: rgba(var(--base), .35);
+  --l4:  rgba(var(--base), .4);
+
+  /* The app's own variables, re-pointed. Every component that was already
+     written against these (per CLAUDE.md's rule) recolours for free. */
+  --bg: var(--gr);
+  --card: var(--gr);
+  --card-2: var(--sf);
+  --text: var(--ink);
+  --muted: var(--gy);
+  --silver: var(--mu);
+  --accent: var(--ac);
+  --live: var(--ac);
+  --gold: var(--wm);
+  --line: var(--l25);
+  --eagles-green: var(--ink);
+  --eagles-green-light: var(--ac);
+  --radius: 0px;
+}
+
+/* --- Modernist form ------------------------------------------------------ */
+:root[data-palette] body {
+  background: var(--gr);
+  color: var(--ink);
+  font-family: "Archivo", system-ui, -apple-system, sans-serif;
+}
+/* Zero radius, everywhere, on purpose. */
+:root[data-palette] .hl-card, :root[data-palette] .game-card,
+:root[data-palette] .featured-card, :root[data-palette] .brd-card,
+:root[data-palette] .lrc, :root[data-palette] .setup-card,
+:root[data-palette] .ai-stat, :root[data-palette] .ai-report,
+:root[data-palette] .ai-note, :root[data-palette] .trend-row,
+:root[data-palette] .stat-row, :root[data-palette] .sched-row,
+:root[data-palette] .opp-card, :root[data-palette] .staff-card,
+:root[data-palette] .fan-card, :root[data-palette] .fan-item,
+:root[data-palette] .lg-card, :root[data-palette] .mu-card,
+:root[data-palette] .modal-card, :root[data-palette] .chip,
+:root[data-palette] .badge, :root[data-palette] .version,
+:root[data-palette] .status, :root[data-palette] .rl-pill,
+:root[data-palette] .fan-btn, :root[data-palette] .to-top,
+:root[data-palette] .odds-grid > div, :root[data-palette] .gr-row,
+:root[data-palette] .conf-bar, :root[data-palette] .gr-bar,
+:root[data-palette] .gr-bar i, :root[data-palette] .cat,
+:root[data-palette] .trend .pill, :root[data-palette] .pick-btns button,
+:root[data-palette] .field, :root[data-palette] .field-spot,
+:root[data-palette] .empty, :root[data-palette] .setup-card code,
+:root[data-palette] .setup-card pre, :root[data-palette] .gr-grade,
+:root[data-palette] .hero-chip, :root[data-palette] .po-card,
+:root[data-palette] .ai-edge, :root[data-palette] .gr-edge,
+:root[data-palette] .ai-mkt, :root[data-palette] .market-cmp,
+:root[data-palette] .gr-sharp, :root[data-palette] .wc-in,
+:root[data-palette] .rank-badge, :root[data-palette] .edge-badge,
+:root[data-palette] .brd-tier { border-radius: 0; }
+
+/* Nothing floats: gradients and drop shadows both go. Structure is drawn. */
+:root[data-palette] .topbar,
+:root[data-palette] .featured-card,
+:root[data-palette] .field,
+:root[data-palette] .conf-bar span { background-image: none; }
+:root[data-palette] .topbar, :root[data-palette] .lrc,
+:root[data-palette] .hl-card, :root[data-palette] .to-top,
+:root[data-palette] .modal-card, :root[data-palette] .lg-card,
+:root[data-palette] .game-card.fav, :root[data-palette] .lrc.fav,
+:root[data-palette] .ai-edge, :root[data-palette] .gr-edge { box-shadow: none; }
+/* Cards lift on hover in the dark theme; here the rule does the work. */
+:root[data-palette] .hl-card:hover, :root[data-palette] .lrc:hover,
+:root[data-palette] .brd-card:hover { transform: none; }
+
+/* Every hairline that was white-on-dark, and every card edge. */
+:root[data-palette] .hl-card, :root[data-palette] .game-card,
+:root[data-palette] .ai-stat, :root[data-palette] .ai-report,
+:root[data-palette] .ai-note, :root[data-palette] .trend-row,
+:root[data-palette] .odds-grid > div, :root[data-palette] .setup-card,
+:root[data-palette] .chip, :root[data-palette] input[type="date"],
+:root[data-palette] .stat-row, :root[data-palette] .sched-row,
+:root[data-palette] .opp-card, :root[data-palette] .staff-card,
+:root[data-palette] .depth-player, :root[data-palette] .news-item,
+:root[data-palette] .fan-card, :root[data-palette] .fan-item,
+:root[data-palette] .lg-card, :root[data-palette] .mu-card,
+:root[data-palette] .pj-card, :root[data-palette] .cs-row,
+:root[data-palette] .ad-row, :root[data-palette] .wv-item,
+:root[data-palette] .ss-cols > div, :root[data-palette] .pick-btns button,
+:root[data-palette] .modal-card, :root[data-palette] .to-top,
+:root[data-palette] .lrc, :root[data-palette] .brd-card,
+:root[data-palette] .po-card, :root[data-palette] .field,
+:root[data-palette] .field-spot { border-color: var(--l25); }
+:root[data-palette] th, :root[data-palette] td,
+:root[data-palette] .fac-row, :root[data-palette] .rep-pick,
+:root[data-palette] .leader-row, :root[data-palette] .hit-row,
+:root[data-palette] .md-leader, :root[data-palette] .md-line th,
+:root[data-palette] .md-line td, :root[data-palette] .ss-cols li,
+:root[data-palette] .st-table th, :root[data-palette] .st-table td,
+:root[data-palette] .fan-body { border-color: var(--l15); }
+
+/* Section headings: uppercase ink, on a 2px rule. The gold kicker the
+   Editorial theme used belongs to that theme, not this one. */
+:root[data-palette] .section-title,
+:root[data-palette] .ai-section-head,
+:root[data-palette] .lad-sec {
+  color: var(--ink); font-weight: 700; font-size: 13px;
+  letter-spacing: .15em; text-transform: uppercase;
+  border-bottom: 2px solid var(--ink); padding-bottom: 7px;
+  margin: 22px 0 0;
+}
+:root[data-palette] .section-title .sec-chev,
+:root[data-palette] .ai-section-head .sec-chev,
+:root[data-palette] .lad-sec .sec-chev { color: var(--ac); font-size: 15px; }
+:root[data-palette] .featured-card h2,
+:root[data-palette] .news-title, :root[data-palette] .hl-title,
+:root[data-palette] .topbar h1 {
+  font-family: "Archivo", system-ui, sans-serif; letter-spacing: -.025em;
+}
+
+/* Masthead. Flat ground, one 2px rule under it — no green gradient. */
+:root[data-palette] .topbar {
+  background: var(--gr); border-bottom: 2px solid var(--ink);
+  padding: 8px 14px 5px;
+}
+:root[data-palette] .topbar h1 { font-weight: 900; font-size: 17px; color: var(--ink); }
+:root[data-palette] .version {
+  color: var(--mu); background: none; border: none;
+  font-size: 9px; font-weight: 500; letter-spacing: .08em; padding: 0;
+}
+:root[data-palette] .badge {
+  background: var(--ink); color: var(--gr); border: none;
+  font-size: 9px; font-weight: 800; letter-spacing: .08em; padding: 5px 6px;
+}
+:root[data-palette] .badge.live { background: var(--ink); color: var(--gr); }
+:root[data-palette] .badge.demo { background: var(--wm); color: var(--gr); }
+
+/* Buttons: solid accent for primary, ruled outline for the rest, label flush
+   left. `#fff` was safe on a dark ground and is not on three of these. */
+:root[data-palette] .fan-btn {
+  background: var(--ac); color: var(--gr); border: none;
+  font-weight: 800; letter-spacing: .08em; text-align: left;
+}
+:root[data-palette] .fan-btn.ghost {
+  background: none; border: 1px solid var(--l4); color: var(--ink);
+}
+:root[data-palette] .fan-btn:hover { background: var(--ac6); }
+:root[data-palette] .setup-card a.fan-btn { color: var(--gr); }
+:root[data-palette] .to-top {
+  background: var(--ink); color: var(--gr); border: none;
+  width: 40px; height: 40px; font-size: 15px; font-weight: 800;
+}
+:root[data-palette] .to-top:hover { background: var(--ac); }
+:root[data-palette] .chip {
+  background: none; border: 1px solid var(--l3); color: var(--gy);
+  font-weight: 700; font-size: 9.5px; letter-spacing: .07em; text-transform: uppercase;
+}
+:root[data-palette] .chip.active,
+:root[data-palette] .chip[aria-pressed="true"] {
+  background: var(--ink); color: var(--gr); border-color: var(--ink);
+}
+:root[data-palette] .pick-btns button.picked { background: var(--ac); color: var(--gr); }
+:root[data-palette] .trend .pill.w { background: var(--ink); color: var(--gr); }
+:root[data-palette] .trend .pill.l { background: var(--ac); color: var(--gr); }
+:root[data-palette] .stat-row .rank.top { background: var(--ink); color: var(--gr); }
+:root[data-palette] .stat-row .rank.bot { background: var(--tr); color: var(--ink); }
+:root[data-palette] .hl-num { background: var(--ac); color: var(--gr); border-radius: 0; }
+
+/* Hero: no emoji watermark, no gradient — a rule and a left edge instead. */
+:root[data-palette] .featured-card {
+  background: var(--gr); border: none; border-left: 3px solid var(--ac);
+  border-bottom: 2px solid var(--ink); padding: 14px 0 15px 11px;
+}
+:root[data-palette] .featured-card::after { display: none; }
+:root[data-palette] .featured-card::before { display: none; }
+:root[data-palette] .featured-game { background: var(--sf); border: 1px solid var(--l2); }
+:root[data-palette] .hero-chip { background: var(--sf); border: 1px solid var(--l2); }
+
+/* Tracks and bars: ink fill on a tinted track, accent for the marker. */
+:root[data-palette] .conf-bar { background: var(--tr); height: 7px; }
+:root[data-palette] .conf-bar span { background: var(--ink); }
+:root[data-palette] .gr-bar { background: var(--tr); }
+:root[data-palette] .gr-bar i { background: var(--ac); }
+
+/* The heat ramp, on the palette's own colours. Cold reads as a muted number
+   with no ring; only a genuine edge earns the box. (Same 5 steps as before.) */
+:root[data-palette] .ai-edge.h0, :root[data-palette] .gr-edge.h0 { color: var(--mu2); background: none; border: 1px solid transparent; }
+:root[data-palette] .ai-edge.h1, :root[data-palette] .gr-edge.h1 { color: var(--mu);  background: none; border: 1px solid transparent; }
+:root[data-palette] .ai-edge.h2, :root[data-palette] .gr-edge.h2 { color: var(--wm);  background: none; border: 1px solid var(--wm); }
+:root[data-palette] .ai-edge.h3, :root[data-palette] .gr-edge.h3 { color: var(--ac6); background: none; border: 1px solid var(--ac6); }
+:root[data-palette] .ai-edge.h4, :root[data-palette] .gr-edge.h4 { color: var(--ac);  background: none; border: 1px solid var(--ac); }
+:root[data-palette] .ai-edge, :root[data-palette] .gr-edge { font-weight: 800; font-variant-numeric: tabular-nums; }
+:root[data-palette] .ai-conf.heat.h0 { color: var(--mu2); }
+:root[data-palette] .ai-conf.heat.h1 { color: var(--mu); }
+:root[data-palette] .ai-conf.heat.h2 { color: var(--wm); }
+:root[data-palette] .ai-conf.heat.h3 { color: var(--ac6); }
+:root[data-palette] .ai-conf.heat.h4 { color: var(--ac); }
+
+/* Status pills → flat labels. Live is the one thing allowed to pulse. */
+:root[data-palette] .status {
+  background: none; color: var(--mu); font-weight: 800;
+  font-size: 9.5px; letter-spacing: .08em; padding: 2px 0;
+}
+:root[data-palette] .status.live { background: none; color: var(--ac); }
+:root[data-palette] .status.final { background: none; color: var(--mu2); }
+
+/* Game / board cards: a bottom rule, not a box. */
+:root[data-palette] .game-card, :root[data-palette] .brd-card {
+  background: none; border: none; border-bottom: 1px solid var(--l25);
+  padding: 12px 0;
+}
+:root[data-palette] .game-card.fav { border-left: 3px solid var(--ink); padding-left: 10px; }
+:root[data-palette] .brd-card.t1, :root[data-palette] .brd-card.alert {
+  border-left: 3px solid var(--ac); padding-left: 10px;
+}
+:root[data-palette] .brd-rib { display: none; }
+:root[data-palette] .brd-tier {
+  background: var(--ac); color: var(--gr); font-weight: 800;
+  font-size: 8.5px; letter-spacing: .12em; padding: 4px 5px;
+}
+:root[data-palette] .brd-tier.edge { background: var(--ink); color: var(--gr); }
+:root[data-palette] .brd-tier.lean { background: var(--tr); color: var(--ink); }
+:root[data-palette] .brd-tier.tot, :root[data-palette] .brd-tier.ats { background: var(--ink); color: var(--gr); }
+
+:root[data-palette] .footer { display: none; }
+:root[data-palette] ::selection { background: var(--tr); color: var(--ink); }
+:root[data-palette] :focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+
+/* ==========================================================================
+   CHROME — five stacked bars down to three (v187).
+   Was: rail / league bubbles / masthead / tabs / per-tab controls. Now the
+   league filter lives INSIDE the rail as a narrow column, and the per-tab
+   chips share one row with the jump rail and the collapse-all control.
+   ========================================================================== */
+
+/* --- tabs: all nine visible, 5 across, two rows --------------------------- */
+/* The one-line sideways scroller hid Fantasy, Labs and About past the right
+   edge with no visual hint that they were there — which is exactly how a tab
+   goes missing. A grid can't cut off. */
+:root[data-palette] .tabs {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 1px; padding: 0; overflow: visible;
+  background: var(--l2); border-bottom: 2px solid var(--ink);
+  backdrop-filter: none;
+}
+:root[data-palette] .tabs button {
+  display: block; min-width: 0; min-height: 0; width: 100%;
+  padding: 7px 6px 6px; border-radius: 0; text-align: left;
+  font-weight: 800; font-size: 9px; letter-spacing: .03em;
+  text-transform: uppercase; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  background: var(--gr); color: var(--mu2);
+  border-bottom: 3px solid transparent;
+}
+:root[data-palette] .tabs button .ic { display: none; }
+:root[data-palette] .tabs button .lb { font-size: inherit; font-weight: inherit; }
+:root[data-palette] .tabs button:hover { color: var(--ink); background: var(--l07); }
+:root[data-palette] .tabs button.active {
+  background: var(--sf2); color: var(--ink); border-bottom-color: var(--ac);
+}
+:root[data-palette] .tabs button.active::after { display: none; }
+/* Live pip: a 5px square on the label, since the icon it used to hang off is
+   gone. Square, not a dot — nothing is rounded here. */
+:root[data-palette] .tabs button[data-live="1"] .lb::after {
+  content: ""; display: inline-block; width: 5px; height: 5px;
+  background: var(--ac); margin-left: 4px; vertical-align: middle;
+}
+:root[data-palette] .tabs button[data-live="1"] .ic::after { display: none; }
+@media (min-width: 700px) {
+  :root[data-palette] .tabs { grid-template-columns: repeat(9, 1fr); }
+}
+
+/* --- rail: league filter as a column inside it ---------------------------- */
+:root[data-palette] .rail-wrap {
+  display: flex; align-items: stretch; gap: 1px;
+  background: var(--l25); border-bottom: 1px solid var(--l35);
+}
+:root[data-palette] .rail-wrap[hidden] { display: none; }
+:root[data-palette] .rail-leagues {
+  flex: none; display: flex; flex-direction: column; gap: 1px;
+  padding: 0; overflow: visible; background: var(--l25);
+}
+:root[data-palette] .rail-leagues[hidden] { display: none; }
+:root[data-palette] .rl-pill {
+  flex: 1; border-radius: 0; border: none; text-align: left;
+  display: flex; align-items: center; padding: 0 8px;
+  font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  background: var(--gr); color: var(--gy);
+}
+:root[data-palette] .rl-pill.on { background: var(--ink); color: var(--gr); }
+:root[data-palette] .rl-pill .rl-n { opacity: .6; margin-left: 4px; font-weight: 800; }
+:root[data-palette] .live-rail {
+  flex: 1; min-width: 0; gap: 1px; padding: 0; background: var(--l25);
+}
+:root[data-palette] .lrc {
+  flex: 0 0 146px; border: none; border-radius: 0;
+  background: var(--gr); padding: 7px 10px 8px;
+}
+:root[data-palette] .lrc.fav { background: var(--sf); box-shadow: none; }
+:root[data-palette] .lrc-stripe { display: none; }
+:root[data-palette] .lrc-final { opacity: 1; }
+:root[data-palette] .lrc-final .lrc-nm, :root[data-palette] .lrc-final .lrc-sc { color: var(--mu2); }
+:root[data-palette] .lrc-row.lead .lrc-nm, :root[data-palette] .lrc-row.lead .lrc-sc { color: var(--ink); }
+:root[data-palette] .lrc-tag { color: var(--mu); font-weight: 500; letter-spacing: .14em; font-size: 8px; }
+:root[data-palette] .lrc-dot { background: var(--ac); border-radius: 0; }
+/* The model's read on the rail card, so the tier is visible without opening
+   anything — the same badge the board and the ladder use. */
+:root[data-palette] .lrc-mdl {
+  display: flex; align-items: center; gap: 4px; margin-top: 7px;
+}
+:root[data-palette] .lrc-tier {
+  flex: none; font-size: 8px; font-weight: 800; letter-spacing: .08em;
+  padding: 3px 4px; background: var(--ink); color: var(--gr);
+}
+:root[data-palette] .lrc-tier.alert, :root[data-palette] .lrc-tier.best { background: var(--ac); color: var(--gr); }
+:root[data-palette] .lrc-tier.lean { background: var(--tr); color: var(--ink); }
+:root[data-palette] .lrc-tier.pass { background: var(--sf2); color: var(--gy); }
+:root[data-palette] .lrc-pick {
+  font-size: 9px; font-weight: 600; color: var(--ink2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* --- one control row: chips + jump rail + collapse-all -------------------- */
+:root[data-palette] .ctl-row {
+  display: flex; align-items: stretch;
+  background: var(--sf); border-bottom: 1px solid var(--l35);
+  margin: 0 0 4px;
+}
+:root[data-palette] .ctl-row .ctl-chips {
+  flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 5px;
+  align-items: center; padding: 7px 0 7px 14px;
+}
+/* Wraps rather than scrolls: a chip past the right edge is a chip that isn't
+   there, which is the bug that hid three tabs for a version. */
+:root[data-palette] .ctl-row .jump-nav,
+:root[data-palette] .ctl-row .chips,
+:root[data-palette] .ctl-row .eagles-nav {
+  display: contents; margin: 0; padding: 0;
+}
+:root[data-palette] .ctl-row .chip {
+  flex: 0 0 auto; padding: 7px 9px; min-height: 0;
+  border-color: var(--l3); background: none;
+}
+:root[data-palette] .ctl-row .chip.here,
+:root[data-palette] .ctl-row .chip.active {
+  background: var(--ink); color: var(--gr); border-color: var(--ink);
+}
+:root[data-palette] .sec-all {
+  flex: none; display: flex; align-items: center; padding: 0 12px;
+  background: none; border: none; border-left: 1px solid var(--l3);
+  font-family: inherit; font-size: 9px; font-weight: 800; letter-spacing: .08em;
+  color: var(--ac); cursor: pointer; white-space: nowrap;
+}
+:root[data-palette] .sec-all:hover { background: var(--l07); }
+:root[data-palette] .sec-all[hidden] { display: none; }
+/* The bare rows are absorbed by .ctl-row; anything left loose still reads. */
+:root[data-palette] .jump-nav, :root[data-palette] .eagles-nav { gap: 5px; padding: 9px 0 5px; }
+
+/* --- the persistent bottom bar ------------------------------------------- */
+/* One line stating the model's read for the day, and the one tap to the tab
+   that explains it. Replaces the "Go Birds" footer, which said nothing. */
+:root[data-palette] .botbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 46;
+  display: flex; align-items: stretch; justify-content: space-between; gap: 8px;
+  height: 52px; background: var(--gr); border-top: 2px solid var(--ink);
+}
+:root[data-palette] .botbar .bb-read {
+  min-width: 0; display: flex; align-items: center; padding-left: 14px;
+  font-size: 10.5px; font-weight: 700; line-height: 1.3; color: var(--ink);
+  overflow: hidden;
+}
+:root[data-palette] .botbar .bb-go {
+  flex: none; display: flex; align-items: center; padding: 0 14px;
+  background: var(--ac); color: var(--gr); border: none;
+  font-family: inherit; font-size: 10px; font-weight: 800; letter-spacing: .1em;
+  cursor: pointer;
+}
+:root[data-palette] .botbar .bb-go:hover { background: var(--ac6); }
+:root[data-palette] main { padding-bottom: 78px; }
+:root[data-palette] .to-top { bottom: 66px; }
+
+/* --- masthead controls ---------------------------------------------------- */
+:root[data-palette] .hd-btn {
+  font-family: inherit; font-size: 9px; font-weight: 800; letter-spacing: .08em;
+  padding: 5px 6px; cursor: pointer; white-space: nowrap;
+  background: none; border: 1px solid var(--l35); color: var(--gy); border-radius: 0;
+}
+:root[data-palette] .hd-btn:hover { background: var(--l07); }
+:root[data-palette] .hd-btn.sharp { font-size: 10px; }
+:root[data-palette] .hd-btn.sharp.on { background: var(--ac); border-color: var(--ac); }
+:root[data-palette] .head-right { gap: 5px; }
+:root[data-palette] .brand { gap: 6px; align-items: baseline; }
+:root[data-palette] .brand-mark { font-size: 13px; }
+
+/* The 💰 toggle: one switch that takes the sharp-money read off every surface
+   at once, for when you want the model's own number and nothing else. */
+:root[data-sharp="off"] .gr-sharp,
+:root[data-sharp="off"] .brd-row.sharp,
+:root[data-sharp="off"] .mkt-sharp,
+:root[data-sharp="off"] .gr-sub.sharp-sub,
+:root[data-sharp="off"] .gr-money-row { display: none; }
+
+/* --- three markets on every card ------------------------------------------ */
+/* Named every time, in a fixed order, so a market with no play reads as "no
+   play" rather than as a row that quietly wasn't rendered. */
+:root[data-palette] .mkt-box { border: 1px solid var(--l2); margin-top: 10px; }
+:root[data-palette] .mkt-row {
+  display: grid; grid-template-columns: 62px 1fr auto; gap: 8px;
+  align-items: center; padding: 7px 8px; border-bottom: 1px solid var(--l12);
+}
+:root[data-palette] .mkt-row:last-child { border-bottom: none; }
+:root[data-palette] .mkt-k {
+  font-size: 8px; font-weight: 600; letter-spacing: .1em; color: var(--mu);
+}
+:root[data-palette] .mkt-p {
+  font-size: 12px; font-weight: 700; line-height: 1.2; min-width: 0;
+}
+:root[data-palette] .mkt-row .ai-edge {
+  padding: 4px 6px; font-size: 11px; white-space: nowrap;
+}
+:root[data-palette] .mkt-note {
+  font-size: 10.5px; line-height: 1.4; color: var(--gy); margin-top: 8px;
+}
+
+/* Model confidence against the market's own implied number for the same side.
+   The tick is where the book is; the gap between them is the play. */
+:root[data-palette] .cvm {
+  display: flex; align-items: center; gap: 8px; margin: 9px 0 2px;
+}
+:root[data-palette] .cvm-bar {
+  flex: 1; height: 7px; background: var(--tr); position: relative;
+}
+:root[data-palette] .cvm-bar i { position: absolute; inset: 0 auto 0 0; background: var(--ink); }
+:root[data-palette] .cvm-bar u {
+  position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ac);
+}
+:root[data-palette] .cvm-l {
+  font-size: 9px; font-weight: 700; letter-spacing: .05em;
+  color: var(--gy); white-space: nowrap;
+}
+:root[data-palette] .brd-bar { display: none; }
+
+/* --- chrome fixes --------------------------------------------------------- */
+/* Nine tabs in a 5-wide grid leave one empty cell on the second row. Left
+   alone it shows the grid's own line colour, which reads as a tenth, broken
+   tab; this fills it with the ground. */
+:root[data-palette] .tabs::after { content: ""; background: var(--gr); }
+@media (min-width: 700px) { :root[data-palette] .tabs::after { display: none; } }
+
+/* The control row is one bar: chips left, collapse-all pinned right, both
+   aligned to the top so a wrapped chip row doesn't float the button. */
+:root[data-palette] .ctl-row { align-items: flex-start; }
+:root[data-palette] .sec-all { align-self: stretch; min-height: 34px; }
+
+/* Radius that the first pass missed, on surfaces nested inside cards. */
+:root[data-palette] .featured-game, :root[data-palette] .brd-more,
+:root[data-palette] .ai-statbar > *, :root[data-palette] .lad-fold,
+:root[data-palette] .lad-row, :root[data-palette] .bb-strip,
+:root[data-palette] .bb-gap, :root[data-palette] .bb-sharp,
+:root[data-palette] .brd-note, :root[data-palette] .season-tag,
+:root[data-palette] .rank-badge, :root[data-palette] .live-dot,
+:root[data-palette] .lrc-dia i, :root[data-palette] .lrc-outs u,
+:root[data-palette] .depth-player, :root[data-palette] .news-item,
+:root[data-palette] .wv-item, :root[data-palette] .ad-row,
+:root[data-palette] .cs-row, :root[data-palette] .pj-card { border-radius: 0; }
+
+/* The model strip on a slate card carries the market block now, so it needs
+   the room the board cards already had. */
+:root[data-palette] .bb-strip { background: none; border-top: 1px solid var(--l2); padding-top: 8px; }
+:root[data-palette] .bb-strip .mkt-box { margin-top: 8px; }
+
+/* The rail's own ground, with the 1px separators drawn on the cards. Painting
+   them with the wrapper's background meant any space the cards didn't fill —
+   a short slate on a wide screen — showed up as a grey slab. */
+:root[data-palette] .rail-wrap { background: var(--gr); }
+:root[data-palette] .live-rail { background: var(--gr); }
+:root[data-palette] .rail-leagues { background: var(--gr); border-right: 1px solid var(--l25); }
+:root[data-palette] .rl-pill { border-bottom: 1px solid var(--l25); }
+:root[data-palette] .rl-pill:last-child { border-bottom: none; }
+:root[data-palette] .lrc { border-right: 1px solid var(--l25); }
+
+/* The collapse-all control is a label, not a column: it takes the width of its
+   own text and leaves the rest of the row to the chips. */
+:root[data-palette] .sec-all { flex: 0 0 auto; max-width: 170px; justify-content: flex-start; }

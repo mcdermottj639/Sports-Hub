@@ -11,17 +11,24 @@
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css?v=186" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=187" />
   <script>
-    /* Set the theme before first paint to avoid a flash. Uses the saved
-       preference if present, else follows the OS light/dark setting. */
+    /* Set the palette before first paint to avoid a flash. Saved preference if
+       present, else Sand — the warm default. `data-theme` rides alongside so
+       the light/dark rules underneath the palette layer still resolve: three
+       of the four grounds are paper, Dusk is the dark one. */
     (function () {
+      var LIGHT = { paper: 1, sand: 1, terracotta: 1 };
       try {
-        var t = localStorage.getItem('sportshub:theme');
-        if (t !== 'light' && t !== 'dark') {
-          t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        var p = localStorage.getItem('sportshub:palette');
+        if (p !== 'paper' && p !== 'sand' && p !== 'terracotta' && p !== 'dusk') {
+          /* No explicit choice yet: follow the OS, warm either way. */
+          p = window.matchMedia('(prefers-color-scheme: light)').matches ? 'sand' : 'dusk';
         }
-        document.documentElement.setAttribute('data-theme', t);
+        document.documentElement.setAttribute('data-palette', p);
+        document.documentElement.setAttribute('data-theme', LIGHT[p] ? 'light' : 'dark');
       } catch (e) {}
     })();
   </script>
@@ -31,19 +38,26 @@
        sport's own gamecast (bases/count/outs, field position + down, clock).
        Rendered by renderLiveRail(); stays hidden entirely when nothing is
        live, so it never costs a dead strip of chrome. -->
-  <div id="live-rail" class="live-rail" hidden aria-label="Today's games"></div>
-  <!-- League filter (v166): one bubble per league with games today. Filled =
-       showing, hollow = hidden. Only appears when 2+ leagues are playing. -->
-  <div id="rail-leagues" class="rail-leagues" hidden aria-label="Filter leagues"></div>
+  <!-- v187: the league filter moved INSIDE the rail as a narrow column, so the
+       two bars became one. Nothing was dropped — the bubbles do the same job in
+       the same place, they just no longer cost a strip of their own. -->
+  <div id="rail-wrap" class="rail-wrap" hidden>
+    <!-- League filter (v166): one bubble per league with games today. Filled =
+         showing, hollow = hidden. Only appears when 2+ leagues are playing. -->
+    <div id="rail-leagues" class="rail-leagues" hidden aria-label="Filter leagues"></div>
+    <div id="live-rail" class="live-rail" hidden aria-label="Today's games"></div>
+  </div>
 
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">🦅</span>
       <h1>Sports-Hub</h1>
+      <span id="app-version" class="version"></span>
     </div>
     <div class="head-right">
-      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle light or dark mode">🌙</button>
-      <span id="app-version" class="version"></span>
+      <button id="palette-toggle" class="hd-btn" type="button" title="Change palette">SAND</button>
+      <button id="rail-toggle" class="hd-btn" type="button" title="Show or hide the rail">⌃ RAIL</button>
+      <button id="sharp-toggle" class="hd-btn sharp on" type="button" title="Show or hide the sharp-money read">💰</button>
       <div id="mode-badge" class="badge">…</div>
     </div>
   </header>
@@ -224,6 +238,13 @@
 
   <footer class="footer"><span>Go Birds 🦅 — live data via ESPN</span></footer>
 
+  <!-- v187: a persistent one-line read of where the model stands today, and the
+       one tap to the tab that shows its work. Filled by paintBotBar(). -->
+  <div id="botbar" class="botbar">
+    <span id="bb-read" class="bb-read">Reading today’s board…</span>
+    <button id="bb-go" class="bb-go" type="button">AI PICKS →</button>
+  </div>
+
   <div id="game-modal" class="modal hidden">
     <div class="modal-backdrop" id="modal-close"></div>
     <div class="modal-card">
@@ -234,6 +255,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=186" defer></script>
+  <script src="app.js?v=187" defer></script>
 </body>
 </html>

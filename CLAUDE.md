@@ -368,7 +368,73 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v186** (backend **b13-pregame-lines**).
+Current version as of this writing: **v187** (backend **b13-pregame-lines**).
+
+- **🎨 Four palettes, three bars of chrome, and all three markets on every card
+  (v187)** — the feel-and-function pass from the Claude Design handoff. The
+  owner's brief was explicit: *"i dont want u changing the content, i want u
+  improving the feel and functionality."* So every tab, section, heading and
+  string is where it was; what changed is the form and the mechanics.
+  - **Palettes replace light/dark.** `data-palette` = `sand` (default, warm
+    paper) · `terracotta` · `paper` · `dusk`. Each is nine hexes plus one
+    `--base` ink triple that generates the whole alpha ramp (`--l07` … `--l4`),
+    and the block re-points the app's OWN variables (`--bg`, `--card`,
+    `--text`, `--muted`, `--accent`, `--line`, `--radius`) at them — so every
+    component written against the vars, per the rule above, recolours for free.
+    `data-theme` still rides alongside (light for the three papers, dark for
+    Dusk) so the Editorial light block keeps un-hardcoding the dark-only
+    values underneath. **Dusk IS dark mode** — the 🌙/☀️ toggle wasn't dropped,
+    it was absorbed into the palette cycler, and `applyTheme('light'|'dark')`
+    survives as an alias so a pre-v187 saved preference still resolves.
+  - **The system is Modernist**: Archivo, zero radius, 2px section rules, flat
+    grounds, no gradients or drop shadows, labels flush left. Structure is
+    drawn rather than floated.
+  - **Five stacked bars → three.** The league filter moved INSIDE the rail as a
+    narrow column (`#rail-wrap`); the per-tab sport chips, the section jump
+    rail and collapse-all merged into one `.ctl-row` per tab. Nothing was
+    dropped — the same controls do the same jobs without a strip each.
+  - **Nine tabs, all visible.** The one-line sideways scroller was hiding
+    Fantasy, Labs and About past the right edge with no visual hint — which is
+    exactly how a tab goes missing. It's a 5×2 grid on a phone and 9-across on
+    a desktop, and a grid can't cut off. The live pip moved to the label since
+    the icon it hung off is gone.
+  - **Every card names all three markets, every time.** `marketRowsHTML()`
+    prints MONEYLINE / SPREAD / TOTAL on board cards, ladder cards and the
+    NFL/CFB slate strips, with the heat ramp on each edge and an explicit
+    reason where there's no play ("no line posted", "model tops out near 33.9",
+    "under the 2-pt bar — shown, not recorded"). `buildBoard` now carries the
+    RAW reads (`atsR`/`totR`) beside the qualifying ones — **what records is
+    unchanged**, `ats`/`tot` still gate on the bar.
+  - **Home's Board is one card per game.** With all three markets on the card,
+    the separate ATS and totals cards listed the same games a second time —
+    the two-near-identical-lists problem v176 took off the NFL/CFB slates.
+  - **Model vs market on the bar.** A confidence bar alone says "68% — of
+    what?"; a tick now marks the book's own implied number for the same side.
+  - **New controls**: 💰 takes the sharp-money read off every surface at once
+    (display only — splits are still fetched and still recorded, so the record
+    can't drift with the switch); ⌃ RAIL folds the rail and says how many games
+    it's holding; the palette name cycles; a persistent bottom bar states the
+    day's read ("1 red alert · 2 edges · sharp agrees on 3") with one tap to
+    AI Picks. The rail cards carry the model's tier badge and pick, read from
+    what The Board already priced — no second model run, no extra ESPN calls.
+  - **Scroll-spy** on the jump rail: it flags the section you're in, not just
+    the ones you can jump to. AI Picks got a rail at all for the first time —
+    it builds from `.lad-sec`, which `injectJumpNav` didn't look at.
+  - **Three bugs found while verifying, worth remembering:** `buildControlRow`
+    made a second collapse-all button on every rebuild (it looked for one as a
+    direct child of the panel, after the first call had already moved it into
+    the row) — Home, which rebuilds when the async board lands, always had two.
+    A **negative** moneyline gap was heat-scaled off its magnitude, so "the
+    book likes this 40 points more than the model does" came out blazing red;
+    heat is how far past the bar an EDGE is, and there is no edge on the wrong
+    side of zero. And the sport chips re-render AI Picks without going through
+    `showTab`, so the jump rail kept listing the previous sport's ladder.
+  - Verified in Chromium at 390 / 768 / 1280 against ESPN-shaped fixtures (the
+    session's network policy blocks ESPN): all four palettes swap cleanly, no
+    horizontal overflow at any width, nine tabs reachable everywhere, all nine
+    tabs render with a control row, the 💰 and rail toggles bite, the league
+    column filters, and the ladder's rail tracks the selected sport. `node
+    --check` clean.
 
 - **🎓 CFB has a ROW in By sport now, whether or not it has graded games
   (v186)** — the owner, on the third ask: *"What did u do. I just wanted cfb to
