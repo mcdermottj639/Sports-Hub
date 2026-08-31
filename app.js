@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v192';
+const APP_VERSION = 'v193';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -32,7 +32,15 @@ const FEATURED = { sport: 'nfl', name: 'Philadelphia Eagles' };
 // Roughly which months each sport is active, used to sort in-season first.
 const SEASON_MONTHS = {
   nfl: [8, 9, 10, 11, 0, 1], cfb: [7, 8, 9, 10, 11, 0], mlb: [2, 3, 4, 5, 6, 7, 8, 9],
-  nba: [9, 10, 11, 0, 1, 2, 3, 4, 5], golf: [0, 1, 2, 3, 4, 5, 6, 7],
+  nba: [9, 10, 11, 0, 1, 2, 3, 4, 5],
+  // ⛳ SHELVED (v193) — the PGA season ends with the Tour Championship in late
+  // August, so golf is off. This is a SHELF, not a removal, and it is the ONLY
+  // edit: `LEAGUES.golf`, `renderGolfHome`, `getGolfEvent` and the `.golf-*`
+  // CSS are all intact and dormant. renderGolfHome checks this list first, so
+  // an empty one means it paints nothing, the Home section stays empty and no
+  // jump-nav chip is generated for it.
+  // TO REVIVE next January: put the months back — [0, 1, 2, 3, 4, 5, 6, 7].
+  golf: [],
 };
 const BASE_ORDER = ['nfl', 'cfb', 'mlb', 'nba', 'golf'];
 function sortedSports(opts = {}) {

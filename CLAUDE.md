@@ -419,7 +419,36 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v192** (backend **b13-pregame-lines**).
+Current version as of this writing: **v193** (backend **b13-pregame-lines**).
+
+- **⛳ Golf SHELVED for the off-season (v193)** — owner: *"Remove golf for now
+  the season is over."* The PGA season ends with the Tour Championship in late
+  August, and `SEASON_MONTHS.golf` ran through August (month index 7), so on
+  31 Aug the card was still trying to render a finished season.
+  - **This is a SHELF, not a removal** — the v147 fantasy-baseball pattern, not
+    the v125 soccer one. Soccer was deleted because the World Cup was over for
+    good; golf comes back every January, so `LEAGUES.golf`, `renderGolfHome`,
+    `getGolfEvent` and the `.golf-*` CSS are all intact and dormant.
+  - **One edit, and it is the only one: `SEASON_MONTHS.golf` is now `[]`.**
+    `renderGolfHome` checks that list before it does anything else, so an empty
+    one means it paints nothing, `#home-golf` stays empty, no `.section-title`
+    is emitted and therefore no jump-nav chip is generated either.
+    **TO REVIVE in January: put the months back — `[0,1,2,3,4,5,6,7]`.**
+  - **Why nothing else needed touching**, checked rather than assumed: every
+    `sortedSports()` caller passes `{teamOnly:true}`, which filters on
+    `type === 'team'` and has always excluded golf; the one caller that could
+    have used the unfiltered default (`buildChips`) is passed an explicit
+    team-only list by its single call site; and `recordSlate`/`commitRow`
+    already guard on `type === 'golf'`.
+  - **It also stops a network call** — the season gate short-circuits before
+    `getGolfEvent()`, so the PGA scoreboard is no longer fetched at all.
+  - Fixed in passing: `README.md` claimed golf *"isn't included yet"*, which has
+    been wrong since the feature shipped. It now says built-but-shelved and
+    names the constant to flip.
+  - Verified: zero golf network calls, `#home-golf` empty, no "golf"/⛳ anywhere
+    in the rendered app, no golf chip on Home or in the AI Picks sport chips, no
+    console errors, and both sweeps still clean — collisions on nine tabs at
+    320/360/390/430/768/1280 and the clip-and-gutter audit at four widths.
 
 - **🔍 A collision detector, and the three things it found (v192)** — the owner,
   on a screenshot of the masthead with `v191` rendering underneath the palette
@@ -3167,8 +3196,8 @@ index, not the argument.
   league filter bubbles as a column INSIDE it since v187, not a bar under it.
   Order: My Teams → **🎲 The Board** (v164: the
   model's best plays against the book across every in-season sport — moneyline,
-  spread and totals — with its own record stated in the header) → ⛳ Golf →
-  Top Headlines. Top Headlines
+  spread and totals — with its own record stated in the header) → ⛳ Golf
+  (**SHELVED v193, season over** — see below) → Top Headlines. Top Headlines
   (numbered story strip, **up to 10** as of v111, from in-season leagues' lead
   stories — leads first, then up to 5 more per league, deduped; tap → in-app
   summary popup — headlines stay tappable; the strip stays a horizontal scroll on

@@ -36,4 +36,4 @@ In the repo: **Settings → Pages → Build and deployment → Source: "Deploy f
 
 ## Notes
 
-- **Golf** isn't included yet (ESPN has golf, but leaderboard data is shaped differently) — easy to add later.
+- **Golf** (PGA leaderboard on Home) is built but **shelved out of season** — flip `SEASON_MONTHS.golf` in `app.js` back on in January.
