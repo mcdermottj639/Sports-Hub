@@ -1443,6 +1443,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   --ink: #201e1d; --ink2: #444141; --gy: #605d5d;
   --mu: #7d7979; --mu2: #9b9797; --tr: #d7d3d3; --tr2: #bab6b6;
   --ac: #ec3013; --ac6: #dd2b0f; --ac7: #ae1800; --wm: #c26a00;
+  --pos: #2c6a48; --pos2: #67903c; --neg2: #c2531c; --neg: #a52218;
   --base: 32, 30, 29;
 }
 :root[data-palette="sand"] {
@@ -1450,6 +1451,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   --ink: #241f19; --ink2: #4a4137; --gy: #6b6154;
   --mu: #8a8073; --mu2: #a89e90; --tr: #ddd3c4; --tr2: #c6bcab;
   --ac: #ec3013; --ac6: #dd2b0f; --ac7: #ae1800; --wm: #c26a00;
+  --pos: #2e6b45; --pos2: #6a8f3c; --neg2: #c4521a; --neg: #a3231a;
   --base: 36, 31, 25;
 }
 :root[data-palette="terracotta"] {
@@ -1457,6 +1459,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   --ink: #4d170e; --ink2: #7c1405; --gy: #9e3526;
   --mu: #b06a5c; --mu2: #c99184; --tr: #ffc4b8; --tr2: #ff9783;
   --ac: #dd2b0f; --ac6: #ae1800; --ac7: #7c1405; --wm: #c26a00;
+  --pos: #35664a; --pos2: #6d8b3f; --neg2: #b8501c; --neg: #8c1f10;
   --base: 77, 23, 14;
 }
 :root[data-palette="dusk"] {
@@ -1464,6 +1467,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   --ink: #f8f4f4; --ink2: #ddd6d2; --gy: #b6aca6;
   --mu: #9b8f88; --mu2: #7d726c; --tr: #453c37; --tr2: #5c524c;
   --ac: #ff563c; --ac6: #ff9783; --ac7: #ffc4b8; --wm: #ffb066;
+  --pos: #6fbf8a; --pos2: #a9c96a; --neg2: #ff9057; --neg: #ff6b5a;
   --base: 248, 244, 244;
 }
 
@@ -1628,10 +1632,6 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   background: var(--ink); color: var(--gr); border-color: var(--ink);
 }
 :root[data-palette] .pick-btns button.picked { background: var(--ac); color: var(--gr); }
-:root[data-palette] .trend .pill.w { background: var(--ink); color: var(--gr); }
-:root[data-palette] .trend .pill.l { background: var(--ac); color: var(--gr); }
-:root[data-palette] .stat-row .rank.top { background: var(--ink); color: var(--gr); }
-:root[data-palette] .stat-row .rank.bot { background: var(--tr); color: var(--ink); }
 :root[data-palette] .hl-num { background: var(--ac); color: var(--gr); border-radius: 0; }
 
 /* Hero: no emoji watermark, no gradient — a rule and a left edge instead. */
@@ -2089,3 +2089,80 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-palette] .botbar { height: 56px; }
 :root[data-palette] .botbar .bb-read { padding: 0 12px 0 16px; }
 :root[data-palette] .to-top { bottom: 70px; }
+
+/* ==========================================================================
+   SEMANTIC COLOUR (v189) — win/loss coding, restored.
+   The original dark theme's `--accent` was GREEN (#3ad29f) and `--live` was
+   RED, so the app quite reasonably used `var(--accent)` for every good state
+   and `var(--live)` for every bad one. v187 pointed BOTH at the Modernist red,
+   which silently collapsed the pair: a win and a loss, an A and an F, a top
+   rank and a bottom one all came out the same colour.
+
+   The accent goes back to meaning brand and heat only. Good/bad is its own
+   ramp — `--pos --pos2 --wm --neg2 --neg` — tuned per palette so a green on
+   warm paper stays warm rather than arriving from a different design system.
+   ========================================================================== */
+
+/* Good */
+:root[data-palette] .ai-result.win,
+:root[data-palette] .pred-outcome.win,
+:root[data-palette] .sched-row .res.w,
+:root[data-palette] .hero-chip .hc-v.w,
+:root[data-palette] .mu-score b.lead,
+:root[data-palette] .cat.win .cat-vals b,
+:root[data-palette] .mu-legend .win,
+:root[data-palette] .pj-verdict.win,
+:root[data-palette] .pj-prob-val.win,
+:root[data-palette] .gr-diff.up { color: var(--pos); }
+
+/* Bad */
+:root[data-palette] .ai-result.loss,
+:root[data-palette] .pred-outcome.loss,
+:root[data-palette] .sched-row .res.l,
+:root[data-palette] .hero-chip .hc-v.l,
+:root[data-palette] .pj-verdict.loss { color: var(--neg); }
+
+/* Filled states: the label has to stay readable on the fill, and `#fff` /
+   `#06241b` were only ever safe on the dark theme's green. */
+:root[data-palette] .trend .pill.w,
+:root[data-palette] .stat-row .rank.top { background: var(--pos); color: var(--gr); }
+:root[data-palette] .trend .pill.l,
+:root[data-palette] .stat-row .rank.bot { background: var(--neg); color: var(--gr); }
+
+/* Fantasy category cards — won/lost/tied at a glance. */
+:root[data-palette] .cat.win {
+  border-color: var(--pos);
+  background: color-mix(in srgb, var(--pos) 10%, transparent);
+}
+:root[data-palette] .cat.loss {
+  border-color: var(--neg);
+  background: color-mix(in srgb, var(--neg) 9%, transparent);
+}
+
+/* Playoff outlook: in the field vs on the bubble. */
+:root[data-palette] .po-card.in { border-left-color: var(--pos); }
+:root[data-palette] .po-card.in .po-status { color: var(--pos); }
+:root[data-palette] .po-card.out { border-left-color: var(--wm); }
+:root[data-palette] .po-card.out .po-status { color: var(--wm); }
+
+/* Hot / cold is a TEMPERATURE, not a verdict, so it rides the same ramp the
+   edge heat uses — accent for hot, cool grey for cold. The old #5fb0ff arrived
+   from the dark theme and is the one genuinely cold-blue thing on warm paper. */
+:root[data-palette] .fan-head .arrow.hot,
+:root[data-palette] .fan-body .hc.hot .hc-tag,
+:root[data-palette] .hc-h.hot { color: var(--ac); }
+:root[data-palette] .fan-head .arrow.cold,
+:root[data-palette] .fan-body .hc.cold .hc-tag,
+:root[data-palette] .hc-h.cold { color: var(--mu2); }
+:root[data-palette] .fan-body .hc.hot { border-left-color: var(--ac); }
+:root[data-palette] .fan-body .hc.cold { border-left-color: var(--mu2); }
+:root[data-palette] .wv-item.hot { border-color: var(--pos); }
+:root[data-palette] .wv-item.cold { border-color: var(--wm); }
+:root[data-palette] .wv-hot .hc-tag.cold { color: var(--wm); }
+
+/* The grade badge is drawn with an inline colour from gradeHue(); this only
+   has to square the corner and give the letter room. */
+:root[data-palette] .gr-grade {
+  border-width: 1.5px; border-radius: 0; width: 34px; height: 30px; font-weight: 900;
+}
+:root[data-palette] .gr-grade.none { border-color: transparent; color: var(--mu); }

@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v188';
+const APP_VERSION = 'v189';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -793,9 +793,14 @@ function priceGrade(gapPts) {
   for (const [min, l] of T) if (gapPts >= min) return l;
   return 'F';
 }
+// Price grades are a five-step ramp, green → amber → red, and they are written
+// INLINE (see the .gr-grade span), so no stylesheet can correct them — they
+// have to be tokens or they are wrong in every palette but the one they were
+// picked for. v189: `var(--accent)` used to be the dark theme's GREEN, which is
+// how an A and an F both came out red once the accent became the Modernist red.
 const gradeHue = (letter) =>
-  letter[0] === 'A' ? 'var(--accent)' : letter[0] === 'B' ? '#8fd14f'
-  : letter[0] === 'C' ? 'var(--gold)' : letter[0] === 'D' ? '#ff9f43' : '#ff5a5a';
+  letter[0] === 'A' ? 'var(--pos)' : letter[0] === 'B' ? 'var(--pos2)'
+  : letter[0] === 'C' ? 'var(--wm)' : letter[0] === 'D' ? 'var(--neg2)' : 'var(--neg)';
 
 function oddsSectionHTML(info, awayAbbr, homeAbbr, pred, sport, g) {
   if (!info) return '';

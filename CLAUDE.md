@@ -384,7 +384,43 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v188** (backend **b13-pregame-lines**).
+Current version as of this writing: **v189** (backend **b13-pregame-lines**).
+
+- **🟢 Semantic colour restored — a win and a loss are different colours again
+  (v189)** — the owner, with a photo of the Game Report: *"This used to be
+  color coordinated. Bring that back."* An **A** grade and an **F** grade were
+  both rendering red.
+  - **Root cause, and it is worth understanding because it is a whole class of
+    bug:** the original dark theme's `--accent` was **GREEN** (#3ad29f) and
+    `--live` was **RED**. So the app, entirely reasonably, spent 180 versions
+    writing `var(--accent)` for every good state and `var(--live)` for every bad
+    one — wins, covers, top ranks, category wins, "in the field", A grades.
+    v187's palette layer pointed **both of them at the Modernist red**. Nothing
+    errored and nothing looked obviously broken; the semantics just silently
+    collapsed. Every win/loss pair in the app became one colour.
+  - **`--accent` now means brand and heat only.** Good/bad is its own five-step
+    ramp — `--pos --pos2 --wm --neg2 --neg` — defined per palette so the green
+    on a warm paper ground is a warm green and not something that arrived from
+    another design system. Dusk gets lighter steps so they read on the dark.
+  - **`gradeHue()` had to change in JS, not CSS.** The grade badge is written
+    with an INLINE `style="color:…;border-color:…"`, so no stylesheet can
+    correct it. It returned `var(--accent)` for an A (green when it was
+    written), a hardcoded `#8fd14f` lime for a B and `#ff5a5a` for an F. It
+    returns palette tokens now: A `--pos` → B `--pos2` → C `--wm` → D `--neg2`
+    → F `--neg`. **Anything drawn with an inline colour is invisible to the
+    palette layer — put a token in it or it will be wrong in three palettes.**
+  - Retargeted with it: `.ai-result`, `.pred-outcome`, `.sched-row .res`,
+    `.hero-chip .hc-v`, `.trend .pill`, `.stat-row .rank`, `.cat.win/.loss`,
+    `.pj-verdict`, `.mu-legend`, `.gr-diff.up`, `.po-card.in/.out`. The filled
+    states also needed their label colour fixed — `#fff` and `#06241b` were only
+    ever safe on the dark theme's green.
+  - **Hot/cold is a temperature, not a verdict**, so it rides the same ramp the
+    edge heat uses (accent for hot, `--mu2` for cold). The old `#5fb0ff` was the
+    one genuinely cold-blue thing on a warm paper ground.
+  - Verified by measuring computed colour in all four palettes: every grade
+    A–F distinct from its neighbours and from the ground, and `win !== loss`
+    across all five pair types. The v188 layout audit re-run clean at
+    390/430/768/1280 on all nine tabs. `node --check` clean.
 
 - **📐 Spacing and alignment — one gutter, one vertical scale, and a rail that
   fits its own text (v188)** — the owner, with a photo of the live app: *"Look
