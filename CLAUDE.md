@@ -368,7 +368,52 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v184** (backend **b13-pregame-lines**).
+Current version as of this writing: **v185** (backend **b13-pregame-lines**).
+
+- **📥 "Logged, awaiting results" — the card can finally answer "did you store
+  my game?" (v185)** — the owner, on the Report Card after v183/v184 shipped:
+  *"And I still see no cfb games in v183 just mlb and soccer."* Correct, and the
+  app had no way to tell them why.
+  - **Every section of the Report Card reads the TALLY, i.e. GRADED results
+    only** (`tallyDetails` → `getTally()`). A pick logged an hour ago lives in
+    `sportshub:pending` and appears **nowhere** until its game finishes and
+    `gradePending` folds it in. So a slate that had just been logged looked
+    byte-for-byte identical to one that was never logged at all — which is why
+    the question got asked twice. That is the app failing to report its own
+    state, not a bug in the logging.
+  - **`pendingSummary()`** + a **📥 Logged, awaiting results** section at the TOP
+    of the card: per-sport counts broken out by market ("🎓 CFB — 4 · 2 moneyline
+    · 1 spread · 1 total"), the 8 most recent picks **named** (⏳ SJSU @ USC ·
+    USC Trojans 90%), and a sentence saying they join the record automatically
+    once the games finish. The count also rides the collapsed header
+    (`· 5 awaiting`) so it's visible without expanding anything.
+  - **Naming the games needed a schema addition:** pending entries stored no
+    matchup (grading re-derives it from the game), so the queue could only ever
+    have said "22 picks". `m` is now written by all three recorders via
+    `commitRow`. "22 picks" and "SJSU @ USC · USC Trojans 90%" are very
+    different kinds of reassurance.
+  - **The note explains the actual confusion**, in the card rather than only
+    here: a sport appears in this section the moment its slate is logged, and in
+    **By sport** only once it has *graded* results. CFB has zero graded picks
+    ever — the model has never had a completed college game to be judged on —
+    so it correctly shows in one and not the other.
+  - **Why CFB was empty on the day, and it isn't a fault:** the AI tab, Home and
+    the CFB tab all had nothing to log. Saturday's games were already **final**
+    (v183's rule: never manufacture a retroactive pick), and Monday's slate was
+    empty. The first real test is the next scheduled college slate.
+  - **The empty state is honest too** — "Nothing waiting … only games that
+    haven't started yet can be picked, so a slate that has already finished logs
+    nothing" — which is the one sentence that would have answered the original
+    question.
+  - Verified in headless Chromium at 390px in **both themes** — **26 checks**:
+    the header count, the section, CFB listed with zero graded picks, the
+    per-market breakdown, MLB counted separately, the games named with pick and
+    confidence, spread/total rows marked, **By sport** still showing only the
+    graded MLB row, the empty state, and the header count disappearing with it.
+    The v183/v184 suites (30/7/19/8) still pass — 90 checks total.
+  - ⚠️ **Test note:** `.rep-sec` uppercases via CSS and Chromium's `innerText`
+    reflects `text-transform`, so a case-sensitive assertion on a section
+    heading fails against markup that is perfectly correct.
 
 - **📈 EVERY posted game is logged now, not just the ones the owner taps
   (v184)** — the follow-up to v183, in the owner's words: *"every posted game is
@@ -3139,7 +3184,9 @@ index, not the argument.
   toward the side taken — absent when there was no qualifying split); v164+
   entries carry `gp` (model-vs-market gap) and `tr` (ladder tier), and ATS
   entries carry `pm` (the model's projected margin).
-- `sportshub:pending` — ungraded picks awaiting results. **v183: written by
+- `sportshub:pending` — ungraded picks awaiting results, surfaced in the Report
+  Card's **📥 Logged, awaiting results** section since v185 (which also added `m`,
+  the matchup label, so the queue can name its games). **v183: written by
   BOTH the AI Picks tab and the game modal**, through the shared `commitRow`;
   every writer dedupes on the pick's own key, so the two can see the same game
   without double-counting it. (v83+ includes `conf`;

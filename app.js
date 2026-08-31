@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v184';
+const APP_VERSION = 'v185';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2528,6 +2528,11 @@ function recordPick(id, sport, date, pick, fav, conf, isEdge, meta = {}) {
   // was unanswerable about games already played. Storing them now means the
   // by-tier record starts accumulating from this build forward.
   p[id] = { sport, date, pick, fav: fav || null, conf: conf ?? null, eg: isEdge ? 1 : 0,
+    // m (v185): the matchup label. Grading re-derives it from the game, so this
+    // is purely so the "logged, awaiting results" panel can NAME what it's
+    // holding — a queue that says "22 picks" is not the same reassurance as one
+    // that says "SJSU @ USC · USC Trojans 90%".
+    ...(meta.m ? { m: meta.m } : {}),
     ...(meta.sh != null ? { sh: meta.sh } : {}),
     ...(meta.gp != null ? { gp: meta.gp } : {}),
     ...(meta.tr ? { tr: meta.tr } : {}) };
@@ -2537,14 +2542,14 @@ function recordPick(id, sport, date, pick, fav, conf, isEdge, meta = {}) {
 // moneyline pick or the totals pick — the three are separate markets and keep
 // separate records. `line` is the picked side's own spread; `home` says which
 // side that is, which is all grading needs.
-function recordAtsPick(gameId, sport, date, ats) {
+function recordAtsPick(gameId, sport, date, ats, m) {
   const id = `${gameId}:s`;
   if (!gameId || !ats) return;
   if (getTally()[id]) return;
   const p = getPending();
   if (p[id]) return;
   p[id] = { sport, date, a: 1, pick: ats.label, home: ats.home ? 1 : 0,
-    hsp: ats.homeSpread, proj: ats.proj };
+    hsp: ats.homeSpread, proj: ats.proj, ...(m ? { m } : {}) };
   setPending(p);
 }
 // Did the picked side cover? Home covers when (homeMargin + homeSpread) > 0.
@@ -2559,14 +2564,37 @@ function atsResult(g, homeSpread, tookHome) {
 // proj (v159) = the model's projected total at pick time. Without it a graded
 // export shows only WHICH side we took, so a directional skew (the OVER lean)
 // can be seen but never sized — see the projected-total bias note in the card.
-function recordTotalPick(gameId, sport, date, side, line, proj, tier) {
+function recordTotalPick(gameId, sport, date, side, line, proj, tier, m) {
   const id = `${gameId}:t`;
   if (!gameId || !side || line == null) return;
   if (getTally()[id]) return;
   const p = getPending();
   if (p[id]) return;
-  p[id] = { sport, date, t: 1, pick: side, line, proj: proj ?? null, ...(tier ? { tr: tier } : {}) };
+  p[id] = { sport, date, t: 1, pick: side, line, proj: proj ?? null,
+    ...(tier ? { tr: tier } : {}), ...(m ? { m } : {}) };
   setPending(p);
+}
+
+// 🚨 v185 — what's logged but not yet graded. The Report Card has only ever
+// read the TALLY, i.e. graded results, so after v183/v184 started logging
+// everything there was still no way to see that it was working: a CFB pick made
+// on Monday shows up nowhere until Saturday's game finishes AND gradePending
+// folds it in. The owner asked twice whether their games were being stored,
+// which is the app failing to answer a fair question about its own state.
+function pendingSummary() {
+  const p = getPending();
+  const by = {}; const list = [];
+  let total = 0;
+  Object.values(p).forEach((e) => {
+    if (!e || !e.sport) return;
+    const r = (by[e.sport] = by[e.sport] || { n: 0, ml: 0, ats: 0, tot: 0 });
+    if (e.a) r.ats++; else if (e.t) r.tot++; else r.ml++;
+    r.n++; total++;
+    list.push(e);
+  });
+  // Newest first: the games just logged are the ones the owner is checking on.
+  list.sort((a, b) => Number(b.date || 0) - Number(a.date || 0));
+  return { by, total, list };
 }
 async function gradePending() {
   const p = getPending();
@@ -2905,9 +2933,33 @@ function reportCard(det) {
     (sh.against.n ? row('Big money the other way', sh.against) : '') +
     `<div class="ai-why" style="padding:2px 0">${shN} pick${shN === 1 ? '' : 's'} where DraftKings' dollars ran ${SHARP_MIN_DIV}+ points ahead of its tickets on one side.${shN < 20 ? ' Too thin to tune on — this row exists to measure the factor, not to trust it yet.' : ''}</div>`;
   const week = det.week.n ? ` · this week ${det.week.w}-${det.week.n - det.week.w}` : '';
+  // 📥 Logged, awaiting results (v185). Everything else on this card is the
+  // GRADED record, which by definition can't show a pick made an hour ago —
+  // so a slate that was just logged looked identical to one that wasn't logged
+  // at all. This section is the app answering "did you store my game?".
+  const pend = pendingSummary();
+  const pRows = Object.entries(pend.by).sort((a, b) => b[1].n - a[1].n).map(([s, r]) => {
+    const bits = [r.ml ? `${r.ml} moneyline` : '', r.ats ? `${r.ats} spread` : '', r.tot ? `${r.tot} total${r.tot === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
+    return `<div class="rep-row"><span class="rep-l">${LEAGUES[s]?.emoji || ''} ${esc(LEAGUES[s]?.label || s)}</span><span class="rep-v">${r.n} <span class="rep-cf">${esc(bits)}</span></span></div>`;
+  }).join('');
+  // Name the games, don't just count them — "22 picks" and "SJSU @ USC · USC
+  // Trojans 90%" are very different kinds of reassurance.
+  const pList = pend.list.slice(0, 8).map((e) => {
+    const d = String(e.date || '');
+    const dd = d.length === 8 ? `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}` : '';
+    const mark = e.a ? '📐' : e.t ? '🎯' : '';
+    const pk = e.t ? `${e.pick} ${e.line}` : e.pick;
+    return `<div class="rep-pick"><span class="rep-i">⏳${mark}</span><span class="rep-m">${esc(e.m || '')}</span><span class="rep-p">${esc(pk || '')}${e.conf ? ` <span class="rep-cf">${e.conf}%</span>` : ''}</span><span class="rep-d">${dd}</span></div>`;
+  }).join('');
+  const pendSec = pend.total
+    ? `<div class="rep-sec">📥 Logged, awaiting results</div>${pRows}${pList}
+       <div class="ai-why" style="padding:4px 0 2px">${pend.total} pick${pend.total === 1 ? '' : 's'} stored and waiting on final scores. ${pend.total > 8 ? 'Showing the 8 most recent. ' : ''}They join the record above automatically once the games finish — grading runs every time you open the app. A sport shows up here the moment its slate is logged and in the record above only once it has <b>graded</b> results, which is why a league you've only just started tracking appears in one and not the other.</div>`
+    : `<div class="rep-sec">📥 Logged, awaiting results</div>
+       <div class="ai-why" style="padding:4px 0 2px">Nothing waiting — every stored pick has been graded. New games are logged automatically whenever you open Home or a league tab; only games that haven't started yet can be picked, so a slate that has already finished logs nothing.</div>`;
   box.innerHTML = `
-    <button class="ai-report-head" aria-expanded="false">📜 Model Report Card${week}<span class="sec-chev">▸</span></button>
+    <button class="ai-report-head" aria-expanded="false">📜 Model Report Card${week}${pend.total ? ` · ${pend.total} awaiting` : ''}<span class="sec-chev">▸</span></button>
     <div class="ai-report-body" hidden>
+      ${pendSec}
       ${bRows ? `<div class="rep-sec">By confidence (→ actual, vs claimed)</div>${bRows}
         <div class="ai-why" style="padding:4px 0 2px">Green = the model's confidence matched reality within 6 points. Red = it was overconfident.</div>` : ''}
       ${det.legacy ? `<div class="ai-why" style="padding:2px 0">${det.legacy} older graded pick${det.legacy === 1 ? '' : 's'} stored no confidence, so ${det.legacy === 1 ? 'it counts' : 'they count'} toward the all-time record but can't be calibrated.</div>` : ''}
@@ -3200,10 +3252,11 @@ function commitRow(r, dateStr) {
     }
     return out;
   }
+  const label = matchupLabel(sport, g);
   recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge,
-    { sh: p.sharp?.pts ?? null, gp: gap, tr: tier });
-  if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line, tot.proj, tot.tier);
-  if (r.ats) recordAtsPick(g.id, sport, dateStr, r.ats);
+    { sh: p.sharp?.pts ?? null, gp: gap, tr: tier, m: label });
+  if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line, tot.proj, tot.tier, label);
+  if (r.ats) recordAtsPick(g.id, sport, dateStr, r.ats, label);
   return null;
 }
 
