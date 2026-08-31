@@ -368,7 +368,70 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v182** (backend **b13-pregame-lines**).
+Current version as of this writing: **v183** (backend **b13-pregame-lines**).
+
+- **🚨 A game you LOOK at is now a game the model is held to (v183)** — the
+  owner opened the CFB tab, tapped SJSU @ USC, read all three markets on the
+  card (ML USC 90% · spread SJSU +37.5 · total UNDER 61.5), and asked whether it
+  was being tracked. **It wasn't, and it never could have been.**
+  - **`recordPick` lived ONLY in `renderPredictions`.** The game modal — which
+    is where the owner actually reads a pick, since every slate card on Home,
+    NFL and CFB opens it — computed the full model read and wrote nothing. And
+    the AI Picks tab renders **only today's slate** (`ymd(sportsDate())`), so a
+    Saturday game was unreachable from it by Monday. Confirmed on device: the
+    tab said "No games today for this sport" and the **Spread tile read "new —
+    collecting"**, i.e. zero graded ATS picks ever.
+  - **The write path is now ONE function, `commitRow(r, dateStr)`**, extracted
+    (not copied) from `renderPredictions` and called by both it and the modal.
+    v177 is the standing lesson: two identical copies of the slate-grouping code
+    meant one tab could be fixed while the other stayed broken. One function,
+    one set of keys, one meta shape — the tab's behaviour is byte-for-byte
+    unchanged (it just reads back `{graded, hit}` for its counters).
+  - **`recordFromModal(sport, g)`** goes through **`buildBoard` on a one-game
+    slate**, not its own copy of the tier/edge/totals math, so a pick recorded
+    from the modal is identical to the one the tab would have recorded.
+  - **It waits the full `SHARP_WAIT.picks` (8s) leash, not the modal's 1.2s
+    display leash.** `sh` means "the sharp factor moved this pick N points", and
+    an absent `sh` means "no qualifying split" — writing that when the truth is
+    "we didn't wait" would quietly corrupt open measurement #7, the one thing
+    the sharp factor is waiting on. It runs **after paint and is never awaited**,
+    so v157's rule is untouched (measured: modal still paints in **50 ms** with
+    a backend that never answers).
+  - **🚨 PREGAME AND LIVE ONLY — never a final.** The tab grades finals it meets
+    on today's slate, but the modal can open a game from any date, and freshly
+    predicting a game that already ended is look-ahead (the v138 lesson):
+    `teamProfile` cuts at `g.date`, but the season-stat feeds it leans on can't
+    be rewound. A game picked pregame is already handled by `gradePending` on
+    boot. **So the owner's USC game is NOT recoverable — that record starts from
+    this build forward, and manufacturing it retroactively would inflate the
+    tally the repo spends every other version trying to keep honest.**
+  - **🚨 `slateDateFor(g)` is the subtle part.** `gradePending` re-fetches
+    `getGames(sport, date)` to find a game again, so a date that doesn't match
+    the scoreboard the game is listed on means the pick **never grades and is
+    silently purged at the 14-day cutoff** — the exact shape of the v171 `:s`
+    bug. It applies the **same 4 AM ET rule `sportsDate()` uses**, so a 7:30pm
+    PT Saturday kickoff (10:30pm ET) and a game running past midnight ET both
+    land on Saturday's slate. `ymd(new Date(g.date))` would have been wrong for
+    every West Coast night game.
+  - **Deliberately NOT done: recording the whole NFL/CFB slate.** `enrichSlate`
+    already computes identical board rows for up to `BB_MAX_GAMES` games, so
+    wiring it in is nearly free — but it changes what the record MEANS (every
+    game on the slate, vs games the owner engaged with) and `BB_MAX_GAMES`
+    would truncate a big Saturday. That's a product call, not a bug fix.
+  - Verified in headless Chromium at 390px with ESPN and the backend fully
+    stubbed — **37 checks** across two suites. The owner's card reproduced
+    end-to-end (fixtures tuned so the model lands at ~93% / USC by ~24.7 /
+    total ~56.5, deliberately NOT pinned so the v178 saturation guard stays out
+    of the way): ML + ATS written, **the total correctly NOT written** because
+    5.0 is under the 6-pt CFB bar, `hsp` stored as −37.5, the away side taken,
+    and the stored ATS entry grading to a **WIN** at the real 42-26 final.
+    Plus: all six `slateDateFor` cases incl. the midnight rollover and junk
+    input, `sh` surviving a 2.5s backend (proving the full leash), preseason
+    and finals writing nothing, re-opening a game not overwriting its stored
+    pick, an already-graded game not being re-added, a total that DOES clear
+    the bar being recorded, the modal's 50ms paint with the backend asleep, and
+    the AI Picks tab still recording pregame + grading finals inline with no
+    console errors.
 
 - **🌡️ Heat-coloured edge numbers (v182)** — the owner, on v181's grey/gold
   pills: *"I saw how you just withheld smaller than two points. It's not a bad
@@ -2968,6 +3031,12 @@ index, not the argument.
   (`sportshub:pending`) and **auto-graded** against final results on app load
   (`gradePending`), so the all-time + vs-line tallies (`sportshub:aitally`) keep
   building even if the AI Picks tab wasn't open when games ended. Stale (>14d) purged.
+  **v183: the game modal writes too** (`recordFromModal` → the shared
+  `commitRow`), so a game you open from any slate card is tracked — the AI Picks
+  tab only ever renders TODAY's slate, so before this a game looked at on the
+  NFL/CFB tab on any other day was computed, shown and thrown away. Pregame and
+  live games only; the modal never manufactures a pick for a game that's already
+  final.
 - **Auto-update** — `sw.js` is a network-first service worker that fetches app
   files with `cache:'no-store'`, so launches pull the newest deploy (with an
   offline cache fallback). Registered at the end of `app.js`. This replaced the
@@ -2994,7 +3063,10 @@ index, not the argument.
   toward the side taken — absent when there was no qualifying split); v164+
   entries carry `gp` (model-vs-market gap) and `tr` (ladder tier), and ATS
   entries carry `pm` (the model's projected margin).
-- `sportshub:pending` — ungraded picks awaiting results (v83+ includes `conf`;
+- `sportshub:pending` — ungraded picks awaiting results. **v183: written by
+  BOTH the AI Picks tab and the game modal**, through the shared `commitRow`;
+  every writer dedupes on the pick's own key, so the two can see the same game
+  without double-counting it. (v83+ includes `conf`;
   v160+ includes `sh`; v164+ includes `gp`/`tr`, plus `:s` ATS rows carrying
   `hsp` (the home-oriented spread) so they can be graded without re-fetching odds).
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.

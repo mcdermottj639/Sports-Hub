@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v182';
+const APP_VERSION = 'v183';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -638,6 +638,12 @@ async function openGameDetail(sport, id, g) {
     const slot = reportP ? '<div id="md-report"><div class="empty">📊 Loading betting report…</div></div>' : '';
     $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, slot);
     makeAccordion($('#modal-body'), '.md-section-title', 0);
+    // v183: the game is on screen — now hold the model to what it just said.
+    // Deliberately NOT awaited and deliberately not token-guarded: the pick was
+    // computed and shown, so it counts whether or not the modal is still open
+    // when the write lands. Every writer dedupes on the pick's own key, so the
+    // tab and the modal can both see the same game without double-counting it.
+    if (g && !preseason) recordFromModal(sport, g);
     if (reportP) {
       // Odds for the report: prefer the summary's pickcenter — the scoreboard
       // object often drops its odds once a game goes live, which blanked the
@@ -3147,6 +3153,108 @@ async function buildBoard(sport, games, opts = {}) {
   return { rows, playable, report };
 }
 
+// 🚨 v183 — the ONE place a board row is written to the record. Until now this
+// logic lived inline in renderPredictions, which meant a pick only ever existed
+// if you happened to have the AI Picks tab open, on that sport, on the day of
+// the game. The owner opened a CFB game from the CFB tab, read all three of its
+// markets in the modal, and none of it was ever stored: the tab shows only
+// TODAY's slate (`ymd(sportsDate())`), so by the time they looked the game was
+// two days gone and unreachable forever.
+//
+// It is extracted rather than copied because the two callers MUST agree — v177
+// is the standing lesson here: two identical copies of the slate-grouping code
+// meant one tab could be fixed while the other stayed broken. One function, one
+// set of keys, one meta shape.
+//
+// Returns {graded, hit} when it graded a final, else null.
+function commitRow(r, dateStr) {
+  const { g, sport, p, info, gap, tier, tot, isEdge } = r;
+  if (!p || !g?.id) return null;
+  if (gameState(g) === 'final') {
+    let out = null;
+    const actual = winnerName(g);
+    if (actual && actual !== 'TIE') {
+      const hit = actual === p.winner.name;
+      const edge = info && info.favName ? (isEdge ? (hit ? 'h' : 'm') : null) : null;
+      recordResult(g.id, hit, edge,
+        { s: sport, d: Number(dateStr), cf: p.conf, p: p.winner.name, m: matchupLabel(sport, g),
+          ...(p.sharp ? { sh: p.sharp.pts } : {}),
+          ...(gap != null ? { gp: gap } : {}), ...(tier ? { tr: tier } : {}) });
+      r.resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
+      out = { graded: true, hit };
+    }
+    if (tot && g.home.score != null && g.away.score != null) {
+      const total = g.home.score + g.away.score;
+      if (total !== tot.line) {
+        recordResult(`${g.id}:t`, tot.side === 'OVER' ? total > tot.line : total < tot.line, null,
+          { s: sport, d: Number(dateStr), t: 1, p: `${tot.side} ${tot.line}`, m: matchupLabel(sport, g),
+            pt: Math.round(tot.proj * 10) / 10, ...(tot.tier ? { tr: tot.tier } : {}) });
+      }
+    }
+    if (r.ats) {
+      const covered = atsResult(g, r.ats.homeSpread, r.ats.home);
+      if (covered != null) {
+        recordResult(`${g.id}:s`, covered, null,
+          { s: sport, d: Number(dateStr), a: 1, p: r.ats.label, m: matchupLabel(sport, g), pm: r.ats.proj });
+      }
+    }
+    return out;
+  }
+  recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge,
+    { sh: p.sharp?.pts ?? null, gp: gap, tr: tier });
+  if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line, tot.proj, tot.tier);
+  if (r.ats) recordAtsPick(g.id, sport, dateStr, r.ats);
+  return null;
+}
+
+// The slate date a game belongs to, by the SAME 4 AM ET rule sportsDate() uses
+// for "today". This is not cosmetic: gradePending re-fetches
+// getGames(sport, date) to find the game again, so a date that doesn't match
+// the scoreboard the game is listed on means the pick never grades and is
+// silently purged at the 14-day cutoff — the exact shape of the v171 `:s` bug.
+// A 7:30pm PT Saturday kickoff is 10:30pm ET, still Saturday; the -4h keeps a
+// game that runs past midnight ET on the day it started.
+function slateDateFor(g) {
+  const t = g?.date ? new Date(g.date) : null;
+  if (!t || isNaN(t.getTime())) return ymd(sportsDate());
+  const et = new Date(t.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  if (isNaN(et.getTime())) return ymd(sportsDate());
+  et.setHours(et.getHours() - 4);
+  return ymd(et);
+}
+
+// 🚨 v183 — recording from the game modal, so a game you LOOK at is a game the
+// model is held to. The modal is where the owner actually reads a pick (the
+// slate cards open it from Home, NFL and CFB), but it never wrote anything, and
+// the AI Picks tab only ever renders today's slate. Result: every game the
+// owner studied on a team tab, on any day they didn't also open AI Picks on
+// that sport, was computed, displayed and thrown away.
+//
+// Three rules, all deliberate:
+//   1. It goes through buildBoard on a one-game slate, NOT its own copy of the
+//      tier/edge/totals math, so a pick recorded here is byte-for-byte the pick
+//      the tab would have recorded.
+//   2. It waits the FULL SHARP_WAIT.picks leash, not the modal's 1.2s display
+//      leash. `sh` is meant to read "the sharp factor moved this pick N points",
+//      and an absent `sh` means "no qualifying split" — writing that when the
+//      truth is "we didn't wait" would quietly corrupt the one open measurement
+//      the sharp factor is waiting on. This runs after paint, so it costs the
+//      user nothing (v157's rule is about render time, not background work).
+//   3. It records PREGAME AND LIVE GAMES ONLY — never a final. The tab grades
+//      finals it meets on today's slate, but the modal can open a game from any
+//      date, and freshly predicting a game that already ended is look-ahead
+//      (v138's lesson): teamProfile cuts at g.date, but the season-stat feeds it
+//      leans on can't be rewound. A final that was picked pregame is already
+//      handled by gradePending on boot.
+async function recordFromModal(sport, g) {
+  try {
+    if (!g?.id || g.seasonType === 1 || gameState(g) === 'final') return;
+    if (!LEAGUES[sport] || LEAGUES[sport].type === 'golf') return;
+    const { rows } = await buildBoard(sport, [g], { wait: SHARP_WAIT.picks });
+    if (rows[0]) commitRow(rows[0], slateDateFor(g));
+  } catch (_) { /* recording is never allowed to break the modal */ }
+}
+
 // One board card. `compact` (Home) drops the factor breakdown; the AI tab
 // keeps it. Tapping opens the same game modal a slate card does.
 function boardCard(r, opts = {}) {
@@ -3374,40 +3482,8 @@ async function renderPredictions() {
   // never writes, so a pick can't be stored twice or stored with a different
   // sharp-money state than the one shown here.
   rows.forEach((r) => {
-    const { g, p, info, gap, tier, tot, isEdge } = r;
-    if (!p) return;
-    if (gameState(g) === 'final') {
-      const actual = winnerName(g);
-      if (actual && actual !== 'TIE') {
-        graded++; const hit = actual === p.winner.name; if (hit) right++;
-        const edge = info && info.favName ? (isEdge ? (hit ? 'h' : 'm') : null) : null;
-        recordResult(g.id, hit, edge,
-          { s: sport, d: Number(dateStr), cf: p.conf, p: p.winner.name, m: matchupLabel(sport, g),
-            ...(p.sharp ? { sh: p.sharp.pts } : {}),
-            ...(gap != null ? { gp: gap } : {}), ...(tier ? { tr: tier } : {}) });
-        r.resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
-      }
-      if (tot && g.home.score != null && g.away.score != null) {
-        const total = g.home.score + g.away.score;
-        if (total !== tot.line) {
-          recordResult(`${g.id}:t`, tot.side === 'OVER' ? total > tot.line : total < tot.line, null,
-            { s: sport, d: Number(dateStr), t: 1, p: `${tot.side} ${tot.line}`, m: matchupLabel(sport, g),
-              pt: Math.round(tot.proj * 10) / 10, ...(tot.tier ? { tr: tot.tier } : {}) });
-        }
-      }
-      if (r.ats) {
-        const covered = atsResult(g, r.ats.homeSpread, r.ats.home);
-        if (covered != null) {
-          recordResult(`${g.id}:s`, covered, null,
-            { s: sport, d: Number(dateStr), a: 1, p: r.ats.label, m: matchupLabel(sport, g), pm: r.ats.proj });
-        }
-      }
-    } else {
-      recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge,
-        { sh: p.sharp?.pts ?? null, gp: gap, tr: tier });
-      if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line, tot.proj, tot.tier);
-      if (r.ats) recordAtsPick(g.id, sport, dateStr, r.ats);
-    }
+    const c = commitRow(r, dateStr);
+    if (c?.graded) { graded++; if (c.hit) right++; }
   });
 
   // No line ≠ no disagreement: if ESPN sent no odds, say so instead of
