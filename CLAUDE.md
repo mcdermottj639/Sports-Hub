@@ -368,7 +368,45 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v181** (backend **b13-pregame-lines**).
+Current version as of this writing: **v182** (backend **b13-pregame-lines**).
+
+- **🌡️ Heat-coloured edge numbers (v182)** — the owner, on v181's grey/gold
+  pills: *"I saw how you just withheld smaller than two points. It's not a bad
+  call — maybe you should colour code these numbers based on cold leads and
+  increasingly hot."* The binary said only "play / not a play" and threw the
+  magnitude away.
+  - **Heat is measured in units of the BAR that market has to clear**, never in
+    raw points. 0.6 points of spread, 2.1 of total and a 9-point moneyline gap
+    are different units against different thresholds (`ATS_EDGE_MIN` 2/3,
+    `TOT_EDGE_MIN` 1.5–6, `EDGE_BAR.edge` 5), so a shared points scale would be
+    meaningless. `heatCls(edge, bar)` keys off the **ratio**, which makes
+    **1.0× exactly the recording bar** — so the colour can never disagree with
+    whether the model records the play, and it keeps working if a bar is
+    re-fitted.
+  - Five steps: **h0 cold** (<0.5×) · **h1 cool** (<1×) · **h2 warm** (<1.75×)
+    · **h3 hot** (<3×) · **h4 blazing**. The two cold steps are **ringless** —
+    only a pill that clears the bar wears the gold/orange/red ring, so a read
+    can't be mistaken for a play at a glance.
+  - **The moneyline is coloured by its market GAP, not its confidence.** A 59%
+    pick against a book at 50% is a real disagreement; the same 59% against a
+    book at 64% is not. The number shown stays the confidence (that's what it
+    means); only the colour carries the gap.
+  - **The light theme needs its own ramp** — the dark blues and oranges wash
+    out on paper (`#1f7fa3`, `#c26a00`, `#c0392b`). Gold is a theme var and is
+    shared.
+  - The v181 explanation shrank from three lines to one ("🌡️ Cold = under the
+    bar…") because the colour now carries the rest.
+  - Verified — **25 checks**: the ramp flipping exactly at 1.0×, the same ratio
+    giving the same colour across four different market/sport combinations,
+    sign-independence, junk input falling back to cold, five distinct colours
+    actually painting in **both themes**, cold/cool ringless while warm+ are
+    ringed, and the owner's real card reading cold spread / cool total / a
+    gap-coloured moneyline. Fourteen suites green.
+  - ⚠️ **Test-expectation note:** five assertions across `three.js`/`plays.js`
+    keyed off v181's `.under` class, which the ramp replaced — "soft" is now
+    "h0 or h1". And one new assertion of mine was simply wrong: 2.1 against a
+    4-point floor is **0.53×**, i.e. *cool*, not cold. The ramp was right and
+    the test wasn't.
 
 - **🤖 AI Pick lists ML · Spread · Total every time (v181)** — the owner, on a
   SEA/NE card: *"Where it says AI Picks here, I want ML spread and total. U

@@ -299,11 +299,22 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   font-size: 11px; font-weight: 700; color: var(--gold);
   background: rgba(197, 160, 50, .18); box-shadow: inset 0 0 0 1px var(--gold);
 }
-/* Under the recording bar: shown so the read is visible, styled so it can't
-   be mistaken for a play the model actually tracks. */
-.ai-edge.under, .gr-edge.under {
-  color: var(--muted); background: rgba(128, 128, 128, .16); box-shadow: none;
-}
+/* 🌡️ Heat ramp (v182) — the pill's colour is how far past that market's own
+   bar the edge sits, so cold → blazing reads the same on ML, spread and total.
+   h0/h1 are UNDER the bar (a read, not a recorded play) and deliberately have
+   no ring: they must not look like the gold "this is a play" pill. */
+.ai-edge.h0, .gr-edge.h0 { color: #7e8a99; background: rgba(126,138,153,.16); box-shadow: none; }
+.ai-edge.h1, .gr-edge.h1 { color: #55a8c8; background: rgba(85,168,200,.16); box-shadow: none; }
+.ai-edge.h2, .gr-edge.h2 { color: var(--gold); background: rgba(197,160,50,.18); box-shadow: inset 0 0 0 1px var(--gold); }
+.ai-edge.h3, .gr-edge.h3 { color: #ff9f43; background: rgba(255,159,67,.18); box-shadow: inset 0 0 0 1px #ff9f43; }
+.ai-edge.h4, .gr-edge.h4 { color: #ff5a5a; background: rgba(255,90,90,.18); box-shadow: inset 0 0 0 1px #ff5a5a; }
+/* The moneyline shows a confidence, not an edge, so it stays a plain number —
+   only its colour carries the gap vs the book. */
+.ai-conf.heat.h0 { color: #7e8a99; }
+.ai-conf.heat.h1 { color: #55a8c8; }
+.ai-conf.heat.h2 { color: var(--gold); }
+.ai-conf.heat.h3 { color: #ff9f43; }
+.ai-conf.heat.h4 { color: #ff5a5a; }
 .conf-bar { height: 7px; background: var(--card-2); border-radius: 999px; overflow: hidden; margin: 7px 0 6px; }
 .conf-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--eagles-green-light), var(--accent)); }
 .ai-why { font-size: 12px; color: var(--muted); }
@@ -1306,6 +1317,18 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   border-color: #c0392b;
   box-shadow: 0 0 0 1px #c0392b inset, 0 1px 3px rgba(0,0,0,.07);
 }
+/* 🌡️ The heat ramp needs darker steps on paper — the dark-theme blues and
+   oranges wash out on an off-white card. Gold is shared (it's a theme var). */
+:root[data-theme="light"] .ai-edge.h0, :root[data-theme="light"] .gr-edge.h0,
+:root[data-theme="light"] .ai-conf.heat.h0 { color: #5c6773; }
+:root[data-theme="light"] .ai-edge.h1, :root[data-theme="light"] .gr-edge.h1,
+:root[data-theme="light"] .ai-conf.heat.h1 { color: #1f7fa3; }
+:root[data-theme="light"] .ai-edge.h3, :root[data-theme="light"] .gr-edge.h3,
+:root[data-theme="light"] .ai-conf.heat.h3 { color: #c26a00; }
+:root[data-theme="light"] .ai-edge.h3, :root[data-theme="light"] .gr-edge.h3 { box-shadow: inset 0 0 0 1px #c26a00; }
+:root[data-theme="light"] .ai-edge.h4, :root[data-theme="light"] .gr-edge.h4,
+:root[data-theme="light"] .ai-conf.heat.h4 { color: #c0392b; }
+:root[data-theme="light"] .ai-edge.h4, :root[data-theme="light"] .gr-edge.h4 { box-shadow: inset 0 0 0 1px #c0392b; }
 :root[data-theme="light"] .brd-card.t0 .brd-rib { background: #c0392b; }
 :root[data-theme="light"] .brd-card.t0 .brd-tier { background: #c0392b; color: #fff; }
 :root[data-theme="light"] .lrc-gc { border-left-color: var(--line); }

@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v181';
+const APP_VERSION = 'v182';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1913,19 +1913,25 @@ function aiPickHead(pred, sport, g, info) {
   if (!pred) return '';
   const ats = (sport && g && info) ? atsRead(sport, g, pred, info) : null;
   const tot = totalRead(sport, pred, info);
-  const pill = (v, qualifies) =>
-    `<span class="ai-edge${qualifies ? '' : ' under'}">${v}</span>`;
+  // 🌡️ Every pill is coloured by how far past that market's own bar it sits,
+  // so cold → blazing means the same thing on all three rows.
+  const pill = (v, edge, bar) => `<span class="ai-edge ${heatCls(edge, bar)}">${v}</span>`;
 
+  // The moneyline's edge is its gap vs the de-vigged market, not the raw
+  // confidence — a 59% pick against a book at 50% is a real disagreement,
+  // the same 59% against a book at 64% is not. The number shown stays the
+  // confidence (that's what it means); the colour carries the gap.
+  const mlGap = info ? marketGap(pred, info) : null;
   const rows = [`<div class="ai-play"><span class="ai-mkt">Moneyline</span>
     <span class="ai-sel"><b>${esc(pred.winner.name)}</b> to win</span>
-    <span class="ai-conf">${pred.conf}%</span></div>`];
+    <span class="ai-conf${mlGap == null ? '' : ` heat ${heatCls(mlGap, EDGE_BAR.edge)}`}">${pred.conf}%</span></div>`];
 
   if (ats) {
     rows.push(`<div class="ai-play"><span class="ai-mkt">Spread</span>
       <span class="ai-sel">${ats.pinned
         ? `<span class="bb-muted">model tops out around ${Math.abs(ats.proj).toFixed(1)} pts — can't price this number</span>`
         : `<b>${esc(ats.label)}</b>`}</span>
-      ${ats.pinned ? '' : pill(`${Math.abs(ats.edge).toFixed(1)} pts`, ats.qualifies)}</div>`);
+      ${ats.pinned ? '' : pill(`${Math.abs(ats.edge).toFixed(1)} pts`, ats.edge, ATS_EDGE_MIN[sport] ?? 2)}</div>`);
   } else if (ATS_SPORTS.has(sport)) {
     rows.push(`<div class="ai-play"><span class="ai-mkt">Spread</span>
       <span class="ai-sel bb-muted">no spread posted</span></div>`);
@@ -1934,7 +1940,7 @@ function aiPickHead(pred, sport, g, info) {
   if (tot) {
     rows.push(`<div class="ai-play"><span class="ai-mkt">Total</span>
       <span class="ai-sel"><b>${tot.side} ${tot.line}</b></span>
-      ${pill(`${Math.abs(tot.diff).toFixed(1)} pts`, tot.qualifies)}</div>`);
+      ${pill(`${Math.abs(tot.diff).toFixed(1)} pts`, tot.diff, TOT_EDGE_MIN[sport] ?? 1)}</div>`);
   } else if (info?.ou != null) {
     rows.push(`<div class="ai-play"><span class="ai-mkt">Total</span>
       <span class="ai-sel bb-muted">model lands exactly on ${info.ou}</span></div>`);
@@ -1945,12 +1951,13 @@ function aiPickHead(pred, sport, g, info) {
   const split = ats && !ats.pinned && ats.team !== pred.winner.name
     ? `<div class="ai-why">Both from the same projection: ${esc(pred.winner.name)} by ${Math.abs(pred.projMargin).toFixed(1)} — ${Math.abs(ats.edge) >= 1 ? 'enough to win' : 'a win'}, but ${Math.abs(ats.spread)} is more than that, so the points are on the other side.</div>`
     : '';
-  // Be explicit about which rows are bets and which are only reads, rather
-  // than showing a number that looks like a play but never gets graded.
+  // Which rows are bets and which are only reads. The heat colour already
+  // carries the magnitude (cold = under the bar), so this stays to one short
+  // line rather than the three it used to run to.
   const soft = [ats && !ats.pinned && !ats.qualifies ? 'spread' : '', tot && !tot.qualifies ? 'total' : '']
     .filter(Boolean);
   const softNote = soft.length
-    ? `<div class="ai-why">The ${soft.join(' and ')} difference${soft.length > 1 ? 's are' : ' is'} inside the noise band, so ${soft.length > 1 ? 'they are' : 'it is'} shown as a read — the model doesn't record ${soft.length > 1 ? 'them' : 'it'} as a play.</div>`
+    ? `<div class="ai-why">🌡️ Cold = under the bar: the ${soft.join(' and ')} ${soft.length > 1 ? 'reads are' : 'read is'} shown but not recorded as a play.</div>`
     : '';
   const homeAbbr = g?.home?.abbr || 'home', awayAbbr = g?.away?.abbr || 'away';
   const marginTxt = pred.projMargin != null
@@ -2299,7 +2306,7 @@ function gameReportHTML(sport, g, pred, info, report, data) {
       parts.push(`<div class="gr-total">Spread: model <b>${side}</b> vs book ${book}${!ats ? ''
         : ats.pinned
           ? ` <span class="bb-muted">→ no play: the model tops out around ${Math.abs(pred.projMargin).toFixed(1)} points, so it can't price a number this big.</span>`
-          : ` → <b>${esc(ats.label)}</b> <span class="gr-edge${ats.qualifies ? '' : ' under'}">${Math.abs(ats.edge).toFixed(1)} pts${ats.qualifies ? ' of value' : ''}</span>${
+          : ` → <b>${esc(ats.label)}</b> <span class="gr-edge ${heatCls(ats.edge, ATS_EDGE_MIN[sport] ?? 2)}">${Math.abs(ats.edge).toFixed(1)} pts${ats.qualifies ? ' of value' : ''}</span>${
               ats.qualifies ? '' : ` <span class="bb-muted">— under the ${ATS_EDGE_MIN[sport] ?? 2}-pt bar, so it's a read, not a recorded play</span>`}`}</div>`);
     }
   }
@@ -3046,6 +3053,32 @@ function atsCall(sport, g, pred, info) {
   const r = atsRead(sport, g, pred, info);
   return r && r.qualifies ? r : null;
 }
+// 🌡️ Heat scale for an edge (v182). The owner: "maybe you should colour code
+// these numbers based on cold leads and increasingly hot."
+//
+// The number itself isn't comparable across markets — 0.6 points of spread,
+// 2.1 points of total and a 9-point moneyline gap are different units against
+// different bars. So heat is measured in **units of the bar that market has to
+// clear**: ratio 1.0 is exactly the recording threshold. That makes the colour
+// mean one thing everywhere ("how far past the bar is this?"), and it keeps
+// working if a bar is ever re-fitted.
+//
+// Below 1.0 the play is a read, not a recorded pick — the cold end of the ramp
+// carries that, so the colour and the threshold never disagree.
+const HEAT_STEPS = [
+  { under: 0.5, cls: 'h0' },   // cold — barely a lean
+  { under: 1.0, cls: 'h1' },   // cool — approaching the bar, still not a play
+  { under: 1.75, cls: 'h2' },  // warm — clears it
+  { under: 3.0, cls: 'h3' },   // hot
+  { under: Infinity, cls: 'h4' }, // blazing
+];
+function heatCls(edge, bar) {
+  const e = Math.abs(Number(edge)), b = Number(bar);
+  if (!isFinite(e) || !isFinite(b) || b <= 0) return 'h0';
+  const r = e / b;
+  return (HEAT_STEPS.find((h) => r < h.under) || HEAT_STEPS[HEAT_STEPS.length - 1]).cls;
+}
+
 // The model's raw totals read, same idea: always computed, flagged for whether
 // it clears the sport's own floor.
 function totalRead(sport, pred, info) {
