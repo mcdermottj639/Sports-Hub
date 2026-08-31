@@ -1876,19 +1876,12 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   background: none; border: 1px solid var(--l35); color: var(--gy); border-radius: 0;
 }
 :root[data-palette] .hd-btn:hover { background: var(--l07); }
-:root[data-palette] .hd-btn.sharp { font-size: 10px; }
-:root[data-palette] .hd-btn.sharp.on { background: var(--ac); border-color: var(--ac); }
+
 :root[data-palette] .head-right { gap: 5px; }
 :root[data-palette] .brand { gap: 6px; align-items: baseline; }
 :root[data-palette] .brand-mark { font-size: 13px; }
 
-/* The 💰 toggle: one switch that takes the sharp-money read off every surface
-   at once, for when you want the model's own number and nothing else. */
-:root[data-sharp="off"] .gr-sharp,
-:root[data-sharp="off"] .brd-row.sharp,
-:root[data-sharp="off"] .mkt-sharp,
-:root[data-sharp="off"] .gr-sub.sharp-sub,
-:root[data-sharp="off"] .gr-money-row { display: none; }
+
 
 /* --- three markets on every card ------------------------------------------ */
 /* Named every time, in a fixed order, so a market with no play reads as "no
@@ -2229,9 +2222,13 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   background: var(--sf); border: none; border-right: none; border-radius: var(--r2);
   box-shadow: var(--e1); padding: 10px 12px 11px; flex: 0 0 216px;
 }
-/* Uniform height keeps the rail's bottom edge clean; short cards spread their
-   own content rather than leaving a dead block under it. */
-:root[data-palette] .lrc-l { justify-content: space-between; }
+/* Uniform card height, content TOP-aligned. v191 spread each card's content
+   over its full height to kill dead space — but cards hold different numbers
+   of lines, so they spread differently and the team rows stopped lining up
+   across the rail. A rail is scanned HORIZONTALLY; rows at matching heights
+   matter far more than a few px of trailing space on a shorter card.
+   (The single-column change cut that gap from ~87px to ~28px anyway.) */
+:root[data-palette] .lrc-l { justify-content: flex-start; gap: 6px; }
 :root[data-palette] .lrc.fav {
   box-shadow: var(--e1), inset 0 0 0 1.5px rgba(var(--acRGB), .40);
 }
@@ -2247,15 +2244,19 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   border-bottom: 1px solid rgba(var(--base), .09); padding: 9px 16px 8px;
 }
 :root[data-palette] .topbar h1 { font-size: 16px; white-space: nowrap; }
-:root[data-palette] .brand { gap: 5px; flex: 0 1 auto; min-width: 0; }
+/* `min-width: 0` lets .brand shrink, but the <h1> inside is `nowrap` and can't
+   — so the version badge spilled OUT of the brand and rendered underneath the
+   palette pill. `overflow: hidden` is the guarantee: it clips instead of
+   colliding, at any width. The short palette label below is what stops it
+   having to clip in practice. */
+:root[data-palette] .brand { gap: 5px; flex: 0 1 auto; min-width: 0; overflow: hidden; }
+:root[data-palette] .version { flex: 0 0 auto; }
 :root[data-palette] .head-right { gap: 5px; flex: none; }
 :root[data-palette] .hd-btn {
   border-radius: var(--rp); border: 1px solid var(--tr); background: var(--sf);
   padding: 6px 10px; font-size: 8.5px; box-shadow: none;
 }
-:root[data-palette] .hd-btn.sharp.on {
-  background: var(--grad); border-color: transparent; box-shadow: var(--glow);
-}
+
 :root[data-palette] .badge {
   border-radius: var(--rp); padding: 5px 10px; font-size: 8.5px;
   background: var(--ink); color: var(--gr);

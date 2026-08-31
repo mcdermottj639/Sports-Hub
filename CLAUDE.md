@@ -419,7 +419,56 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v191** (backend **b13-pregame-lines**).
+Current version as of this writing: **v192** (backend **b13-pregame-lines**).
+
+- **🔍 A collision detector, and the three things it found (v192)** — the owner,
+  on a screenshot of the masthead with `v191` rendering underneath the palette
+  pill: *"U can see v191 getting cut off too that's more formatting things u
+  missed. Probably more."* Right on both counts, and the second part is the
+  important one.
+  - **Why the audits kept missing these.** The v188 audit asked "does an element
+    clip its OWN box?" (`scrollWidth > clientWidth`). It has no opinion about an
+    element **colliding with a sibling** or **spilling outside its parent**,
+    which is a different failure and the one the owner kept seeing. A new sweep
+    checks both, across nine tabs × six widths down to **320px**.
+    - ⚠️ **Two artefacts to filter or it cries wolf:** a `display: contents`
+      parent has no box, so its children legitimately sit "outside" it (that is
+      every `.jump-nav` in the control row), and a **wrapped inline** occupies
+      several line boxes whose union rect overlaps its neighbour's by design.
+      Unfiltered these produced ~30 false hits and buried the one real bug.
+  - **The real bug: `#app-version` spilled 22px out of `.brand`, on every tab.**
+    `.brand` is `min-width: 0` so it may shrink, but the `<h1>` inside is
+    `white-space: nowrap` and cannot — so the version badge rendered outside its
+    own parent, underneath the palette pill. `overflow: hidden` on `.brand` is
+    the structural guarantee: it clips instead of colliding, at any width.
+  - **And the pressure that caused it is gone too.** 22px of deficit means the
+    masthead had NO margin, so any font-rendering variance tips it over — which
+    is why the owner saw it and a 430px fixture did not. The palette button now
+    reads **LIGHT / DARK** rather than CHAMPAGNE / ONYX: with two palettes it is
+    a light/dark switch and that is what a toggle's label should say, it is a
+    stable width, and it frees ~55px. The palette's real name stays on the
+    button's `aria-label`/`title`.
+  - **🚨 The rail rows are top-aligned again — v191's own fix broke them.** v191
+    spread each card's content over its full height (`justify-content:
+    space-between`) to kill dead space. But cards hold different numbers of
+    lines, so they spread differently: the MLB card's team rows landed at
+    y=113/185 while the NFL card's landed at y=143/243. **A rail is scanned
+    HORIZONTALLY** — rows at matching heights matter far more than a few px of
+    trailing space on a shorter card, and the single-column change had already
+    cut that gap from ~87px to ~28px. Content is top-aligned; rows now share one
+    y across every card.
+  - **💰 dropped.** The masthead toggle that hid the sharp-money read app-wide is
+    gone — the owner asked what it was for, which was the answer. It was an
+    unlabelled emoji competing with two text buttons, and because it only ever
+    REMOVED content there was no feedback that it was on; the app just looked
+    normal. The sharp read always shows now, as it did before v187. **Nothing
+    about what is fetched, recorded or graded ever depended on it**, so no
+    record is affected. `sportshub:sharp` is dead, and the `.mkt-sharp` marker
+    class went with it.
+  - Verified: the collision sweep clean on all nine tabs at **320 / 360 / 390 /
+    430 / 768 / 1280**, the v188 clip-and-gutter audit still clean, rail rows
+    measured to a single shared y, and the grade ramp plus every win/loss pair
+    still distinct in both palettes. `node --check` clean.
 
 - **🥇 Plated gold, and the app stops being boxy (v191)** — the owner, after
   reviewing three accent candidates: *"Harbor is good but how can we not make
@@ -3594,9 +3643,9 @@ index, not the argument.
   choice instead of being dragged back to following the OS.
 - `sportshub:railhidden` — `'1'` when the owner has folded the top rail (v187).
   Re-asserted after every rail repaint, so the 30s refresh can't re-open it.
-- `sportshub:sharp` — `'0'` when the 💰 sharp-money read is hidden app-wide
-  (v187). **Display only** — splits are still fetched and still recorded, so the
-  model's record can't drift depending on the switch.
+- `sportshub:sharp` — **DEAD as of v192.** Held the 💰 sharp-money toggle's
+  state; the toggle is gone and the sharp read always shows. Nothing reads this
+  key any more. Left unremoved on devices, harmless.
 - Note: localStorage is **per browser/device** — the home-screen PWA and Safari
   keep separate tallies/rosters.
 

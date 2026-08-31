@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v191';
+const APP_VERSION = 'v192';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3527,7 +3527,7 @@ function boardCard(r, opts = {}) {
     ${bookBits ? `<div class="brd-row">${bookBits}</div>` : ''}
     ${marketRowsHTML(r)}
     ${why ? `<div class="brd-row">${why}</div>` : ''}
-    ${p.sharp ? `<div class="brd-row mkt-sharp${p.sharp.agree ? ' sharp' : ''}">💰 ${p.sharp.handle}% of dollars vs ${p.sharp.bets}% of bets on ${esc(p.sharp.abbr)} — sharp side ${p.sharp.agree ? 'agrees' : 'disagrees'}</div>` : ''}`;
+    ${p.sharp ? `<div class="brd-row${p.sharp.agree ? ' sharp' : ''}">💰 ${p.sharp.handle}% of dollars vs ${p.sharp.bets}% of bets on ${esc(p.sharp.abbr)} — sharp side ${p.sharp.agree ? 'agrees' : 'disagrees'}</div>` : ''}`;
   if (g.id) card.onclick = () => openGameDetail(sport, g.id, g);
   return card;
 }
@@ -8272,7 +8272,7 @@ async function enrichSlate(sport, host, games) {
         ? ` · total ${p.projTotal.toFixed(1)} vs ${info.ou}` : '';
       modelTxt = `🤖 <b>${esc(p.winner.name)}</b> ${p.conf}%${tot} ${gapTag}`;
     }
-    const sharpRows = sharpSignals(g, sp, null).map((t) => `<div class="bb-sharp mkt-sharp">${t}</div>`).join('');
+    const sharpRows = sharpSignals(g, sp, null).map((t) => `<div class="bb-sharp">${t}</div>`).join('');
     // v187: the same three-market block the board cards carry. The slate is
     // where a week is actually read, and a strip that named only the winner
     // made the spread and the total look like they hadn't been priced.
@@ -8624,8 +8624,14 @@ function applyPalette(p) {
   if (themeMeta) themeMeta.setAttribute('content', PALETTE_META[p]);
   const btn = $('#palette-toggle');
   if (btn) {
-    btn.textContent = p.toUpperCase();
-    btn.setAttribute('aria-label', `Palette: ${p}. Tap for the next one.`);
+    // The MODE, not the palette name. Two reasons: with only two palettes this
+    // is a light/dark switch and that is what the label should say, and
+    // "CHAMPAGNE" is 9 characters in a masthead that had 22px of spill at
+    // 360px. LIGHT/DARK is short and a stable width. The palette's real name
+    // stays on the accessible label.
+    btn.textContent = PALETTE_DARK[p] ? 'DARK' : 'LIGHT';
+    btn.setAttribute('aria-label', `Theme: ${p}. Tap to switch.`);
+    btn.setAttribute('title', `Theme: ${p}`);
   }
 }
 // Kept as a thin alias: applyTheme('light'|'dark') still means something, it
@@ -8667,29 +8673,12 @@ $('#rail-toggle')?.addEventListener('click', () => {
   paintRailToggle();
 });
 
-// --- 💰 sharp toggle --------------------------------------------------------
-// One switch that takes the sharp-money read off every surface at once, for
-// when you want the model's own number and nothing else. Display only — the
-// splits are still fetched and still recorded, so the record can't drift
-// depending on whether the block was showing.
-const SHARP_KEY = 'sportshub:sharp';
-let sharpOn = true;
-try { sharpOn = localStorage.getItem(SHARP_KEY) !== '0'; } catch (e) {}
-function paintSharpToggle() {
-  document.documentElement.setAttribute('data-sharp', sharpOn ? 'on' : 'off');
-  const btn = $('#sharp-toggle');
-  if (btn) {
-    btn.classList.toggle('on', sharpOn);
-    btn.setAttribute('aria-pressed', String(sharpOn));
-    btn.setAttribute('title', sharpOn ? 'Hide the sharp-money read' : 'Show the sharp-money read');
-  }
-}
-$('#sharp-toggle')?.addEventListener('click', () => {
-  sharpOn = !sharpOn;
-  try { localStorage.setItem(SHARP_KEY, sharpOn ? '1' : '0'); } catch (e) {}
-  paintSharpToggle();
-});
-paintSharpToggle();
+// v192: the 💰 masthead toggle is GONE. It hid the sharp-money read app-wide,
+// but it was an unlabelled emoji competing with two text buttons, and because
+// it only ever REMOVED content there was no feedback that it was on — the app
+// just looked normal. The owner asked what it was for, which was the answer.
+// The sharp read now always shows, as it did before v187. Nothing about what
+// is fetched, recorded or graded ever depended on it.
 
 // Labs: launch the fantasy mock draft (in the About → Labs card).
 $('#labs-mock-start')?.addEventListener('click', () => {
