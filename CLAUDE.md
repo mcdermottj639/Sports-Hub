@@ -8,6 +8,21 @@ Guidance for Claude (and humans) working on this repo. Read this first.
 > change** (same commit). Future sessions rely on this file being accurate —
 > don't wait to be asked. When you bump `APP_VERSION`, also update the
 > "Current version" line below if it's drifted.
+>
+> **Two kinds of section, and they are maintained differently:**
+> - **Current-state sections** (What this is · Hard constraints · Files ·
+>   Architecture notes · Features built · localStorage keys) describe the app as
+>   it is TODAY. Rewrite them in place. They must never describe a past build.
+> - **The changelog** under "Current version" is a record of decisions and the
+>   reasoning behind them, so entries are NOT rewritten — but they are written
+>   in the present tense ("`.tabs` is now ONE line that scrolls sideways"), which
+>   means a stale one reads as current to anyone who greps. So when a change
+>   invalidates an older entry, **add an inline `⚠️ SUPERSEDED in vN` marker to
+>   that entry** naming what replaced it. Both halves are required: the new
+>   entry explains what you did, the marker stops the old one lying. (v187 broke
+>   this rule for a version — the v163/v166/v172/v175 entries went on describing
+>   a scrolling tab rail and a league-filter row after both were gone. v190
+>   added the markers.)
 
 > ## 🧮 Before you touch ANY model constant
 > Several model fixes are shipped but not yet verified against results. There
@@ -384,7 +399,43 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v189** (backend **b13-pregame-lines**).
+Current version as of this writing: **v190** (backend **b13-pregame-lines**).
+
+- **📄 The changelog was lying about the app, and the active tab wasn't wearing
+  the accent (v190)** — the owner: *"why would u keep old things in the CLAUDE.md
+  as current? Wont that be confusing."* Yes, and the defence given at the time
+  ("history is a log, leave it") was wrong **for this file**, which already had
+  the opposite convention: the v161 and v159 entries carry inline SUPERSEDED
+  markers. v187 simply didn't follow it.
+  - **The mechanism that makes stale history dangerous here:** changelog entries
+    are written in the **present tense**. "`.tabs` is now ONE line that scrolls
+    sideways" (v163) reads as a statement about the app, not about 2026-08. Four
+    entries — v163, v166, v172, v175 — went on describing a scrolling tab rail
+    and a league-filter row under the rail for three versions after both were
+    gone. Each now carries a `⚠️ SUPERSEDED in v187` marker naming the
+    replacement; the v180 `.t0` bullet got one for v188/v189. The reasoning in
+    those entries is still worth reading, which is why they are annotated rather
+    than rewritten.
+  - **The rule is now written down** in the standing rule at the top of this
+    file, including which sections get rewritten in place and which get markers.
+  - **The bigger miss was the CURRENT-state sections.** Fixing Files and the
+    localStorage keys in v189 was not enough: **Architecture notes** and
+    **Features built** still described a v186 shell, so the control row, the
+    palette cycler, the 💰 and rail toggles, scroll-spy, the bottom bar and the
+    three-market card existed ONLY inside changelog entries. Anyone reading the
+    current-state sections got the wrong app. Architecture notes now carries a
+    "The shell, as of v187–v189" bullet describing all three bars, the control
+    row and the card.
+  - **Also corrected: the mode badge never said "DEMO".** `setMode(false)` has
+    written **OFFLINE** for many versions while this file claimed DEMO — a
+    pre-existing error, found by reading the code instead of the file.
+  - **One real CSS bug, found while rendering colour-scheme candidates:** the
+    active tab's underline was **amber, not the accent**. The Editorial light
+    block paints it with `box-shadow: inset 0 -3px 0 var(--gold)` at (0,3,1),
+    which out-specifies a plain `:root[data-palette]` rule at (0,2,1) — the exact
+    trap documented in **Files → styles.css** in v189, live in Sand the whole
+    time and invisible until the accent stopped being red. Fixed by adding
+    `[data-theme]` to the selector to win specificity, and killing the shadow.
 
 - **🟢 Semantic colour restored — a win and a loss are different colours again
   (v189)** — the owner, with a photo of the Game Report: *"This used to be
@@ -855,6 +906,10 @@ Current version as of this writing: **v189** (backend **b13-pregame-lines**).
     `[data-theme="light"]` block resets `.brd-card`'s border-color after the
     base rule, so without it the alert renders as an ordinary paper card
     (caught by test).
+    - ⚠️ **SUPERSEDED in v188/v189.** Those hardcoded rings (`#c0392b` light,
+      `#ff5a5a` dark) are gone — both top tiers now take a `var(--ac)` left
+      edge, so each palette uses its own accent. The specificity lesson in this
+      bullet still holds and is written up in **Files → styles.css**.
   - The Report Card's by-tier row picks it up for free — it iterates
     `TIER_ORDER` — so the tier is tracked from here forward and reads
     "collecting" until it grades.
@@ -1189,6 +1244,11 @@ Current version as of this writing: **v189** (backend **b13-pregame-lines**).
     `wheelScrollsSideways('.tabs, .live-rail, .rail-leagues')` maps a plain
     vertical wheel to horizontal scroll on the three rails that still scroll,
     so a trackpad works without holding shift.
+    - ⚠️ **SUPERSEDED in v187.** `.tabs` is a GRID now (5×2 on a phone, 9 across
+      above 700px) and `.rail-leagues` is a vertical column, so neither scrolls
+      sideways any more. `wheelScrollsSideways` is still called on all three
+      selectors but only ever does work on `.live-rail` — it no-ops when a rail
+      doesn't overflow.
   - **AI Picks and The Board were one 1500px-wide column.** At `min-width:
     860px` both become a **two-column grid** (`.brd-card` children side by
     side; everything else spans `1 / -1`), the backtest cards reflow with
@@ -1302,7 +1362,9 @@ index, not the argument.
   - **🚨 On a PC the tab rail was partly unreachable.** v163 made it a
     one-line horizontal scroller with `scrollbar-width: none` — fine on a phone
     (swipe), broken with a mouse: no sideways gesture, no visible scrollbar, so
-    Fantasy/Labs/About simply could not be reached. Two fixes: **above 700px
+    Fantasy/Labs/About simply could not be reached. ⚠️ **SUPERSEDED in v187 —
+    the rail is a grid now and cannot cut off at any width; see that entry.**
+    Two fixes: **above 700px
     the rail wraps** (`flex-wrap: wrap`, no overflow) so nothing is ever
     off-screen — wrapping rather than a wider single line means it can't cut
     off whatever the labels or font do — and **`wheelScrollsSideways()`**
@@ -1546,7 +1608,11 @@ index, not the argument.
     `addGolfHomeSection` are gone.
   - **🔵 League filter bubbles** (`#rail-leagues`, `paintRailLeagues`) — one
     small pill per league with games today, directly under the rail, with a
-    game count. Filled = showing, hollow = hidden; state in
+    game count. ⚠️ **MOVED in v187:** they are a narrow COLUMN inside
+    `#rail-wrap`, to the left of the rail, not a row under it. Everything else
+    in this bullet — the filled/hollow semantics, `sportshub:railoff` storing
+    only the OFF leagues, the 2+ league gate, the all-off message, pips
+    ignoring the filter — is unchanged. Filled = showing, hollow = hidden; state in
     `sportshub:railoff`, storing only the OFF leagues so a league you've never
     touched is on by default. The row **only appears with 2+ leagues playing**
     (with one league it'd just be a button that hides everything). Turning all
@@ -1691,7 +1757,10 @@ index, not the argument.
   "too big": nine `flex-wrap`ped 44px buttons cost **~150px** of chrome on a
   390px phone, three rows deep, before a single score.
   - **`.tabs` is now ONE line that scrolls sideways** (`flex-wrap: nowrap` +
-    `overflow-x: auto`), icon over label, ~56px tall. Deliberately **no "More"
+    `overflow-x: auto`), icon over label, ~56px tall. ⚠️ **SUPERSEDED in v187:
+    this is exactly the scroller that ended up hiding Fantasy, Labs and About
+    past the right edge — it is a 5×2 GRID now, text-only labels, no icons, and
+    the live pip moved to `.lb`.** Deliberately **no "More"
     sheet** — the option that inspired this buried Red Sox, AI Picks, Fantasy,
     Labs and About two taps deep, and Red Sox is a favorite team. One swipe
     beats two taps. Buttons now wrap `<span class="ic">`/`<span class="lb">`,
@@ -2943,10 +3012,37 @@ index, not the argument.
 - UX rules the owner cares about: scannable views with **tap-to-expand**
   accordions (`makeAccordion`); jump-nav chip rows that **wrap** (all visible, no
   horizontal scroll); compact rows; `–` for not-yet-played scores.
-- **Live/Demo mode badge** — the header badge (`#mode-badge`, set by `setMode`)
-  reads **LIVE** when ESPN fetches succeed and **DEMO** when they all fail, in
-  which case the app renders the hardcoded `DEMO` fixtures so it never looks
-  broken offline. `setMode(true)` is called from `renderHome` once any feed loads.
+- **The shell, as of v187–v189** — this is the current description; the v163 /
+  v166 / v172 / v175 changelog entries describe the shell that came BEFORE it
+  and carry superseded markers. Three bars above the content, not five:
+  1. **`#rail-wrap`** — the whole day's games. `#rail-leagues` is a narrow
+     league-filter COLUMN on its left (not a bar underneath); `#live-rail` holds
+     the cards. A scheduled/final card stacks (184px); only a LIVE card is two
+     columns (232px) because only it draws a diamond or a field. Each card
+     carries the model's tier badge + pick, read from `MODEL_TODAY` — which The
+     Board fills, so the rail costs no extra model run and no extra ESPN call.
+     Folds via the ⌃ RAIL header button (`sportshub:railhidden`), which
+     re-asserts after every repaint so the 30s refresh can't re-open it.
+  2. **The masthead** — brand · version · palette cycler · rail fold · the 💰
+     sharp toggle · the LIVE/OFFLINE badge.
+  3. **`nav.tabs`** — a GRID of all nine tabs (5×2 on a phone, 9 across above
+     700px), text labels, no icons, live pip on `.lb`. It cannot cut off.
+  Then, inside each tab panel, **one `.ctl-row`** built by `buildControlRow()`:
+  the tab's sport chips, its jump rail and the collapse-all `.sec-all` share a
+  single full-bleed bar. `wireScrollSpy()` flags the section you are actually
+  in (`.chip.here`). At the bottom, **`#botbar`** states the day's model read
+  and links to AI Picks.
+- **Every game card names all three markets** — `marketRowsHTML()` prints
+  MONEYLINE / SPREAD / TOTAL on board cards, ladder cards and the NFL/CFB slate
+  strips, heat-ramped, with a stated reason where there is no play. It reads the
+  RAW reads (`atsR`/`totR`) that `buildBoard` carries beside the qualifying
+  `ats`/`tot` — **what records is still gated on the bar.**
+- **Live/Offline mode badge** — the header badge (`#mode-badge`, set by
+  `setMode`) reads **LIVE** when ESPN fetches succeed and **OFFLINE** when they
+  all fail, in which case the app renders the hardcoded `DEMO` fixtures so it
+  never looks broken. (The badge keeps the `.badge.demo` class in the offline
+  state — the class name predates the label.) `setMode(true)` is called from
+  `renderHome` once any feed loads.
 
 ## Features built (high level)
 

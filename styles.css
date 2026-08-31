@@ -1721,8 +1721,14 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-palette] .tabs button .ic { display: none; }
 :root[data-palette] .tabs button .lb { font-size: inherit; font-weight: inherit; }
 :root[data-palette] .tabs button:hover { color: var(--ink); background: var(--l07); }
-:root[data-palette] .tabs button.active {
+:root[data-palette] .tabs button.active,
+:root[data-palette][data-theme] .tabs button.active {
   background: var(--sf2); color: var(--ink); border-bottom-color: var(--ac);
+  /* The Editorial light block paints the active tab with an inset gold bar at
+     (0,3,1), which out-specifies a plain [data-palette] rule — so the ACTIVE
+     TAB was the one piece of chrome not wearing the accent. Killed here, and
+     the extra [data-theme] in the selector is what wins the specificity. */
+  box-shadow: none;
 }
 :root[data-palette] .tabs button.active::after { display: none; }
 /* Live pip: a 5px square on the label, since the icon it used to hang off is
