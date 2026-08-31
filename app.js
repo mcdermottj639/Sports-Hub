@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v180';
+const APP_VERSION = 'v181';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1900,34 +1900,66 @@ async function predictGame(sport, g, opts) {
 //
 // So every play now names its own market, and the spread + total plays sit
 // beside the moneyline instead of being scattered across two cards.
+// 🤖 AI Pick — the model's read on ALL THREE markets, every time.
+//
+// v179 named each market, but still only listed a market when it produced a
+// qualifying PLAY, so a small spread difference showed nothing here and the
+// owner had to go find "no play" in the Game Report. v181: the three rows are
+// always present when the book posted the number, each showing the side and
+// the size of the difference, with the ones under the recording bar marked as
+// reads rather than bets. Model SEA -2.9 vs book SEA -3.5 now reads
+// "NE +3.5 · 0.6 pts", not silence.
 function aiPickHead(pred, sport, g, info) {
   if (!pred) return '';
-  const ats = (sport && g && info) ? atsCall(sport, g, pred, info) : null;
+  const ats = (sport && g && info) ? atsRead(sport, g, pred, info) : null;
+  const tot = totalRead(sport, pred, info);
+  const pill = (v, qualifies) =>
+    `<span class="ai-edge${qualifies ? '' : ' under'}">${v}</span>`;
+
   const rows = [`<div class="ai-play"><span class="ai-mkt">Moneyline</span>
     <span class="ai-sel"><b>${esc(pred.winner.name)}</b> to win</span>
     <span class="ai-conf">${pred.conf}%</span></div>`];
+
   if (ats) {
     rows.push(`<div class="ai-play"><span class="ai-mkt">Spread</span>
-      <span class="ai-sel"><b>${esc(ats.label)}</b></span>
-      <span class="ai-edge">${Math.abs(ats.edge).toFixed(1)} pts</span></div>`);
+      <span class="ai-sel">${ats.pinned
+        ? `<span class="bb-muted">model tops out around ${Math.abs(ats.proj).toFixed(1)} pts — can't price this number</span>`
+        : `<b>${esc(ats.label)}</b>`}</span>
+      ${ats.pinned ? '' : pill(`${Math.abs(ats.edge).toFixed(1)} pts`, ats.qualifies)}</div>`);
+  } else if (ATS_SPORTS.has(sport)) {
+    rows.push(`<div class="ai-play"><span class="ai-mkt">Spread</span>
+      <span class="ai-sel bb-muted">no spread posted</span></div>`);
   }
-  if (pred.projTotal != null && info?.ou != null) {
-    const lean = pred.projTotal > info.ou ? 'OVER' : pred.projTotal < info.ou ? 'UNDER' : null;
-    if (lean) {
-      rows.push(`<div class="ai-play"><span class="ai-mkt">Total</span>
-        <span class="ai-sel"><b>${lean} ${info.ou}</b></span>
-        <span class="ai-edge">${Math.abs(pred.projTotal - info.ou).toFixed(1)} pts</span></div>`);
-    }
+
+  if (tot) {
+    rows.push(`<div class="ai-play"><span class="ai-mkt">Total</span>
+      <span class="ai-sel"><b>${tot.side} ${tot.line}</b></span>
+      ${pill(`${Math.abs(tot.diff).toFixed(1)} pts`, tot.qualifies)}</div>`);
+  } else if (info?.ou != null) {
+    rows.push(`<div class="ai-play"><span class="ai-mkt">Total</span>
+      <span class="ai-sel bb-muted">model lands exactly on ${info.ou}</span></div>`);
   }
-  // Spell out the reconciliation whenever the two plays land on opposite
-  // teams — the exact thing that looked like a bug.
-  const split = ats && ats.team !== pred.winner.name
-    ? `<div class="ai-why">Both from the same projection: ${esc(pred.winner.name)} by about ${Math.abs(pred.projMargin).toFixed(0)} — enough to win the game, not enough to cover ${Math.abs(ats.spread)}.</div>`
+
+  // Spell out the reconciliation whenever the spread side differs from the
+  // winner — the thing that read as a contradiction in v178.
+  const split = ats && !ats.pinned && ats.team !== pred.winner.name
+    ? `<div class="ai-why">Both from the same projection: ${esc(pred.winner.name)} by ${Math.abs(pred.projMargin).toFixed(1)} — ${Math.abs(ats.edge) >= 1 ? 'enough to win' : 'a win'}, but ${Math.abs(ats.spread)} is more than that, so the points are on the other side.</div>`
     : '';
+  // Be explicit about which rows are bets and which are only reads, rather
+  // than showing a number that looks like a play but never gets graded.
+  const soft = [ats && !ats.pinned && !ats.qualifies ? 'spread' : '', tot && !tot.qualifies ? 'total' : '']
+    .filter(Boolean);
+  const softNote = soft.length
+    ? `<div class="ai-why">The ${soft.join(' and ')} difference${soft.length > 1 ? 's are' : ' is'} inside the noise band, so ${soft.length > 1 ? 'they are' : 'it is'} shown as a read — the model doesn't record ${soft.length > 1 ? 'them' : 'it'} as a play.</div>`
+    : '';
+  const homeAbbr = g?.home?.abbr || 'home', awayAbbr = g?.away?.abbr || 'away';
+  const marginTxt = pred.projMargin != null
+    ? `model margin: ${esc(pred.projMargin >= 0 ? homeAbbr : awayAbbr)} by ${Math.abs(pred.projMargin).toFixed(1)}` : '';
+  const bits = [pred.projTotal != null ? `Model total: ${pred.projTotal.toFixed(1)}` : '', marginTxt].filter(Boolean);
   return `<div class="md-section-title acc-open">🤖 AI Pick</div>
     <div class="ai-plays">${rows.join('')}</div>
-    <div class="conf-bar"><span style="width:${pred.conf}%"></span></div>${split}
-    ${pred.projTotal != null ? `<div class="ai-why">Model total: ${pred.projTotal.toFixed(1)}${pred.projMargin != null ? ` · model margin: ${esc(pred.winner.name === g?.home?.name ? (g?.home?.abbr || 'home') : (g?.away?.abbr || 'away'))} by ${Math.abs(pred.projMargin).toFixed(1)}` : ''}</div>` : ''}
+    <div class="conf-bar"><span style="width:${pred.conf}%"></span></div>${split}${softNote}
+    ${bits.length ? `<div class="ai-why">${bits.join(' · ')}</div>` : ''}
     ${pred.thin ? '<div class="ai-why">Not enough games played yet for full analysis.</div>' : ''}`;
 }
 function aiFactors(pred) {
@@ -2257,16 +2289,18 @@ function gameReportHTML(sport, g, pred, info, report, data) {
     if (ATS_SPORTS.has(sport) && pred.projMargin != null && info?.spread != null) {
       const sp = Number(info.spread);                    // home-oriented
       const mLine = -pred.projMargin;                    // the model's own home number
-      const ats = atsCall(sport, g, pred, info);
+      // v181: the READ, not the play — so the side is named even when the
+      // difference is too small to record. "No play" alone threw away the
+      // one thing the owner wanted to see.
+      const ats = atsRead(sport, g, pred, info);
       const fmt = (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
       const side = `${esc(g.home.abbr || g.home.name)} ${fmt(mLine)}`;
       const book = `${esc(g.home.abbr || g.home.name)} ${fmt(sp)}`;
-      const pinned = pred.marginSat && Math.abs(sp) > Math.abs(pred.projMargin);
-      parts.push(`<div class="gr-total">Spread: model <b>${side}</b> vs book ${book}${ats
-        ? ` → <b>${esc(ats.label)}</b> <span class="gr-edge">${Math.abs(ats.edge).toFixed(1)} pts of value</span>`
-        : pinned
+      parts.push(`<div class="gr-total">Spread: model <b>${side}</b> vs book ${book}${!ats ? ''
+        : ats.pinned
           ? ` <span class="bb-muted">→ no play: the model tops out around ${Math.abs(pred.projMargin).toFixed(1)} points, so it can't price a number this big.</span>`
-          : ` <span class="bb-muted">→ inside the ${ATS_EDGE_MIN[sport] ?? 2}-pt noise band, no play</span>`}</div>`);
+          : ` → <b>${esc(ats.label)}</b> <span class="gr-edge${ats.qualifies ? '' : ' under'}">${Math.abs(ats.edge).toFixed(1)} pts${ats.qualifies ? ' of value' : ''}</span>${
+              ats.qualifies ? '' : ` <span class="bb-muted">— under the ${ATS_EDGE_MIN[sport] ?? 2}-pt bar, so it's a read, not a recorded play</span>`}`}</div>`);
     }
   }
   const mv = lineMoves(sport, g, report);
@@ -2971,29 +3005,57 @@ function pickTier(pred, info, gap) {
 // The model's against-the-spread call for one game, or null. Football only:
 // ATS_SPORTS gates it, so MLB/NBA rows simply carry ats: null and every
 // consumer's optional chaining does the rest.
-function atsCall(sport, g, pred, info) {
+// The model's RAW spread read — always returned whenever the sport has a
+// spread market and the book posted a number, however small the difference.
+//
+// 🚨 v181 split this out of atsCall. atsCall returns null below the noise
+// band, which is right for RECORDING (a 0.6-point difference is not a pick
+// worth grading) but was wrong for DISPLAY: the card showed "inside the 2-pt
+// noise band, no play" and dropped the read entirely, when the owner wants to
+// see which side the model is on and by how much. Model SEA -2.9 against a
+// book asking SEA -3.5 IS a read — NE +3.5 by 0.6 — it just isn't a bet.
+//
+// So: show everything, record only what clears the bar.
+function atsRead(sport, g, pred, info) {
   if (!ATS_SPORTS.has(sport) || !pred || info?.spread == null) return null;
   const sp = Number(info.spread);                  // home-oriented: -3.5 = home favored by 3.5
   if (!isFinite(sp) || pred.projMargin == null) return null;
-  // 🚨 v178: no play when the projected margin is PINNED at its ceiling and
-  // the book's number is past it. projMarginFor clamps pHome to [0.02, 0.98],
-  // which caps the margin at 33.9 in CFB and 27.7 in the NFL — so on USC -37.5
-  // the model "likes the dog" on every single game of that shape, having
-  // measured nothing: it simply cannot express a number that big. Recording
-  // those would quietly fill the ATS record with picks the model never really
-  // made, which is the opposite of what tracking it is for.
-  if (pred.marginSat && Math.abs(sp) > Math.abs(pred.projMargin)) return null;
   const edge = pred.projMargin + sp;               // >0 → model likes HOME to cover
-  if (!isFinite(edge) || Math.abs(edge) < (ATS_EDGE_MIN[sport] ?? 2)) return null;
+  if (!isFinite(edge)) return null;
   const home = edge > 0;
   const team = home ? g.home : g.away;
   const teamSpread = home ? sp : -sp;              // that side's own number
+  // 🚨 v178: the projected margin is PINNED when projMarginFor's [0.02, 0.98]
+  // clamp bites (33.9 pts in CFB, 27.7 in the NFL). Past that the model can't
+  // express a number that big, so it would "like the dog" on every game of
+  // that shape having measured nothing.
+  const pinned = !!pred.marginSat && Math.abs(sp) > Math.abs(pred.projMargin);
   return {
     home, team: team.name, abbr: team.abbr || (team.name || '').split(' ').pop(),
-    spread: teamSpread, homeSpread: sp, proj: pred.projMargin, edge,
+    spread: teamSpread, homeSpread: sp, proj: pred.projMargin, edge, pinned,
+    // Whether this is a PLAY (recorded + graded) or just the read.
+    qualifies: !pinned && Math.abs(edge) >= (ATS_EDGE_MIN[sport] ?? 2),
     // "PHI +2.5" — the bet as it would be written on a ticket.
     label: `${team.abbr || team.name} ${teamSpread > 0 ? '+' : ''}${teamSpread}`,
   };
+}
+// The ATS PLAY: the read, but only when it clears the bar. Everything that
+// records, grades or ranks a pick goes through this, so the noise band and the
+// saturation guard still gate the record exactly as before.
+function atsCall(sport, g, pred, info) {
+  const r = atsRead(sport, g, pred, info);
+  return r && r.qualifies ? r : null;
+}
+// The model's raw totals read, same idea: always computed, flagged for whether
+// it clears the sport's own floor.
+function totalRead(sport, pred, info) {
+  if (pred?.projTotal == null || info?.ou == null) return null;
+  const line = Number(info.ou);
+  if (!isFinite(line)) return null;
+  const diff = pred.projTotal - line;
+  if (!isFinite(diff) || diff === 0) return null;
+  return { side: diff > 0 ? 'OVER' : 'UNDER', line, proj: pred.projTotal, diff,
+    qualifies: Math.abs(diff) >= (TOT_EDGE_MIN[sport] ?? 1) };
 }
 
 // Everything the model has to say about one sport's slate: the pick, the

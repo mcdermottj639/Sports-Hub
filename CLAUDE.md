@@ -368,7 +368,47 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v180** (backend **b13-pregame-lines**).
+Current version as of this writing: **v181** (backend **b13-pregame-lines**).
+
+- **🤖 AI Pick lists ML · Spread · Total every time (v181)** — the owner, on a
+  SEA/NE card: *"Where it says AI Picks here, I want ML spread and total. U
+  noted the spread line but it should say the model picks the Pats by 0.6 pts
+  since that difference."*
+  - **The read was computed and thrown away.** v179 named each market but only
+    listed one when it produced a **qualifying play**, and `atsCall` returns
+    null below `ATS_EDGE_MIN`. So model SEA −2.9 against a book asking SEA −3.5
+    showed **no Spread row at all** — even though the read (NE +3.5 by 0.6)
+    existed. The Game Report said "inside the 2-pt noise band, no play", which
+    discards the one thing the owner wanted to see.
+  - **The rule now: show everything, record only what clears the bar.** New
+    **`atsRead(sport, g, pred, info)`** returns the raw read whenever the book
+    posted a number, carrying `qualifies` and `pinned`; **`atsCall` is now a
+    thin wrapper returning it only when it qualifies**, so *every* path that
+    records, grades or ranks a pick is byte-for-byte unchanged. Same split for
+    totals via **`totalRead(sport, pred, info)`**.
+  - Rows under the bar are rendered with a **muted pill** (`.ai-edge.under`,
+    `.gr-edge.under`) plus a sentence saying they're a read the model does not
+    record — a number that looks like a play but never grades would be worse
+    than hiding it.
+  - The card also degrades honestly rather than silently: "no spread posted"
+    (ATS sports with no number), "model lands exactly on 44.5" (a zero
+    difference), no spread row at all for non-ATS sports, and the v178 pinned
+    explanation kept.
+  - **Fixed in passing:** the model-margin line reported the *winner's* abbrev
+    rather than reading `projMargin`'s sign. They agree today (both derive from
+    `pHome`), but the sign is the actual source of truth.
+  - Verified — **27 checks**, including the owner's exact card reproduced
+    end-to-end: three rows in order, `NE +3.5` / `0.6 pts`, both soft rows
+    marked, the noise-band sentence, the reconciliation line, an under-bar pill
+    visually distinct from a qualifying one, a favourite-covers spread NOT
+    marked soft, all four degradation states, and — the important one —
+    `atsRead` returning the sub-threshold read while `atsCall` still returns
+    null so the record is untouched. Thirteen suites green.
+  - ⚠️ **Test-expectation note:** four assertions in `plays.js`/`ats.js`
+    asserted the *absence* of a sub-threshold row. That absence was the bug, so
+    they were inverted deliberately — when a suite fails after a change like
+    this, check whether it was asserting the old behaviour before "fixing" the
+    code.
 
 - **🚨 RED ALERT tier (v180)** — the owner's rule: *"most of the value will be
   found in spreads for football. If we ever have an underdog on the Vegas DK
