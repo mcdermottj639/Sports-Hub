@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v187';
+const APP_VERSION = 'v188';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -113,6 +113,14 @@ const timeAgo = (date) => {
 };
 // Pre-game label: ESPN sometimes returns a generic "Scheduled"/"TBD" string
 // instead of a start time, so fall back to the time.
+// Compact form of the same label for the RAIL only: today's date is implied
+// by the rail existing, and "EDT" is the phone's own timezone. The full string
+// is untouched everywhere else — the modal and the slate have room for it.
+const railWhen = (g) => scheduledLabel(g)
+  .replace(/^\s*\d{1,2}\/\d{1,2}\s*[-–]\s*/, '')
+  .replace(/\s+(EDT|EST|CDT|CST|MDT|MST|PDT|PST|UTC)\b/i, '')
+  .replace(/\s*:00\b/, '')
+  .trim();
 const scheduledLabel = (g) => {
   const t = (g.statusText || '').trim();
   if (t && !/scheduled|tbd|pre[- ]?game/i.test(t)) return t;
@@ -1057,8 +1065,9 @@ function liveRailCard(sport, g) {
     tag = `<div class="lrc-tag off">${cfg.emoji} ${cfg.label} · FINAL</div>`;
   } else {
     const info = normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
-    gc = `<div class="lrc-when">${esc(scheduledLabel(g))}</div>`
-      + (g.tv ? `<div class="lrc-st">📺 ${esc(g.tv)}</div>` : '')
+    const tv = (g.tv || '').split(',').slice(0, 2).join(',').trim();
+    gc = `<div class="lrc-when">${esc(railWhen(g))}</div>`
+      + (tv ? `<div class="lrc-st">📺 ${esc(tv)}</div>` : '')
       + (info?.details ? `<div class="lrc-st">${esc(info.details)}</div>` : '');
     tag = `<div class="lrc-tag off">${cfg.emoji} ${cfg.label}</div>`;
   }

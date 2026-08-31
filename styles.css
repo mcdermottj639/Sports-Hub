@@ -1678,9 +1678,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   padding: 12px 0;
 }
 :root[data-palette] .game-card.fav { border-left: 3px solid var(--ink); padding-left: 10px; }
-:root[data-palette] .brd-card.t1, :root[data-palette] .brd-card.alert {
-  border-left: 3px solid var(--ac); padding-left: 10px;
-}
+
 :root[data-palette] .brd-rib { display: none; }
 :root[data-palette] .brd-tier {
   background: var(--ac); color: var(--gr); font-weight: 800;
@@ -1746,12 +1744,17 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-palette] .rail-wrap[hidden] { display: none; }
 :root[data-palette] .rail-leagues {
   flex: none; display: flex; flex-direction: column; gap: 1px;
+  justify-content: flex-start; align-content: flex-start;
   padding: 0; overflow: visible; background: var(--l25);
 }
 :root[data-palette] .rail-leagues[hidden] { display: none; }
 :root[data-palette] .rl-pill {
-  flex: 1; border-radius: 0; border: none; text-align: left;
-  display: flex; align-items: center; padding: 0 8px;
+  /* Not `flex: 1`: dividing the rail's full height between three leagues made
+     three heavy filled slabs down the left edge. They're bubbles — they take
+     the height of their own label and stack from the top. */
+  flex: 0 0 auto; min-height: 32px;
+  border-radius: 0; border: none; text-align: left;
+  display: flex; align-items: center; padding: 0 9px;
   font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
   background: var(--gr); color: var(--gy);
 }
@@ -1769,7 +1772,10 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-palette] .lrc-final { opacity: 1; }
 :root[data-palette] .lrc-final .lrc-nm, :root[data-palette] .lrc-final .lrc-sc { color: var(--mu2); }
 :root[data-palette] .lrc-row.lead .lrc-nm, :root[data-palette] .lrc-row.lead .lrc-sc { color: var(--ink); }
-:root[data-palette] .lrc-tag { color: var(--mu); font-weight: 500; letter-spacing: .14em; font-size: 8px; }
+:root[data-palette] .lrc-tag {
+  color: var(--mu); font-weight: 500; letter-spacing: .12em; font-size: 8px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
 :root[data-palette] .lrc-dot { background: var(--ac); border-radius: 0; }
 /* The model's read on the rail card, so the tier is visible without opening
    anything — the same badge the board and the ladder use. */
@@ -1814,7 +1820,13 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   background: var(--ink); color: var(--gr); border-color: var(--ink);
 }
 :root[data-palette] .sec-all {
-  flex: none; display: flex; align-items: center; padding: 0 12px;
+  /* The base rule is a full-width dashed block with a 10px radius, which is
+     what it was when it sat alone above the content. In the control row it is
+     a label at the end of a bar: it hugs its own text, squares off, and the
+     divider is its left border running the full height of the row. */
+  flex: 0 0 auto; width: auto; max-width: 46%; margin: 0;
+  display: flex; align-items: center; justify-content: flex-start;
+  padding: 0 14px; border-radius: 0;
   background: none; border: none; border-left: 1px solid var(--l3);
   font-family: inherit; font-size: 9px; font-weight: 800; letter-spacing: .08em;
   color: var(--ac); cursor: pointer; white-space: nowrap;
@@ -1917,8 +1929,6 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
 /* The control row is one bar: chips left, collapse-all pinned right, both
    aligned to the top so a wrapped chip row doesn't float the button. */
-:root[data-palette] .ctl-row { align-items: flex-start; }
-:root[data-palette] .sec-all { align-self: stretch; min-height: 34px; }
 
 /* Radius that the first pass missed, on surfaces nested inside cards. */
 :root[data-palette] .featured-game, :root[data-palette] .brd-more,
@@ -1949,4 +1959,133 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
 /* The collapse-all control is a label, not a column: it takes the width of its
    own text and leaves the rest of the row to the chips. */
-:root[data-palette] .sec-all { flex: 0 0 auto; max-width: 170px; justify-content: flex-start; }
+
+/* ==========================================================================
+   SPACING & ALIGNMENT (v188).
+   v187 got the system right and the rhythm wrong: the rail card kept the
+   402px prototype's 146px width while carrying ESPN's real strings, and
+   everything below it was butted straight up against its own divider. This
+   block sets one vertical scale and one left edge, and gives the rail room.
+   ========================================================================== */
+
+/* --- the rail ------------------------------------------------------------- */
+/* A scheduled card is three lines of text, not a graphic — stacking them is
+   what the width was always for. Only a LIVE card earns two columns, because
+   only a live card has a diamond or a field to draw. */
+:root[data-palette] .lrc {
+  flex: 0 0 184px; flex-direction: column; gap: 6px;
+  padding: 9px 11px 10px; overflow: hidden;
+}
+:root[data-palette] .lrc-live { flex: 0 0 232px; flex-direction: row; gap: 10px; align-items: flex-start; }
+/* A live card is two columns, so its gamecast must size to its own graphic —
+   the `width: 100%` the stacked variant needs would take the whole card and
+   wrap the league tag onto a second line. */
+:root[data-palette] .lrc-live .lrc-gc {
+  flex: 0 0 auto; width: auto; min-width: 0; padding-left: 9px;
+  border-left: 1px solid var(--l15); align-items: flex-end; justify-content: center;
+}
+:root[data-palette] .lrc-live .lrc-l { flex: 1 1 auto; }
+:root[data-palette] .lrc-l { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+/* Not `flex: 0 0 82px` any more: a fixed basis still grows to max-content
+   when the children can't wrap, which is exactly how 145px of card ended up
+   holding 199px of text. */
+:root[data-palette] .lrc-gc {
+  flex: 0 0 auto; min-width: 0; width: 100%;
+  align-items: flex-start; justify-content: flex-start;
+  gap: 3px; padding-left: 0; border-left: none;
+}
+:root[data-palette] .lrc-st, :root[data-palette] .lrc-when,
+:root[data-palette] .lrc-dd, :root[data-palette] .lrc-big {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+:root[data-palette] .lrc-when { font-size: 12px; }
+:root[data-palette] .lrc-st { font-size: 9.5px; font-weight: 600; }
+:root[data-palette] .lrc-row { gap: 7px; padding: 0; }
+:root[data-palette] .lrc-mdl { margin-top: 2px; }
+
+/* --- tabs: room to breathe, and no orphan cell ---------------------------- */
+:root[data-palette] .tabs button { padding: 10px 10px 8px; font-size: 9.5px; }
+/* Nine tabs in a 5-wide grid leave one empty cell. Rather than filling it with
+   a blank, the last tab takes it — the row reads as a row instead of as a
+   broken grid. */
+:root[data-palette] .tabs button:last-child { grid-column: span 2; }
+:root[data-palette] .tabs::after { display: none; }
+@media (min-width: 700px) {
+  :root[data-palette] .tabs button:last-child { grid-column: auto; }
+}
+
+/* --- masthead ------------------------------------------------------------- */
+:root[data-palette] .topbar { padding: 10px 16px 7px; }
+:root[data-palette] .hd-btn { padding: 6px 8px; }
+
+/* --- one left edge, one vertical scale ------------------------------------ */
+:root[data-palette] main { padding: 0 16px 96px; }
+/* The control row is chrome, so it runs edge to edge like the bars above it
+   rather than floating inside the text column with its own ragged margin. */
+:root[data-palette] .ctl-row {
+  margin: 0 -16px 20px; padding: 0;
+  align-items: stretch;
+  border-bottom: 1px solid var(--l25);
+}
+:root[data-palette] .ctl-row .ctl-chips { gap: 6px; padding: 10px 6px 10px 16px; }
+:root[data-palette] .ctl-row .chip { padding: 8px 10px; }
+
+/* Sections: 30px of air above the heading, 10px under its rule, and the rule
+   spans the column — .brd-head was a flex box, so The Board's underline
+   stopped wherever its title happened to end. */
+:root[data-palette] .section-title,
+:root[data-palette] .ai-section-head,
+:root[data-palette] .lad-sec {
+  margin: 30px 0 0; padding-bottom: 9px;
+}
+:root[data-palette] .tab-panel > .ctl-row + .section-title,
+:root[data-palette] .tab-panel > *:first-child > .section-title:first-child { margin-top: 0; }
+:root[data-palette] .brd-head { display: block; }
+:root[data-palette] .section-title + *,
+:root[data-palette] .ai-section-head + *,
+:root[data-palette] .lad-sec + * { margin-top: 12px; }
+:root[data-palette] .ai-note, :root[data-palette] .brd-note,
+:root[data-palette] .empty { padding: 13px 14px; line-height: 1.5; }
+
+/* Hero: the accent rule hangs in the gutter so the hero's own text starts on
+   the same left edge as every heading and every card below it. */
+:root[data-palette] .featured-card {
+  margin-left: -16px; padding: 15px 0 16px 13px;
+}
+:root[data-palette] .featured-card h2 { margin-bottom: 6px; }
+:root[data-palette] .featured-line { margin-top: 12px; }
+:root[data-palette] .hero-chips { margin-top: 14px; gap: 8px; }
+:root[data-palette] .hero-chip { padding: 8px 10px; }
+
+/* Cards and rows: consistent internal rhythm. */
+:root[data-palette] .game-card, :root[data-palette] .brd-card { padding: 14px 0; }
+/* The top two tiers carry an accent edge. The tier classes are `t0` (Red
+   Alert) and `t1` (Best Bet) — v187 wrote `.alert`, which is the TIER_META key
+   and not a class any card has, so the rule never matched and the emphasis
+   came only from the pre-palette rules underneath: a hardcoded #c0392b ring on
+   the light themes and #ff5a5a on the dark one, neither of which is the
+   palette's own accent. Terracotta got a red that isn't its red. */
+:root[data-palette] .brd-card.t0, :root[data-palette] .brd-card.t1 {
+  padding-left: 11px; border-left: 3px solid var(--ac); box-shadow: none;
+}
+:root[data-palette] .brd-card.t0 { border-left-width: 4px; }
+:root[data-palette] .brd-card.t0 .brd-tier { background: var(--ac); color: var(--gr); }
+:root[data-palette] .brd-mu { margin-top: 2px; }
+:root[data-palette] .brd-pick { margin-top: 7px; gap: 8px; }
+:root[data-palette] .brd-row { margin-top: 7px; line-height: 1.45; }
+:root[data-palette] .mkt-box { margin-top: 12px; }
+:root[data-palette] .mkt-row { padding: 9px 10px; gap: 10px; }
+:root[data-palette] .mkt-note { margin-top: 10px; }
+:root[data-palette] .cvm { margin: 11px 0 3px; }
+:root[data-palette] .stat-row, :root[data-palette] .sched-row { padding: 11px 12px; margin-bottom: 8px; }
+:root[data-palette] .leader-row, :root[data-palette] .hit-row { padding: 10px 0; }
+:root[data-palette] .ai-statbar { gap: 10px; margin: 12px 0 6px; }
+:root[data-palette] .ai-stat { padding: 12px 10px; }
+:root[data-palette] .setup-card { padding: 18px 16px; line-height: 1.65; }
+:root[data-palette] .fan-btn { padding: 12px 16px; }
+:root[data-palette] .headline-row { gap: 12px; }
+
+/* The bottom bar sits over the page, so the page has to end above it. */
+:root[data-palette] .botbar { height: 56px; }
+:root[data-palette] .botbar .bb-read { padding: 0 12px 0 16px; }
+:root[data-palette] .to-top { bottom: 70px; }

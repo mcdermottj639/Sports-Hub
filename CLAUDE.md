@@ -127,22 +127,38 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 ## Files
 
 - `index.html` — single page, all tabs/sections. Asset URLs carry `?v=N` cache-busting.
-  Holds `#live-rail` (above the masthead), the icon-over-label tab rail, and
-  `#home-board` (🎲 The Board, between My Teams and Today's Games).
-- `app.js` (~2100 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
-- `styles.css` — all styling. **Dark theme is the default** (base `:root` CSS vars at top:
-  `--accent` #3ad29f green, `--gold`, `--eagles-green` #004C54, etc.). A **light theme**
-  ("Editorial / Premium" — warm paper `#f7f4ee`, off-white cards, hairline rules, gold
-  "kicker" section headings, serif masthead/headlines) lives in a `:root[data-theme="light"]`
-  block appended at the END of the file. It re-declares the variables (so most surfaces
-  recolor for free) plus targeted overrides for spots that hardcoded dark-only values
-  (white hairline borders, dark gradients, dark chips/tracks). **Dark mode is untouched** —
-  the light block only applies when `<html data-theme="light">`. Theme is chosen by a
-  header toggle (🌙/☀️): an inline `<head>` script sets `data-theme` before first paint
-  (saved pref in `sportshub:theme`, else the OS `prefers-color-scheme`); `applyTheme()` in
-  `app.js` wires the toggle, syncs the `theme-color` meta, and follows the OS until the user
-  picks explicitly. When adding new components, use the CSS vars (esp. `var(--card)`,
-  `var(--text)`, `var(--muted)`, `var(--line)`) so they theme automatically.
+  Holds `#rail-wrap` (v187 — the rail plus the league-filter column, above the
+  masthead), the nine-tab grid, `#home-board` (🎲 The Board, between My Teams
+  and ⛳ Golf) and `#botbar` (the persistent model-read bar).
+- `app.js` (~8,700 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
+- `styles.css` — all styling, in four layers, and **order matters**: (1) the
+  original dark `:root` vars and components; (2) the `:root[data-theme="light"]`
+  "Editorial / Premium" block, which un-hardcodes the dark-only values (white
+  hairline borders, dark gradients, chips, tracks); (3) the **Modernist palette
+  layer** (v187) and (4) the **spacing & alignment layer** (v188), both keyed on
+  `:root[data-palette]`. `[data-palette]` and `[data-theme]` are the SAME
+  specificity, so layers 3–4 win only because they come last — append to the
+  end, never insert above them.
+  - **Four palettes**, chosen with `<html data-palette="sand|terracotta|paper|dusk">`:
+    Sand (default, warm paper), Terracotta, Paper, Dusk. Each block is 14 colours
+    (`--gr --sf --sf2 --ink --ink2 --gy --mu --mu2 --tr --tr2 --ac --ac6 --ac7 --wm`)
+    plus one `--base` ink triple that generates the alpha ramp `--l07 … --l4`.
+    The layer then re-points the app's OWN variables (`--bg`, `--card`, `--card-2`,
+    `--text`, `--muted`, `--silver`, `--accent`, `--live`, `--gold`, `--line`,
+    `--eagles-green`, `--radius`) at them, which is why components written
+    against the vars recolour for free. **Keep doing that** — a new component
+    that hardcodes a hex will be wrong in three palettes out of four.
+  - **`data-theme` still rides alongside** `data-palette` (light for the three
+    paper grounds, dark for Dusk) so layer 2 keeps doing its job underneath.
+    **Dusk IS dark mode.** An inline `<head>` script sets both before first
+    paint (saved pref in `sportshub:palette`, else the OS `prefers-color-scheme`);
+    `applyPalette()` in `app.js` wires the header cycler and syncs the
+    `theme-color` meta. `applyTheme('light'|'dark')` survives as an alias so a
+    pre-v187 saved preference still resolves.
+  - ⚠️ **Specificity trap** (cost a real bug in v187): layer 2 rules like
+    `:root[data-theme="light"] .brd-card.t0` are (0,3,1) and OUT-SPECIFY a plain
+    `:root[data-palette] .brd-card` (0,2,1). If a palette override looks ignored,
+    that is why — match the class, don't just rely on coming later.
 - `sw.js` — service worker (network-first auto-update; see below).
 - `manifest.webmanifest` — PWA manifest. Icons are real eagle emoji extracted from NotoColorEmoji (one-off via `/tmp/make-icon.js`, not in repo).
 - `draft.html` / `draft.css` / `draft.js` — **🧪 Labs: NFL Mock Draft Simulator**,
@@ -368,7 +384,60 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v187** (backend **b13-pregame-lines**).
+Current version as of this writing: **v188** (backend **b13-pregame-lines**).
+
+- **📐 Spacing and alignment — one gutter, one vertical scale, and a rail that
+  fits its own text (v188)** — the owner, with a photo of the live app: *"Look
+  how cramped it is at the top and everywhere. We need better formatting and
+  alignment. Not so squeezed."* Correct on every count.
+  - **The rail was broken, not just tight.** v187 kept the 402px prototype's
+    **146px** card while feeding it ESPN's real strings — `"8/31 - 6:45 PM EDT"`,
+    `"MLB.TV, Mariners.TV, NESN"`, `"BOS -162"`, all `white-space: nowrap`. Every
+    card on an all-MLB slate held **199px of content in a 145px box**, so the
+    team names, the scores and the gamecast all collided and clipped mid-word.
+    Three causes, all fixed:
+    - `.lrc-gc` was `flex: 0 0 82px`. **A fixed basis still grows to
+      max-content** when the children can't wrap — that is the whole overflow.
+      It is `flex: 0 0 auto; min-width: 0` now, with ellipsis on the text lines.
+    - **A scheduled card is three lines of text, not a graphic.** The card
+      stacks now (184px) and only a LIVE card keeps two columns (232px),
+      because only a live card has a diamond or a field to draw. ⚠️ The
+      `width: 100%` the stacked variant needs has to be undone for
+      `.lrc-live .lrc-gc` or the league tag wraps onto a second line.
+    - **Trimmed at the source, not with CSS.** New `railWhen()` drops the date
+      prefix and the timezone (the rail is today's games, on the owner's own
+      phone), and the TV list is capped at two networks. `scheduledLabel()` is
+      untouched — the modal and the slate have room for the full string.
+  - **One left edge.** Everything on a tab — headings, cards, notes, hero copy
+    — now starts on the same 16px gutter at every width. The hero's accent rule
+    hangs in the gutter (`margin-left: -16px`) so the hero's TEXT aligns with
+    the headings instead of sitting 15px inside them. The control row went
+    full-bleed to match the bars above it rather than floating in the text
+    column with its own margin.
+  - **One vertical scale**: 30px above every section heading, 12px under its
+    rule, before uniform card and row padding. `.brd-head` was a flex box, so
+    The Board's 2px underline stopped wherever its title happened to end —
+    it's `display: block` now and the rule spans the column.
+  - **Three latent bugs the pass surfaced**, all from rules the palette layer
+    never reset:
+    - `.sec-all`'s base rule is `width: 100%; border-radius: 10px`. In the
+      control row that made the collapse control take **40% of the bar with a
+      rounded corner on it**. It hugs its label now — the scattered
+      `[data-palette] .sec-all` patches are consolidated into one block.
+    - `.brd-card.alert` **never matched anything**: the tier classes are `t0`
+      (Red Alert) and `t1` (Best Bet); `alert` is the TIER_META key. So the top
+      tier's emphasis came only from the pre-palette rules underneath — a
+      hardcoded `#c0392b` ring on the light themes and `#ff5a5a` on Dusk.
+      **Terracotta was showing a red that isn't its red.** Both tiers now take
+      a `var(--ac)` left edge, so each palette uses its own accent.
+    - The nine-tab grid left an orphan cell on the second row; the last tab
+      spans it, so the row reads as a row.
+  - Verified in Chromium at **390 / 430 / 768 / 1280** against two fixtures —
+    the owner's actual case (all-MLB scheduled, long TV strings) and a mixed
+    live/scheduled slate: **zero horizontal overflow, zero clipped elements**
+    on all nine tabs at all four widths, rail cards non-overflowing in both
+    states, the tag no longer wrapping, and the Red Alert edge on-palette in
+    all four palettes. `node --check` clean.
 
 - **🎨 Four palettes, three bars of chrome, and all three markets on every card
   (v187)** — the feel-and-function pass from the Claude Design handoff. The
@@ -376,7 +445,7 @@ Current version as of this writing: **v187** (backend **b13-pregame-lines**).
   improving the feel and functionality."* So every tab, section, heading and
   string is where it was; what changed is the form and the mechanics.
   - **Palettes replace light/dark.** `data-palette` = `sand` (default, warm
-    paper) · `terracotta` · `paper` · `dusk`. Each is nine hexes plus one
+    paper) · `terracotta` · `paper` · `dusk`. Each is 14 colours plus one
     `--base` ink triple that generates the whole alpha ramp (`--l07` … `--l4`),
     and the block re-points the app's OWN variables (`--bg`, `--card`,
     `--text`, `--muted`, `--accent`, `--line`, `--radius`) at them — so every
@@ -2846,8 +2915,9 @@ index, not the argument.
 ## Features built (high level)
 
 - **Home** — the app's front door. The day's scores are NOT on this tab any
-  more (v166): they live in the **rail** pinned above the masthead, with the
-  league filter bubbles under it. Order: My Teams → **🎲 The Board** (v164: the
+  more (v166): they live in the **rail** pinned above the masthead — with the
+  league filter bubbles as a column INSIDE it since v187, not a bar under it.
+  Order: My Teams → **🎲 The Board** (v164: the
   model's best plays against the book across every in-season sport — moneyline,
   spread and totals — with its own record stated in the header) → ⛳ Golf →
   Top Headlines. Top Headlines
@@ -3316,8 +3386,17 @@ index, not the argument.
 - `sportshub:railoff` — leagues the user has filtered OUT of the top rail
   (array of sport keys). Only the hidden ones are stored, so a league you've
   never touched — including one whose season starts next week — shows by default.
-- `sportshub:theme` — chosen color theme (`'light'` | `'dark'`). Absent = follow the
-  OS `prefers-color-scheme`. Read by the inline `<head>` script and by `applyTheme`.
+- `sportshub:palette` — chosen palette (`'sand'` | `'terracotta'` | `'paper'` |
+  `'dusk'`), v187. Absent = follow the OS `prefers-color-scheme` (Sand when light,
+  Dusk when dark). Read by the inline `<head>` script and by `applyPalette`.
+- `sportshub:theme` — the pre-v187 light/dark preference. **No longer written**,
+  but still READ: an install that saved one before v187 keeps its side of the
+  choice instead of being dragged back to following the OS.
+- `sportshub:railhidden` — `'1'` when the owner has folded the top rail (v187).
+  Re-asserted after every rail repaint, so the 30s refresh can't re-open it.
+- `sportshub:sharp` — `'0'` when the 💰 sharp-money read is hidden app-wide
+  (v187). **Display only** — splits are still fetched and still recorded, so the
+  model's record can't drift depending on the switch.
 - Note: localStorage is **per browser/device** — the home-screen PWA and Safari
   keep separate tallies/rosters.
 
