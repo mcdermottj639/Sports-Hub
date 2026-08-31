@@ -146,30 +146,50 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   masthead), the nine-tab grid, `#home-board` (🎲 The Board, between My Teams
   and ⛳ Golf) and `#botbar` (the persistent model-read bar).
 - `app.js` (~8,700 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
-- `styles.css` — all styling, in four layers, and **order matters**: (1) the
+- `styles.css` — all styling, in five layers, and **order matters**: (1) the
   original dark `:root` vars and components; (2) the `:root[data-theme="light"]`
   "Editorial / Premium" block, which un-hardcodes the dark-only values (white
-  hairline borders, dark gradients, chips, tracks); (3) the **Modernist palette
-  layer** (v187) and (4) the **spacing & alignment layer** (v188), both keyed on
-  `:root[data-palette]`. `[data-palette]` and `[data-theme]` are the SAME
-  specificity, so layers 3–4 win only because they come last — append to the
-  end, never insert above them.
-  - **Four palettes**, chosen with `<html data-palette="sand|terracotta|paper|dusk">`:
-    Sand (default, warm paper), Terracotta, Paper, Dusk. Each block is 14 colours
-    (`--gr --sf --sf2 --ink --ink2 --gy --mu --mu2 --tr --tr2 --ac --ac6 --ac7 --wm`)
-    plus one `--base` ink triple that generates the alpha ramp `--l07 … --l4`.
-    The layer then re-points the app's OWN variables (`--bg`, `--card`, `--card-2`,
+  hairline borders, dark gradients, chips, tracks); (3) the **token layer**
+  (v187), (4) the **spacing & alignment layer** (v188) and (5) the **FLOW
+  layer** (v191), all keyed on `:root[data-palette]`. `[data-palette]` and
+  `[data-theme]` are the SAME specificity, so layers 3–5 win only because they
+  come last — append to the end, never insert above them.
+  - ⚠️ **Layer 5 supersedes the FORM half of layer 3.** v187 was Modernist —
+    zero radius, 2px rules, nothing floats, a hairline between everything. v191
+    replaced that with a card-and-elevation language: surfaces float, spacing
+    separates instead of rules, the accent runs as a plated gradient. Layer 3's
+    token mapping, alpha ramp, semantic ramp, heat classes and spacing scale
+    are all still live. Its radius-0 list, card borders and flat fills are
+    DEAD — editing them does nothing. Change form in the flow layer.
+  - **Two palettes**, chosen with `<html data-palette="champagne|onyx">`:
+    Champagne (light, default) and Onyx (dark) — the same design on two grounds.
+    Each block is 14 colours plus a `--base` ink triple that generates the alpha
+    ramp `--l07 … --l4`, plus four the flow layer needs: **`--acRGB`** (accent as
+    an rgb triple, so every tint derives from one place), **`--grad`** (the plated
+    fill — the metal is the DOUBLE highlight; one flat stop reads as mustard),
+    **`--on-ac`** (type ON an accent fill) and **`--glow`**.
+  - ⚠️ **Accent fills take DARK type.** White on gold is ~1.9:1 and unreadable;
+    `--on-ac` is dark ink and measures **7.8:1** on both grounds. Never write
+    `color:#fff` on an accent fill.
+  - ⚠️ **`--wm` is a muted bronze-taupe, not amber.** Gold occupies the amber
+    slot, so a C grade or a "vs market" tag tinted amber reads as a brand
+    element. Semantic good/bad (`--pos`/`--neg`) is unchanged.
+  - The layer re-points the app's OWN variables (`--bg`, `--card`, `--card-2`,
     `--text`, `--muted`, `--silver`, `--accent`, `--live`, `--gold`, `--line`,
-    `--eagles-green`, `--radius`) at them, which is why components written
+    `--eagles-green`, `--radius`) at the tokens, which is why components written
     against the vars recolour for free. **Keep doing that** — a new component
-    that hardcodes a hex will be wrong in three palettes out of four.
-  - **`data-theme` still rides alongside** `data-palette` (light for the three
-    paper grounds, dark for Dusk) so layer 2 keeps doing its job underneath.
-    **Dusk IS dark mode.** An inline `<head>` script sets both before first
-    paint (saved pref in `sportshub:palette`, else the OS `prefers-color-scheme`);
-    `applyPalette()` in `app.js` wires the header cycler and syncs the
-    `theme-color` meta. `applyTheme('light'|'dark')` survives as an alias so a
-    pre-v187 saved preference still resolves.
+    that hardcodes a hex will be wrong in one of the two palettes.
+  - **`data-theme` still rides alongside** `data-palette` (light for Champagne,
+    dark for Onyx) so layer 2 keeps doing its job underneath. **Onyx IS dark
+    mode.** An inline `<head>` script sets both before first paint (saved pref in
+    `sportshub:palette`, else the OS `prefers-color-scheme`); `applyPalette()` in
+    `app.js` wires the header cycler and syncs the `theme-color` meta.
+    `applyTheme('light'|'dark')` survives as an alias.
+  - ⚠️ **`PALETTE_MIGRATE` is duplicated on purpose** — once in `app.js` and once
+    in the `<head>` script. The inline script runs BEFORE `app.js`, so a saved
+    v187–v190 preference (sand/paper/terracotta → champagne, dusk → onyx) has to
+    resolve there too, or first paint lands on a palette with no tokens. **Change
+    both together.**
   - ⚠️ **Specificity trap** (cost a real bug in v187): layer 2 rules like
     `:root[data-theme="light"] .brd-card.t0` are (0,3,1) and OUT-SPECIFY a plain
     `:root[data-palette] .brd-card` (0,2,1). If a palette override looks ignored,
@@ -399,7 +419,54 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v190** (backend **b13-pregame-lines**).
+Current version as of this writing: **v191** (backend **b13-pregame-lines**).
+
+- **🥇 Plated gold, and the app stops being boxy (v191)** — the owner, after
+  reviewing three accent candidates: *"Harbor is good but how can we not make
+  everything so boxy... more futuristic and flowing"*, then *"make it plated
+  gold"*, then *"Champagne gold is the winner"* with Onyx as the dark.
+  - **This is a STRUCTURAL change, not a palette swap.** v187's Modernist system
+    — zero radius, 2px rules, nothing floats, a hairline between everything —
+    is replaced by a card-and-elevation language: surfaces float on the ground,
+    spacing separates instead of rules, chips and toggles are pills, sticky bars
+    are frosted, and the accent runs as a plated gradient. It ships as a **new
+    layer appended after the Modernist one**, which therefore wins every form
+    rule; see Files → styles.css for what is still live up there and what is
+    dead. Deleting the dead half is a follow-up, not this change.
+  - **Four palettes → two.** Champagne (light, default) and Onyx (dark), the
+    same design on two grounds. Saved v187–v190 preferences migrate.
+  - **Two things gold forces that blue did not**, both now written into Files:
+    accent fills take **dark** type (white on gold is ~1.9:1; `--on-ac` measures
+    7.8:1), and `--wm` moves off amber to a bronze-taupe, because gold occupies
+    the amber slot and a C grade tinted amber reads as brand.
+  - **🚨 The rail is one column now, live cards included.** The owner: *"U gotta
+    fix the rail formatting. Used to look better."* Correct — and the cause was
+    v188's own decision. A live card was TWO columns (scores | gamecast), which
+    left the name column ~55% of the card, so "New England Patriots" and "New
+    York Yankees" truncated mid-word while the scheduled cards beside them —
+    single-column, same width — showed their names in full. That inconsistency
+    is what read as broken. The gamecast is a ROW underneath the scores now, so
+    every card has the same structure and the name always gets the full width.
+    Cards are a uniform 216px; only genuinely long names (Arizona Diamondbacks,
+    San Jose State Spartans) still ellipsis.
+  - **Alignment, measured rather than eyeballed.** The first flow cut had THREE
+    competing gutters — tabs at 8, rail at 10, bottom-bar text at 0, content at
+    16. All six now sit at 16. The last tab's 2-cell span was also dropped: with
+    no cell borders left an empty slot is invisible, and the span pushed that tab
+    out of line with the column above it.
+  - **Two bugs the pass surfaced:** rail cards were locked to the tallest card's
+    height (~70px of dead space under the short ones) — sizing to content instead
+    traded that for a ragged bottom edge, so cards stay uniform and short ones
+    *spread* their content; dead space is now 11px, which is padding.
+    ⚠️ That needed `align-items: stretch` on `.lrc-live` — v188 pins it to
+    `flex-start`, so `justify-content: space-between` had nothing to spread
+    against. And `.mkt-row`'s label column was 56px while "MONEYLINE" needs 60,
+    so it clipped its own label at every width.
+  - Verified in Chromium at **390 / 430 / 768 / 1280**: zero horizontal overflow
+    and zero clipped elements on all nine tabs at all four widths, the grade ramp
+    and every win/loss pair still distinct in BOTH palettes, dark-on-gold at
+    7.8:1, and both migration paths (sand → champagne/light, dusk → onyx/dark)
+    resolving on first paint. `node --check` clean.
 
 - **📄 The changelog was lying about the app, and the active tab wasn't wearing
   the accent (v190)** — the owner: *"why would u keep old things in the CLAUDE.md
@@ -3518,9 +3585,10 @@ index, not the argument.
 - `sportshub:railoff` — leagues the user has filtered OUT of the top rail
   (array of sport keys). Only the hidden ones are stored, so a league you've
   never touched — including one whose season starts next week — shows by default.
-- `sportshub:palette` — chosen palette (`'sand'` | `'terracotta'` | `'paper'` |
-  `'dusk'`), v187. Absent = follow the OS `prefers-color-scheme` (Sand when light,
-  Dusk when dark). Read by the inline `<head>` script and by `applyPalette`.
+- `sportshub:palette` — chosen palette (`'champagne'` | `'onyx'`), v191. Absent =
+  follow the OS `prefers-color-scheme`. Read by the inline `<head>` script and by
+  `applyPalette`. **v187–v190 values (sand/paper/terracotta/dusk) still resolve**
+  via `PALETTE_MIGRATE`, which lives in BOTH places — see Files → styles.css.
 - `sportshub:theme` — the pre-v187 light/dark preference. **No longer written**,
   but still READ: an install that saved one before v187 keeps its side of the
   choice instead of being dragged back to following the OS.

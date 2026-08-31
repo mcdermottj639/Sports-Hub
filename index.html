@@ -13,22 +13,25 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=190" />
+  <link rel="stylesheet" href="styles.css?v=191" />
   <script>
     /* Set the palette before first paint to avoid a flash. Saved preference if
-       present, else Sand — the warm default. `data-theme` rides alongside so
-       the light/dark rules underneath the palette layer still resolve: three
-       of the four grounds are paper, Dusk is the dark one. */
+       present, else Champagne. `data-theme` rides alongside so the light/dark
+       rules underneath the palette layer still resolve — Onyx is the dark one.
+       MIGRATE mirrors PALETTE_MIGRATE in app.js: this runs before app.js does,
+       so a v187–v190 preference has to resolve here too or the first paint
+       lands on a palette that no longer has tokens. */
     (function () {
-      var LIGHT = { paper: 1, sand: 1, terracotta: 1 };
+      var MIGRATE = { sand: 'champagne', paper: 'champagne', terracotta: 'champagne', dusk: 'onyx' };
       try {
         var p = localStorage.getItem('sportshub:palette');
-        if (p !== 'paper' && p !== 'sand' && p !== 'terracotta' && p !== 'dusk') {
-          /* No explicit choice yet: follow the OS, warm either way. */
-          p = window.matchMedia('(prefers-color-scheme: light)').matches ? 'sand' : 'dusk';
+        if (MIGRATE[p]) p = MIGRATE[p];
+        if (p !== 'champagne' && p !== 'onyx') {
+          /* No explicit choice yet: follow the OS. */
+          p = window.matchMedia('(prefers-color-scheme: light)').matches ? 'champagne' : 'onyx';
         }
         document.documentElement.setAttribute('data-palette', p);
-        document.documentElement.setAttribute('data-theme', LIGHT[p] ? 'light' : 'dark');
+        document.documentElement.setAttribute('data-theme', p === 'onyx' ? 'dark' : 'light');
       } catch (e) {}
     })();
   </script>
@@ -55,7 +58,7 @@
       <span id="app-version" class="version"></span>
     </div>
     <div class="head-right">
-      <button id="palette-toggle" class="hd-btn" type="button" title="Change palette">SAND</button>
+      <button id="palette-toggle" class="hd-btn" type="button" title="Change palette">CHAMPAGNE</button>
       <button id="rail-toggle" class="hd-btn" type="button" title="Show or hide the rail">⌃ RAIL</button>
       <button id="sharp-toggle" class="hd-btn sharp on" type="button" title="Show or hide the sharp-money read">💰</button>
       <div id="mode-badge" class="badge">…</div>
@@ -255,6 +258,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=190" defer></script>
+  <script src="app.js?v=191" defer></script>
 </body>
 </html>

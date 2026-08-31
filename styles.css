@@ -1424,8 +1424,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
 /* ==========================================================================
    MODERNIST — the feel & function pass (v187).
-   Four palettes, tokenised. Chosen with <html data-palette="sand|paper|
-   terracotta|dusk">; `data-theme` still rides alongside (light for the three
+   The token layer. Chosen with <html data-palette="champagne|onyx">; `data-theme` still rides alongside (light for the three
    paper grounds, dark for Dusk) so the Editorial light block above keeps
    doing its job of un-hardcoding the dark-only values, and the ramps below
    then say what the colour actually is.
@@ -1437,38 +1436,43 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
    left. Nothing floats; the dividers do the organising.
    ========================================================================== */
 
-/* --- the four grounds ---------------------------------------------------- */
-:root[data-palette="paper"] {
-  --gr: #f3f2f2; --sf: #eae9e9; --sf2: #eae7e7;
-  --ink: #201e1d; --ink2: #444141; --gy: #605d5d;
-  --mu: #7d7979; --mu2: #9b9797; --tr: #d7d3d3; --tr2: #bab6b6;
-  --ac: #ec3013; --ac6: #dd2b0f; --ac7: #ae1800; --wm: #c26a00;
-  --pos: #2c6a48; --pos2: #67903c; --neg2: #c2531c; --neg: #a52218;
-  --base: 32, 30, 29;
+/* --- the two grounds (v191) ----------------------------------------------
+   Champagne (light, default) and Onyx (dark) are the SAME design on two
+   grounds. Paper/Sand/Terracotta/Dusk are gone; saved preferences migrate in
+   `applyPalette`.
+
+   Beyond the Modernist tokens each carries four the flow layer needs:
+     --acRGB  the accent as an rgb triple, so every tint derives from one place
+     --grad   the plated fill. The metal is the DOUBLE highlight — a single
+              flat stop reads as mustard, not gold.
+     --on-ac  type ON an accent fill. White on gold is ~1.9:1 and unreadable,
+              so this is dark ink; measured 7.8:1 on both grounds.
+     --glow   the accent's soft cast shadow.
+   Note --wm is a muted bronze-taupe, NOT amber: gold occupies the amber slot,
+   and a C grade tinted amber would read as a brand element. */
+:root[data-palette="champagne"] {
+  --gr: #f3f1ec; --sf: #ffffff; --sf2: #faf8f3;
+  --ink: #17150f; --ink2: #3a3529; --gy: #5f584a;
+  --mu: #8a8272; --mu2: #a9a193; --tr: #e0dbcd; --tr2: #c9c2b0;
+  --ac: #b8942f; --ac6: #a07f24; --ac7: #86691a; --wm: #8a7a58;
+  --pos: #1d7a52; --pos2: #6b8f2e; --neg2: #c0651c; --neg: #b0332a;
+  --base: 23, 21, 15;
+  --acRGB: 184, 148, 47;
+  --on-ac: #1a1509;
+  --grad: linear-gradient(135deg, #f0dc9e 0%, #d7b34a 26%, #b8942f 52%, #e6d290 74%, #bf9c33 100%);
+  --glow: 0 4px 14px rgba(184,148,47,.34);
 }
-:root[data-palette="sand"] {
-  --gr: #f5efe6; --sf: #ece4d7; --sf2: #e6dccb;
-  --ink: #241f19; --ink2: #4a4137; --gy: #6b6154;
-  --mu: #8a8073; --mu2: #a89e90; --tr: #ddd3c4; --tr2: #c6bcab;
-  --ac: #ec3013; --ac6: #dd2b0f; --ac7: #ae1800; --wm: #c26a00;
-  --pos: #2e6b45; --pos2: #6a8f3c; --neg2: #c4521a; --neg: #a3231a;
-  --base: 36, 31, 25;
-}
-:root[data-palette="terracotta"] {
-  --gr: #fbf0ec; --sf: #ffe0d9; --sf2: #ffd6cc;
-  --ink: #4d170e; --ink2: #7c1405; --gy: #9e3526;
-  --mu: #b06a5c; --mu2: #c99184; --tr: #ffc4b8; --tr2: #ff9783;
-  --ac: #dd2b0f; --ac6: #ae1800; --ac7: #7c1405; --wm: #c26a00;
-  --pos: #35664a; --pos2: #6d8b3f; --neg2: #b8501c; --neg: #8c1f10;
-  --base: 77, 23, 14;
-}
-:root[data-palette="dusk"] {
-  --gr: #241f1d; --sf: #2f2926; --sf2: #383029;
-  --ink: #f8f4f4; --ink2: #ddd6d2; --gy: #b6aca6;
-  --mu: #9b8f88; --mu2: #7d726c; --tr: #453c37; --tr2: #5c524c;
-  --ac: #ff563c; --ac6: #ff9783; --ac7: #ffc4b8; --wm: #ffb066;
-  --pos: #6fbf8a; --pos2: #a9c96a; --neg2: #ff9057; --neg: #ff6b5a;
-  --base: 248, 244, 244;
+:root[data-palette="onyx"] {
+  --gr: #14130f; --sf: #1d1b15; --sf2: #24221a;
+  --ink: #f6f2e7; --ink2: #ded8c7; --gy: #b4ac98;
+  --mu: #918a77; --mu2: #6f695b; --tr: #332f26; --tr2: #4b4537;
+  --ac: #d9b445; --ac6: #e8d089; --ac7: #f2e3ad; --wm: #a89263;
+  --pos: #4fb383; --pos2: #9ec14e; --neg2: #e08a3c; --neg: #e8635a;
+  --base: 246, 242, 231;
+  --acRGB: 217, 180, 69;
+  --on-ac: #17140b;
+  --grad: linear-gradient(135deg, #f6e7b4 0%, #dcb84c 28%, #c9a234 54%, #f0dda0 76%, #d3ac3e 100%);
+  --glow: 0 4px 16px rgba(217,180,69,.30);
 }
 
 /* Ink-on-ground alpha ramp. One `--base` triple per palette drives all of
@@ -1982,13 +1986,17 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   flex: 0 0 184px; flex-direction: column; gap: 6px;
   padding: 9px 11px 10px; overflow: hidden;
 }
-:root[data-palette] .lrc-live { flex: 0 0 232px; flex-direction: row; gap: 10px; align-items: flex-start; }
-/* A live card is two columns, so its gamecast must size to its own graphic —
-   the `width: 100%` the stacked variant needs would take the whole card and
-   wrap the league tag onto a second line. */
+/* v191: EVERY card is one column, live included. The two-column live card gave
+   its name column only ~55% of the card, so "New England Patriots" and "New
+   York Yankees" truncated mid-word while the scheduled cards beside them —
+   single-column, same width — showed their names in full. Now the gamecast is
+   a ROW underneath the scores, so the name always gets the card's full width
+   and every card in the rail has the same structure. */
+:root[data-palette] .lrc-live { flex-direction: column; gap: 6px; }
 :root[data-palette] .lrc-live .lrc-gc {
-  flex: 0 0 auto; width: auto; min-width: 0; padding-left: 9px;
-  border-left: 1px solid var(--l15); align-items: flex-end; justify-content: center;
+  flex: 0 0 auto; width: 100%; min-width: 0;
+  flex-direction: row; align-items: center; justify-content: flex-start;
+  gap: 9px; padding-left: 0; border-left: none;
 }
 :root[data-palette] .lrc-live .lrc-l { flex: 1 1 auto; }
 :root[data-palette] .lrc-l { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
@@ -2172,3 +2180,238 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   border-width: 1.5px; border-radius: 0; width: 34px; height: 30px; font-weight: 900;
 }
 :root[data-palette] .gr-grade.none { border-color: transparent; color: var(--mu); }
+
+/* ==========================================================================
+   FLOW — the structural layer (v191).
+
+   ⚠️ READ THIS BEFORE EDITING THE MODERNIST LAYER ABOVE.
+   Modernist said: zero radius, 2px rules, nothing floats, a hairline between
+   everything. This layer says the opposite — surfaces float on the ground,
+   spacing separates instead of rules, and the accent runs as a plated
+   gradient. It is appended LAST and therefore WINS every form rule above it.
+
+   What is still live from the Modernist layer: the token mapping (--bg,
+   --card, --text, --accent, --line …), the alpha ramp, the semantic ramp, the
+   heat classes and the spacing scale. What is dead: its radius-0 list, its
+   card/rule/chrome borders, its flat fills. Editing a form rule up there will
+   do nothing — change it here.
+   ========================================================================== */
+:root[data-palette] {
+  --r1: 10px; --r2: 16px; --r3: 22px; --rp: 999px;
+  --radius: 16px;
+  --e1: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.05);
+  --e2: 0 2px 6px rgba(0,0,0,.07), 0 10px 26px rgba(0,0,0,.08);
+}
+:root[data-palette] body {
+  background:
+    radial-gradient(1100px 520px at 82% -14%, rgba(var(--acRGB), .16), transparent 62%),
+    radial-gradient(760px 420px at 8% 4%, rgba(var(--acRGB), .07), transparent 60%),
+    var(--gr);
+  background-attachment: fixed;
+}
+
+/* --- the rail ------------------------------------------------------------- */
+:root[data-palette] .rail-wrap {
+  background: transparent; border-bottom: none; gap: 8px;
+  padding: 8px 16px 2px; align-items: stretch;
+}
+:root[data-palette] .rail-leagues { background: transparent; border-right: none; gap: 5px; }
+:root[data-palette] .rl-pill {
+  border-radius: var(--rp); border: 1px solid var(--tr); background: var(--sf);
+  padding: 0 11px; min-height: 27px; font-size: 8.5px; color: var(--gy);
+  flex: 0 0 auto; border-bottom: none;
+}
+:root[data-palette] .rl-pill.on {
+  background: var(--grad); color: var(--on-ac); border-color: transparent; box-shadow: var(--glow);
+}
+:root[data-palette] .live-rail { background: transparent; gap: 8px; align-items: stretch; }
+:root[data-palette] .lrc {
+  background: var(--sf); border: none; border-right: none; border-radius: var(--r2);
+  box-shadow: var(--e1); padding: 10px 12px 11px; flex: 0 0 216px;
+}
+/* Uniform height keeps the rail's bottom edge clean; short cards spread their
+   own content rather than leaving a dead block under it. */
+:root[data-palette] .lrc-l { justify-content: space-between; }
+:root[data-palette] .lrc.fav {
+  box-shadow: var(--e1), inset 0 0 0 1.5px rgba(var(--acRGB), .40);
+}
+:root[data-palette] .lrc-tier { border-radius: var(--rp); padding: 3px 8px; }
+:root[data-palette] .lrc-tier.alert, :root[data-palette] .lrc-tier.best {
+  background: var(--grad); color: var(--on-ac);
+}
+
+/* --- masthead + tabs ------------------------------------------------------ */
+:root[data-palette] .topbar {
+  background: rgba(var(--base), .04);
+  backdrop-filter: saturate(180%) blur(14px); -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid rgba(var(--base), .09); padding: 9px 16px 8px;
+}
+:root[data-palette] .topbar h1 { font-size: 16px; white-space: nowrap; }
+:root[data-palette] .brand { gap: 5px; flex: 0 1 auto; min-width: 0; }
+:root[data-palette] .head-right { gap: 5px; flex: none; }
+:root[data-palette] .hd-btn {
+  border-radius: var(--rp); border: 1px solid var(--tr); background: var(--sf);
+  padding: 6px 10px; font-size: 8.5px; box-shadow: none;
+}
+:root[data-palette] .hd-btn.sharp.on {
+  background: var(--grad); border-color: transparent; box-shadow: var(--glow);
+}
+:root[data-palette] .badge {
+  border-radius: var(--rp); padding: 5px 10px; font-size: 8.5px;
+  background: var(--ink); color: var(--gr);
+}
+:root[data-palette] .tabs {
+  background: rgba(var(--base), .04);
+  backdrop-filter: saturate(180%) blur(14px); -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid rgba(var(--base), .09); gap: 3px; padding: 6px 16px 8px;
+}
+:root[data-palette] .tabs button {
+  background: var(--gr); background: transparent; border-bottom: none;
+  border-radius: var(--rp); padding: 8px 6px; font-size: 9px;
+  text-align: center; color: var(--gy);
+}
+/* All nine on an equal grid — with no cell borders left, the spare slot is
+   invisible, and the old 2-cell span pushed the last tab out of line with the
+   column above it. */
+:root[data-palette] .tabs button:last-child { grid-column: auto; }
+:root[data-palette] .tabs button:hover { background: rgba(var(--acRGB), .10); }
+:root[data-palette] .tabs button.active,
+:root[data-palette][data-theme] .tabs button.active {
+  background: var(--grad); color: var(--on-ac); box-shadow: var(--glow); border-bottom: none;
+}
+:root[data-palette] .tabs button[data-live="1"] .lb::after {
+  border-radius: var(--rp); width: 5px; height: 5px; background: var(--wm);
+}
+:root[data-palette] .tabs button.active[data-live="1"] .lb::after { background: var(--on-ac); }
+
+/* --- control row ---------------------------------------------------------- */
+:root[data-palette] .ctl-row {
+  background: var(--sf); border: none; border-radius: var(--r2);
+  box-shadow: var(--e1); margin: 12px 0 18px; overflow: hidden; align-items: stretch;
+}
+:root[data-palette] .ctl-row .ctl-chips { padding: 9px 8px 9px 12px; gap: 6px; }
+:root[data-palette] .chip, :root[data-palette] .ctl-row .chip {
+  border-radius: var(--rp); border: 1px solid var(--tr); background: var(--sf2);
+  padding: 7px 12px; color: var(--gy);
+}
+:root[data-palette] .chip.active,
+:root[data-palette] .ctl-row .chip.here,
+:root[data-palette] .ctl-row .chip.active {
+  background: var(--grad); color: var(--on-ac); border-color: transparent; box-shadow: var(--glow);
+}
+:root[data-palette] .sec-all { border-left: 1px solid var(--tr); color: var(--ac7); }
+
+/* --- headings: a short plated stroke, not a 2px slab ---------------------- */
+:root[data-palette] .section-title,
+:root[data-palette] .ai-section-head,
+:root[data-palette] .lad-sec {
+  border-bottom: none; position: relative; padding-bottom: 11px;
+  margin-top: 24px; letter-spacing: .12em; color: var(--ink);
+}
+:root[data-palette] .section-title::after,
+:root[data-palette] .ai-section-head::after,
+:root[data-palette] .lad-sec::after {
+  content: ""; position: absolute; left: 0; bottom: 4px;
+  width: 34px; height: 3px; border-radius: var(--rp); background: var(--grad);
+}
+
+/* --- hero + cards --------------------------------------------------------- */
+:root[data-palette] .featured-card {
+  background: var(--sf); border: none; border-left: none; border-radius: var(--r3);
+  box-shadow: var(--e2); margin-left: 0; padding: 16px 16px 16px 20px;
+  overflow: hidden; position: relative;
+}
+:root[data-palette] .featured-card::before {
+  content: ""; display: block; position: absolute; left: 0; top: 12px; bottom: 12px;
+  width: 5px; border-radius: var(--rp); background: var(--grad);
+}
+:root[data-palette] .featured-card h2 { font-size: 20px; }
+:root[data-palette] .featured-game, :root[data-palette] .hero-chip {
+  background: var(--sf2); border: 1px solid var(--tr); border-radius: var(--r2); padding: 11px 13px;
+}
+:root[data-palette] .brd-card, :root[data-palette] .game-card {
+  background: var(--sf); border: none; border-bottom: none; border-radius: var(--r2);
+  box-shadow: var(--e2); padding: 15px 13px; margin-bottom: 12px;
+}
+:root[data-palette] .brd-card.t0, :root[data-palette] .brd-card.t1 {
+  border-left: none; padding-left: 13px; position: relative; overflow: hidden; box-shadow: var(--e2);
+}
+:root[data-palette] .brd-card.t0::before, :root[data-palette] .brd-card.t1::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--grad);
+}
+:root[data-palette] .brd-tier, :root[data-palette] .status, :root[data-palette] .season-tag {
+  border-radius: var(--rp); padding: 5px 11px;
+}
+:root[data-palette] .brd-tier { background: var(--grad); color: var(--on-ac); }
+:root[data-palette] .brd-tier.edge { background: var(--ink); color: var(--gr); }
+:root[data-palette] .brd-tier.lean { background: var(--tr); color: var(--ink); }
+
+/* --- markets + bars ------------------------------------------------------- */
+:root[data-palette] .mkt-box {
+  border: none; background: var(--sf2); border-radius: var(--r2);
+  padding: 3px 4px; margin-top: 13px;
+}
+:root[data-palette] .mkt-row {
+  border-bottom: none; border-radius: var(--r1);
+  /* 62px, not 56: "MONEYLINE" needs 60 and was clipping its own label. */
+  grid-template-columns: 62px 1fr auto; gap: 8px; padding: 10px 8px;
+}
+:root[data-palette] .mkt-row + .mkt-row { box-shadow: inset 0 1px 0 rgba(var(--base), .07); }
+:root[data-palette] .mkt-p { font-size: 11.5px; }
+:root[data-palette] .ai-edge, :root[data-palette] .gr-edge {
+  border-radius: var(--rp); padding: 5px 9px; border: none;
+}
+:root[data-palette] .ai-edge.h4, :root[data-palette] .gr-edge.h4 { background: var(--grad); color: var(--on-ac); }
+:root[data-palette] .ai-edge.h3, :root[data-palette] .gr-edge.h3 { background: rgba(var(--acRGB), .20); color: var(--ac7); }
+:root[data-palette] .ai-edge.h2, :root[data-palette] .gr-edge.h2 { background: rgba(var(--base), .07); color: var(--wm); }
+:root[data-palette] .ai-edge.h1, :root[data-palette] .gr-edge.h1,
+:root[data-palette] .ai-edge.h0, :root[data-palette] .gr-edge.h0 { background: rgba(var(--base), .06); }
+:root[data-palette] .cvm-bar, :root[data-palette] .conf-bar, :root[data-palette] .gr-bar {
+  border-radius: var(--rp); height: 8px; background: var(--tr); overflow: visible;
+}
+:root[data-palette] .cvm-bar i, :root[data-palette] .conf-bar span, :root[data-palette] .gr-bar i {
+  border-radius: var(--rp); background: var(--grad);
+}
+:root[data-palette] .cvm-bar u { width: 3px; border-radius: var(--rp); background: var(--ink); top: -4px; bottom: -4px; }
+
+/* --- panels, buttons, bottom bar ----------------------------------------- */
+:root[data-palette] .ai-note, :root[data-palette] .brd-note, :root[data-palette] .empty,
+:root[data-palette] .setup-card, :root[data-palette] .ai-stat, :root[data-palette] .stat-row,
+:root[data-palette] .sched-row, :root[data-palette] .odds-grid > div,
+:root[data-palette] .modal-card, :root[data-palette] .hl-card,
+:root[data-palette] .opp-card, :root[data-palette] .staff-card, :root[data-palette] .lg-card,
+:root[data-palette] .mu-card, :root[data-palette] .trend-row, :root[data-palette] .ai-report {
+  border: none; border-radius: var(--r2); background: var(--sf); box-shadow: var(--e1);
+}
+:root[data-palette] .brd-note, :root[data-palette] .ai-note {
+  background: linear-gradient(180deg, rgba(var(--acRGB), .10), rgba(var(--acRGB), .04)); box-shadow: none;
+}
+:root[data-palette] .gr-grade { border-radius: var(--r1); }
+:root[data-palette] .modal-card { border-radius: var(--r3) var(--r3) 0 0; }
+:root[data-palette] .fan-btn {
+  border-radius: var(--rp); background: var(--grad); color: var(--on-ac);
+  box-shadow: var(--glow); text-align: center;
+}
+:root[data-palette] .fan-btn.ghost {
+  background: var(--sf); border: 1px solid var(--tr); box-shadow: var(--e1); color: var(--ink);
+}
+:root[data-palette] .setup-card a.fan-btn { color: var(--on-ac); }
+:root[data-palette] .to-top {
+  border-radius: var(--rp); background: var(--grad); color: var(--on-ac);
+  box-shadow: var(--glow); border: none;
+}
+:root[data-palette] .botbar {
+  background: rgba(var(--base), .06);
+  backdrop-filter: saturate(180%) blur(16px); -webkit-backdrop-filter: saturate(180%) blur(16px);
+  border-top: 1px solid rgba(var(--base), .09);
+  border-radius: var(--r3) var(--r3) 0 0; height: 58px;
+  box-shadow: 0 -6px 24px rgba(0,0,0,.08); padding: 9px 16px; align-items: center;
+}
+:root[data-palette] .botbar .bb-read { padding: 0 12px 0 0; }
+:root[data-palette] .botbar .bb-go {
+  border-radius: var(--rp); background: var(--grad); color: var(--on-ac);
+  box-shadow: var(--glow); height: 40px; padding: 0 18px;
+}
+:root[data-palette] main { padding-bottom: 92px; }
+:root[data-palette] .trend .pill.w, :root[data-palette] .stat-row .rank.top,
+:root[data-palette] .trend .pill.l, :root[data-palette] .stat-row .rank.bot { border-radius: var(--rp); }

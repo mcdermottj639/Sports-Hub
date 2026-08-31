@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v190';
+const APP_VERSION = 'v191';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -8601,17 +8601,23 @@ if (verEl) verEl.textContent = APP_VERSION;
 // cycling to Dusk is what turning the lights off means now.
 const THEME_KEY = 'sportshub:theme';
 const PALETTE_KEY = 'sportshub:palette';
-const PALETTES = ['sand', 'terracotta', 'paper', 'dusk'];
-const PALETTE_DARK = { dusk: 1 };
-const PALETTE_META = { sand: '#f5efe6', terracotta: '#fbf0ec', paper: '#f3f2f2', dusk: '#241f1d' };
+const PALETTES = ['champagne', 'onyx'];
+const PALETTE_DARK = { onyx: 1 };
+const PALETTE_META = { champagne: '#f3f1ec', onyx: '#14130f' };
+// v191 replaced the four Modernist grounds with the two gold ones. A saved
+// preference from v187–v190 still resolves — mapping it beats dropping the
+// owner back to a default they didn't pick, and the three light grounds all
+// mean the same thing now.
+const PALETTE_MIGRATE = { sand: 'champagne', paper: 'champagne', terracotta: 'champagne', dusk: 'onyx' };
 const themeMeta = document.querySelector('meta[name="theme-color"]');
 const effectivePalette = () => {
   const p = document.documentElement.getAttribute('data-palette');
-  return PALETTES.includes(p) ? p : 'sand';
+  if (PALETTES.includes(p)) return p;
+  return PALETTE_MIGRATE[p] || 'champagne';
 };
 const effectiveTheme = () => (PALETTE_DARK[effectivePalette()] ? 'dark' : 'light');
 function applyPalette(p) {
-  if (!PALETTES.includes(p)) p = 'sand';
+  if (!PALETTES.includes(p)) p = PALETTE_MIGRATE[p] || 'champagne';
   const root = document.documentElement;
   root.setAttribute('data-palette', p);
   root.setAttribute('data-theme', PALETTE_DARK[p] ? 'dark' : 'light');
@@ -8625,7 +8631,7 @@ function applyPalette(p) {
 // Kept as a thin alias: applyTheme('light'|'dark') still means something, it
 // just resolves to a palette now. Anything that used to call it keeps working.
 function applyTheme(t) {
-  applyPalette(t === 'light' ? 'sand' : 'dusk');
+  applyPalette(t === 'light' ? 'champagne' : 'onyx');
   try { localStorage.setItem(PALETTE_KEY, effectivePalette()); } catch (e) {}
 }
 applyPalette(effectivePalette());
@@ -8699,7 +8705,7 @@ $('#labs-mock-start')?.addEventListener('click', () => {
 try {
   window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
     if (localStorage.getItem(PALETTE_KEY) || localStorage.getItem(THEME_KEY)) return;
-    applyPalette(e.matches ? 'sand' : 'dusk');
+    applyPalette(e.matches ? 'champagne' : 'onyx');
   });
 } catch (e) {}
 
