@@ -1439,6 +1439,23 @@ index, not the argument.
 > the only way it ever gets off the device. If you re-run this analysis
 > earlier, cancel or re-date that Routine so it doesn't ask twice.
 
+> ### 🏈 The football read happens on the 1 OCT monthly run — owner's call
+> The first honest NFL + CFB calibration read is **due on the 1 October monthly
+> brainstorm run** (`trig_01Lt5NNcSbV45JgMVy4t5DA3`, fires 15:00 UTC). Whichever
+> session picks that up: **do rows 8 and 9 below as part of that run** — ask for
+> the export first, same as always.
+> - ⚠️ **Sample-size caveat the owner accepted knowingly.** NFL kicked off
+>   **10 Sep**, so 1 Oct is only ~3 NFL weeks (~40-50 graded picks); the
+>   suggested date was 13 Oct (~5 weeks). The owner chose 1 Oct. **So treat the
+>   NFL per-bucket splits as directional, not conclusive** — with n that small a
+>   single bucket can swing 20 points on noise. CFB is in better shape (~5 weeks
+>   by 1 Oct, season opened 29 Aug). **State the n beside every football number
+>   and do not refit a constant off a bucket with n < 20.**
+> - ⚠️ A leftover one-shot Routine (`trig_01JfgLp1EKrAkRmH3SsxDkT3`, "first NFL
+>   + CFB calibration read") is still dated **13 Oct** — it needed owner approval
+>   to re-date or delete and did not get it on 1 Sep. If it fires after the work
+>   is already done on 1 Oct, that's a duplicate: say so and delete it.
+
 | # | What to read | Where | Ships as fixed? | What "it worked" looks like |
 |---|---|---|---|---|
 | 1 | **Model total vs the book** | Report Card → Totals (the *all priced games* row, not the picks-only one) | v171 `MLB_SP_ERA` 4.10→4.30 | near **0.00 runs**. Still ~+0.3 → the anchor needs more. |
@@ -1448,6 +1465,8 @@ index, not the argument.
 | 5 | **Record by tier** | Backtesting → Record by tier | v164 stored `gp`/`tr` | reads a real W-L instead of "collecting". **Do not touch `EDGE_BAR` before this has ~20 graded picks.** |
 | 6 | **ATS record** | Backtesting → by sport | v171 fixed grading (`:s` was never stripped, so ATS never graded at all) | any non-zero number. `PD_SD` (13.5/16.5) and `ATS_EDGE_MIN` (2/3) are guesses and are the first things to re-fit. |
 | 7 | **Sharp money split** | Report Card → 💰 Sharp money | v160 stored `sh` | 20+ graded picks. At the v170 export there were **3**. Nothing to conclude until then. |
+| 8 | **🏈 NFL calibration — the FIRST honest one** | export, filter `s: 'nfl'` + `d >= 20260910` | nothing yet — this read decides | buckets roughly ordered and a Brier that beats always-quoting the base rate. **Every NFL pick before 10 Sep 2026 predates BOTH the v83 confidence meta AND the v138 leak fix — it is history, not calibration data. Exclude it.** |
+| 9 | **🎓 CFB calibration + first ATS sample** | export, filter `s: 'cfb'` + `d >= 20260829` | nothing yet | any graded CFB W-L at all (there were **zero** through Aug). Football is a SPREAD sport, so the **ATS** row matters more than the moneyline one — see #6. |
 
 **Known and deliberately NOT fixed:**
 - **`MIN_EDGE_GAP`** — edges are **18-21 (46.2%)** all-time, under the 52.4%
@@ -1460,6 +1479,54 @@ index, not the argument.
   same way MLB's was — from a sample, not from the comment.
 - **7 soccer entries** (World Cup, league removed in v125) still count toward
   the all-time headline record.
+- **🏈 NFL is the only sport with NO calibration shrink — and it is an OPEN
+  DECISION, not an oversight.** `MODEL_SHRINK = { mlb: 0.5, cfb: 0.8, default: 1 }`,
+  so NFL falls to `default: 1` (unshrunk) while `CONF_CAP.nfl` is **85**. The
+  argument FOR shrinking it blind: NFL uses `MODEL_W.default` — the same
+  hand-weighted family that was **measured ~2x too confident in MLB** — and
+  v161 gave CFB 0.8 as exactly this kind of cheap precaution, monotonic so it
+  changes no pick, only the stated confidence and the edge sizing that keys off
+  `probHome`. The argument AGAINST: this file's own standing rule is *fit from a
+  sample, not from a comment*, which is why CFB's leftover mismatch is parked
+  right above. **Asked the owner on 1 Sep 2026 ("precaution or purity?"); they
+  did not answer, so it was deliberately left ALONE rather than guessed.**
+  Settle it from the row-8 read, not from taste.
+
+## 🗓️ Monthly brainstorm log
+
+A recurring Routine (`trig_01Lt5NNcSbV45JgMVy4t5DA3`, **1st of each month,
+15:00 UTC**, fresh session) runs an improvement brainstorm — the owner's
+standing ask: *"once a month brainstorm how we can improve for next year, make
+yourself better."* Keep this log to a few lines per run so the next one starts
+with continuity instead of rediscovering the same things. **Append, don't
+rewrite.**
+
+- **1 Sep 2026** — App had moved **v152 → v193 in a month** (palettes, CFB tab,
+  betting board folded into slates, RED ALERT tier, full-slate logging, and the
+  v171 model-bug fixes). *Lesson: never trust session memory over the changelog
+  — re-read this file first, every time.*
+  - **Verified season-readiness for NFL kickoff (8 days out) and found nothing
+    broken**: `footballSeason()` → 2026, `NFL_KICKOFF` = a real Thursday
+    (10 Sep), `SEASON_MONTHS` correct for nfl/cfb/mlb, preseason purge window
+    right. Don't re-check these in October; they're computed, not hardcoded.
+  - **Shipped no code, deliberately.** Everything worth doing was either blocked
+    by this file's own measure-first rule (model constants — the 14 Sep re-read
+    hadn't happened), a real build (QB-status signal), or unverifiable from the
+    sandbox (contract signings). Inventing work to look productive is how the
+    calibration got wrecked the first time.
+  - **Ranked list carried forward** (biggest first): (1) the NFL-shrink open
+    decision — see the bullet above; (2) the football calibration read, now
+    booked for the 1 Oct run; (3) **QB-status signal for NFL — the single
+    biggest known model gap**, since a backup-QB start is the largest line-mover
+    the model cannot see (needs depth-chart + injury per game; real build, needs
+    on-device verification); (4) `CONTRACT_WATCH` staleness — contract-year guys
+    who have since signed should move to the `paid` group (needs web search, and
+    v173 is the precedent for *verifying rather than trusting* an agent snippet);
+    (5) fantasy-baseball revival prep — **not timely until ~Feb 2027**.
+  - **Unanswered question for the owner, still open:** did the fantasy draft
+    happen, and did the keeper / draft-turn / mock-draft stack hold up? That
+    decides whether the draft tools get more investment or go dormant like
+    baseball. Ask again if it's still unanswered.
 
 
 - **🚨 Desktop layout — AI Picks was scattering itself across columns (v173)** —
