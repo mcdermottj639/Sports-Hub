@@ -419,7 +419,61 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v193** (backend **b13-pregame-lines**).
+Current version as of this writing: **v194** (backend **b13-pregame-lines**).
+
+- **🔍 Draft-night audit — four subagents, four real findings (v194)** — the
+  owner's fantasy draft was that night and asked for the draft plan to be
+  independently verified. Four Sonnet subagents each attacked a different
+  failure mode. **The sim ENGINE came back clean** — `mockOverallFor`/
+  `mockTeamOnClock` verified exact (userIdx 9 → #10, #15, #34 … #130, matching
+  every `TURN_ROUNDS.pick`, no off-by-one), 4,400 keeper-placement checks with
+  0 errors and 0 pool leaks, `m.pool` never out of rank order, and 50 drafts
+  produced 50 distinct outcomes (no determinism bug). What was wrong was the
+  DATA and the reporting around it:
+  - **🐛 `#cw-add` had no keeper guard.** The turn-plan merge got
+    `if (keptEntry(pl.n))` in v148; the **Contract Angle** button never did, so
+    tapping "⭐ Add contract targets" silently added **four undraftable kept
+    players** (JSN, Achane, Puka, Chase Brown) to the board. Now guarded and
+    reports the skip count, matching `#tp-add`. **Lesson: when adding a guard,
+    grep for every button that does the same kind of merge.**
+  - **James Conner opens 2026 on IR** (out 4+, zero camp 11-on-11 reps, HIGH
+    confidence). He was an R4 plan target and read "100% available" in the sim.
+    Removed from the plan group (replaced with Tony Pollard) and sunk to the
+    back of `MOCK_POOL_RAW`.
+  - **Stale R9 prose** recommended Judkins and Skattebo "at an injury discount"
+    — both are KEPT (GMDD R5, Morning Woods R6) and can never be drafted. The
+    UI struck them through but the note still argued for them. Rewritten.
+    Chris Olave (kept, Samrizz) is still listed in R8 and renders struck —
+    that's the documented treatment for a group with alternatives.
+  - **Three ADP outliers fixed** against 2026 consensus (multi-source):
+    **Omarion Hampton 45 → 12** (real ADP ~14-22), **Mike Evans 38 → 57**
+    (~53-65), **Marvin Harrison Jr. 32 → 70** (~64-83 — the board hadn't
+    priced in his injury-marred 2025). Left alone deliberately: Rashee Rice and
+    Kenneth Walker III, where sources disagreed widely and a camp injury
+    muddied the read — flagged to the owner verbally instead of guessed at.
+  - ⚠️ **Hampton's move shifted the R1 numbers ~20 points, and that is a REAL
+    effect, not a bug** — verified by A/B running the identical script against
+    the pre- and post-edit boards. Saquon went 54-61% → 73-79% available at
+    #10 **because adding a second elite RB in the same tier splits RB demand**,
+    so each individual back survives more often (Hampton's own availability
+    fell 100% → 44%, i.e. he became genuinely contested). Jeanty, unchanged at
+    6 draftable-above, stayed ~25% on both boards.
+  - ⚠️ **Monte-Carlo precision was overstated.** Re-running the 400-sim method
+    15 times gave Saquon **58.4% ± 2.7** (range 53-62) on the old board — the
+    single run quoted as "63%" was ~1.7 SD high. **Quote these as ±5-point
+    bands, never as point estimates.**
+  - ⚠️ **A causal claim was WRONG and is corrected here:** "Kittle is
+    best-available at R3 because your keepers lock those positions" is not the
+    mechanism. `mockPendingKeepers` only ever fires for `teamIdx === m.userIdx`
+    and cannot influence rival logic. Kittle floats up purely because **McBride
+    being kept removes the best TE from the whole league's supply** — it would
+    happen identically if any other team kept him. The *advice* (don't spend R3
+    on a position your keepers already fill) still stands; the reasoning
+    behind it did not.
+  - **Verified robust, and worth keeping:** forcing the user to SKIP them,
+    Love / Jeanty / Saquon still survive #10 → #15 in **0%** of 400 sims —
+    only two CPU teams pick in that window and one always takes the top RB. So
+    *if an elite back is there at 1.10, he will not be there at 2.15.*
 
 - **⛳ Golf SHELVED for the off-season (v193)** — owner: *"Remove golf for now
   the season is over."* The PGA season ends with the Tour Championship in late

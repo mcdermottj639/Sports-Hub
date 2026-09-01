@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v193';
+const APP_VERSION = 'v194';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -4428,7 +4428,7 @@ const TURN_ROUNDS = [
   ] },
   { r: 4, pick: '#39', tag: '🆕 the Jadarian Price pick — HERE, not R5', note: 'Price moved up a round (v156). Nationally his ADP is 57.8 (Underdog) to 63.3, which is why the old plan put him at #58 — but national ADP does not know YOUR league, which keeps 8 running backs (Achane, Chase Brown, Skattebo, Hubbard, Javonte, Judkins, Tuten, White). Strip 8 backs out and the rest go earlier: measured, Price is on the board at #39 in 100% of sims but at #58 in only 12%. If you want the Seahawks rookie with the lead-back path (Walker left for KC, Charbonnet coming off a knee), this is the pick. No QB — ever; Maye is your R11 keeper.', groups: [
     { label: '🎯 The rookie with a lead-back path', tier: 3, players: [{ n: 'Jadarian Price', p: 'RB' }] },
-    { label: 'RB depth — all 100% to be here', tier: 3, players: [{ n: 'TreVeyon Henderson', p: 'RB' }, { n: 'James Conner', p: 'RB' }, { n: 'Aaron Jones', p: 'RB' }] },
+    { label: 'RB depth — all 100% to be here (⚠️ Conner opens on IR, out 4+)', tier: 3, players: [{ n: 'TreVeyon Henderson', p: 'RB' }, { n: 'Aaron Jones', p: 'RB' }, { n: 'Tony Pollard', p: 'RB' }] },
     { label: 'WR if the backfield is set', tier: 3, players: [{ n: 'DeVonta Smith', p: 'WR' }, { n: 'Zay Flowers', p: 'WR' }, { n: 'Jerry Jeudy', p: 'WR' }, { n: 'Calvin Ridley', p: 'WR' }] },
   ] },
   { r: 5, pick: '#58', tag: 'RB volume + WR3', note: 'Assume Price is gone (88%). What actually survives to #58: David Montgomery 90% · Jakobi Meyers 86% · Tony Pollard 78% · Jordan Addison 74% · RJ Harvey 59% · Xavier Worthy 55%. Travis Hunter (37%) and a second TE are luxuries you do not need — McBride is kept.', groups: [
@@ -4443,7 +4443,7 @@ const TURN_ROUNDS = [
   { r: 8, pick: '#87', tag: 'skip the QB run — stack RB/WR', note: 'This used to be your QB1 window. Others will spend R8–R10 chasing Nix/Baker/Herbert — you have Maye for an 11th. Take the best RB/WR they pass over.', groups: [
     { label: 'Best available RB/WR', tier: 4, players: [{ n: 'Jaylen Warren', p: 'RB' }, { n: 'Keon Coleman', p: 'WR' }, { n: 'Chris Olave', p: 'WR' }] },
   ] },
-  { r: 9, pick: '#106', tag: 'rehab discounts + upside', note: 'Judkins (ankle/fibula, Dec) and Skattebo (ankle, cleared) are big talents at an injury discount. Corum is no longer YOUR handcuff — he backs up a Kyren you didn’t keep — but he’s still a value/trade chip if he slides.', groups: [
+  { r: 9, pick: '#106', tag: 'upside swings', note: 'Judkins and Skattebo are KEPT (GMDD R5, Morning Woods R6) — they never enter this draft, so ignore the struck-through names below. Corum is no longer YOUR handcuff either — he backs up a Kyren you didn’t keep — but he’s still a value/trade chip if he slides.', groups: [
     { label: 'Upside swings', tier: 4, players: [{ n: 'Quinshon Judkins', p: 'RB' }, { n: 'Cam Skattebo', p: 'RB' }, { n: 'Jayden Reed', p: 'WR' }, { n: 'Josh Downs', p: 'WR' }] },
   ] },
   { r: 10, pick: '#111', tag: 'handcuff your RB1 + darts', note: 'If you took Jeremiyah Love at 2.15, Trey Benson (ARI) is now YOUR handcuff — grab him here. Otherwise best dart standing.', groups: [
@@ -4817,15 +4817,27 @@ function renderFantasyFootball() {
   if (cwBtn) cwBtn.onclick = () => {
     const list = loadNflBoard();
     const have = new Set(list.map((p) => (p.name || '').toLowerCase()));
-    let added = 0;
+    let added = 0, skipped = 0;
     CONTRACT_WATCH.forEach((g) => g.players.forEach((pl) => {
       if (have.has(pl.n.toLowerCase())) return;
+      // Same guard the turn-plan merge has had since v148 — a player another
+      // team KEEPS never enters the draft, so putting him on the board is a
+      // trap. (JSN, Achane, Puka and Chase Brown are all kept in this league.)
+      if (keptEntry(pl.n)) { skipped++; return; }
       list.push({ name: pl.n, pos: pl.p, tier: pl.tier });
       have.add(pl.n.toLowerCase());
       added++;
     }));
-    if (added) { saveNflBoard(list); renderFantasyFootball(); }
-    else { const n = box.querySelector('#cw-note'); if (n) n.textContent = 'All contract targets are already on your board.'; }
+    const n = box.querySelector('#cw-note');
+    if (added) {
+      if (skipped) fanState.cwSkipped = skipped;
+      fanState.bdOpen = true;
+      saveNflBoard(list); renderFantasyFootball();
+    } else if (n) {
+      n.textContent = skipped
+        ? `All draftable contract targets are already on your board (${skipped} skipped — kept by other teams).`
+        : 'All contract targets are already on your board.';
+    }
   };
   const liveBtn = box.querySelector('#pp-live');
   if (liveBtn) liveBtn.onclick = () => { fanState.footballView = 'live'; renderFantasy(); };
@@ -5315,6 +5327,7 @@ Jonathan Taylor|RB|IND
 Amon-Ra St. Brown|WR|DET
 Puka Nacua|WR|LAR
 Ashton Jeanty|RB|LV
+Omarion Hampton|RB|LAC
 De'Von Achane|RB|MIA
 Saquon Barkley|RB|PHI
 Jeremiyah Love|RB|ARI
@@ -5335,20 +5348,17 @@ Garrett Wilson|WR|NYJ
 Davante Adams|WR|LAR
 Terry McLaurin|WR|WSH
 Malik Nabers|WR|NYG
-Marvin Harrison Jr.|WR|ARI
 George Pickens|WR|DAL
 James Cook|RB|BUF
 Kenneth Walker III|RB|KC
 Breece Hall|RB|NYJ
 DK Metcalf|WR|PIT
-Mike Evans|WR|SF
 DJ Moore|WR|CHI
 Josh Allen|QB|BUF
 Lamar Jackson|QB|BAL
 Jayden Daniels|QB|WSH
 Jalen Hurts|QB|PHI
 George Kittle|TE|SF
-Omarion Hampton|RB|LAC
 Alvin Kamara|RB|NO
 Rashee Rice|WR|KC
 Courtland Sutton|WR|DEN
@@ -5359,10 +5369,10 @@ Chuba Hubbard|RB|CAR
 TreVeyon Henderson|RB|NE
 Drake Maye|QB|NE
 Sam LaPorta|TE|DET
-James Conner|RB|ARI
 Aaron Jones|RB|MIN
 Jerry Jeudy|WR|CLE
 Calvin Ridley|WR|TEN
+Mike Evans|WR|SF
 Jameson Williams|WR|DET
 Tetairoa McMillan|WR|CAR
 Jadarian Price|RB|SEA
@@ -5375,6 +5385,7 @@ Travis Hunter|WR|JAX
 Xavier Worthy|WR|KC
 Jordan Addison|WR|MIN
 Jakobi Meyers|WR|JAX
+Marvin Harrison Jr.|WR|ARI
 T.J. Hockenson|TE|MIN
 Mark Andrews|TE|BAL
 D'Andre Swift|RB|CHI
@@ -5527,7 +5538,8 @@ Lions D/ST|DST|DET
 Chiefs D/ST|DST|KC
 49ers D/ST|DST|SF
 Chargers D/ST|DST|LAC
-Seahawks D/ST|DST|SEA`;
+Seahawks D/ST|DST|SEA
+James Conner|RB|ARI`;
 const MOCK_POOL = MOCK_POOL_RAW.trim().split('\n').map((l, i) => {
   const [name, pos, team] = l.split('|');
   return { name, pos, team, rank: i + 1 };
