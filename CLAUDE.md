@@ -443,6 +443,16 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     viewer could poison — and it makes the standings tick live on a Sunday.
     Do NOT add a results table; it would immediately be a second source of
     truth that can drift.
+  - ⚠️ **The app ships NOT SHARED, and that is the last step before the family
+    gets links.** `SUPABASE_URL`/`KEY` are empty, so `pickStore()` returns
+    `LocalStore` and every person would get their own isolated copy. The
+    footgun was that **"Copy everyone's links" worked anyway** — 20 relatives
+    could each be texted a link that opens an empty app on their own phone.
+    `linkWarnOK()` now guards every path that hands a link to another human,
+    the Admin screen leads with a red `.warnbox` instead of a mild note, and
+    the setup steps are numbered in-app including the SQL-editor commissioner
+    seed the audit called for. `isShared()` is the one predicate for "picks
+    actually travel between devices".
   - **Storage is pluggable**: `LocalStore` (localStorage, this device only) and
     `SupaStore` (Supabase free tier, plain `fetch` against PostgREST, no SDK
     and no build step). `pickStore()` picks one; nothing else in the file knows
@@ -577,8 +587,9 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **192 checks** across six suites (behaviour, matchup/grid, byes,
-      four iPhone sizes, accessibility, audit fixes).
+    - Verified: **207 checks** across seven suites (behaviour, matchup/grid,
+      byes, four iPhone sizes, accessibility, audit fixes, and the
+      not-shared-yet guards).
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.
