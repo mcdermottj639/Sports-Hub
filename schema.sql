@@ -1,7 +1,24 @@
 -- Family Survivor League — Supabase schema.
 -- Paste this whole file into the Supabase SQL editor and run it once.
 --
--- The shape of the security model, because it is the part that matters:
+-- ⚠️ READ THIS BEFORE THE FAMILY LINKS GO OUT
+--
+-- 1. SEED THE COMMISSIONER HERE, NOT IN THE APP. `admin_add_player` lets the
+--    FIRST caller become admin while `players` is empty, and the anon key is
+--    public the moment the site deploys. So insert your own row in this SQL
+--    editor before the URL is shared, rather than racing for it in the UI:
+--       select admin_add_player('bootstrap', 'Jack');
+--    then read your token back with:  select token from players;
+--
+-- 2. "PICKS ARE HIDDEN UNTIL KICKOFF" IS A UI CONVENTION, NOT A SECURITY
+--    BOUNDARY. The client computes standings itself, so it must read every
+--    pick, so `picks` is readable by anyone with the anon key — which is in
+--    the public JS. Anyone willing to open dev tools can see this week's
+--    picks early. For a family pool that is an acceptable trade; do NOT
+--    describe it to players as impossible. Closing it properly means storing
+--    kickoff times server-side and gating reads behind a function.
+--
+-- The shape of the rest of the security model:
 --   * The anon key sits in a public JS file. That is normal and safe HERE
 --     only because of what follows.
 --   * `players` holds everyone's personal token and is NOT readable by the
@@ -121,9 +138,11 @@ begin
   v_base := regexp_replace(lower(trim(p_name)), '[^a-z0-9]+', '-', 'g');
   v_base := trim(both '-' from v_base);
   if v_base = '' then v_base := 'player'; end if;
-  v_token := v_base;
+  -- The personal link IS the login, so the token must not be guessable from
+  -- the person's name. Readable prefix, random tail.
+  v_token := v_base || '-' || substr(encode(gen_random_bytes(8), 'hex'), 1, 6);
   while exists (select 1 from players where token = v_token) loop
-    v_n := v_n + 1; v_token := v_base || '-' || v_n;
+    v_token := v_base || '-' || substr(encode(gen_random_bytes(8), 'hex'), 1, 6);
   end loop;
   insert into players (display_name, token, is_admin)
   values (trim(p_name), v_token, not exists (select 1 from players));
@@ -156,6 +175,11 @@ begin
   -- phone is the MOST likely way a bye team gets picked, so it matters here.
   if p_team is not null and p_kickoff is null then
     return json_build_object('ok', false, 'error', 'That team is on bye in week ' || p_week || '.');
+  end if;
+  -- The deadline applies to the commissioner too. Without this, a pick could
+  -- be entered on a game that has already been played.
+  if p_team is not null and p_kickoff <= now() then
+    return json_build_object('ok', false, 'error', 'That game has already started.');
   end if;
   if p_team is null then
     delete from picks where player_id = p_player_id and season = v_season and week = p_week;
