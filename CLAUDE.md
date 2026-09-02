@@ -432,6 +432,25 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     would otherwise produce a duplicate that the commissioner has to adjudicate
     by text message. Anything new that writes a pick must go through
     `submit_pick`/`admin_set_pick`, never straight at the table.
+  - **🔗 ONE league link, and each person taps their own NAME.** The owner's
+    rule: *"For them on the other end there can be no required work. Just click
+    link, add name and pick as we go."* So the commissioner texts a single
+    address to the family group; each person opens it, taps their own name
+    once, and that phone remembers them forever (`signInWith` writes the token
+    to localStorage AND to the address bar via `location.search`, so a
+    bookmark or Home Screen icon captures it).
+    - `players.claimed_at` marks a name as taken; `claim_player(id)` hands out
+      that player's token and is the ONLY way the token can reach them, since
+      `players_public` deliberately omits it. A claimed name disappears from
+      the list, so two people can never share one entry.
+    - `join_league(name)` covers anyone the commissioner forgot — they type a
+      name instead. It refuses duplicates case-insensitively and **never grants
+      admin, however it is called.**
+    - `admin_unclaim` puts a name back when somebody taps the wrong one.
+    - ⚠️ **Pre-add everyone's names.** Tapping beats typing for the people this
+      league exists for; the type-your-name path is the fallback, not the plan.
+    - This replaced "mint 20 personal links and text them individually".
+      Individual links still exist in Admin as a rarely-needed escape hatch.
   - **Identity is a personal URL** (`?u=nana`), saved to localStorage on first
     visit. No password, no account, no install — that is the only design that
     a 95-year-old can actually use, and it is a trust model rather than a
@@ -603,7 +622,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **232 checks** across nine suites (behaviour, matchup/grid,
+    - Verified: **252 checks** across ten suites (behaviour, matchup/grid,
       byes, four iPhone sizes, accessibility, audit fixes, the not-shared-yet
       guards, the deployment/stranded-link path, and the zero-touch relative
       experience).

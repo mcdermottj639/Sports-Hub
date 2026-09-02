@@ -538,3 +538,14 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 }
 .welcome b { display: block; font-size: 1.2rem; margin-bottom: 10px; }
 .welcome p { margin: 0 0 10px; line-height: 1.55; color: var(--ink2); }
+
+/* The join screen: a list of names to tap. Bigger than a normal button — this
+   is the very first thing a 95-year-old ever does in the app. */
+.namelist { padding: 10px 12px; }
+.namebtn {
+  min-height: 64px; font-size: 1.05rem; font-weight: 800; margin-bottom: 8px;
+  border: 2px solid var(--tr);
+}
+.namebtn:last-child { margin-bottom: 0; }
+.namebtn:hover { border-color: var(--ac); }
+.pn-wait { color: var(--gy); font-weight: 400; font-size: .85rem; }

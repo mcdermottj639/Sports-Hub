@@ -8,6 +8,8 @@
 --    public the moment the site deploys. So insert your own row in this SQL
 --    editor before the URL is shared, rather than racing for it in the UI:
 --       select admin_add_player('bootstrap', 'Jack');
+--    Then mark yourself claimed so your own name is not offered to anyone else:
+--       update players set claimed_at = now() where is_admin;
 --    then read your token back with:  select token from players;
 --
 -- 2. "PICKS ARE HIDDEN UNTIL KICKOFF" IS A UI CONVENTION, NOT A SECURITY
@@ -39,8 +41,13 @@ create table if not exists players (
   display_name  text        not null,
   token         text        not null unique,
   is_admin      boolean     not null default false,
+  -- Null until somebody opens the shared join link and taps this name. Once
+  -- claimed the name disappears from the join list, so two people cannot end
+  -- up sharing one entry.
+  claimed_at    timestamptz,
   created_at    timestamptz not null default now()
 );
+alter table players add column if not exists claimed_at timestamptz;
 
 create table if not exists picks (
   id          bigint generated always as identity primary key,
@@ -56,7 +63,7 @@ create table if not exists picks (
 );
 
 create or replace view players_public as
-  select id, display_name, is_admin from players;
+  select id, display_name, is_admin, (claimed_at is not null) as claimed from players;
 
 -- ---------------------------------------------------------- lock it down
 
@@ -166,6 +173,58 @@ begin
   return json_build_object('ok', true, 'token', v_token);
 end $$;
 
+-- ---- joining: one link for the whole family -------------------------------
+-- The commissioner texts ONE address to the group. Each person opens it and
+-- taps their own name; nobody types a URL or remembers a password. The token
+-- is handed out here, which is the only way it can reach them without being
+-- readable from the players table.
+
+create or replace function claim_player(p_player_id bigint)
+returns json language plpgsql security definer set search_path = public as $$
+declare v players%rowtype;
+begin
+  select * into v from players where id = p_player_id;
+  if not found then return json_build_object('ok', false, 'error', 'That name is not in the league.'); end if;
+  if v.claimed_at is not null then
+    return json_build_object('ok', false, 'error', 'Somebody has already taken that name. Ask the commissioner.');
+  end if;
+  update players set claimed_at = now() where id = p_player_id;
+  return json_build_object('ok', true, 'token', v.token, 'display_name', v.display_name, 'is_admin', v.is_admin);
+end $$;
+
+-- For anyone the commissioner did not think to add in advance.
+create or replace function join_league(p_name text)
+returns json language plpgsql security definer set search_path = public as $$
+declare v_token text; v_base text;
+begin
+  if p_name is null or length(trim(p_name)) = 0 then
+    return json_build_object('ok', false, 'error', 'Please type your name.');
+  end if;
+  if exists (select 1 from players where lower(display_name) = lower(trim(p_name))) then
+    return json_build_object('ok', false, 'error', 'That name is already in the league — tap it in the list instead.');
+  end if;
+  v_base := regexp_replace(lower(trim(p_name)), '[^a-z0-9]+', '-', 'g');
+  v_base := trim(both '-' from v_base);
+  if v_base = '' then v_base := 'player'; end if;
+  v_token := v_base || '-' || substr(encode(gen_random_bytes(8), 'hex'), 1, 6);
+  while exists (select 1 from players where token = v_token) loop
+    v_token := v_base || '-' || substr(encode(gen_random_bytes(8), 'hex'), 1, 6);
+  end loop;
+  -- never admin, however it is called
+  insert into players (display_name, token, is_admin, claimed_at)
+  values (trim(p_name), v_token, false, now());
+  return json_build_object('ok', true, 'token', v_token);
+end $$;
+
+-- If somebody taps the wrong name, the commissioner puts it back.
+create or replace function admin_unclaim(p_admin_token text, p_player_id bigint)
+returns json language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin_token(p_admin_token) then return json_build_object('ok', false, 'error', 'Not an admin.'); end if;
+  update players set claimed_at = null where id = p_player_id;
+  return json_build_object('ok', true);
+end $$;
+
 create or replace function admin_set_pick(p_admin_token text, p_player_id bigint, p_week int, p_team text, p_kickoff timestamptz default null)
 returns json language plpgsql security definer set search_path = public as $$
 declare v_season int := 2026; v_dupe int;
@@ -198,6 +257,9 @@ begin
 end $$;
 
 grant execute on function whoami(text)                                   to anon, authenticated;
+grant execute on function claim_player(bigint)                           to anon, authenticated;
+grant execute on function join_league(text)                              to anon, authenticated;
+grant execute on function admin_unclaim(text, bigint)                    to anon, authenticated;
 grant execute on function submit_pick(text, int, text, timestamptz)      to anon, authenticated;
 grant execute on function admin_add_player(text, text)                   to anon, authenticated;
 grant execute on function admin_del_player(text, bigint)                 to anon, authenticated;
