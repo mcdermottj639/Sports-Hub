@@ -77,6 +77,10 @@ $$;
 -- could spoof it; the real deterrent is that every pick is timestamped and
 -- becomes public at kickoff. The no-repeat rule is NOT spoofable — it is a
 -- database constraint.
+-- p_kickoff is REQUIRED. A pick with no kickoff is a pick on a team that has
+-- no game that week (a bye, or a stale page), and since house rule 1 makes a
+-- missed week free, burning a team on a bye is strictly worse than doing
+-- nothing. The client refuses it too; this is the backstop.
 create or replace function submit_pick(p_token text, p_week int, p_team text, p_kickoff timestamptz default null)
 returns json language plpgsql security definer set search_path = public as $$
 declare v players%rowtype; v_season int := 2026; v_dupe int;
@@ -84,7 +88,10 @@ begin
   select * into v from players where token = p_token;
   if not found then return json_build_object('ok', false, 'error', 'Unknown link.'); end if;
   if p_week < 1 or p_week > 18 then return json_build_object('ok', false, 'error', 'Bad week.'); end if;
-  if p_kickoff is not null and p_kickoff <= now() then
+  if p_kickoff is null then
+    return json_build_object('ok', false, 'error', 'That team is not playing in week ' || p_week || '.');
+  end if;
+  if p_kickoff <= now() then
     return json_build_object('ok', false, 'error', 'That game has already started.');
   end if;
 
@@ -140,11 +147,16 @@ begin
   return json_build_object('ok', true, 'token', v_token);
 end $$;
 
-create or replace function admin_set_pick(p_admin_token text, p_player_id bigint, p_week int, p_team text)
+create or replace function admin_set_pick(p_admin_token text, p_player_id bigint, p_week int, p_team text, p_kickoff timestamptz default null)
 returns json language plpgsql security definer set search_path = public as $$
 declare v_season int := 2026; v_dupe int;
 begin
   if not is_admin_token(p_admin_token) then return json_build_object('ok', false, 'error', 'Not an admin.'); end if;
+  -- Same bye guard as submit_pick. The commissioner taking a pick over the
+  -- phone is the MOST likely way a bye team gets picked, so it matters here.
+  if p_team is not null and p_kickoff is null then
+    return json_build_object('ok', false, 'error', 'That team is on bye in week ' || p_week || '.');
+  end if;
   if p_team is null then
     delete from picks where player_id = p_player_id and season = v_season and week = p_week;
     return json_build_object('ok', true);
@@ -166,5 +178,5 @@ grant execute on function submit_pick(text, int, text, timestamptz)      to anon
 grant execute on function admin_add_player(text, text)                   to anon, authenticated;
 grant execute on function admin_del_player(text, bigint)                 to anon, authenticated;
 grant execute on function admin_token_for(text, bigint)                  to anon, authenticated;
-grant execute on function admin_set_pick(text, bigint, int, text)        to anon, authenticated;
+grant execute on function admin_set_pick(text, bigint, int, text, timestamptz) to anon, authenticated;
 revoke execute on function is_admin_token(text) from anon, authenticated;
