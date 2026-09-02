@@ -264,3 +264,97 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
   .pk { min-height: 84px; }
   .pk-name { font-size: .95em; }
 }
+
+/* ---- matchup info button + sheet -------------------------------------- */
+.game-when { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ibtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; padding: 0 10px; border-radius: 999px;
+  background: var(--sf); border: 1px solid var(--tr); color: var(--gy);
+  font-size: .82em; font-weight: 800; letter-spacing: 0; text-transform: none;
+}
+.ibtn-i { font-size: 1.15em; color: var(--ac6); }
+.ibtn-l { color: var(--gy); }
+
+.sheet { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+.sheet-back { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
+.sheet-card {
+  position: relative; width: 100%; max-width: 640px; max-height: 92vh; overflow-y: auto;
+  background: var(--gr); border-radius: 20px 20px 0 0; padding: 22px 18px 34px;
+  box-shadow: 0 -8px 40px rgba(0,0,0,.35); -webkit-overflow-scrolling: touch;
+}
+@media (min-width: 700px) {
+  .sheet { align-items: center; }
+  .sheet-card { border-radius: 20px; max-height: 88vh; }
+}
+.sheet-x {
+  position: absolute; top: 12px; right: 12px; width: 46px; height: 46px; border-radius: 999px;
+  background: var(--sf); border: 1px solid var(--tr); color: var(--ink); font-size: 1.05em; font-weight: 800;
+}
+.sh-head { padding-right: 54px; margin-bottom: 16px; }
+.sh-title { font-size: 1.3em; font-weight: 900; line-height: 1.25; letter-spacing: -.01em; }
+.sh-at { color: var(--mu); font-weight: 600; font-size: .8em; }
+.sh-when { color: var(--gy); font-size: .9em; margin-top: 4px; }
+
+.sh-proj { background: var(--grad); color: var(--on-ac); border-radius: 16px; padding: 16px; box-shadow: var(--glow); }
+.sh-k { font-size: .76em; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .72; }
+.sh-team { font-size: 1.35em; font-weight: 900; line-height: 1.2; margin: 3px 0 1px; }
+.sh-sub { font-size: .9em; opacity: .8; }
+.sh-bar { height: 10px; border-radius: 999px; background: rgba(0,0,0,.22); margin: 12px 0 5px; overflow: hidden; }
+.sh-bar i { display: block; height: 100%; background: var(--on-ac); opacity: .78; }
+.sh-split { display: flex; justify-content: space-between; font-size: .8em; font-weight: 800; opacity: .82; }
+
+.sh-h { font-size: .78em; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--mu); margin: 22px 0 8px; }
+.sh-blurb p { margin: 0 0 10px; line-height: 1.55; }
+.sh-blurb p:last-child { margin-bottom: 0; }
+.sh-t { width: 100%; border-collapse: collapse; background: var(--sf); border: 1px solid var(--tr); border-radius: 12px; overflow: hidden; }
+.sh-t th, .sh-t td { padding: 11px 12px; text-align: right; border-bottom: 1px solid var(--tr); font-size: .95em; }
+.sh-t td:first-child { white-space: nowrap; }
+.sh-t tr:last-child td { border-bottom: 0; }
+.sh-t th { color: var(--mu); font-size: .74em; text-transform: uppercase; letter-spacing: .05em; font-weight: 800; }
+.sh-t td:first-child, .sh-t th:first-child { text-align: left; color: var(--gy); }
+.sh-t .sh-tm { font-weight: 800; color: var(--ink); }
+.sh-note { margin: 8px 0 0; }
+.sh-you { margin-top: 16px; background: var(--sf2); border: 1px solid var(--tr); border-radius: 12px; padding: 12px 14px; }
+.sh-you p { margin: 0 0 6px; font-size: .93em; color: var(--ink2); }
+.sh-you p:last-child { margin: 0; }
+.sh-act { display: flex; gap: 10px; margin-top: 18px; }
+.sh-act .btn { flex: 1; }
+
+/* ---- standings: table / week-by-week toggle --------------------------- */
+.vtog { display: flex; gap: 6px; margin: 0 0 14px; }
+.vtog button { flex: 1; min-height: 50px; border-radius: 12px; font-weight: 700; font-size: .9em;
+  background: var(--sf); border: 1px solid var(--tr); color: var(--gy); }
+.vtog button.on { background: var(--grad); border-color: transparent; color: var(--on-ac); box-shadow: var(--glow); }
+
+/* The season grid: player rows x week columns. It scrolls sideways, with the
+   name column pinned, because 18 weeks will never fit on a phone. */
+.grid-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--tr); border-radius: 16px; background: var(--sf); }
+.gr { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+.gr th, .gr td { padding: 8px 6px; text-align: center; border-bottom: 1px solid var(--tr); }
+.gr thead th { color: var(--mu); font-size: .7em; text-transform: uppercase; letter-spacing: .04em; font-weight: 800; white-space: nowrap; }
+.gr tbody tr:last-child td { border-bottom: 0; }
+.gr .gnm {
+  position: sticky; left: 0; z-index: 2; background: var(--sf);
+  text-align: left; font-weight: 700; white-space: nowrap; padding-left: 14px;
+  border-right: 1px solid var(--tr); max-width: 112px; overflow: hidden; text-overflow: ellipsis;
+}
+.gr tr.you .gnm, .gr tr.you td { background: var(--pos-bg); }
+.gr .grec { color: var(--gy); font-size: .78em; font-weight: 700; white-space: nowrap; }
+.gcell {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 46px; height: 38px; padding: 0 6px; border-radius: 9px;
+  font-size: .78em; font-weight: 800; letter-spacing: .02em;
+  border: 2px solid var(--tr); background: var(--sf2); color: var(--gy);
+}
+.gcell.w { border-color: var(--pos); background: var(--pos-bg); color: var(--pos); }
+.gcell.l { border-color: var(--neg); background: var(--neg-bg); color: var(--neg); }
+.gcell.t { border-color: var(--wm); color: var(--wm); }
+.gcell.p { border-style: dashed; color: var(--ink2); }
+.gcell.none { border-style: dashed; border-color: var(--tr2); color: var(--mu2); font-weight: 600; }
+.gr-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; color: var(--gy); font-size: .84em; }
+.gr-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.gr-legend i { width: 14px; height: 14px; border-radius: 4px; border: 2px solid var(--tr); display: inline-block; }
+.gr-legend i.w { border-color: var(--pos); background: var(--pos-bg); }
+.gr-legend i.l { border-color: var(--neg); background: var(--neg-bg); }
+.gr-legend i.n { border-style: dashed; border-color: var(--tr2); }
