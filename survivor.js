@@ -1086,6 +1086,20 @@ function renderHistory() {
 function linkFor(token) {
   return `${location.origin}${location.pathname}?u=${encodeURIComponent(token)}`;
 }
+/* True only when picks actually travel between devices. */
+const isShared = () => S.store && S.store.kind === 'cloud';
+
+/* Guard on anything that hands a link to another human. */
+function linkWarnOK(what) {
+  if (isShared()) return true;
+  return confirm(
+    `This league is NOT connected to a shared database yet.\n\n` +
+    `${what} will not work for anyone else — they would open an empty app on ` +
+    `their own phone, and their picks would never reach you.\n\n` +
+    `Connect Supabase first (Admin \u2192 Shared database).\n\nCopy anyway, just to test?`
+  );
+}
+
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
   try {
@@ -1103,10 +1117,14 @@ async function renderAdmin() {
   const cloud = S.store.kind === 'cloud';
   let h = msgHTML() + `<h2 class="hh">Commissioner</h2>`;
 
-  h += `<div class="card"><b>${cloud ? '☁️ Shared database' : '📱 This device only'}</b>
-    <p class="note" style="margin:6px 0 0">${cloud
-      ? 'Picks are saved to your Supabase project, so everyone in the family sees the same league.'
-      : 'Picks are saved in this browser only. Nobody else can see them and they do not sync. Fine for trying it out — connect Supabase below before you send links to the family.'}</p></div>`;
+  h += cloud
+    ? `<div class="card"><b>☁️ Shared league — connected</b>
+        <p class="note" style="margin:6px 0 0">Picks are saved to your Supabase project. Everyone in the family reads and writes the same league, and standings update for all of them.</p></div>`
+    : `<div class="warnbox">
+        <b>⚠️ Not shared yet — do not send links</b>
+        <p>Picks are saved <b>in this browser only</b>. If you send someone a link right now they will open an empty app on their own phone, make picks nobody can see, and none of it will reach you.</p>
+        <p>Connect a free Supabase project below and this becomes a real league. Everything you have built so far keeps working — only where the picks live changes.</p>
+      </div>`;
 
   // --- people ---
   h += `<h2 class="hh">Family (${S.players.length})</h2>
@@ -1145,7 +1163,17 @@ async function renderAdmin() {
   // --- connection ---
   const cfg = jGet('survivor:sb', { url: '', key: '' });
   h += `<h2 class="hh">Shared database</h2>
-    <p class="sub">Paste your Supabase project URL and its anon (publishable) key. Run <code>schema.sql</code> in the Supabase SQL editor first.</p>
+    <p class="sub">This is what makes it a real league. Free, about five minutes, once.</p>
+    <ol class="steps">
+      <li>Make a free project at <b>supabase.com</b>.</li>
+      <li>SQL Editor → paste all of <b>schema.sql</b> → Run.</li>
+      <li>Still in the SQL editor, make yourself commissioner:<br>
+        <code>select admin_add_player('bootstrap', 'Jack');</code><br>
+        then <code>select display_name, token from players;</code> and keep your token.</li>
+      <li>Settings → API → copy the <b>Project URL</b> and the <b>anon</b> key into the boxes below.</li>
+      <li>Save &amp; reload, open your own link, then add everyone else.</li>
+    </ol>
+    <p class="note">Step 3 matters: whoever is added first becomes commissioner, and the key below is public once the site is live. Claim it from the SQL editor, not from the app.</p>
     <div class="card">
       <label class="fld"><span>Project URL</span><input id="sb-url" type="url" placeholder="https://xxxx.supabase.co" value="${esc(cfg.url || '')}"></label>
       <label class="fld"><span>Anon key</span><input id="sb-key" type="text" placeholder="eyJ..." value="${esc(cfg.key || '')}"></label>
@@ -1416,6 +1444,7 @@ document.addEventListener('click', async (e) => {
 
   // --- admin ---
   if (t.dataset.copy) {
+    if (!linkWarnOK('That personal link')) return;
     const tok = await S.store.tokenFor(S.me.token, Number(t.dataset.copy));
     const p = S.players.find((x) => x.id === Number(t.dataset.copy));
     if (!tok) { say('bad', 'Could not read that link.'); render(); return; }
@@ -1424,6 +1453,7 @@ document.addEventListener('click', async (e) => {
     render(); return;
   }
   if (t.id === 'ad-copyall') {
+    if (!linkWarnOK('These personal links')) return;
     const lines = [];
     for (const p of S.players) {
       const tok = await S.store.tokenFor(S.me.token, p.id);
