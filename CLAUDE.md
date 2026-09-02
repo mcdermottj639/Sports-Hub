@@ -640,7 +640,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **313 checks** across twelve suites (behaviour, matchup/grid,
+    - Verified: **320 checks** across twelve suites (behaviour, matchup/grid,
       byes, four iPhone sizes, accessibility, audit fixes, the not-shared-yet
       guards, the deployment/stranded-link path, and the zero-touch relative
       experience).
@@ -689,6 +689,19 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     underdog wins, how contrarian), and form (streaks, average win/loss margin,
     biggest win, worst beat). Plus league-wide: **week winners**, **head to
     head**, and **most-picked teams**.
+    - **Every number carries a plain-English explainer** (`statDef`), not a
+      label and a figure. A stat nobody can read is worse than no stat — it
+      looks authoritative and means nothing. Each section also opens with a
+      sentence saying what it is for, and the explainers name the actual
+      values ("3 wins from picks worth about 3.9") rather than defining the
+      metric in the abstract. A test asserts every `.statdef` has one, that
+      the shortest is a real sentence, and that no statistical jargon
+      (variance, regression, EV, de-vig…) appears anywhere.
+    - ⚠️ **Verb agreement matters here.** The copy is generated for "you" OR a
+      named person, so `vb()` adds the -s: "you take coin flips" but "Patti
+      takes coin flips". Without it every sentence about somebody else read as
+      broken English. ⚠️ The test for this needs a lookbehind — "Did Patti
+      win" is correct (auxiliary + bare infinitive) and a naive regex flags it.
     - ⚠️ **Two rules this screen may never break.** (1) Anything reading MORE
       THAN ONE player's picks goes through `pickVisible()` — otherwise a stats
       page becomes a side channel for reading a hidden Thursday pick. (2)
