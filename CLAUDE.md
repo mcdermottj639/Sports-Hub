@@ -520,6 +520,65 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       no sideways scroll on any of the four screens, every input ≥16px, every
       tap target ≥44px, the scroll lock and its restore, the sheet clearing
       the home indicator, and the status bar tracking the palette.
+  - **🔍 Three-agent audit (accessibility · deep stats · adversarial correctness).
+    Findings acted on, and the two that are ARCHITECTURAL rather than bugs:**
+    - 🚨 **`tallyFor` sums all 18 weeks but only loaded weeks have games**, so a
+      week never fetched in THIS session graded as `nogame` and silently
+      vanished from that player's record — two people could see different
+      standings at the same moment. `weeksInPlay()` + an `ensureWeeks` on entry
+      to Standings/History closes it.
+    - 🚨 **The admin path had a bye guard but NO deadline guard**, so the
+      commissioner could enter a pick on a game that had already finished — a
+      pick made with hindsight. Exactly the same shape as the bye hole. Fixed
+      in the dropdown (`state === 'pre'` only), both stores and `admin_set_pick`.
+    - 🚨 **`if (S.games[week])` is truthy for `[]`**, so ONE failed ESPN fetch
+      pinned that week to "no games" for the life of the page. Now tests
+      `.length`, which is safe because a real NFL week is never empty.
+    - 🚨 **The 60s live refresh gated on the STALE snapshot** (`some(state==='in')`),
+      so it could never discover the first kickoff of the day — a tab opened at
+      9am never updated. Now refreshes whenever the week is unfinished, and
+      re-derives `currentWeek()` so a long-lived tab crosses week boundaries.
+    - 🚨 **Tokens were the slugified NAME** — `?u=nana`, `?u=jack` — so anyone
+      could guess a relative's link, and guessing the commissioner's got them
+      admin. Now `name-xxxxxx` with a random tail (`randTail`, and
+      `gen_random_bytes` in SQL).
+    - The per-week localStorage cache was permanent and nothing cleared it (not
+      even "Erase everything"), so one bad ESPN snapshot was stuck forever.
+      `clearWeekCache()` + an admin "Re-fetch all results" button.
+    - ⚠️ **NOT FIXED, and it cannot be fixed client-side: "picks are hidden
+      until kickoff" is a UI convention, not a security boundary.** The client
+      computes standings itself, so it must read every pick, so `picks` is
+      readable by anyone with the anon key — which is in the public JS. Anyone
+      who opens dev tools can see this week's picks early. Written into
+      `schema.sql`'s header so nobody promises the family otherwise. Closing it
+      properly means storing kickoff times server-side and gating reads behind
+      a function.
+    - ⚠️ **Seed the commissioner in the Supabase SQL editor, NOT in the app.**
+      `admin_add_player` lets the first caller become admin while `players` is
+      empty, and the anon key is public the moment the site deploys.
+    - ⚠️ **`em` compounds.** `.gcell` is `.78em`, so a `.9em` child rendered at
+      **12.6px**, not 16.2px. Root sizing moved to `:root` (and `[data-big]`
+      with it) so `rem` is a true anchor; small labels now use `rem`.
+    - 🚨 **The margin in the season grid lived only in a `title` attribute**,
+      and the legend told people to "tap and hold" — a gesture **iOS Safari
+      does not support on non-image elements**, so the app promised something
+      it could never deliver. The margin is printed in the cell now, which
+      also removes the app's only colour-only win/loss cue.
+    - `setScreen` scrolled to the top on EVERY render, so making a pick threw
+      you back up the page. Only a real screen change scrolls now.
+    - Contrast, measured: **`--mu` failed AA in Champagne (3.37:1)** and is now
+      `#726a5a` (4.74:1); `--mu2` fails in BOTH palettes and must never carry
+      text — the two places that did now use `--gy`.
+    - ⚠️ **Two test bugs cost real time and are worth remembering.** A contrast
+      harness initialised `'rgba(0,0,0,0)'` but compared `'rgba(0, 0, 0, 0)'`,
+      so the parent-walk never ran and EVERY ratio was measured against black —
+      three "failures" against correct CSS. And the demo seeder wrote through
+      `adminSetPick`, so the new deadline guard correctly refused its
+      backfilled weeks 1-3 and the fixture silently lost them; the seeder now
+      writes straight to the store, because fixture generation must not
+      impersonate a commissioner.
+    - Verified: **192 checks** across six suites (behaviour, matchup/grid, byes,
+      four iPhone sizes, accessibility, audit fixes).
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.

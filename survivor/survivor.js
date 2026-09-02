@@ -79,6 +79,20 @@ function setThemeColor(pal) {
   if (sb) sb.setAttribute('content', pal === 'onyx' ? 'black' : 'default');
 }
 
+/* Every cached week. The cache is written once a week is entirely final and
+   then never re-fetched, so a bad snapshot (a corrected score, a game marked
+   final before it was played) would otherwise be permanent. */
+function clearWeekCache() {
+  let n = 0;
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('survivor:wk:')) { localStorage.removeItem(k); n++; }
+    }
+  } catch (e) {}
+  return n;
+}
+
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const lsDel = (k)    => { try { localStorage.removeItem(k); } catch (e) {} };
@@ -91,6 +105,18 @@ function slug(s) {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'player';
 }
 const signed = (n) => (n > 0 ? `+${n}` : String(n));
+
+/* A personal link is the whole security model, so the token cannot be the
+   person's name — "?u=nana" and "?u=jack" were guessable, and guessing the
+   commissioner's got you admin. Name stays as a readable prefix; the tail is
+   random. */
+function randTail(n = 6) {
+  const abc = 'abcdefghjkmnpqrstuvwxyz23456789';   // no look-alike characters
+  const a = new Uint32Array(n);
+  (crypto || window.crypto).getRandomValues(a);
+  return Array.from(a, (x) => abc[x % abc.length]).join('');
+}
+const mintToken = (name) => `${slug(name)}-${randTail()}`;
 
 function fmtKick(iso) {
   const d = new Date(iso);
@@ -107,6 +133,7 @@ const S = {
   games: {},         // week -> [game]
   screen: 'pick',
   apWeek: 1,         // the week the admin "enter a pick" card is looking at
+  weekPinned: false, // true once the user navigates weeks by hand
   stView: 'table',   // 'table' | 'grid' — the standings' two looks
   sheet: null,       // id of the game whose matchup card is open
   demo: lsGet('survivor:demo', '0') === '1',
@@ -167,8 +194,8 @@ const LocalStore = {
   async addPlayer(adminToken, name) {
     const db = this._db();
     if (db.players.length && !this._isAdmin(db, adminToken)) return { ok: false, error: 'Not an admin.' };
-    let token = slug(name), n = 2;
-    while (db.players.some((p) => p.token === token)) token = `${slug(name)}-${n++}`;
+    let token = mintToken(name);
+    while (db.players.some((p) => p.token === token)) token = mintToken(name);
     const first = db.players.length === 0;   // the very first player is the commissioner
     db.players.push({ id: db.seq++, display_name: name, token, is_admin: first });
     this._save(db);
@@ -186,6 +213,11 @@ const LocalStore = {
     const db = this._db();
     if (!this._isAdmin(db, adminToken)) return { ok: false, error: 'Not an admin.' };
     if (team && !kickoffISO) return { ok: false, error: `The ${teamShort(team)} are on bye in week ${week}.` };
+    // Without this the commissioner could enter a pick on a game that has
+    // already kicked off — or finished — which is a pick made with hindsight.
+    if (team && new Date(kickoffISO) <= new Date()) {
+      return { ok: false, error: `That game has already started — you cannot enter a pick for it.` };
+    }
     if (team) {
       const dup = db.picks.find((p) => p.player_id === playerId && p.season === SEASON && p.team === team && p.week !== week);
       if (dup) return { ok: false, error: `They already used the ${teamShort(team)} in week ${dup.week}.` };
@@ -405,7 +437,10 @@ function normGame(ev, week) {
 
 const memCache = {};
 async function weekGames(week) {
-  if (S.games[week]) return S.games[week];
+  // `.length` matters: an empty array is truthy, so a single failed fetch used
+  // to pin the week to "no games" for the whole session. A real NFL week is
+  // never empty, so treating [] as "not loaded" is safe and self-healing.
+  if (S.games[week] && S.games[week].length) return S.games[week];
   if (S.demo) return (S.games[week] = demoGames(week));
 
   // A week whose games are all final never changes again, so it is worth
@@ -694,7 +729,7 @@ function matchupHTML(g) {
     h += `<table class="sh-t"><tbody>
       <tr><td>Spread</td><td>${esc(r.fav ? `${teamShort(r.fav.abbr)} -${r.favBy}` : '—')}</td></tr>
       <tr><td>Total</td><td>${r.ou == null ? '—' : `O/U ${r.ou}`}</td></tr>
-      <tr><td>Moneyline</td><td>${r.hML != null && r.aML != null
+      <tr><td>Moneyline <span class="sh-gloss">(straight-up odds)</span></td><td>${r.hML != null && r.aML != null
         ? `${esc(g.away.abbr)} ${fmtML(r.aML)} · ${esc(g.home.abbr)} ${fmtML(r.hML)}`
         : '—'}</td></tr>
     </tbody></table>
@@ -866,7 +901,7 @@ function renderPick() {
   if (bye && bye.length) {
     h += `<div class="byebar"><b>On bye in week ${S.week}</b><span>${
       esc(bye.map(teamShort).join(' · '))}</span>
-      <em>These teams are not playing, so they cannot be picked — and picking is never wasted on them.</em></div>`;
+      <em>These teams are not playing this week. Skipping them costs you nothing — no loss, and you don't use them up.</em></div>`;
   }
 
   const usedList = Object.entries(used).sort((a, b) => a[1] - b[1]);
@@ -907,9 +942,11 @@ function seasonGridHTML(rows) {
       }
       const cls = row.status === 'win' ? 'w' : row.status === 'loss' ? 'l'
         : row.status === 'tie' ? 't' : 'p';
-      const tip = row.status === 'win' || row.status === 'loss'
-        ? `${teamShort(row.pick.team)} ${signed(row.margin)}` : teamShort(row.pick.team);
-      h += `<td><span class="gcell ${cls}" title="${esc(tip)}">${esc(row.pick.team)}</span></td>`;
+      const mar = row.status === 'win' || row.status === 'loss' ? signed(row.margin)
+        : row.status === 'tie' ? 'tie' : '·';
+      const tip = `${teamShort(row.pick.team)} ${mar}`;
+      h += `<td><span class="gcell ${cls}" title="${esc(tip)}">
+        <b>${esc(row.pick.team)}</b><i>${esc(mar)}</i></span></td>`;
     }
     h += `</tr>`;
   }
@@ -918,8 +955,9 @@ function seasonGridHTML(rows) {
       <span><i class="w"></i> won</span><span><i class="l"></i> lost</span>
       <span><i></i> tie / not played</span><span><i class="n"></i> no pick</span>
       <span>🔒 hidden until kickoff</span>
+      <span>The number under each team is how much they won or lost by.</span>
     </div>
-    <p class="note" style="margin-top:10px">Scroll sideways for later weeks. Tap and hold a team to see the margin.</p>`;
+    <p class="note" style="margin-top:10px">Scroll sideways for later weeks.</p>`;
   return h;
 }
 
@@ -1079,7 +1117,7 @@ async function renderAdmin() {
       <span class="pn">${esc(p.display_name)}${p.is_admin ? ' 👑' : ''}</span>
       <button class="btn sm" data-copy="${p.id}">Copy link</button>
       <button class="btn sm" data-view="${p.id}">View as</button>
-      <button class="btn sm" data-del="${p.id}" title="Remove">✕</button>
+      <button class="btn sm" data-del="${p.id}" title="Remove" aria-label="Remove ${esc(p.display_name)}">✕</button>
     </div>`;
   }
   if (!S.players.length) h += `<p class="note">Nobody yet. Add yourself first — the first person added becomes the commissioner.</p>`;
@@ -1122,6 +1160,11 @@ async function renderAdmin() {
       <button class="btn ${S.demo ? 'pri' : ''} wide" id="dm-toggle">${S.demo ? 'Demo mode is ON — turn it off' : 'Turn demo mode ON'}</button>
       <button class="btn wide" id="dm-seed">Load a demo family &amp; three weeks of picks</button>
       <button class="btn wide" id="dm-wipe">Erase everything on this device</button>
+    </div>
+    <h2 class="hh">Cached results</h2>
+    <p class="sub">Finished weeks are stored on this device so history loads instantly. If a score ever looks wrong, clear it and it will be fetched fresh.</p>
+    <div class="card">
+      <button class="btn wide" id="ck-clear">Re-fetch all results from ESPN</button>
     </div>`;
 
   host.innerHTML = h;
@@ -1136,18 +1179,26 @@ function adminTeamOptions() {
   let h = '<option value="">— clear their pick —</option>';
   if (!games || !games.length) return h;
   const playing = [];
-  for (const g of games) { playing.push(g.away.abbr); playing.push(g.home.abbr); }
+  // Only games that have not kicked off. The player-facing pick screen has
+  // always done this; the admin form did not.
+  for (const g of games) {
+    if (g.state !== 'pre') continue;
+    playing.push(g.away.abbr); playing.push(g.home.abbr);
+  }
   playing.sort((a, b) => teamName(a).localeCompare(teamName(b)));
   for (const a of playing) h += `<option value="${a}">${esc(teamName(a))}</option>`;
   return h;
 }
 function adminTeamNote() {
   const wk = S.apWeek;
-  if (!S.games[wk]) return `Loading week ${wk}'s schedule…`;
+  const games = S.games[wk];
+  if (!games || !games.length) return `Loading week ${wk}'s schedule…`;
   const bye = byeTeams(wk) || [];
-  return bye.length
-    ? `Only teams playing in week ${wk} are listed. On bye: ${bye.map(teamShort).join(', ')}.`
-    : `Only teams playing in week ${wk} are listed.`;
+  const started = games.filter((g) => g.state !== 'pre').length;
+  let n = `Only teams whose week ${wk} game has not kicked off yet are listed.`;
+  if (started) n += ` ${started} game${started > 1 ? 's have' : ' has'} already started.`;
+  if (bye.length) n += ` On bye: ${bye.map(teamShort).join(', ')}.`;
+  return n;
 }
 
 /* ---- demo seed -------------------------------------------------------- */
@@ -1166,22 +1217,29 @@ async function seedDemo() {
   const db = store._db();
   const admin = db.players[0].token;
   const rnd = mulberry32(20260902);
+  // Writes go STRAIGHT into the store, not through adminSetPick. The demo
+  // backfills weeks that have already been played, and the commissioner path
+  // now correctly refuses a pick on a game that has kicked off — this is
+  // fixture generation, not a commissioner action, so it must not pretend to
+  // be one.
   for (const p of db.players) {
     const used = new Set();
-    // Weeks 1-3 are played; most people also have a week-4 pick in already.
     for (let wk = 1; wk <= 4; wk++) {
-      if (wk === 4 && rnd() < 0.3) continue;          // a couple of stragglers
-      if (wk === 2 && p.display_name === 'Nana') continue; // and one genuine miss
-      const games = demoGames(wk);
+      if (wk === 4 && rnd() < 0.3) continue;                 // a couple of stragglers
+      if (wk === 2 && p.display_name === 'Nana') continue;   // and one genuine miss
       const byTeam = {};
-      for (const g of games) { byTeam[g.away.abbr] = g; byTeam[g.home.abbr] = g; }
+      for (const g of demoGames(wk)) { byTeam[g.away.abbr] = g; byTeam[g.home.abbr] = g; }
       const free = Object.keys(byTeam).filter((t) => !used.has(t));
       const team = free[Math.floor(rnd() * free.length)];
       if (!team) continue;
       used.add(team);
-      await store.adminSetPick(admin, p.id, wk, team, byTeam[team].date);
+      db.picks.push({
+        id: db.seq++, player_id: p.id, season: SEASON, week: wk, team,
+        entered_by: 'self', updated_at: new Date().toISOString(),
+      });
     }
   }
+  store._save(db);
   lsSet('survivor:me', admin);   // land on the commissioner
 }
 
@@ -1216,11 +1274,15 @@ function renderPicker() {
    WIRING + BOOT
    ====================================================================== */
 
-function setScreen(name) {
+function setScreen(name, scroll) {
+  const changed = S.screen !== name;
   S.screen = name;
   for (const s of ['pick', 'standings', 'history', 'admin']) $(`#s-${s}`).hidden = s !== name;
   $$('#tabs .tab').forEach((b) => b.classList.toggle('on', b.dataset.screen === name));
-  window.scrollTo(0, 0);
+  // Only a genuine screen change jumps to the top. render() runs after every
+  // pick and every week change too, and yanking the page up each time loses
+  // the reader's place in a long list of games.
+  if (changed || scroll) window.scrollTo(0, 0);
 }
 
 function render() {
@@ -1244,7 +1306,18 @@ async function reloadPlayers() {
   try { S.players = await S.store.listPlayers(); } catch (e) { console.warn('[survivor] players reload failed', e); }
 }
 async function ensureWeeks(weeks) {
-  await Promise.all(weeks.filter((w) => w >= 1 && w <= LAST_WEEK && !S.games[w]).map((w) => weekGames(w)));
+  await Promise.all(weeks
+    .filter((w) => w >= 1 && w <= LAST_WEEK && !(S.games[w] && S.games[w].length))
+    .map((w) => weekGames(w)));
+}
+/* Every week ANY player has a pick in, plus the current one. The standings sum
+   over all 18 weeks, so a week that was never fetched grades as 'nogame' and
+   silently vanishes from that player's record — which made two people looking
+   at the same standings see different numbers. */
+function weeksInPlay() {
+  const set = new Set([S.week]);
+  for (const p of S.picks) set.add(p.week);
+  return Array.from(set);
 }
 
 function say(kind, text) { S.msg = { kind, text }; }
@@ -1270,7 +1343,16 @@ document.addEventListener('click', async (e) => {
     else { document.documentElement.setAttribute('data-big', '1'); lsSet('survivor:big', '1'); }
     return;
   }
-  if (t.dataset.screen) { setScreen(t.dataset.screen); render(); return; }
+  if (t.dataset.screen) {
+    const to = t.dataset.screen;
+    setScreen(to, true); render();
+    if (to === 'standings' || to === 'history') {
+      // Load every week that has a pick before trusting the totals.
+      const before = weeksInPlay().filter((w) => !(S.games[w] && S.games[w].length)).length;
+      if (before) { await ensureWeeks(weeksInPlay()); render(); }
+    }
+    return;
+  }
 
   // --- first run / identity picker ---
   if (t.id === 'first-go') {
@@ -1311,6 +1393,7 @@ document.addEventListener('click', async (e) => {
   // --- week nav ---
   if (t.dataset.week && t.dataset.week !== 'null') {
     S.week = Number(t.dataset.week);
+    S.weekPinned = true;
     await ensureWeeks([S.week]);
     render();
     return;
@@ -1320,7 +1403,10 @@ document.addEventListener('click', async (e) => {
   if (t.dataset.team && S.screen === 'pick') {
     const team = t.dataset.team;
     const g = gameForTeam(S.games[S.week] || [], team);
-    t.disabled = true;
+    // Lock the whole board, not just this button: two quick taps on different
+    // teams used to race, and the pick that landed last won rather than the
+    // one tapped last.
+    $$('#s-pick .pk').forEach((b) => { b.disabled = true; });
     const r = await S.store.submitPick(S.me.token, S.week, team, g && g.date).catch((err) => ({ ok: false, error: String(err.message || err) }));
     if (r && r.ok) { say('ok', `Locked in: the ${teamShort(team)} for week ${S.week}.`); await reloadPicks(); }
     else say('bad', (r && r.error) || 'Could not save that pick.');
@@ -1372,6 +1458,7 @@ document.addEventListener('click', async (e) => {
     const team = ($('#ap-team') || {}).value;
     const g = team ? gameFor(wk, team) : null;
     if (team && !g) { say('bad', `The ${teamShort(team)} are on bye in week ${wk} — pick somebody who is playing.`); render(); return; }
+    if (g && new Date(g.date) <= new Date()) { say('bad', `That game has already started — you cannot enter a pick for it.`); render(); return; }
     const r = await S.store.adminSetPick(S.me.token, who, wk, team || null, g && g.date);
     say(r && r.ok ? 'ok' : 'bad', r && r.ok ? 'Saved.' : (r && r.error) || 'Could not save.');
     await reloadPicks(); render(); return;
@@ -1389,9 +1476,17 @@ document.addEventListener('click', async (e) => {
     if (!confirm('This replaces everything stored on this device with a demo family. Continue?')) return;
     await seedDemo(); location.search = ''; return;
   }
+  if (t.id === 'ck-clear') {
+    const n = clearWeekCache();
+    for (const k of Object.keys(S.games)) delete S.games[k];
+    await ensureWeeks(weeksInPlay());
+    say('ok', `Cleared ${n} cached week${n === 1 ? '' : 's'} and re-fetched.`);
+    render(); return;
+  }
   if (t.id === 'dm-wipe') {
     if (!confirm('Erase the league stored on this device? (A connected Supabase league is not touched.)')) return;
     lsDel('survivor:local'); lsDel('survivor:me'); lsSet('survivor:demo', '0');
+    clearWeekCache();
     location.search = ''; return;
   }
 });
@@ -1436,11 +1531,17 @@ async function boot() {
   // While games are in progress the standings genuinely move, so refresh.
   setInterval(async () => {
     if (document.hidden) return;
-    const live = (S.games[S.week] || []).some((g) => g.state === 'in');
-    if (!live) return;
+    // Refresh whenever the week is UNFINISHED, not only when we can already
+    // see something live — deciding from the stale snapshot meant we could
+    // never discover the first kickoff of the day.
+    const games = S.games[S.week] || [];
+    const unfinished = !games.length || games.some((g) => g.state !== 'post');
+    if (!unfinished) return;
     delete S.games[S.week]; memCache[`w${S.week}`] = null;
+    const wk = await currentWeek();            // a tab left open crosses weeks
+    if (wk !== S.week && !S.weekPinned) { S.week = wk; S.apWeek = wk; }
     await ensureWeeks([S.week]);
-    if (S.screen !== 'admin') render();
+    if (S.screen !== 'admin' && !S.sheet) render();
   }, 60000);
 }
 

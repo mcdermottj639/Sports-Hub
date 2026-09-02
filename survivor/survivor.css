@@ -43,16 +43,20 @@
    grid; without this the tab bar showed on the sign-in screen. */
 [hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
+:root { font-size: 18px; }
+/* Bigger-text mode. It sits on :root, not body, so `rem` is a true absolute
+   anchor that still scales with the toggle — `em` compounds inside shrunk
+   parents and silently produced 11-13px text in the grid and header. */
+:root[data-big] { font-size: 22px; }
 body {
   margin: 0;
   background: var(--gr);
   color: var(--ink);
-  font: 18px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
   padding-bottom: 64px;
 }
-/* Bigger-text mode: one toggle, everything scales because everything below
-   is expressed in rem/em off this root size. */
-:root[data-big] body { font-size: 22px; }
 
 button, input, select { font: inherit; color: inherit; touch-action: manipulation; }
 button { cursor: pointer; }
@@ -430,3 +434,82 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   .sheet { align-items: stretch; }
   .sheet-card { max-height: 100dvh; border-radius: 0; }
 }
+
+/* ======================================================================
+   ACCESSIBILITY PASS — appended last so it wins. Every value here comes
+   from a measured contrast ratio or a stated house floor, not taste.
+   ====================================================================== */
+
+/* --mu measured 3.37:1 on --gr and 3.81:1 on --sf in Champagne — under the
+   4.5:1 AA floor, and it colours real content (team records on the Pick
+   screen, every table header, the running points total). Darkened to
+   4.74 / 5.35. Onyx's --mu already passes at 5.40/5.01, so it is untouched. */
+:root[data-palette="champagne"] { --mu: #726a5a; }
+
+/* --mu2 fails in BOTH palettes (2.27 / 3.41). It is fine as a hairline or a
+   bar fill, but it must never carry text — these two were the only places
+   that did. --gy measures 6.24-8.23 everywhere. */
+.ft { color: var(--gy); }
+.gcell.none { color: var(--gy); }
+
+/* Small type on the primary screens. 16px is the practical floor for
+   anything a reader has to parse; these five were 12.6-15.3px. */
+.pk-rec      { font-size: .9em; }
+.st th       { font-size: .9em; letter-spacing: .02em; }
+.tot .k      { font-size: .9em; text-transform: none; letter-spacing: .02em; }
+.h-run       { font-size: .9em; }
+.gr thead th { font-size: .9em; text-transform: none; letter-spacing: .02em; }
+.tab         { font-size: 1em; }
+
+/* There was no :active state anywhere, and the iOS grey tap flash is
+   deliberately removed — so a tap had NO confirmation until the re-render.
+   That uncertainty is exactly what makes a tremulous hand tap twice. */
+.pk:active:not(:disabled), .btn:active:not(:disabled),
+.tab:active, .hd-btn:active, .ibtn:active, .sheet-x:active { transform: scale(.97); }
+
+/* The house floor is 56px. These three sat at 46 — and one of them is the
+   week nav, tapped on essentially every visit. */
+.hd-btn, .sheet-x { min-width: 56px; min-height: 56px; }
+.btn.sm { min-height: 56px; }
+.hd-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; line-height: 1; }
+.hb-i { font-size: 1em; font-weight: 800; }
+.hb-l { font-size: .62em; font-weight: 700; color: var(--gy); letter-spacing: .02em; }
+.hd-btn:active .hb-l { color: inherit; }
+
+/* Grid cells now carry the margin as text, which is both the fix for the
+   unreachable title tooltip AND the redundant non-colour cue for win/loss. */
+.gcell {
+  flex-direction: column; gap: 0; min-width: 52px; height: 46px; padding: 0 5px;
+}
+.gcell b { font-size: .82em; font-weight: 800; line-height: 1.1; }
+.gcell i { font-size: .72em; font-style: normal; font-weight: 700; opacity: .85; line-height: 1.1; }
+.gcell.none b { font-weight: 600; }
+
+.sh-gloss { color: var(--gy); font-weight: 400; font-size: .85em; }
+
+/* Remaining type floors from the accessibility pass: these were 10-14px. */
+.hb-l        { font-size: .78em; }
+.gr .grec    { font-size: .88em; }
+.gcell b     { font-size: .9em; }
+.gcell i     { font-size: .8em; }
+.gcell       { min-width: 58px; height: 50px; }
+.vtog button { min-height: 56px; }
+.hd-btn sup  { font-size: .7em; }
+
+/* Absolute (rem) sizes for labels that sit inside already-shrunk parents, so
+   they cannot compound below the readable floor. */
+.hb-l        { font-size: .8rem; }
+.gr .grec    { font-size: .9rem; }
+.gcell       { font-size: 1rem; min-width: 62px; height: 54px; }
+.gcell b     { font-size: .95rem; }
+.gcell i     { font-size: .85rem; }
+.hd-btn      { font-size: 1rem; }
+.hd-btn sup  { font-size: .6rem; }
+.pk-rec, .pk-used-tag { font-size: .9rem; }
+.st th, .tot .k, .gr thead th { font-size: .9rem; }
+.h-run       { font-size: .9rem; }
+.tab         { font-size: .95rem; }
+
+/* The grid legend explains the colour coding — it is content, not decoration. */
+.gr-legend { font-size: .9rem; }
+.pillmode { font-size: .9rem; }
