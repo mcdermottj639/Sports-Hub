@@ -466,13 +466,37 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.
   - Verified by driving the real page in headless Chromium at 390px in both
-    palettes — **43 checks**: all six house rules (including the store refusing
+    palettes — **86 checks across two suites**: all six house rules (including the store refusing
     a reused team and refusing a pick on a kicked-off game), no duplicate teams
     across a seeded season, other players' picks not leaking onto the standings
     screen, a missed week not counting as a loss, running point totals adding up
     to the season total, sorting, the personal link signing someone in with no
     password and NOT granting them admin, zero horizontal overflow at 320/390px,
-    the 44px tap-target floor on all four screens, and no console errors.
+    the 44px tap-target floor on all four screens, and no console errors —
+    plus the matchup card (its three projection sources incl. both fallbacks,
+    the favourite carrying the shorter moneyline, a used team offering no pick
+    button, a final leading with its score) and the grid (one row per player,
+    one column per played week, no hidden pick leaking, agreeing with the
+    table, scrolling in its own box rather than moving the page).
+  - **ⓘ Matchup card** (`matchupRead`/`matchupBlurb`/`matchupHTML`, the `#sheet`
+    bottom sheet) on every game: projected winner with a win-probability bar,
+    a short written read, the Vegas line (spread · O/U · moneyline), and both
+    teams' overall/home/away records — plus a pick button, and a warning when
+    a side is already used. ⚠️ **The "projected winner" is THE MARKET'S view,
+    not a model of our own**, and the copy says so. Porting Sports-Hub's model
+    would drag half of `app.js` into a page twenty relatives can open, and the
+    de-vigged moneyline is both a better forecaster and honestly stateable.
+    Order of preference: de-vigged moneylines → spread through `ncdf(-s/13.5)`
+    → records, each labelled. With no odds AND no records it says so rather
+    than guessing.
+  - **Standings has two views** (`S.stView`): the W-L-T table (default) and a
+    **week-by-week grid** (`seasonGridHTML`) — player rows × week columns,
+    colour-coded win/loss/tie/no-pick, modelled on the pool app the family
+    already used. Both read the SAME `tallyFor`, so they cannot disagree; a
+    test asserts they list the same players, order and records. The grid
+    auto-scrolls to the newest week (otherwise it opens on week 1 with the
+    live column off the right edge) and **honours the hidden-pick rule**, so
+    an unstarted pick shows 🔒 rather than the team.
   - ⚠️ **Unverified live:** the sandbox reaches neither ESPN nor Supabase, so
     the real week-scoreboard shape
     (`?dates=2026&seasontype=2&week=N`), `currentWeek()`'s read of

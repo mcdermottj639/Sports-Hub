@@ -99,6 +99,8 @@ const S = {
   week: 1,           // the week the Pick screen defaults to
   games: {},         // week -> [game]
   screen: 'pick',
+  stView: 'table',   // 'table' | 'grid' — the standings' two looks
+  sheet: null,       // id of the game whose matchup card is open
   demo: lsGet('survivor:demo', '0') === '1',
   store: null,
   msg: null,         // { kind:'ok'|'bad', text }
@@ -257,9 +259,32 @@ function roundRobin(round) {
   return out;
 }
 
+/* Records as they stood BEFORE the given week, from the demo season itself,
+   so the matchup card's numbers agree with its own standings. */
+const _demoRecCache = {};
+function demoRecords(beforeWeek) {
+  if (_demoRecCache[beforeWeek]) return _demoRecCache[beforeWeek];
+  const r = {};
+  for (const a of ABBRS) r[a] = { w: 0, l: 0, t: 0, hw: 0, hl: 0, aw: 0, al: 0 };
+  for (let w = 1; w < beforeWeek; w++) {
+    for (const g of demoGames(w)) {
+      if (g.state !== 'post') continue;
+      const d = g.home.score - g.away.score;
+      const H = r[g.home.abbr], A = r[g.away.abbr];
+      if (!H || !A) continue;
+      if (d > 0) { H.w++; H.hw++; A.l++; A.al++; }
+      else if (d < 0) { H.l++; H.hl++; A.w++; A.aw++; }
+      else { H.t++; A.t++; }
+    }
+  }
+  return (_demoRecCache[beforeWeek] = r);
+}
+const recStr = (o) => `${o.w}-${o.l}${o.t ? `-${o.t}` : ''}`;
+
 function demoGames(week) {
   const rnd = mulberry32(week * 7919 + 13);
   const dayMs = 86400000;
+  const rec = week > 1 ? demoRecords(week) : null;
   return roundRobin(week - 1).map((pair, i) => {
     let dayOff, state;
     if (week < DEMO_WEEK)      { dayOff = (week - DEMO_WEEK) * 7; state = 'post'; }
@@ -271,12 +296,61 @@ function demoGames(week) {
     date.setHours(i >= 14 ? 20 : (i === 0 ? 20 : 13), 0, 0, 0);
     const hs = state === 'post' ? 10 + Math.floor(rnd() * 29) : null;
     const as = state === 'post' ? 10 + Math.floor(rnd() * 29) : null;
+
+    // A plausible, deterministic line so the matchup card is testable offline.
+    const homeFav = rnd() < 0.58;                       // home teams are favoured more often
+    const by = Math.round((1 + rnd() * 12) * 2) / 2;    // 1.0 .. 13.0, on the half point
+    const favAbbr = homeFav ? pair[1] : pair[0];
+    const ml = (fav) => {
+      const p = ncdf(by / 13.5);                        // the favourite's win probability
+      const q = fav ? p : 1 - p;
+      return q >= 0.5 ? -Math.round((q / (1 - q)) * 100) : Math.round(((1 - q) / q) * 100);
+    };
+    const side = (abbr, isHome) => {
+      const o = rec && rec[abbr];
+      return {
+        abbr, score: isHome ? hs : as,
+        rec: o ? recStr(o) : '0-0',
+        recHome: o ? `${o.hw}-${o.hl}` : '0-0',
+        recRoad: o ? `${o.aw}-${o.al}` : '0-0',
+      };
+    };
     return {
       id: `demo-${week}-${i}`, week, date: date.toISOString(), state,
       statusText: state === 'post' ? 'Final' : fmtKick(date.toISOString()),
-      away: { abbr: pair[0], score: as }, home: { abbr: pair[1], score: hs },
+      tv: i === 0 ? 'Prime Video' : i >= 14 ? 'ESPN' : (i % 3 === 0 ? 'CBS' : 'FOX'),
+      odds: {
+        det: `${favAbbr} -${by}`, favAbbr, favBy: by,
+        ou: Math.round((38 + rnd() * 14) * 2) / 2,
+        hML: ml(homeFav), aML: ml(!homeFav),
+        homeFav, awayFav: !homeFav, provider: 'Demo book',
+      },
+      away: side(pair[0], false), home: side(pair[1], true),
     };
   });
+}
+
+function normOdds(comp) {
+  const o = (comp.odds || [])[0];
+  if (!o) return null;
+  const num = (v) => (v == null || v === '' || isNaN(Number(v)) ? null : Number(v));
+  const det = o.details || '';                       // e.g. "BAL -6.5"
+  let favAbbr = null, favBy = null;
+  const m = det.match(/([A-Z]{2,4})\s*[-]\s*(\d+(?:\.\d)?)/);
+  if (m) { favAbbr = fixAbbr(m[1]); favBy = Math.abs(Number(m[2])); }
+  if (favBy == null && num(o.spread) != null) {
+    // ESPN's bare `spread` is home-oriented: negative means the home side is laying points.
+    favBy = Math.abs(num(o.spread));
+  }
+  return {
+    det, favAbbr, favBy,
+    ou: num(o.overUnder),
+    hML: num(o.homeTeamOdds && o.homeTeamOdds.moneyLine),
+    aML: num(o.awayTeamOdds && o.awayTeamOdds.moneyLine),
+    homeFav: !!(o.homeTeamOdds && o.homeTeamOdds.favorite),
+    awayFav: !!(o.awayTeamOdds && o.awayTeamOdds.favorite),
+    provider: (o.provider && o.provider.name) || '',
+  };
 }
 
 function normGame(ev, week) {
@@ -285,16 +359,26 @@ function normGame(ev, week) {
   const h = cs.find((c) => c.homeAway === 'home') || cs[0] || {};
   const a = cs.find((c) => c.homeAway === 'away') || cs[1] || {};
   const st = (ev.status && ev.status.type) || (comp.status && comp.status.type) || {};
+  const recOf = (c, type) => {
+    const rs = c.records || [];
+    const hit = rs.find((r) => r.type === type) || (type === 'total' ? rs[0] : null);
+    return (hit && hit.summary) || '';
+  };
   const side = (c) => ({
     abbr: fixAbbr((c.team || {}).abbreviation),
     score: c.score == null || c.score === '' ? null : Number(c.score),
-    rec: ((c.records || []).find((r) => r.type === 'total') || (c.records || [])[0] || {}).summary || '',
+    rec: recOf(c, 'total'),
+    recHome: recOf(c, 'home'),
+    recRoad: recOf(c, 'road'),
   });
+  const bc = (comp.broadcasts || [])[0] || {};
   return {
     id: ev.id, week,
     date: ev.date || comp.date,
     state: st.state || 'pre',                       // 'pre' | 'in' | 'post'
     statusText: st.shortDetail || st.detail || st.description || '',
+    tv: (bc.names || []).join(', '),
+    odds: normOdds(comp),
     home: side(h), away: side(a),
   };
 }
@@ -423,6 +507,210 @@ function standings(allGames) {
 }
 
 /* ======================================================================
+   MATCHUP READ
+   The "projected winner" here is THE BETTING MARKET'S view, not a model of
+   our own. That is deliberate: porting Sports-Hub's model would drag half of
+   app.js into a page twenty relatives can open, and the market is both a
+   better forecaster and far easier to state honestly. When no line is posted
+   we fall back to records and say so.
+   ====================================================================== */
+
+/* Standard normal CDF (Abramowitz & Stegun 26.2.17). */
+function ncdf(z) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989422804014327 * Math.exp(-z * z / 2);
+  const p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  return z > 0 ? 1 - p : p;
+}
+/* An American moneyline as an implied probability (still carrying the vig). */
+function mlProb(ml) {
+  if (ml == null || isNaN(ml)) return null;
+  return ml < 0 ? (-ml) / (-ml + 100) : 100 / (ml + 100);
+}
+const fmtML = (v) => (v == null ? '' : v > 0 ? `+${v}` : String(v));
+const NFL_SD = 13.5;   // points; the usual spread-to-win-probability conversion
+
+function recTotals(str) {
+  const m = String(str || '').match(/^(\d+)-(\d+)(?:-(\d+))?$/);
+  if (!m) return null;
+  return { w: +m[1], l: +m[2], t: +(m[3] || 0) };
+}
+
+/* Everything the matchup card needs, derived from one game object. */
+function matchupRead(g) {
+  const o = g.odds || {};
+  let homeSpread = null;                 // negative = the home side is laying points
+  if (o.favBy != null) {
+    if (o.favAbbr) homeSpread = o.favAbbr === g.home.abbr ? -o.favBy : o.favBy;
+    else if (o.homeFav) homeSpread = -o.favBy;
+    else if (o.awayFav) homeSpread = o.favBy;
+  }
+
+  // Win probability: de-vigged moneylines if both are posted, else the spread.
+  let pHome = null, basis = null;
+  const ph = mlProb(o.hML), pa = mlProb(o.aML);
+  if (ph != null && pa != null && ph + pa > 0) { pHome = ph / (ph + pa); basis = 'moneyline'; }
+  else if (homeSpread != null) { pHome = ncdf(-homeSpread / NFL_SD); basis = 'spread'; }
+
+  let favSide = null;
+  if (pHome != null) favSide = pHome >= 0.5 ? 'home' : 'away';
+  else if (homeSpread != null) favSide = homeSpread < 0 ? 'home' : 'away';
+
+  // No market at all — fall back to records, and label it as the weaker read.
+  let fromRecords = false;
+  if (!favSide) {
+    const rh = recTotals(g.home.rec), ra = recTotals(g.away.rec);
+    const pct = (r) => (r && r.w + r.l + r.t ? (r.w + r.t / 2) / (r.w + r.l + r.t) : null);
+    const a = pct(rh), b = pct(ra);
+    if (a != null && b != null && a !== b) { favSide = a > b ? 'home' : 'away'; fromRecords = true; }
+    else if (a != null && b != null) { favSide = 'home'; fromRecords = true; }   // home field breaks a tie
+  }
+
+  const fav = favSide ? g[favSide] : null;
+  const dog = favSide ? g[favSide === 'home' ? 'away' : 'home'] : null;
+  const pFav = pHome == null ? null : (favSide === 'home' ? pHome : 1 - pHome);
+  return {
+    homeSpread, pHome, pFav, basis, favSide, fav, dog, fromRecords,
+    ou: o.ou == null ? null : o.ou,
+    favBy: homeSpread == null ? null : Math.abs(homeSpread),
+    hML: o.hML, aML: o.aML, provider: o.provider || '',
+    hasLine: homeSpread != null || (o.hML != null && o.aML != null),
+  };
+}
+
+function confidenceWord(p) {
+  if (p == null) return null;
+  if (p >= 0.78) return 'one of the safer picks on the board';
+  if (p >= 0.66) return 'a solid favourite';
+  if (p >= 0.57) return 'a modest favourite';
+  return 'close to a coin flip';
+}
+
+/* A short written read. Every sentence is built from a real number — nothing
+   here is invented, and when a number is missing the sentence is dropped. */
+function matchupBlurb(g, r) {
+  const out = [];
+  const homeName = teamShort(g.home.abbr), awayName = teamShort(g.away.abbr);
+
+  if (g.state === 'post') {
+    const d = g.home.score - g.away.score;
+    out.push(d === 0
+      ? `Final: ${awayName} ${g.away.score}, ${homeName} ${g.home.score} — a tie, so it is worth 0 points either way.`
+      : `Final: ${d > 0 ? homeName : awayName} won by ${Math.abs(d)}, ${g.away.score}-${g.home.score}.`);
+    return out;
+  }
+
+  if (r.fav && r.hasLine) {
+    const where = r.favSide === 'home' ? 'at home' : 'on the road';
+    const pct = r.pFav == null ? null : Math.round(r.pFav * 100);
+    out.push(`${teamShort(r.fav.abbr)} are favoured by ${r.favBy} ${where}`
+      + (pct ? `, which the betting market puts at about a ${pct}% chance of winning.` : '.'));
+  } else if (r.fav && r.fromRecords) {
+    out.push(`No line is posted yet. On records alone ${teamShort(r.fav.abbr)} (${r.fav.rec}) look the stronger side — a much rougher guide than a real line.`);
+  } else {
+    out.push('No line is posted for this game yet, and neither side has a record to separate them.');
+  }
+
+  const rh = recTotals(g.home.rec), ra = recTotals(g.away.rec);
+  if (rh && ra && (rh.w + rh.l + rh.t > 0 || ra.w + ra.l + ra.t > 0)) {
+    out.push(`${homeName} come in ${g.home.rec}${g.home.recHome ? ` (${g.home.recHome} at home)` : ''}. `
+      + `${awayName} are ${g.away.rec}${g.away.recRoad ? ` (${g.away.recRoad} on the road)` : ''}.`);
+  }
+
+  if (r.ou != null) {
+    out.push(r.ou >= 48 ? `The total is set at ${r.ou}, so a high-scoring game is expected.`
+      : r.ou <= 41 ? `The total is set at ${r.ou} — the books expect a low-scoring game.`
+      : `The total is set at ${r.ou}, about an average night for points.`);
+  }
+
+  const word = confidenceWord(r.pFav);
+  if (word && r.fav) out.push(`For survivor purposes that makes ${teamShort(r.fav.abbr)} ${word}.`);
+  return out;
+}
+
+function matchupHTML(g) {
+  const r = matchupRead(g);
+  const used = usedTeams(S.me.id, S.week);
+  const mine = pickIn(S.me.id, S.week);
+  const nm = (side) => teamName(g[side].abbr);
+
+  let h = `<div class="sh-head">
+      <div class="sh-title">${esc(nm('away'))} <span class="sh-at">at</span> ${esc(nm('home'))}</div>
+      <div class="sh-when">${esc(g.state === 'post' ? (g.statusText || 'Final') : fmtKick(g.date))}${g.tv ? ` · ${esc(g.tv)}` : ''}</div>
+    </div>`;
+
+  if (r.fav) {
+    const pct = r.pFav == null ? null : Math.round(r.pFav * 100);
+    h += `<div class="sh-proj">
+      <div class="sh-k">${g.state === 'post' ? 'Was projected to win' : 'Projected winner'}</div>
+      <div class="sh-team">${esc(teamName(r.fav.abbr))}</div>
+      <div class="sh-sub">${r.fromRecords ? 'on records only — no line posted'
+        : `${esc(teamShort(r.fav.abbr))} by ${r.favBy}${pct ? ` · about ${pct}%` : ''}`}</div>
+      ${pct ? `<div class="sh-bar"><i style="width:${Math.max(2, Math.min(98, pct))}%"></i></div>
+        <div class="sh-split"><span>${esc(teamShort(r.fav.abbr))} ${pct}%</span><span>${esc(teamShort(r.dog.abbr))} ${100 - pct}%</span></div>` : ''}
+    </div>`;
+  }
+
+  h += `<h3 class="sh-h">The read</h3><div class="sh-blurb">${
+    matchupBlurb(g, r).map((p) => `<p>${esc(p)}</p>`).join('')}</div>`;
+
+  h += `<h3 class="sh-h">Vegas line</h3>`;
+  if (r.hasLine) {
+    h += `<table class="sh-t"><tbody>
+      <tr><td>Spread</td><td>${esc(r.fav ? `${teamShort(r.fav.abbr)} -${r.favBy}` : '—')}</td></tr>
+      <tr><td>Total</td><td>${r.ou == null ? '—' : `O/U ${r.ou}`}</td></tr>
+      <tr><td>Moneyline</td><td>${r.hML != null && r.aML != null
+        ? `${esc(g.away.abbr)} ${fmtML(r.aML)} · ${esc(g.home.abbr)} ${fmtML(r.hML)}`
+        : '—'}</td></tr>
+    </tbody></table>
+    <p class="note sh-note">${r.provider ? `Line from ${esc(r.provider)}. ` : ''}For reference only — it is what the book is offering, not a guarantee.</p>`;
+  } else {
+    h += `<p class="note">No line posted for this game yet. Books usually put NFL numbers up early in the week.</p>`;
+  }
+
+  h += `<h3 class="sh-h">Records</h3>
+    <table class="sh-t"><thead><tr><th></th><th>Overall</th><th>Home</th><th>Away</th></tr></thead><tbody>
+      <tr><td class="sh-tm">${esc(teamShort(g.away.abbr))}</td><td>${esc(g.away.rec || '—')}</td><td>${esc(g.away.recHome || '—')}</td><td>${esc(g.away.recRoad || '—')}</td></tr>
+      <tr><td class="sh-tm">${esc(teamShort(g.home.abbr))}</td><td>${esc(g.home.rec || '—')}</td><td>${esc(g.home.recHome || '—')}</td><td>${esc(g.home.recRoad || '—')}</td></tr>
+    </tbody></table>`;
+
+  // The single most useful line in a survivor pool: can you even take them?
+  const notes = [];
+  for (const side of ['away', 'home']) {
+    const ab = g[side].abbr;
+    if (used[ab]) notes.push(`You already used the ${teamShort(ab)} in week ${used[ab]}, so they are not available.`);
+    else if (mine && mine.team === ab) notes.push(`The ${teamShort(ab)} are your current week ${S.week} pick.`);
+  }
+  if (notes.length) h += `<div class="sh-you">${notes.map((n) => `<p>${esc(n)}</p>`).join('')}</div>`;
+
+  // Pick straight from the card, when it is still legal to.
+  if (g.state === 'pre') {
+    const opts = ['away', 'home'].filter((sd) => !used[g[sd].abbr]);
+    if (opts.length) {
+      h += `<div class="sh-act">${opts.map((sd) =>
+        `<button class="btn ${mine && mine.team === g[sd].abbr ? '' : 'pri'}" data-team="${g[sd].abbr}" data-sheetpick="1">${
+          mine && mine.team === g[sd].abbr ? `✓ ${esc(teamShort(g[sd].abbr))}` : `Pick ${esc(teamShort(g[sd].abbr))}`}</button>`).join('')}</div>`;
+    }
+  }
+  return h;
+}
+
+function openSheet(gameId) {
+  const g = (S.games[S.week] || []).find((x) => x.id === gameId);
+  if (!g) return;
+  S.sheet = gameId;
+  $('#sheet-body').innerHTML = matchupHTML(g);
+  $('#sheet').hidden = false;
+  document.body.style.overflow = 'hidden';
+  $('#sheet-close').focus();
+}
+function closeSheet() {
+  S.sheet = null;
+  $('#sheet').hidden = true;
+  document.body.style.overflow = '';
+}
+
+/* ======================================================================
    RENDER
    ====================================================================== */
 
@@ -509,8 +797,16 @@ function renderPick() {
         disabled: started || !!isUsed,
       });
     };
+    const r = matchupRead(g);
+    const tip = started ? '' : (r.fav && r.hasLine
+      ? `${teamShort(r.fav.abbr)} -${r.favBy}`
+      : r.fav ? `${teamShort(r.fav.abbr)} favoured` : 'no line yet');
     return `<div class="game ${started ? 'started' : ''}">
-      <div class="game-when">${esc(started ? (g.statusText || 'Final') : fmtKick(g.date))}</div>
+      <div class="game-when">
+        <span>${esc(started ? (g.statusText || 'Final') : fmtKick(g.date))}</span>
+        <button class="ibtn" type="button" data-info="${esc(g.id)}" aria-label="Matchup details">${
+          tip ? `<span class="ibtn-l">${esc(tip)}</span>` : ''}<span class="ibtn-i">ⓘ</span></button>
+      </div>
       <div class="game-pair">${row('away')}<span class="game-at">at</span>${row('home')}</div>
     </div>`;
   };
@@ -532,13 +828,73 @@ function renderPick() {
   host.innerHTML = h;
 }
 
+
+/* The week-by-week board the family already knows from their old pool:
+   one row per player, one column per week, coloured by result. It reads the
+   SAME tallyFor() the table does, so the two views can never disagree. */
+function seasonGridHTML(rows) {
+  const upto = Math.max(S.week, ...S.picks.map((p) => p.week), 1);
+  const weeks = Array.from({ length: upto }, (_, i) => i + 1);
+
+  let h = `<div class="grid-wrap"><table class="gr">
+    <thead><tr><th class="gnm">Player</th><th></th>${
+      weeks.map((w) => `<th>Wk ${w}</th>`).join('')}</tr></thead><tbody>`;
+
+  for (const r of rows) {
+    h += `<tr class="${r.p.id === S.me.id ? 'you' : ''}">
+      <td class="gnm">${esc(r.p.display_name)}</td>
+      <td class="grec">${r.w}-${r.l}${r.t ? `-${r.t}` : ''}</td>`;
+    for (const wk of weeks) {
+      const row = r.rows[wk - 1];
+      if (!row || !row.pick) { h += `<td><span class="gcell none">—</span></td>`; continue; }
+      const own = r.p.id === S.me.id;
+      // House rule 3 applies here too: another player's unstarted pick is secret.
+      if (!own && !pickVisible(row.pick.team, S.games[wk] || [])) {
+        h += `<td><span class="gcell p" title="hidden until kickoff">🔒</span></td>`;
+        continue;
+      }
+      const cls = row.status === 'win' ? 'w' : row.status === 'loss' ? 'l'
+        : row.status === 'tie' ? 't' : 'p';
+      const tip = row.status === 'win' || row.status === 'loss'
+        ? `${teamShort(row.pick.team)} ${signed(row.margin)}` : teamShort(row.pick.team);
+      h += `<td><span class="gcell ${cls}" title="${esc(tip)}">${esc(row.pick.team)}</span></td>`;
+    }
+    h += `</tr>`;
+  }
+  h += `</tbody></table></div>
+    <div class="gr-legend">
+      <span><i class="w"></i> won</span><span><i class="l"></i> lost</span>
+      <span><i></i> tie / not played</span><span><i class="n"></i> no pick</span>
+      <span>🔒 hidden until kickoff</span>
+    </div>
+    <p class="note" style="margin-top:10px">Scroll sideways for later weeks. Tap and hold a team to see the margin.</p>`;
+  return h;
+}
+
 function renderStandings() {
   const host = $('#s-standings');
   const rows = standings(S.games);
   const games = S.games[S.week] || [];
 
+  const grid = S.stView === 'grid';
   let h = msgHTML() + `<h2 class="hh">Standings</h2>
-    <p class="sub">Sorted by wins. Points are how much your teams have won or lost by, added up all season — that's the tiebreaker.</p>`;
+    <p class="sub">${grid
+      ? 'Every pick of the season, week by week.'
+      : "Sorted by wins. Points are how much your teams have won or lost by, added up all season — that's the tiebreaker."}</p>
+    <div class="vtog">
+      <button type="button" data-stview="table" class="${grid ? '' : 'on'}">Table</button>
+      <button type="button" data-stview="grid" class="${grid ? 'on' : ''}">Week by week</button>
+    </div>`;
+
+  if (grid) {
+    h += seasonGridHTML(rows);
+    // The current week is the one people care about; without this the grid
+    // opens on week 1 and the live column is off the right edge.
+    requestAnimationFrame(() => {
+      const w = $('#s-standings .grid-wrap');
+      if (w) w.scrollLeft = w.scrollWidth;
+    });
+  } else {
 
   h += `<div class="card" style="padding:6px 16px"><table class="st">
     <thead><tr><th>#</th><th>Name</th><th>W-L-T</th><th>Points</th><th>Left</th></tr></thead><tbody>`;
@@ -553,6 +909,7 @@ function renderStandings() {
     </tr>`;
   }
   h += `</tbody></table></div>`;
+  }
 
   // Who still owes a pick this week — this is the commissioner's chase list.
   const missing = S.players.filter((p) => !pickIn(p.id, S.week));
@@ -856,6 +1213,24 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  if (t.dataset.stview) { S.stView = t.dataset.stview; render(); return; }
+
+  // --- matchup sheet ---
+  if (t.dataset.info) { openSheet(t.dataset.info); return; }
+  if (t.dataset.close) { closeSheet(); return; }
+  if (t.dataset.sheetpick) {
+    const team = t.dataset.team;
+    const g = (S.games[S.week] || []).find((x) => x.id === S.sheet);
+    t.disabled = true;
+    const r = await S.store.submitPick(S.me.token, S.week, team, g && g.date)
+      .catch((err) => ({ ok: false, error: String(err.message || err) }));
+    if (r && r.ok) { say('ok', `Locked in: the ${teamShort(team)} for week ${S.week}.`); await reloadPicks(); }
+    else say('bad', (r && r.error) || 'Could not save that pick.');
+    closeSheet();
+    render();
+    return;
+  }
+
   // --- week nav ---
   if (t.dataset.week && t.dataset.week !== 'null') {
     S.week = Number(t.dataset.week);
@@ -941,6 +1316,11 @@ document.addEventListener('click', async (e) => {
     location.search = ''; return;
   }
 });
+
+document.addEventListener('click', (e) => {
+  if (e.target.classList && e.target.classList.contains('sheet-back')) closeSheet();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.sheet) closeSheet(); });
 
 async function boot() {
   S.store = pickStore();
