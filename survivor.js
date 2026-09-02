@@ -161,7 +161,9 @@ const LocalStore = {
   },
 
   async listPlayers() {
-    return this._db().players.map((p) => ({ id: p.id, display_name: p.display_name, is_admin: !!p.is_admin }));
+    return this._db().players.map((p) => ({
+      id: p.id, display_name: p.display_name, is_admin: !!p.is_admin, claimed: !!p.claimed_at,
+    }));
   },
   async listPicks() {
     return this._db().picks.filter((p) => p.season === SEASON);
@@ -191,6 +193,36 @@ const LocalStore = {
     if (cur) { cur.team = team; cur.entered_by = 'self'; cur.updated_at = new Date().toISOString(); }
     else db.picks.push({ id: db.seq++, player_id: me.id, season: SEASON, week, team, entered_by: 'self', updated_at: new Date().toISOString() });
     this._save(db);
+    return { ok: true };
+  },
+
+  async claimPlayer(playerId) {
+    const db = this._db();
+    const p = db.players.find((x) => x.id === playerId);
+    if (!p) return { ok: false, error: 'That name is not in the league.' };
+    if (p.claimed_at) return { ok: false, error: 'Somebody has already taken that name. Ask the commissioner.' };
+    p.claimed_at = new Date().toISOString();
+    this._save(db);
+    return { ok: true, token: p.token, display_name: p.display_name, is_admin: !!p.is_admin };
+  },
+  async joinLeague(name) {
+    const db = this._db();
+    const nm = String(name || '').trim();
+    if (!nm) return { ok: false, error: 'Please type your name.' };
+    if (db.players.some((p) => p.display_name.toLowerCase() === nm.toLowerCase())) {
+      return { ok: false, error: 'That name is already in the league — tap it in the list instead.' };
+    }
+    let token = mintToken(nm);
+    while (db.players.some((p) => p.token === token)) token = mintToken(nm);
+    db.players.push({ id: db.seq++, display_name: nm, token, is_admin: false, claimed_at: new Date().toISOString() });
+    this._save(db);
+    return { ok: true, token };
+  },
+  async unclaim(adminToken, playerId) {
+    const db = this._db();
+    if (!this._isAdmin(db, adminToken)) return { ok: false, error: 'Not an admin.' };
+    const p = db.players.find((x) => x.id === playerId);
+    if (p) { p.claimed_at = null; this._save(db); }
     return { ok: true };
   },
 
@@ -254,7 +286,10 @@ const SupaStore = {
 
   // players_public is a VIEW that omits the token column, so the anon key can
   // read the roster without handing out everybody's personal link.
-  listPlayers() { return this._get('players_public?select=id,display_name,is_admin&order=display_name'); },
+  listPlayers() { return this._get('players_public?select=id,display_name,is_admin,claimed&order=display_name'); },
+  claimPlayer(playerId) { return this._rpc('claim_player', { p_player_id: playerId }); },
+  joinLeague(name)      { return this._rpc('join_league', { p_name: name }); },
+  unclaim(adminToken, id) { return this._rpc('admin_unclaim', { p_admin_token: adminToken, p_player_id: id }); },
   listPicks()   { return this._get(`picks?season=eq.${SEASON}&select=player_id,week,team,entered_by`); },
   async whoami(token) {
     const r = await this._rpc('whoami', { p_token: token });
@@ -1143,13 +1178,26 @@ async function renderAdmin() {
       </div>`;
 
   // --- people ---
+  // ONE link for the whole family. Everybody opens the same address and taps
+  // their own name — tapping beats typing for the people this exists for.
+  const joined = S.players.filter((p) => p.claimed).length;
+  h += `<h2 class="hh">The league link</h2>
+    <p class="sub">Text this one address to the whole family. Each person taps their own name once, and that phone remembers them from then on.</p>
+    <div class="card">
+      <p class="mono">${esc(location.origin + location.pathname)}</p>
+      <button class="btn pri wide" id="ad-copyjoin">Copy the league link</button>
+      <p class="note" style="margin-top:10px">${joined} of ${S.players.length} have joined so far.</p>
+    </div>`;
+
   h += `<h2 class="hh">Family (${S.players.length})</h2>
-    <p class="sub">Each person gets their own link. That link <em>is</em> their login — no password, no app to install.</p>
+    <p class="sub">Add everyone's name in advance so they only have to tap. Anyone you miss can type their own name on the join screen.</p>
     <div class="card">`;
   for (const p of S.players) {
     h += `<div class="plrow">
-      <span class="pn">${esc(p.display_name)}${p.is_admin ? ' 👑' : ''}</span>
-      <button class="btn sm" data-copy="${p.id}">Copy link</button>
+      <span class="pn">${esc(p.display_name)}${p.is_admin ? ' 👑' : ''}${
+        p.claimed ? '' : ' <span class="pn-wait">not joined yet</span>'}</span>
+      ${p.claimed ? `<button class="btn sm" data-unclaim="${p.id}" title="Free this name up again">Release</button>` : ''}
+      <button class="btn sm" data-copy="${p.id}">Link</button>
       <button class="btn sm" data-view="${p.id}">View as</button>
       <button class="btn sm" data-del="${p.id}" title="Remove" aria-label="Remove ${esc(p.display_name)}">✕</button>
     </div>`;
@@ -1159,7 +1207,7 @@ async function renderAdmin() {
     <div class="card">
       <label class="fld"><span>Add somebody</span><input id="ad-name" type="text" placeholder="e.g. Nana" autocomplete="off"></label>
       <button class="btn pri wide" id="ad-add">Add to the league</button>
-      <button class="btn wide" id="ad-copyall">Copy everyone's links (for the group text)</button>
+      <button class="btn wide" id="ad-copyall">Copy every personal link (rarely needed)</button>
     </div>`;
 
   // --- enter a pick on someone's behalf ---
@@ -1302,24 +1350,24 @@ function renderPicker() {
   $('#tabs').hidden = true;
   const cloud = isShared();
   const hadToken = !!new URLSearchParams(location.search).get('u');
-  let h = '';
 
-  // Somebody followed a personal link that did not resolve. Whatever we do,
-  // do NOT invite them to start a league of their own.
+  // A personal link that did not resolve. Never offer to start a league here —
+  // they would create an empty one of their own and be lost.
   if (hadToken) {
     host.innerHTML = `<h2 class="hh">This link isn't working</h2>
       <div class="warnbox">
         <b>⚠️ We couldn't sign you in</b>
         <p>${cloud
-          ? 'That link is not recognised by the league. It may have been retyped, cut short by a text message, or replaced.'
+          ? 'That link is not recognised. It may have been cut short by a text message.'
           : "This league hasn't been switched on yet, so there is nothing for the link to open."}</p>
-        <p>Ask ${esc(LEAGUE_ADMIN_NAME)} to send you your personal link again — nothing is wrong with your phone.</p>
+        <p>Ask ${esc(LEAGUE_ADMIN_NAME)} to send you the league link again — nothing is wrong with your phone.</p>
       </div>`;
     return;
   }
 
+  // Nobody in the league at all: this is the commissioner's very first visit.
   if (!S.players.length) {
-    h += `<h2 class="hh">Set up the league</h2>
+    host.innerHTML = msgHTML() + `<h2 class="hh">Set up the league</h2>
       <p class="sub">Nothing on this device yet.</p>
       <div class="card">
         <p class="note">Add yourself first — whoever is added first is the commissioner.</p>
@@ -1327,15 +1375,38 @@ function renderPicker() {
         <button class="btn pri wide" id="first-go">Start the league</button>
         <button class="btn wide" id="first-demo">Or load a demo family to poke around</button>
       </div>`;
-  } else if (cloud) {
-    h += `<h2 class="hh">Who are you?</h2>
-      <p class="sub">Open your own personal link to pick. Ask ${esc(LEAGUE_ADMIN_NAME)} to text it to you again if you've lost it.</p>`;
-  } else {
-    h += `<h2 class="hh">Who are you?</h2><p class="sub">Tap your name.</p><div class="card">`;
-    h += S.players.map((p) => `<button class="btn wide" data-be="${p.id}">${esc(p.display_name)}</button>`).join('');
-    h += `</div>`;
+    return;
   }
+
+  // THE JOIN SCREEN. One link goes to the whole family; each person taps their
+  // own name. Tapping beats typing for the people this league exists for.
+  const free = S.players.filter((p) => !p.claimed);
+  let h = msgHTML() + `<h2 class="hh">Welcome 👋</h2>
+    <p class="sub">This is the family football pool. Tap your name to get started — you only do this once on this phone.</p>`;
+
+  if (free.length) {
+    h += `<div class="card namelist">${free.map((p) =>
+      `<button class="btn wide namebtn" data-claim="${p.id}">${esc(p.display_name)}</button>`).join('')}</div>`;
+  } else {
+    h += `<div class="card"><p class="note">Everyone on the list has already joined.</p></div>`;
+  }
+
+  h += `<details class="usedstrip" ${free.length ? '' : 'open'}>
+      <summary>My name isn't on the list</summary>
+      <div class="ub" style="display:block">
+        <label class="fld"><span>Type your name</span><input id="join-name" type="text" placeholder="e.g. Aunt Mary" autocomplete="name"></label>
+        <button class="btn pri wide" id="join-go">Join the league</button>
+      </div>
+    </details>
+    <p class="note" style="margin-top:14px">Tap the wrong one? Ask ${esc(LEAGUE_ADMIN_NAME)} — he can put it back.</p>`;
   host.innerHTML = h;
+}
+
+/* Sign in on this device and put the token in the address bar, so a bookmark
+   or Home Screen icon captures it and they never see this screen again. */
+function signInWith(token) {
+  lsSet('survivor:me', token);
+  location.search = `?u=${encodeURIComponent(token)}`;
 }
 
 /* ======================================================================
@@ -1434,6 +1505,28 @@ document.addEventListener('click', async (e) => {
   }
   if (t.id === 'wl-ok') { lsSet('survivor:welcomed', '1'); render(); return; }
   if (t.id === 'first-demo') { await seedDemo(); location.search = ''; return; }
+  if (t.dataset.claim) {
+    t.disabled = true;
+    const r = await S.store.claimPlayer(Number(t.dataset.claim))
+      .catch((e) => ({ ok: false, error: String(e.message || e) }));
+    if (r && r.ok && r.token) { signInWith(r.token); return; }
+    say('bad', (r && r.error) || 'Could not sign you in.');
+    await reloadPlayers(); renderPicker(); return;
+  }
+  if (t.id === 'join-go') {
+    const nm = (($('#join-name') || {}).value || '').trim();
+    if (!nm) { say('bad', 'Please type your name.'); renderPicker(); return; }
+    t.disabled = true;
+    const r = await S.store.joinLeague(nm).catch((e) => ({ ok: false, error: String(e.message || e) }));
+    if (r && r.ok && r.token) { signInWith(r.token); return; }
+    say('bad', (r && r.error) || 'Could not join.');
+    await reloadPlayers(); renderPicker(); return;
+  }
+  if (t.dataset.unclaim) {
+    const r = await S.store.unclaim(S.me.token, Number(t.dataset.unclaim));
+    say(r && r.ok ? 'ok' : 'bad', r && r.ok ? 'That name is free again.' : (r && r.error) || 'Could not release it.');
+    await reloadPlayers(); render(); return;
+  }
   if (t.dataset.be) {
     const tok = await LocalStore.tokenFor(null, Number(t.dataset.be))
       || (LocalStore._db().players.find((p) => p.id === Number(t.dataset.be)) || {}).token;
@@ -1491,6 +1584,13 @@ document.addEventListener('click', async (e) => {
     if (!tok) { say('bad', 'Could not read that link.'); render(); return; }
     const ok = await copyText(`${p.display_name}, here's your Family Survivor link — bookmark it:\n${linkFor(tok)}`);
     say(ok ? 'ok' : 'bad', ok ? `Copied ${p.display_name}'s link.` : `Could not copy. Link: ${linkFor(tok)}`);
+    render(); return;
+  }
+  if (t.id === 'ad-copyjoin') {
+    if (!linkWarnOK('The league link')) return;
+    const url = location.origin + location.pathname;
+    const ok2 = await copyText(`Family survivor pool — tap this, then tap your name:\n${url}`);
+    say(ok2 ? 'ok' : 'bad', ok2 ? 'Copied. Paste it into the family group text.' : `Could not copy. The link is ${url}`);
     render(); return;
   }
   if (t.id === 'ad-copyall') {
