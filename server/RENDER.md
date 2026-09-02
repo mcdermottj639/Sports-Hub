@@ -32,6 +32,40 @@ next request takes ~30–60s to wake before it answers. The app waits for that
      `localStorage.setItem('sportshub:api','https://YOUR-URL.onrender.com')`
      (the app reads this override before its built-in default).
 
+## Adding your football league (after the draft)
+
+The backend already knows how to serve football — it just needs to be told
+which league is yours. **Nothing in the app has to change.** Three env vars,
+read from your ESPN league URL:
+
+    https://fantasy.espn.com/football/team?leagueId=1234567&teamId=10
+                                                    ^^^^^^^         ^^
+
+| Var | Value |
+|---|---|
+| `FOOTBALL_LEAGUE_ID` | the `leagueId=` number |
+| `FOOTBALL_TEAM_ID` | the `teamId=` number — **your** team |
+| `FOOTBALL_YEAR` | `2026` |
+
+**On a service that's already live**, do it in the dashboard (a `render.yaml`
+edit only re-prompts on a fresh Blueprint apply): Render → the
+`sports-hub-fantasy-api` service → **Environment** → **Add Environment
+Variable** ×3 → **Save**. That triggers a redeploy; wait for it to finish.
+
+⚠️ **Set `FOOTBALL_YEAR` even though it looks optional.** `main.py` falls back
+to `2025`, so a league id with no year quietly serves last season's league —
+which looks like a working app with the wrong roster.
+
+⚠️ **`FOOTBALL_TEAM_ID` is not optional either, in practice.** Without it
+`my_team()` falls back to the *first* team in the league, so the app would
+happily show someone else's roster as yours.
+
+Then: `https://sports-hub-fantasy-api.onrender.com/api/health` should report
+`"configured": {"football": true, ...}`, and **Fantasy → Football** in the app
+flips from the draft-prep view to the live league view (matchup, standings,
+roster, waivers). The prep tools stay reachable via the
+**"🏈 Draft board & prep tools →"** link.
+
 ## Verify
 
 - Open `https://<your-url>/api/health` — it should return JSON with
