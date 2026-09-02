@@ -640,7 +640,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **252 checks** across ten suites (behaviour, matchup/grid,
+    - Verified: **277 checks** across eleven suites (behaviour, matchup/grid,
       byes, four iPhone sizes, accessibility, audit fixes, the not-shared-yet
       guards, the deployment/stranded-link path, and the zero-touch relative
       experience).
@@ -658,6 +658,26 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     the same team twice) and promises nothing to install. It shows ONLY before
     a player's first pick and only on the Pick screen, so it can never sit
     between a returning player and the game list.
+  - **✅ Every pick goes through a confirmation step** (`askConfirm` →
+    `#confirm`, `savePick`). Owner's ask: *"there should be a confirmation pop
+    up... that should help if people accidentally click a team."* A tap on a
+    team NEVER writes — it opens a full-screen panel naming the team, the
+    opponent and the kickoff, and (when replacing) the team being dropped. A
+    pick spends a team for the whole season, and a shaky hand, a pocket or a
+    scroll all produce accidental taps, so this is error prevention, not
+    ceremony.
+    - **The SAFE option takes focus, and both answers are the same size** (66px).
+      A cancel that is harder to hit than a commit is not a real cancel.
+    - Backing out via the button, Escape, or the backdrop all leave the
+      existing pick untouched.
+    - ⚠️ **`pinBody`/`unpinBody` replaced the inline body-pinning in
+      `openSheet`.** Two overlays can now be involved (pick from the matchup
+      card → confirm), and the old code would have unpinned on the first close
+      and left the page scroll-locked. It refcounts; `askConfirm` also closes
+      the matchup sheet first so the two never actually stack.
+    - ⚠️ **Any test that taps a team must now also click `#cf-yes`** — five
+      suites asserted the old direct-save behaviour and failed against
+      perfectly correct code.
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.
