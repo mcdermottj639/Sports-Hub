@@ -1860,10 +1860,19 @@ async function reloadPicks() {
 async function reloadPlayers() {
   try { S.players = await S.store.listPlayers(); } catch (e) { console.warn('[survivor] players reload failed', e); }
 }
+/* Weeks are fetched a few at a time rather than all at once. On a first visit
+   in week 15 the old Promise.all fired 16 scoreboard requests inside 200ms —
+   a burst that a CDN is entitled to throttle, and that nobody needs, since
+   finished weeks are cached on the device afterwards and never re-fetched. */
+const FETCH_LANES = 3;
 async function ensureWeeks(weeks) {
-  await Promise.all(weeks
-    .filter((w) => w >= 1 && w <= LAST_WEEK && !(S.games[w] && S.games[w].length))
-    .map((w) => weekGames(w)));
+  const todo = weeks.filter((w) => w >= 1 && w <= LAST_WEEK && !(S.games[w] && S.games[w].length));
+  if (!todo.length) return;
+  // The current week first — it is the one the screen is waiting on.
+  todo.sort((a, b) => Math.abs(a - S.week) - Math.abs(b - S.week));
+  let i = 0;
+  const lane = async () => { while (i < todo.length) await weekGames(todo[i++]); };
+  await Promise.all(Array.from({ length: Math.min(FETCH_LANES, todo.length) }, lane));
 }
 /* Every week ANY player has a pick in, plus the current one. The standings sum
    over all 18 weeks, so a week that was never fetched grades as 'nogame' and
