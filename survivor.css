@@ -369,3 +369,64 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
   text-transform: uppercase; color: var(--mu); margin-bottom: 5px; }
 .byebar span { display: block; font-weight: 700; color: var(--ink2); line-height: 1.5; }
 .byebar em { display: block; margin-top: 6px; font-size: .88em; color: var(--gy); font-style: normal; }
+
+/* ======================================================================
+   iPHONE / SAFARI LAYER — appended last so it wins.
+   The whole league runs on phones, and the one user who matters most runs
+   it from a Home Screen icon, where Safari's chrome is gone and the notch
+   and home indicator are ours to work around.
+   ====================================================================== */
+
+/* 1. SAFE AREAS. With viewport-fit=cover the page runs under the Dynamic
+      Island and the home indicator, so every edge needs the inset or the
+      content is physically unreachable. */
+.hd-in   { padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
+.hd-in, .hd-who, .tabs, .screen, .ft {
+  padding-left:  calc(16px + env(safe-area-inset-left, 0px));
+  padding-right: calc(16px + env(safe-area-inset-right, 0px));
+}
+body { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+.sheet-card {
+  padding-bottom: calc(34px + env(safe-area-inset-bottom, 0px));
+  padding-left:   calc(18px + env(safe-area-inset-left, 0px));
+  padding-right:  calc(18px + env(safe-area-inset-right, 0px));
+}
+
+/* 2. Safari's toolbar shrinks and grows as you scroll, so vh is a moving
+      target. dvh tracks it; the vh line stays as the fallback. */
+.sheet-card { max-height: 92vh; max-height: 92dvh; }
+@media (min-width: 700px) { .sheet-card { max-height: 88vh; max-height: 88dvh; } }
+
+/* 3. No grey flash on tap, and no long-press callout menu. A shaky hand
+      rests on a button longer than a young one does, and the iOS copy/share
+      bubble appearing over the team you are trying to pick is alarming. */
+* { -webkit-tap-highlight-color: transparent; }
+button, .pk, .tab, .ibtn, .uchip, .gcell {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* 4. Double-tap-to-zoom reads a fast second tap as a zoom gesture and
+      swallows it. This kills that gesture only — pinch-to-zoom is left
+      alone deliberately, because taking it away breaks accessibility. */
+button, input, select, label, summary, a, .pk, .gcell { touch-action: manipulation; }
+
+/* 5. Scrolling. The sheet must not rubber-band the page behind it, and the
+      grid must not drag the whole screen sideways when you reach its end. */
+.sheet-card, .grid-wrap { overscroll-behavior: contain; }
+body { overscroll-behavior-y: none; }
+.grid-wrap, .sheet-card { -webkit-overflow-scrolling: touch; }
+
+/* 6. Type rendering on retina screens. */
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+/* 7. iOS renders a disabled button at ~40% opacity of OUR opacity, which
+      stacks and can push a used team below the contrast floor. Pin it. */
+.pk:disabled { opacity: .5; }
+
+/* 8. Landscape on a phone: the sheet should not become a letterbox slit. */
+@media (max-height: 480px) and (orientation: landscape) {
+  .sheet { align-items: stretch; }
+  .sheet-card { max-height: 100dvh; border-radius: 0; }
+}
