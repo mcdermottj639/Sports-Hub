@@ -834,7 +834,20 @@ function renderPick() {
   const myGame = mine ? gameForTeam(games, mine.team) : null;
   const locked = !!(mine && myGame && myGame.state !== 'pre');
 
-  let h = msgHTML() + weekNavHTML(S.week);
+  let h = msgHTML();
+
+  const seen = lsGet('survivor:welcomed', '0') === '1';
+  if (!seen && !picksOf(S.me.id).length) {
+    h += `<div class="welcome">
+      <b>Hi ${esc(S.me.display_name)} 👋</b>
+      <p>This is the family football pool. Every week you pick <b>one team you think will win</b>.</p>
+      <p>You are never knocked out — you play all season. The only rule is you can't pick the same team twice.</p>
+      <p>Nothing to install and nothing to remember. Just open this same link each week.</p>
+      <button class="btn pri wide" id="wl-ok">Got it — let's pick</button>
+    </div>`;
+  }
+
+  h += weekNavHTML(S.week);
 
   if (locked) {
     const g = gradePick(mine.team, games);
@@ -1419,6 +1432,7 @@ document.addEventListener('click', async (e) => {
     location.search = `?u=${encodeURIComponent(r.token)}`;
     return;
   }
+  if (t.id === 'wl-ok') { lsSet('survivor:welcomed', '1'); render(); return; }
   if (t.id === 'first-demo') { await seedDemo(); location.search = ''; return; }
   if (t.dataset.be) {
     const tok = await LocalStore.tokenFor(null, Number(t.dataset.be))
