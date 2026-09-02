@@ -446,6 +446,15 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     - `join_league(name)` covers anyone the commissioner forgot — they type a
       name instead. It refuses duplicates case-insensitively and **never grants
       admin, however it is called.**
+    - ⚠️ **Tapping the wrong name is confirmed AND self-undoable.** Choosing
+      who you are is a bigger commitment than a pick — it takes a name off the
+      list for everybody else — so `askName` asks "Are you Nana?" first, with
+      the safe answer holding focus. And **before their first pick** the Pick
+      screen carries a "Not Nana? Tap here to pick a different name" escape
+      (`#notme` → `release_me`), so a mis-tap is fixed in two taps without
+      texting the commissioner. Once picks exist the escape disappears and
+      `release_me` refuses — untangling that is a real decision and belongs
+      with the commissioner via `admin_unclaim`.
     - `admin_unclaim` puts a name back when somebody taps the wrong one.
     - ⚠️ **Pre-add everyone's names.** Tapping beats typing for the people this
       league exists for; the type-your-name path is the fallback, not the plan.
@@ -640,7 +649,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **323 checks** across twelve suites (behaviour, matchup/grid,
+    - Verified: **343 checks** across thirteen suites (behaviour, matchup/grid,
       byes, four iPhone sizes, accessibility, audit fixes, the not-shared-yet
       guards, the deployment/stranded-link path, and the zero-touch relative
       experience).

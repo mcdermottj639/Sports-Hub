@@ -140,6 +140,7 @@ const S = {
   stView: 'table',   // 'table' | 'grid' — the standings' two looks
   sheet: null,       // id of the game whose matchup card is open
   confirming: null,  // { team, gameId } while the confirm step is up
+  naming: null,      // player id awaiting "are you X?" confirmation
   demo: lsGet('survivor:demo', '0') === '1',
   store: null,
   msg: null,         // { kind:'ok'|'bad', text }
@@ -219,6 +220,17 @@ const LocalStore = {
     this._save(db);
     return { ok: true, token };
   },
+  async releaseMe(token) {
+    const db = this._db();
+    const me = db.players.find((x) => x.token === token);
+    if (!me) return { ok: false, error: 'Unknown link.' };
+    if (db.picks.some((x) => x.player_id === me.id && x.season === SEASON)) {
+      return { ok: false, error: 'You have already made picks — ask the commissioner to sort this out.' };
+    }
+    me.claimed_at = null;
+    this._save(db);
+    return { ok: true };
+  },
   async unclaim(adminToken, playerId) {
     const db = this._db();
     if (!this._isAdmin(db, adminToken)) return { ok: false, error: 'Not an admin.' };
@@ -291,6 +303,7 @@ const SupaStore = {
   claimPlayer(playerId) { return this._rpc('claim_player', { p_player_id: playerId }); },
   joinLeague(name)      { return this._rpc('join_league', { p_name: name }); },
   unclaim(adminToken, id) { return this._rpc('admin_unclaim', { p_admin_token: adminToken, p_player_id: id }); },
+  releaseMe(token)        { return this._rpc('release_me', { p_token: token }); },
   listPicks()   { return this._get(`picks?season=eq.${SEASON}&select=player_id,week,team,entered_by`); },
   async whoami(token) {
     const r = await this._rpc('whoami', { p_token: token });
@@ -863,6 +876,24 @@ function askConfirm(team) {
   pinBody();
   $('#cf-no').focus({ preventScroll: true });    // the SAFE option takes focus
 }
+/* Choosing who you are is a bigger commitment than a pick — it takes a name
+   off the list for everybody else — so it confirms too. */
+function askName(playerId) {
+  const p = S.players.find((x) => x.id === playerId);
+  if (!p) return;
+  S.naming = playerId;
+  S.confirming = { name: p.display_name };
+  $('#confirm-body').innerHTML = `
+    <div class="cf-k">Just to be sure</div>
+    <div class="cf-team"><span>Are you ${esc(p.display_name)}?</span></div>
+    <p class="cf-game">This phone will remember you, and this name comes off the list for everyone else.</p>
+    <button class="btn pri wide cf-yes" id="nm-yes">Yes — that's me</button>
+    <button class="btn wide cf-no" id="nm-no">No, go back</button>`;
+  $('#confirm').hidden = false;
+  pinBody();
+  $('#nm-no').focus({ preventScroll: true });
+}
+
 function closeConfirm() {
   if (!S.confirming) return;
   S.confirming = null;
@@ -1095,6 +1126,11 @@ function renderPick() {
       <p>Nothing to install and nothing to remember. Just open this same link each week.</p>
       <button class="btn pri wide" id="wl-ok">Got it — let's pick</button>
     </div>`;
+  }
+
+  // Before their first pick, tapping the wrong name is still trivially undone.
+  if (!picksOf(S.me.id).length) {
+    h += `<p class="notme">Not ${esc(S.me.display_name)}? <button id="notme" class="linkbtn">Tap here to pick a different name</button></p>`;
   }
 
   h += weekNavHTML(S.week);
@@ -1940,13 +1976,26 @@ document.addEventListener('click', async (e) => {
   }
   if (t.id === 'wl-ok') { lsSet('survivor:welcomed', '1'); render(); return; }
   if (t.id === 'first-demo') { await seedDemo(); location.search = ''; return; }
-  if (t.dataset.claim) {
+  if (t.dataset.claim) { askName(Number(t.dataset.claim)); return; }
+  if (t.id === 'nm-yes') {
+    const id = S.naming;
+    if (!id) { closeConfirm(); return; }
     t.disabled = true;
-    const r = await S.store.claimPlayer(Number(t.dataset.claim))
-      .catch((e) => ({ ok: false, error: String(e.message || e) }));
+    closeConfirm();
+    S.naming = null;
+    const r = await S.store.claimPlayer(id).catch((e) => ({ ok: false, error: String(e.message || e) }));
     if (r && r.ok && r.token) { signInWith(r.token); return; }
     say('bad', (r && r.error) || 'Could not sign you in.');
     await reloadPlayers(); renderPicker(); return;
+  }
+  if (t.id === 'nm-no') { S.naming = null; closeConfirm(); renderPicker(); return; }
+
+  // "That isn't me" — undo a mis-tap without needing the commissioner.
+  if (t.id === 'notme') {
+    const r = await S.store.releaseMe(S.me.token).catch((e) => ({ ok: false, error: String(e.message || e) }));
+    if (r && r.ok) { lsDel('survivor:me'); lsDel('survivor:welcomed'); location.search = ''; return; }
+    say('bad', (r && r.error) || 'Could not undo that.');
+    render(); return;
   }
   if (t.id === 'join-go') {
     const nm = (($('#join-name') || {}).value || '').trim();

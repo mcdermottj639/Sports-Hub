@@ -614,3 +614,11 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .statwhat p { margin: 0 0 12px; font-size: .92rem; line-height: 1.5; color: var(--ink2); }
 .statwhat p:last-child { margin-bottom: 0; }
 .statwhat b { color: var(--ink); }
+
+/* "That isn't me" — visible only before a first pick, when undoing costs
+   nothing. After that it is a real decision and belongs with the commissioner. */
+.notme { margin: 0 0 16px; color: var(--gy); font-size: .95rem; text-align: center; }
+.linkbtn {
+  background: none; border: 0; padding: 8px 4px; min-height: 44px;
+  color: var(--ac6); font: inherit; font-weight: 700; text-decoration: underline;
+}
