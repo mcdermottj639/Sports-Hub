@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v196';
+const APP_VERSION = 'v197';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -6559,7 +6559,14 @@ async function renderFootballLive() {
       const mv = sumB(starters, b), ov = sumB(oppEff, b);
       if (!mv && !ov) return '';
       const top = Math.max(mv, ov) || 1;
-      const nm = (list) => { const c = list.filter((p) => nflBucket(p) === b).sort((x, y) => (fpts(y.projected) || 0) - (fpts(x.projected) || 0))[0]; return c ? c.name : ''; };
+      // ⚠️ sumB is a POSITION-GROUP total, so naming only the top player made
+      // "30.7" read as A.J. Brown's own projection when it was Brown + Harrison
+      // + Sutton. Say how many players are in the number.
+      const nm = (list) => {
+        const g = list.filter((p) => nflBucket(p) === b).sort((x, y) => (fpts(y.projected) || 0) - (fpts(x.projected) || 0));
+        if (!g.length) return '';
+        return g.length > 1 ? `${g[0].name} +${g.length - 1}` : g[0].name;
+      };
       return `<div class="ffp-mu-row">
         <div class="ffp-mu-side"><b>${mv || '–'}</b><span>${esc(nm(starters))}</span></div>
         <div class="ffp-mu-bar"><div class="ffp-mu-pos">${b}</div><div class="ffp-mu-track">
@@ -6574,7 +6581,7 @@ async function renderFootballLive() {
       ${pct != null ? `<div class="ffp-wp">
         <div class="ffp-wp-track"><div class="ffp-wp-fill" style="width:${Math.max(2, Math.min(98, pct))}%"></div><div class="ffp-wp-mid"></div></div>
         <div class="ffp-wp-read ${tone}">${pct}% to win${wp && wp.remaining ? ` <span style="font-weight:400;font-size:11px;color:var(--gy)">· ${wp.remaining} still to play</span>` : ''}</div></div>` : ''}
-      <div class="ffp-cap">${synced ? esc(synced) + ' · ' : ''}${pct != null ? 'Win% is our estimate from projected points, not ESPN’s.' : 'Win% shows once both lineups carry projections.'}</div>
+      <div class="ffp-cap">Each row is the <b style="color:var(--ink)">combined</b> projection for that position group — "+2" means two more players are in the number. ESPN's own projections, already scored to your league (half-PPR). ${synced ? esc(synced) + ' · ' : ''}${pct != null ? 'Win% is our estimate, not ESPN’s.' : 'Win% shows once both lineups carry projections.'}</div>
       <button id="fbl-resync" class="fan-btn ghost" style="margin-top:10px">🔄 Refresh from ESPN</button></div>`;
   } else {
     matchupHTML = `<div class="ffp-card"><div class="ffp-empty"><b>No matchup posted yet</b>${rec ? 'Season record: ' + esc(rec) + '.' : 'Your Week 1 opponent appears once the schedule is set.'}</div><button id="fbl-resync" class="fan-btn ghost">🔄 Refresh from ESPN</button></div>`;

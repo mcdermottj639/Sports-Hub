@@ -433,7 +433,27 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v196** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v197** (backend **b14-football-boxplayer**).
+
+- **🚨 "ESPN is not projecting 30 points for AJ Brown" — correct, and it wasn't
+  (v197)** — the owner read the This Week card as a per-player projection. It
+  is a **position-group total**: `sumB()` sums every starter in the bucket, so
+  WR `30.7` was Brown + Harrison + Sutton. But the row printed only the top
+  player's NAME beside it, so it read as that one player's number. The
+  single-player rows (QB, TE, K, DST) were honest, which is exactly why the
+  stacked ones stood out as wrong.
+  - Multi-player groups now read **"A.J. Brown +2"**, and the caption says each
+    row is the combined projection for the group.
+  - **The projections themselves were never in question and are league-correct.**
+    espn-api reads **`appliedTotal`** (`football/player.py:56`) — ESPN's number
+    AFTER your league's scoring config is applied, so half-PPR is already baked
+    in by ESPN, not by us. `statSourceId` 0 = actual, 1 = projected. **The app
+    never computes a fantasy point itself**; `NFL_SCORING` is display text only.
+  - ⚠️ **One place that is NOT half-PPR:** `/api/fantasy/football/rankings`
+    defaults to `scoring=PPR` (full), the closest rank type ESPN publishes.
+    Preseason draft ranks only — nothing on the live page.
+  - **Lesson: a number that aggregates must never be labelled with one member's
+    name.** The label is what makes an aggregate readable or a lie.
 
 - **📐 Football page — first on-device pass, and the bug the screenshots caught
   (v196)** — the owner opened v195 on their phone: *"Some formatting alignment
