@@ -1,0 +1,266 @@
+/* Family Survivor League — standalone styles.
+   Self-contained on purpose: this app must never break when Sports-Hub ships.
+   The palette tokens are copied from styles.css so it looks like the same
+   family of apps, but nothing here imports anything from there.
+
+   DESIGN RULE THAT OVERRIDES TASTE: a 95-year-old uses this on a phone.
+   Base type is 18px, every tap target is >= 56px, and contrast is high.
+   Nothing here may shrink below those floors. */
+
+:root[data-palette="champagne"] {
+  --gr: #f3f1ec; --sf: #ffffff; --sf2: #faf8f3;
+  --ink: #17150f; --ink2: #3a3529; --gy: #5f584a;
+  --mu: #8a8272; --mu2: #a9a193; --tr: #e0dbcd; --tr2: #c9c2b0;
+  --ac: #b8942f; --ac6: #a07f24; --wm: #8a7a58;
+  --pos: #1d7a52; --neg: #b0332a;
+  --base: 23, 21, 15;
+  --on-ac: #1a1509;
+  --grad: linear-gradient(135deg, #f0dc9e 0%, #d7b34a 26%, #b8942f 52%, #e6d290 74%, #bf9c33 100%);
+  --glow: 0 4px 14px rgba(184,148,47,.34);
+  --pos-bg: rgba(29,122,82,.12); --neg-bg: rgba(176,51,42,.10);
+}
+:root[data-palette="onyx"] {
+  --gr: #14130f; --sf: #1d1b15; --sf2: #24221a;
+  --ink: #f6f2e7; --ink2: #ded8c7; --gy: #b4ac98;
+  --mu: #918a77; --mu2: #6f695b; --tr: #332f26; --tr2: #4b4537;
+  --ac: #d9b445; --ac6: #e8d089; --wm: #a89263;
+  --pos: #4fb383; --neg: #e8635a;
+  --base: 246, 242, 231;
+  --on-ac: #17140b;
+  --grad: linear-gradient(135deg, #f6e7b4 0%, #dcb84c 28%, #c9a234 54%, #f0dda0 76%, #d3ac3e 100%);
+  --glow: 0 4px 16px rgba(217,180,69,.30);
+  --pos-bg: rgba(79,179,131,.14); --neg-bg: rgba(232,99,90,.13);
+}
+:root[data-palette] {
+  --l07: rgba(var(--base), .07); --l12: rgba(var(--base), .12);
+  --l2: rgba(var(--base), .2);   --l3: rgba(var(--base), .3);
+}
+
+/* ---- base ------------------------------------------------------------- */
+* { box-sizing: border-box; }
+/* Any element given a `display` of its own out-specifies the browser's
+   [hidden] rule, so hiding by property silently stops working. .tabs is a
+   grid; without this the tab bar showed on the sign-in screen. */
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--gr);
+  color: var(--ink);
+  font: 18px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding-bottom: 64px;
+}
+/* Bigger-text mode: one toggle, everything scales because everything below
+   is expressed in rem/em off this root size. */
+:root[data-big] body { font-size: 22px; }
+
+button, input, select { font: inherit; color: inherit; touch-action: manipulation; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--ac); outline-offset: 2px; }
+
+.wrap { padding: 0 16px; max-width: 720px; margin: 0 auto; }
+
+/* ---- header ----------------------------------------------------------- */
+.hd { background: var(--sf); border-bottom: 1px solid var(--tr); }
+.hd-in {
+  max-width: 720px; margin: 0 auto; padding: 10px 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.hd-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hd-ball { font-size: 1.3em; }
+.hd-name { font-weight: 800; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hd-right { display: flex; gap: 6px; flex: 0 0 auto; }
+.hd-btn {
+  min-width: 46px; height: 46px; border-radius: 12px;
+  background: var(--sf2); border: 1px solid var(--tr); color: var(--ink2);
+  font-size: .95em; font-weight: 700;
+}
+.hd-who {
+  max-width: 720px; margin: 0 auto; padding: 0 16px 10px;
+  color: var(--gy); font-size: .95em;
+}
+.hd-who b { color: var(--ink); }
+
+/* ---- tabs ------------------------------------------------------------- */
+.tabs {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  gap: 6px; max-width: 720px; margin: 0 auto; padding: 10px 16px 4px;
+}
+.tab {
+  min-height: 56px; border-radius: 14px; font-weight: 700; font-size: .88em;
+  background: var(--sf); border: 1px solid var(--tr); color: var(--gy);
+  padding: 0 4px; white-space: nowrap;   /* "My Picks" wrapped and doubled the bar's height */
+}
+.tab.on { background: var(--grad); border-color: transparent; color: var(--on-ac); box-shadow: var(--glow); }
+
+/* ---- screens ---------------------------------------------------------- */
+.screen { max-width: 720px; margin: 0 auto; padding: 8px 16px 24px; }
+.boot { padding: 48px 16px; text-align: center; color: var(--mu); }
+
+h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
+.sub { color: var(--gy); margin: 0 0 14px; }
+
+.card {
+  background: var(--sf); border: 1px solid var(--tr); border-radius: 16px;
+  padding: 16px; margin: 0 0 14px;
+}
+.note { color: var(--gy); font-size: .95em; }
+
+/* ---- the pick screen -------------------------------------------------- */
+.locked {
+  background: var(--grad); color: var(--on-ac); border: 0;
+  border-radius: 18px; padding: 20px 18px; margin: 0 0 18px;
+  box-shadow: var(--glow);
+}
+.locked .lk-k { font-size: .85em; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .75; }
+.locked .lk-team { font-size: 1.8em; font-weight: 900; line-height: 1.15; margin: 4px 0 2px; }
+.locked .lk-sub { font-size: .95em; opacity: .8; }
+
+.game { margin: 0 0 14px; }
+.game-when {
+  color: var(--gy); font-size: .9em; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; margin: 0 0 6px 4px;
+}
+.game-pair { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: stretch; }
+.game-at { align-self: center; color: var(--mu); font-size: .85em; font-weight: 700; }
+
+.pk {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; min-height: 92px; padding: 12px 8px;
+  background: var(--sf); border: 2px solid var(--tr); border-radius: 16px;
+  color: var(--ink); text-align: center;
+}
+.pk img { width: 34px; height: 34px; object-fit: contain; }
+.pk-name { font-weight: 800; font-size: 1.02em; line-height: 1.2; }
+.pk-rec { color: var(--mu); font-size: .82em; }
+.pk:hover:not(:disabled) { border-color: var(--ac); }
+.pk.chosen { background: var(--grad); border-color: transparent; color: var(--on-ac); box-shadow: var(--glow); }
+.pk.chosen .pk-rec { color: var(--on-ac); opacity: .75; }
+.pk:disabled { opacity: .45; cursor: not-allowed; }
+.pk.used .pk-name { text-decoration: line-through; }
+.pk-used-tag { font-size: .75em; font-weight: 800; color: var(--neg); letter-spacing: .04em; }
+
+.started { opacity: .6; }
+.started .pk { min-height: 72px; }
+
+.usedstrip { margin: 18px 0 0; }
+.usedstrip summary {
+  cursor: pointer; padding: 14px 16px; min-height: 56px; display: flex; align-items: center;
+  background: var(--sf); border: 1px solid var(--tr); border-radius: 14px;
+  font-weight: 700; color: var(--gy);
+}
+.usedstrip[open] summary { border-radius: 14px 14px 0 0; }
+.usedstrip .ub {
+  border: 1px solid var(--tr); border-top: 0; border-radius: 0 0 14px 14px;
+  background: var(--sf2); padding: 14px 16px;
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.uchip {
+  background: var(--sf); border: 1px solid var(--tr); border-radius: 999px;
+  padding: 6px 12px; font-size: .88em; color: var(--gy);
+}
+.uchip b { color: var(--ink); }
+
+/* ---- standings -------------------------------------------------------- */
+.st { width: 100%; border-collapse: collapse; table-layout: auto; }
+.st th, .st td { padding: 12px 5px; text-align: right; border-bottom: 1px solid var(--tr); }
+.st th { color: var(--mu); font-size: .74em; text-transform: uppercase; letter-spacing: .04em; font-weight: 800; }
+/* Every column except the name is nowrap and sized to content, or the name
+   column's width:99% starves them and "2-1" breaks across two lines. */
+.st th, .st td { white-space: nowrap; width: 1%; }
+.st th:nth-child(2), .st td:nth-child(2) {
+  text-align: left; width: 99%; white-space: nowrap;
+  max-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
+.st td:nth-child(1) { color: var(--mu); font-weight: 800; }
+.st .nm { font-weight: 700; }
+.st tr.you td { background: var(--pos-bg); }
+.st tr.you .nm::after { content: " (you)"; color: var(--gy); font-weight: 400; font-size: .85em; }
+.st .pts.p { color: var(--pos); font-weight: 800; }
+.st .pts.n { color: var(--neg); font-weight: 800; }
+
+.waiting { margin-top: 14px; }
+.waiting b { color: var(--neg); }
+
+.wk-picks { display: flex; flex-direction: column; gap: 8px; }
+/* A grid, not a flex row: the italic "hidden until kickoff" text is long
+   enough that flex shrinking crushed the NAME column down to one letter. */
+.wp-row {
+  display: grid; grid-template-columns: minmax(84px, 1fr) auto auto;
+  align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--tr);
+}
+.wp-row:last-child { border-bottom: 0; }
+.wp-nm { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-team { font-weight: 800; }
+.wp-hidden { color: var(--mu); font-style: italic; font-weight: 400; font-size: .88em; }
+.wp-res { font-weight: 800; min-width: 44px; text-align: right; white-space: nowrap; }
+.wp-res.w { color: var(--pos); } .wp-res.l { color: var(--neg); } .wp-res.t { color: var(--wm); }
+
+/* Week nav: one slim row. It used to be a 100px tile that pushed the games
+   themselves below the fold on a phone. */
+.wknav { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+.wknav .btn { flex: 0 0 auto; min-width: 56px; }
+.wknav-l {
+  flex: 1; text-align: center; font-weight: 800; font-size: 1.05em;
+  color: var(--gy); letter-spacing: .02em;
+}
+
+/* ---- history ---------------------------------------------------------- */
+.hrow {
+  display: grid; grid-template-columns: 62px 1fr auto auto; gap: 10px; align-items: center;
+  padding: 14px 0; border-bottom: 1px solid var(--tr);
+}
+.hrow:last-child { border-bottom: 0; }
+.h-wk { color: var(--mu); font-weight: 800; font-size: .9em; }
+.h-team { font-weight: 800; }
+.h-opp { color: var(--gy); font-size: .85em; display: block; font-weight: 400; }
+.h-mar { font-weight: 800; min-width: 56px; text-align: right; }
+.h-mar.w { color: var(--pos); } .h-mar.l { color: var(--neg); } .h-mar.t { color: var(--wm); }
+.h-run { color: var(--mu); font-size: .85em; min-width: 54px; text-align: right; }
+.hrow.miss .h-team { color: var(--mu); font-style: italic; font-weight: 400; }
+
+.tot { display: flex; gap: 10px; margin: 0 0 14px; }
+.tot > div {
+  flex: 1; background: var(--sf); border: 1px solid var(--tr); border-radius: 14px;
+  padding: 14px 10px; text-align: center;
+}
+.tot .k { color: var(--mu); font-size: .78em; text-transform: uppercase; letter-spacing: .07em; font-weight: 800; }
+.tot .v { font-size: 1.5em; font-weight: 900; margin-top: 2px; }
+
+/* ---- buttons / admin -------------------------------------------------- */
+.btn {
+  min-height: 56px; padding: 0 18px; border-radius: 14px; font-weight: 800;
+  background: var(--sf); border: 1px solid var(--tr); color: var(--ink);
+}
+.btn.pri { background: var(--grad); border-color: transparent; color: var(--on-ac); box-shadow: var(--glow); }
+.btn.wide { width: 100%; margin-top: 10px; }
+.btn.sm { min-height: 46px; font-size: .9em; padding: 0 12px; }
+
+.fld { display: block; margin: 0 0 12px; }
+.fld span { display: block; color: var(--gy); font-size: .88em; font-weight: 700; margin-bottom: 5px; }
+/* >=16px or iOS Safari zooms the viewport on focus and never zooms back. */
+.fld input, .fld select {
+  width: 100%; min-height: 52px; font-size: 17px; padding: 0 12px;
+  background: var(--sf2); border: 1px solid var(--tr2); border-radius: 12px;
+}
+.plrow { display: flex; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--tr); }
+.plrow .pn { flex: 1; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8em; color: var(--mu); word-break: break-all; }
+
+.msg { padding: 12px 14px; border-radius: 12px; margin: 0 0 14px; font-weight: 600; }
+.msg.ok { background: var(--pos-bg); color: var(--pos); }
+.msg.bad { background: var(--neg-bg); color: var(--neg); }
+
+.ft {
+  max-width: 720px; margin: 0 auto; padding: 20px 16px 30px;
+  color: var(--mu2); font-size: .8em; text-align: center;
+}
+.pillmode {
+  display: inline-block; background: var(--sf); border: 1px solid var(--tr);
+  border-radius: 999px; padding: 4px 12px;
+}
+
+@media (max-width: 380px) {
+  .pk { min-height: 84px; }
+  .pk-name { font-size: .95em; }
+}
