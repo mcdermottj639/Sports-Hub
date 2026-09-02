@@ -2416,3 +2416,142 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-palette] main { padding-bottom: 92px; }
 :root[data-palette] .trend .pill.w, :root[data-palette] .stat-row .rank.top,
 :root[data-palette] .trend .pill.l, :root[data-palette] .stat-row .rank.bot { border-radius: var(--rp); }
+
+/* ==========================================================================
+   LAYER 6 — FANTASY FOOTBALL (v195)
+   Appended last, so it wins over every layer above it (see the standing rule
+   in CLAUDE.md → Files → styles.css). Namespaced `.ffp-`: no selector above
+   uses that prefix, so the [data-theme]/[data-palette] specificity trap
+   documented in v187/v189 cannot bite here.
+   EVERY colour is a token. A hardcoded hex is wrong in one of the two
+   palettes by construction — that is the v189 bug this layer exists to undo.
+   --ac/--grad = brand + identity ("you"). --pos/--neg = semantic good/bad.
+   They are NOT interchangeable.
+   ========================================================================== */
+.ffp-card { background: var(--sf); border-radius: var(--r2); box-shadow: var(--e1); padding: 14px; margin: 0 0 12px; }
+.ffp-cap { font-size: 11px; color: var(--gy); line-height: 1.5; margin-top: 10px; }
+.ffp-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--gy); margin-top: 8px; }
+.ffp-legend b { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--ink); }
+.ffp-legend i { width: 9px; height: 9px; border-radius: var(--rp); display: inline-block; }
+.ffp-empty { text-align: center; padding: 20px 14px; color: var(--gy); font-size: 12.5px; line-height: 1.6; }
+.ffp-empty b { display: block; color: var(--ink); font-size: 13.5px; font-weight: 700; margin-bottom: 3px; }
+
+/* --- stat strip ---------------------------------------------------------- */
+.ffp-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); gap: 8px; margin: 0 0 12px; }
+.ffp-tile { background: var(--sf); border-radius: var(--r1); box-shadow: var(--e1); padding: 10px 8px; text-align: center; }
+.ffp-tile .v { font-size: 17px; font-weight: 900; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.ffp-tile .k { font-size: 9.5px; font-weight: 700; color: var(--gy); text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
+.ffp-tile .v.pos { color: var(--pos); } .ffp-tile .v.neg { color: var(--neg); } .ffp-tile .v.wm { color: var(--wm); }
+
+/* --- diverging bars: positional surplus/deficit, and the luck read -------- */
+.ffp-dc-row { display: grid; grid-template-columns: 38px 1fr 52px; align-items: center; gap: 10px; padding: 9px 2px; }
+.ffp-dc-row + .ffp-dc-row { box-shadow: inset 0 1px 0 var(--l07); }
+.ffp-dc-pos { font-size: 11px; font-weight: 800; letter-spacing: .04em; color: var(--gy); text-transform: uppercase; }
+.ffp-dc-track { position: relative; height: 8px; border-radius: var(--rp); background: var(--tr); }
+.ffp-dc-mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; background: var(--l25); transform: translateX(-1px); }
+.ffp-dc-fill { position: absolute; top: 0; bottom: 0; width: calc(var(--v, 0) * 50%); border-radius: var(--rp); }
+.ffp-dc-row[data-dir="pos"] .ffp-dc-fill { left: 50%; background: var(--pos); }
+.ffp-dc-row[data-dir="neg"] .ffp-dc-fill { right: 50%; background: var(--neg); }
+.ffp-dc-row[data-dir="flat"] .ffp-dc-fill { display: none; }
+.ffp-dc-val { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+.ffp-dc-row[data-dir="pos"] .ffp-dc-val { color: var(--pos); }
+.ffp-dc-row[data-dir="neg"] .ffp-dc-val { color: var(--neg); }
+.ffp-dc-row[data-dir="flat"] .ffp-dc-val { color: var(--mu2); }
+
+/* --- player row ---------------------------------------------------------- */
+.ffp-prow { padding: 9px 4px 10px; }
+.ffp-prow + .ffp-prow { box-shadow: inset 0 1px 0 var(--l07); }
+.ffp-prow.bye { opacity: .62; }
+.ffp-prow-l1 { display: flex; align-items: center; gap: 7px; }
+.ffp-slot { font-size: 9.5px; font-weight: 800; color: var(--gy); min-width: 30px; letter-spacing: .03em; }
+.ffp-pname { font-weight: 700; font-size: 13.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
+.ffp-badge { font-size: 9.5px; font-weight: 800; padding: 1px 6px; border-radius: var(--rp); flex: none; letter-spacing: .02em; }
+.ffp-badge.warn { color: var(--wm); background: rgba(var(--acRGB), .10); }
+.ffp-badge.out { color: var(--neg); background: rgba(var(--acRGB), .10); }
+.ffp-badge.bye { color: var(--neg2); background: rgba(var(--acRGB), .10); }
+.ffp-badge.mu-easy { color: var(--pos); background: rgba(var(--acRGB), .10); }
+.ffp-badge.mu-mid { color: var(--wm); background: rgba(var(--acRGB), .10); }
+.ffp-badge.mu-hard { color: var(--neg); background: rgba(var(--acRGB), .10); }
+.ffp-prow-l2 { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.ffp-meta { font-size: 11px; color: var(--gy); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ffp-spark { flex: none; display: block; }
+.ffp-pts { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ink); flex: none; }
+.ffp-pts.proj { color: var(--gy); font-weight: 700; font-size: 13px; }
+.ffp-grp { font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; margin: 4px 0 2px; }
+.ffp-grp.st { color: var(--ac); } .ffp-grp.bn { color: var(--gy); }
+
+/* --- head-to-head mirrored comparison ------------------------------------ */
+.ffp-mu-head { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-weight: 800; color: var(--gy); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; gap: 8px; }
+.ffp-mu-head .you { color: var(--ac); }
+.ffp-mu-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ffp-mu-row { padding: 7px 0; display: grid; grid-template-columns: 1fr 40px 1fr; align-items: center; gap: 8px; }
+.ffp-mu-row + .ffp-mu-row { box-shadow: inset 0 1px 0 var(--l07); }
+.ffp-mu-side { display: flex; flex-direction: column; font-size: 11px; color: var(--gy); min-width: 0; }
+.ffp-mu-side b { font-size: 14px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ffp-mu-side span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ffp-mu-side.opp { align-items: flex-end; text-align: right; }
+.ffp-mu-bar { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.ffp-mu-pos { font-size: 9.5px; font-weight: 800; color: var(--gy); }
+.ffp-mu-track { position: relative; width: 40px; height: 18px; }
+.ffp-mu-fill { position: absolute; height: 6px; border-radius: var(--rp); }
+.ffp-mu-fill.you { right: 50%; top: 1px; background: var(--grad); }
+.ffp-mu-fill.opp { left: 50%; top: 11px; background: var(--tr); }
+.ffp-mu-tot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; gap: 8px; padding-top: 10px; margin-top: 4px; box-shadow: inset 0 1px 0 var(--l25); font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.ffp-mu-tot span { font-size: 10px; font-weight: 700; color: var(--gy); text-align: center; text-transform: uppercase; letter-spacing: .04em; }
+.ffp-mu-tot b:last-child { text-align: right; }
+
+/* --- win probability meter ----------------------------------------------- */
+.ffp-wp { margin-top: 10px; }
+.ffp-wp-track { position: relative; height: 10px; border-radius: var(--rp); background: var(--tr); overflow: hidden; }
+.ffp-wp-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--rp); background: var(--grad); }
+.ffp-wp-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--l25); }
+.ffp-wp-read { text-align: center; font-weight: 900; font-size: 15px; margin-top: 7px; color: var(--ink); }
+.ffp-wp-read.good { color: var(--pos); } .ffp-wp-read.bad { color: var(--neg); } .ffp-wp-read.even { color: var(--wm); }
+
+/* --- strength of schedule strip ------------------------------------------ */
+.ffp-sos-scroll { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+.ffp-sos-scroll::-webkit-scrollbar { display: none; }
+.ffp-sos { display: flex; gap: 6px; width: max-content; }
+.ffp-sos-cell { width: 42px; flex: none; border-radius: var(--r1); text-align: center; padding: 7px 2px 6px; background: var(--sf2); position: relative; }
+.ffp-sos-cell b { display: block; font-size: 9.5px; font-weight: 800; color: var(--gy); }
+.ffp-sos-cell span { display: block; font-size: 11px; font-weight: 800; margin-top: 2px; color: var(--ink); }
+.ffp-sos-cell.easy { background: rgba(var(--acRGB), .10); } .ffp-sos-cell.easy span { color: var(--pos); }
+.ffp-sos-cell.hard span { color: var(--neg); }
+.ffp-sos-cell.bye { background: none; box-shadow: inset 0 0 0 1.5px var(--tr); }
+.ffp-sos-cell.bye b, .ffp-sos-cell.bye span { color: var(--mu2); }
+.ffp-sos-cell.po::after { content: ""; position: absolute; left: 3px; right: 3px; bottom: -4px; height: 2px; border-radius: var(--rp); background: var(--grad); }
+.ffp-sos-cell.now { box-shadow: inset 0 0 0 2px var(--ac); }
+
+/* --- league table -------------------------------------------------------- */
+.ffp-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ffp-tbl th { text-align: left; font-weight: 700; font-size: 9.5px; color: var(--gy); text-transform: uppercase; letter-spacing: .05em; padding: 0 6px 6px; }
+.ffp-tbl td { padding: 7px 6px; }
+.ffp-tbl tbody tr { box-shadow: inset 0 1px 0 var(--l07); }
+.ffp-tbl tbody tr.me { background: rgba(var(--acRGB), .09); }
+.ffp-tbl tbody tr.me td:first-child { font-weight: 800; }
+.ffp-tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ffp-odds { position: relative; height: 6px; border-radius: var(--rp); background: var(--tr); min-width: 46px; }
+.ffp-odds i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--rp); background: var(--grad); }
+.ffp-cut td { padding: 0; }
+.ffp-cut span { display: block; border-top: 2px dashed var(--l25); font-size: 9px; color: var(--gy); text-align: center; padding-top: 3px; letter-spacing: .06em; }
+
+/* --- palette corrections (v195) ------------------------------------------
+   Three bugs that predate the palette system and are wrong in BOTH palettes.
+   Fixed here, at the end, rather than edited in place: the originals sit in
+   layer 1 and are out-specified by layer 2, so a same-specificity edit up
+   there would not have taken. See CLAUDE.md → Files → styles.css. */
+
+/* .lg-card wrapped every football card in an inset ring of rgba(58,210,159,…)
+   — the DEAD pre-v187 dark-theme mint accent. It tracks neither Champagne nor
+   Onyx: a third orphaned colour nobody chose, glowing on every card. */
+:root[data-palette] .lg-card {
+  background: var(--sf); border: 0; border-radius: var(--r2);
+  box-shadow: var(--e1); padding: 14px; margin: 0 0 12px;
+}
+/* White on an accent fill is ~1.9:1. --on-ac is dark ink and measures 7.8:1
+   on both grounds. Never #fff on gold. */
+:root[data-palette] .mk-draft:hover { background: var(--grad); color: var(--on-ac); }
+/* --live maps to the brand accent, so a NEGATIVE draft value rendered in the
+   same gold as a positive one. Good/bad belongs on the semantic ramp. */
+:root[data-palette] .mk-pk-val.pos { color: var(--pos); }
+:root[data-palette] .mk-pk-val.neg { color: var(--neg); }

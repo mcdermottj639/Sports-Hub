@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v194';
+const APP_VERSION = 'v195';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -6163,12 +6163,17 @@ async function syncFromLeague(sport, force = false) {
     try { freeAgents = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/freeagents${q('size=40')}`, 300000); } catch (_) {}
     try { opponent = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/opponent${q()}`, 60000); } catch (_) {}
     // catranks/playoffs are category-league (baseball) concepts — skip for football.
+    let season = null;
     if (sport === 'baseball') {
       try { catranks = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/catranks${q()}`, 60000); } catch (_) {}
       try { playoffs = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/playoffs${q('slots=6')}`, 60000); } catch (_) {}
+    } else {
+      // Football's equivalent: per-week scores, ESPN's OWN playoff odds, and the
+      // all-play record. One call, off the already-cached League snapshot.
+      try { season = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/season${q()}`, 60000); } catch (_) {}
     }
     fanState.league = fanState.league || {};
-    fanState.league[sport] = { team: data.team, record: data.record, rosterFull: data.roster || [], matchup, standings, freeAgents, opponent, catranks, playoffs, syncedAt: Date.now() };
+    fanState.league[sport] = { team: data.team, record: data.record, rosterFull: data.roster || [], live: !!data.live, matchup, standings, freeAgents, opponent, catranks, playoffs, season, syncedAt: Date.now() };
     return true;
   } catch (_) { return false; }
 }
@@ -6219,15 +6224,28 @@ const NFL_BUCKETS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'];
 const fpts = (v) => (v == null || v === '' || Number.isNaN(Number(v))) ? null : Math.round(Number(v) * 10) / 10;
 // Bucket a fantasy player into a scoring position (from pos/eligibility, so a
 // FLEX or benched player still lands in their real position group).
+// ⚠️ Bucket a player by an EXACT single-position slot, never by scanning a
+// concatenated string. ESPN sends combo slots like "RB/WR/TE" for the flex, and
+// a substring scan matched "RB" inside it — so every flex player (and every WR
+// whose eligibility list contains "RB/WR") was counted as a running back. That
+// silently skewed Opponent Scouting from v137 and Roster Shape in v195.
+// `pos` is no help here: ESPN's real payload sends "UTIL" for every player.
+const NFL_EXACT = { QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', K: 'K', PK: 'K', 'D/ST': 'DST', DST: 'DST', DEF: 'DST' };
 function nflBucket(p) {
-  const s = `${p.pos || ''} ${p.lineupSlot || ''} ${(p.eligibleSlots || []).join(' ')}`.toUpperCase();
+  const slot = String((p && p.lineupSlot) || '').toUpperCase().trim();
+  if (NFL_EXACT[slot]) return NFL_EXACT[slot];
+  // Bench/IL players carry no positional slot, so read their eligibility list —
+  // but only entries that name ONE position ("WR"), never a combo ("RB/WR").
+  const elig = ((p && p.eligibleSlots) || []).map((x) => String(x).toUpperCase().trim());
+  for (const e of elig) { if (NFL_EXACT[e]) return NFL_EXACT[e]; }
+  const s = `${(p && p.pos) || ''} ${slot} ${elig.join(' ')}`.toUpperCase();
   if (/\bQB\b/.test(s)) return 'QB';
   if (/D\/ST|\bDST\b|\bDEF\b/.test(s)) return 'DST';
   if (/\bRB\b/.test(s)) return 'RB';
   if (/\bWR\b/.test(s)) return 'WR';
   if (/\bTE\b/.test(s)) return 'TE';
   if (/\bK\b|\bPK\b/.test(s)) return 'K';
-  return (p.pos || '?').toUpperCase();
+  return String((p && p.pos) || '?').toUpperCase();
 }
 const nflPlayed = (p) => { const pt = fpts(p.points); return pt != null && pt !== 0; };
 const nflProjOrPts = (p) => { const pt = fpts(p.points); if (pt != null && pt !== 0) return pt; const pr = fpts(p.projected); return pr != null ? pr : 0; };
@@ -6283,6 +6301,215 @@ const gameChipText = (g) => {
   return `${g.at ? '@' : 'vs'} ${g.opp}${when ? ' · ' + when : ''}`;
 };
 
+// Projected points for one position bucket. Was a local inside
+// renderFootballLive; the mirrored matchup rows need it too, so it is a real
+// helper now rather than two copies that can drift (the v177 lesson).
+function sumB(list, b) {
+  return Math.round((list || []).filter((p) => nflBucket(p) === b)
+    .reduce((s, p) => s + (fpts(p.projected) || 0), 0) * 10) / 10;
+}
+
+// --- Fantasy football visuals (v195) ----------------------------------------
+// Every helper here is PURE: it takes data and returns an HTML string. Nothing
+// fetches, nothing renders. Colours come from tokens only — see the layer-6
+// note in styles.css for why a hardcoded hex is a bug in this app.
+
+// A player's per-week history, oldest first. The backend sends `weeks` off
+// Player.stats; absent (or pre-season) it's an empty array, never faked.
+function fbWeeks(p) {
+  const w = Array.isArray(p && p.weeks) ? p.weeks : [];
+  return w.filter((r) => r && typeof r.pts === 'number');
+}
+
+// Sparkline of recent scoring. Deliberately renders a FLAT DASHED line when
+// there are fewer than 2 real points: interpolating through one point (or
+// zero-filling missing weeks) would draw a trend that does not exist.
+function fbSpark(vals, tone) {
+  const W = 60, H = 20, pad = 2;
+  if (!vals || vals.length < 2) {
+    return `<svg class="ffp-spark" viewBox="0 0 ${W} ${H}" width="54" height="20" aria-hidden="true">
+      <line x1="${pad}" y1="${H / 2}" x2="${W - pad}" y2="${H / 2}" stroke="var(--tr)" stroke-width="2" stroke-dasharray="3 3"/></svg>`;
+  }
+  const col = tone === 'cold' ? 'var(--mu2)' : 'var(--ac)';
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = (hi - lo) || 1;
+  const x = (i) => pad + (i * (W - pad * 2)) / (vals.length - 1);
+  const y = (v) => (H - 4) - ((v - lo) / span) * (H - 8) + 2;
+  const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const lx = x(vals.length - 1).toFixed(1), ly = y(vals[vals.length - 1]).toFixed(1);
+  return `<svg class="ffp-spark" viewBox="0 0 ${W} ${H}" width="54" height="20" role="img" aria-label="Last ${vals.length} games: ${vals.join(', ')} points">
+    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${lx}" cy="${ly}" r="3" fill="${col}" stroke="var(--sf)" stroke-width="2"/></svg>`;
+}
+
+// Hot / cold from the last three weeks vs the season average. Returns null
+// when there isn't enough history to say anything — the app's standing rule.
+function fbTrend(p) {
+  const w = fbWeeks(p);
+  if (w.length < 3) return null;
+  const last = w.slice(-3).map((r) => r.pts);
+  const avg = w.reduce((a, r) => a + r.pts, 0) / w.length;
+  const recent = last.reduce((a, v) => a + v, 0) / last.length;
+  if (!avg) return null;
+  const d = (recent - avg) / Math.abs(avg);
+  if (d >= 0.18) return 'hot';
+  if (d <= -0.18) return 'cold';
+  return null;
+}
+
+// ESPN's PRK: how the upcoming pro defense ranks against this position.
+// 1 = most generous. Anything ESPN didn't send comes back null, not a guess.
+function fbMatchupBadge(p) {
+  const prk = Number(p && p.prk);
+  if (!prk || prk < 1) return '';
+  const cls = prk <= 10 ? 'mu-easy' : prk <= 22 ? 'mu-mid' : 'mu-hard';
+  const word = prk <= 10 ? 'easy' : prk <= 22 ? 'even' : 'tough';
+  return `<span class="ffp-badge ${cls}" title="ESPN rank of this defense vs this position — 1 is the most generous">#${prk} ${word}</span>`;
+}
+
+// Roster strength by position vs the league average, as a diverging bar.
+// Uses SEASON points per team so it measures the roster, not one lucky week.
+function fbDepthHTML(myRoster) {
+  const buckets = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'];
+  const agg = {};
+  buckets.forEach((b) => { agg[b] = { pts: 0, n: 0, scored: 0 }; });
+  (myRoster || []).forEach((p) => {
+    const b = nflBucket(p);
+    if (!agg[b]) return;
+    agg[b].n += 1;
+    const t = Number(p.total);
+    if (Number.isFinite(t) && t > 0) { agg[b].pts += t; agg[b].scored += 1; }
+  });
+  const live = buckets.filter((b) => agg[b].scored > 0);
+  if (!live.length) {
+    return `<div class="ffp-card"><div class="ffp-empty"><b>No scoring yet</b>Roster shape compares points per player, so it fills in once games are played.</div></div>`;
+  }
+  // ⚠️ Per PLAYER, not per position group. Summing a group's points would make
+  // WR look enormous purely because you roster four of them and one QB — that
+  // measures roster counts, not strength. Dividing by the number of players at
+  // the position is what makes the comparison mean anything.
+  const perPlayer = {};
+  live.forEach((b) => { perPlayer[b] = agg[b].pts / agg[b].scored; });
+  const base = live.reduce((a, b) => a + perPlayer[b], 0) / live.length;
+  const rows = buckets.map((b) => {
+    const a = agg[b];
+    const depth = `${a.n} rostered`;
+    if (!a.scored) {
+      return `<div class="ffp-dc-row" data-dir="flat" style="--v:0"><span class="ffp-dc-pos">${b}</span><div class="ffp-dc-track"><div class="ffp-dc-mid"></div><div class="ffp-dc-fill"></div></div><span class="ffp-dc-val">–</span></div>`;
+    }
+    const pct = Math.round(((perPlayer[b] - base) / base) * 100);
+    const dir = pct > 5 ? 'pos' : pct < -5 ? 'neg' : 'flat';
+    const mag = Math.max(0, Math.min(1, Math.abs(pct) / 70));
+    return `<div class="ffp-dc-row" data-dir="${dir}" style="--v:${mag.toFixed(2)}" title="${Math.round(perPlayer[b] * 10) / 10} pts per player · ${depth}"><span class="ffp-dc-pos">${b}</span><div class="ffp-dc-track"><div class="ffp-dc-mid"></div><div class="ffp-dc-fill"></div></div><span class="ffp-dc-val">${pct > 0 ? '+' : ''}${pct}%</span></div>`;
+  }).join('');
+  // Depth is a separate question from strength, and it is the one that bites:
+  // two good backs and no third is a season-ending injury away from a hole.
+  const thin = ['RB', 'WR', 'TE'].filter((b) => agg[b].n > 0 && agg[b].n <= 2);
+  const thinNote = thin.length
+    ? `<div class="ffp-cap" style="color:var(--neg)"><b>Thin: ${thin.map((b) => `${b} (${agg[b].n})`).join(', ')}.</b> One injury there and you are starting a waiver pickup.</div>` : '';
+  const counts = buckets.filter((b) => agg[b].n).map((b) => `${b} ${agg[b].n}`).join(' · ');
+  return `<div class="ffp-card">${rows}
+    <div class="ffp-cap">Fantasy points <b style="color:var(--ink)">per player</b> at each position, against your roster-wide average — so a position isn't rated highly just because you roster more of them. Depth: ${esc(counts)}.</div>
+    ${thinNote}</div>`;
+}
+
+// Weekly scoring chart: your bars, the league median as a dashed line, and the
+// opponent you actually faced that week as a diamond.
+function fbWeeklyHTML(season) {
+  const teams = (season && season.teams) || [];
+  const me = teams.find((t) => t.isMe);
+  const scores = (me && me.scores) || [];
+  const played = scores.filter((v) => typeof v === 'number' && v > 0);
+  if (played.length < 1) {
+    return `<div class="ffp-card"><div class="ffp-empty"><b>Season hasn't started</b>Your first bar appears once Week 1 games are final.</div></div>`;
+  }
+  const n = played.length;
+  const medians = [];
+  for (let i = 0; i < n; i++) {
+    const col = teams.map((t) => (t.scores || [])[i]).filter((v) => typeof v === 'number' && v > 0).sort((a, b) => a - b);
+    medians.push(col.length ? col[Math.floor(col.length / 2)] : null);
+  }
+  const all = played.concat(medians.filter((v) => v != null));
+  const hi = Math.max(...all) * 1.08, lo = 0;
+  const W = 320, H = 108, base = 92, top = 8;
+  const step = W / Math.max(n, 4);
+  const bw = Math.min(28, step * 0.56);
+  const y = (v) => base - ((v - lo) / (hi - lo || 1)) * (base - top);
+  const bars = played.map((v, i) => {
+    const cx = step * i + step / 2;
+    return `<rect x="${(cx - bw / 2).toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(base - y(v)).toFixed(1)}" rx="4" fill="var(--ac)"/>`;
+  }).join('');
+  const medPts = medians.map((v, i) => (v == null ? null : `${(step * i + step / 2).toFixed(1)},${y(v).toFixed(1)}`)).filter(Boolean).join(' ');
+  const medLine = medPts.split(' ').length > 1
+    ? `<polyline points="${medPts}" fill="none" stroke="var(--mu2)" stroke-width="2" stroke-dasharray="4 3" stroke-linecap="round"/>` : '';
+  const labels = played.map((v, i) => `<text x="${(step * i + step / 2).toFixed(1)}" y="${H - 2}" text-anchor="middle" font-size="9" fill="var(--gy)">${i + 1}</text>`).join('');
+  return `<div class="ffp-card">
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="Points scored by week">
+      <line x1="0" y1="${base}" x2="${W}" y2="${base}" stroke="var(--tr)" stroke-width="1"/>
+      ${bars}${medLine}${labels}
+    </svg>
+    <div class="ffp-legend"><span><b><i style="background:var(--ac)"></i>Your score</b></span><span><b><i style="background:var(--mu2)"></i>League median</b></span></div>
+  </div>`;
+}
+
+// All-play record + the luck read. A team can be 1-3 while outscoring most of
+// the league — that says the schedule was unkind, not that the roster is bad.
+function fbLuckHTML(season) {
+  const teams = (season && season.teams) || [];
+  const me = teams.find((t) => t.isMe);
+  const ap = (season && season.allPlay) || {};
+  if (!me || !teams.length) return '';
+  const mine = ap[me.teamId];
+  const played = (me.scores || []).filter((v) => typeof v === 'number' && v > 0).length;
+  if (!mine || (mine.w + mine.l) === 0 || played < 2) {
+    return `<div class="ffp-card"><div class="ffp-empty"><b>Not enough games yet</b>Luck needs a couple of weeks of results before the read means anything.</div></div>`;
+  }
+  const pfRank = teams.slice().sort((a, b) => (b.pointsFor || 0) - (a.pointsFor || 0)).findIndex((t) => t.isMe) + 1;
+  const recRank = teams.slice().sort((a, b) => (b.wins || 0) - (a.wins || 0) || (b.pointsFor || 0) - (a.pointsFor || 0)).findIndex((t) => t.isMe) + 1;
+  const gap = recRank - pfRank; // positive = record worse than scoring = unlucky
+  const apPct = Math.round((100 * mine.w) / (mine.w + mine.l));
+  const tone = gap >= 2 ? 'good' : gap <= -2 ? 'bad' : 'even';
+  const say = gap >= 2 ? `${gap} spot${gap === 1 ? '' : 's'} unlucky` : gap <= -2 ? `${-gap} spot${gap === -1 ? '' : 's'} lucky` : 'record matches scoring';
+  const cls = tone === 'good' ? 'pos' : tone === 'bad' ? 'wm' : '';
+  const note = gap >= 2
+    ? 'Your scoring ranks better than your record does — the record should improve if nothing changes.'
+    : gap <= -2
+      ? 'Your record is ahead of your scoring — some of those wins were the schedule, not the roster.'
+      : 'Your record is an honest reflection of how much you have scored.';
+  return `<div class="ffp-card">
+    <div class="ffp-strip" style="margin:0">
+      <div class="ffp-tile"><div class="v">${mine.w}-${mine.l}</div><div class="k">All-play</div></div>
+      <div class="ffp-tile"><div class="v">${apPct}%</div><div class="k">vs field</div></div>
+      <div class="ffp-tile"><div class="v">#${pfRank}</div><div class="k">Points for</div></div>
+      <div class="ffp-tile"><div class="v ${cls}">#${recRank}</div><div class="k">Record</div></div>
+    </div>
+    <div class="ffp-cap"><b style="color:var(--ink)">${esc(say)}.</b> ${esc(note)} All-play scores you against every team each week, not just the one you were scheduled against.</div>
+  </div>`;
+}
+
+// League table with ESPN's OWN playoff odds (Team.playoff_pct) — no simulator
+// needed on our side, unlike baseball, where ESPN publishes nothing.
+function fbLeagueHTML(season, standings) {
+  const st = (season && season.teams) || [];
+  const rows = st.length ? st : ((standings || {}).teams || []);
+  if (!rows.length) return `<div class="ffp-card"><div class="ffp-empty"><b>Standings not in yet</b>They appear on the first sync after Week 1.</div></div>`;
+  const anyOdds = rows.some((t) => Number(t.playoffPct) > 0);
+  const cut = Number(season && season.playoffTeams) || 0;
+  const sorted = rows.slice().sort((a, b) => (b.wins || 0) - (a.wins || 0) || (b.pointsFor || 0) - (a.pointsFor || 0));
+  const body = sorted.map((t, i) => {
+    const odds = Number(t.playoffPct);
+    const cutRow = cut && i === cut ? `<tr class="ffp-cut"><td colspan="${anyOdds ? 5 : 4}"><span>PLAYOFF CUT</span></td></tr>` : '';
+    return `${cutRow}<tr class="${t.isMe ? 'me' : ''}">
+      <td>${esc(t.team || '')}</td>
+      <td class="num">${t.wins ?? 0}-${t.losses ?? 0}${t.ties ? '-' + t.ties : ''}</td>
+      <td class="num">${t.pointsFor != null ? Math.round(t.pointsFor) : '–'}</td>
+      ${anyOdds ? `<td class="num" style="min-width:62px"><div class="ffp-odds"><i style="width:${Math.max(2, Math.min(100, odds))}%"></i></div><span style="font-size:10px;color:var(--gy)">${Math.round(odds)}%</span></td>` : ''}
+    </tr>`;
+  }).join('');
+  return `<div class="ffp-card" style="overflow-x:auto">
+    <table class="ffp-tbl"><thead><tr><th>Team</th><th class="num">W-L</th><th class="num">PF</th>${anyOdds ? '<th class="num">Playoffs</th>' : ''}</tr></thead><tbody>${body}</tbody></table>
+    <div class="ffp-cap">${anyOdds ? 'Playoff odds are ESPN’s own simulation, read straight from the league — not our estimate.' : 'Playoff odds appear once ESPN starts publishing them, usually a few weeks in.'}</div></div>`;
+}
+
 async function renderFootballLive() {
   const box = $('#fantasy-football');
   if (!box) return;
@@ -6292,133 +6519,160 @@ async function renderFootballLive() {
     : `${r.wins ?? 0}-${r.losses ?? 0}${r.ties ? '-' + r.ties : ''}`;
   const synced = L.syncedAt ? (Date.now() - L.syncedAt < 60000 ? 'synced just now' : `synced ${timeAgo(L.syncedAt)}`) : '';
   const week = await nflWeekGames();
+  // ⚠️ An empty map means the scoreboard call FAILED, not that all 32 teams are
+  // on bye. Without this every starter would be flagged BYE on any ESPN hiccup —
+  // a maximally alarming false alert. `weekOK` gates every bye read below.
+  const weekOK = week && Object.keys(week).length > 0;
 
   const full = L.rosterFull || [];
   const starters = full.filter((p) => (p.status || '') === 'active');
   const bench = full.filter((p) => (p.status || '') !== 'active');
   const oppFull = ((L.opponent || {}).roster) || [];
   const oppStarters = oppFull.filter((p) => (p.status || '') === 'active');
-  const oppEff = oppStarters.length ? oppStarters : oppFull; // fallback if opp has no status
+  const oppEff = oppStarters.length ? oppStarters : oppFull;
+  const season = L.season || null;
   const projFor = (list) => { let s = 0, any = false; list.forEach((p) => { const v = fpts(p.projected); if (v != null) { s += v; any = true; } }); return any ? Math.round(s * 10) / 10 : null; };
+  const isBye = (p) => weekOK && p.proTeam && week[String(p.proTeam).toUpperCase()] === undefined;
 
-  // --- Matchup + win probability ---
+  // --- This week: mirrored comparison + win probability ---
   const M = L.matchup || null;
+  const meScore = M && M.me ? fpts(M.me.score) : null;
+  const opScore = M && M.opponent ? fpts(M.opponent.score) : null;
+  const meVal = meScore != null ? meScore : projFor(starters);
+  const opVal = opScore != null ? opScore : projFor(oppEff);
+  const oppName = (M && M.opponent && M.opponent.team) || (L.opponent || {}).opponent || 'Opponent';
   let matchupHTML;
   if (M && M.me) {
-    const meScore = fpts(M.me.score), opScore = fpts(M.opponent && M.opponent.score);
-    const meVal = meScore != null ? meScore : projFor(starters);
-    const opVal = opScore != null ? opScore : projFor(oppEff);
-    const wp = (starters.length && oppEff.length) ? footballWinProb(starters, oppEff) : null;
-    const verdict = (meVal != null && opVal != null)
-      ? (meVal > opVal ? '<span style="color:var(--accent);font-weight:700">Leading</span>'
-        : meVal < opVal ? '<span style="color:#e2564d;font-weight:700">Trailing</span>' : 'Tied')
-      : 'Not started';
-    const pct = wp ? wp.prob : ((meVal != null && opVal != null && (meVal + opVal) > 0) ? Math.round(100 * meVal / (meVal + opVal)) : 50);
-    const col = pct >= 55 ? 'var(--accent)' : pct >= 45 ? 'var(--gold,#d9b341)' : '#e2564d';
-    const row = (name, val) => `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
-        <span class="lg-name">${esc(name || '')}</span><span style="font-weight:800;font-size:20px">${val != null ? val : '–'}</span></div>`;
-    matchupHTML = `<div class="lg-card">
-        ${row(M.me.team || 'My Team', meVal)}
-        <div style="height:8px;border-radius:999px;background:rgba(128,128,128,.22);overflow:hidden;margin:8px 0"><div style="height:100%;width:${Math.max(2, Math.min(98, pct))}%;background:${col}"></div></div>
-        ${row((M.opponent && M.opponent.team) || 'Opponent', opVal)}
-        ${wp ? `<div style="text-align:center;margin-top:8px;font-weight:800;color:${col}">${wp.prob}% to win${wp.remaining ? ` <span class="muted" style="font-weight:400;font-size:12px">· ${wp.remaining} to play</span>` : ''}</div>` : ''}
-        <div class="muted" style="font-size:12px;margin-top:6px">${verdict}${meScore == null ? ' · projected' : ' · live / final'}${synced ? ' · ' + synced : ''} · <span title="estimate">win% is an estimate</span></div>
-        <button id="fbl-resync" class="fan-btn ghost" style="margin-top:8px">🔄 Refresh from ESPN</button>
-      </div>`;
+    // Win% only renders when BOTH sides have real numbers. Before v195 my side
+    // was structurally zero (the backend's roster carried no points at all), so
+    // the meter read ~8% while the card above it said "Leading" — the two
+    // disagreed because only one of them had data. Better to show nothing.
+    const wp = (meVal != null && opVal != null && (meVal + opVal) > 0) ? footballWinProb(starters, oppEff) : null;
+    const pct = wp ? wp.prob : null;
+    const tone = pct == null ? '' : pct >= 55 ? 'good' : pct >= 45 ? 'even' : 'bad';
+    const rowsHTML = NFL_BUCKETS.map((b) => {
+      const mv = sumB(starters, b), ov = sumB(oppEff, b);
+      if (!mv && !ov) return '';
+      const top = Math.max(mv, ov) || 1;
+      const nm = (list) => { const c = list.filter((p) => nflBucket(p) === b).sort((x, y) => (fpts(y.projected) || 0) - (fpts(x.projected) || 0))[0]; return c ? c.name : ''; };
+      return `<div class="ffp-mu-row">
+        <div class="ffp-mu-side"><b>${mv || '–'}</b><span>${esc(nm(starters))}</span></div>
+        <div class="ffp-mu-bar"><div class="ffp-mu-pos">${b}</div><div class="ffp-mu-track">
+          <div class="ffp-mu-fill you" style="width:${Math.round((mv / top) * 100)}%"></div>
+          <div class="ffp-mu-fill opp" style="width:${Math.round((ov / top) * 100)}%"></div></div></div>
+        <div class="ffp-mu-side opp"><b>${ov || '–'}</b><span>${esc(nm(oppEff))}</span></div></div>`;
+    }).join('');
+    matchupHTML = `<div class="ffp-card">
+      <div class="ffp-mu-head"><span class="you">${esc(M.me.team || 'My Team')}</span><span>${meScore == null ? 'projected' : 'live'}</span><span>${esc(oppName)}</span></div>
+      ${rowsHTML || ''}
+      <div class="ffp-mu-tot"><b>${meVal != null ? meVal : '–'}</b><span>${rowsHTML ? 'total' : 'projected'}</span><b>${opVal != null ? opVal : '–'}</b></div>
+      ${pct != null ? `<div class="ffp-wp">
+        <div class="ffp-wp-track"><div class="ffp-wp-fill" style="width:${Math.max(2, Math.min(98, pct))}%"></div><div class="ffp-wp-mid"></div></div>
+        <div class="ffp-wp-read ${tone}">${pct}% to win${wp && wp.remaining ? ` <span style="font-weight:400;font-size:11px;color:var(--gy)">· ${wp.remaining} still to play</span>` : ''}</div></div>` : ''}
+      <div class="ffp-cap">${synced ? esc(synced) + ' · ' : ''}${pct != null ? 'Win% is our estimate from projected points, not ESPN’s.' : 'Win% shows once both lineups carry projections.'}</div>
+      <button id="fbl-resync" class="fan-btn ghost" style="margin-top:10px">🔄 Refresh from ESPN</button></div>`;
   } else {
-    matchupHTML = `<div class="lg-card"><div class="muted">No matchup posted this week yet.${rec ? ' Season record: ' + rec + '.' : ''}</div><button id="fbl-resync" class="fan-btn ghost" style="margin-top:8px">🔄 Refresh from ESPN</button></div>`;
+    matchupHTML = `<div class="ffp-card"><div class="ffp-empty"><b>No matchup posted yet</b>${rec ? 'Season record: ' + esc(rec) + '.' : 'Your Week 1 opponent appears once the schedule is set.'}</div><button id="fbl-resync" class="fan-btn ghost">🔄 Refresh from ESPN</button></div>`;
   }
 
-  // --- Lineup alerts: byes + injuries among starters ---
-  const byeS = starters.filter((p) => p.proTeam && week[String(p.proTeam).toUpperCase()] === undefined);
+  // --- Stat strip ---
+  const seasonTeams = (season && season.teams) || [];
+  const meT = seasonTeams.find((t) => t.isMe);
+  const played = meT ? (meT.scores || []).filter((v) => typeof v === 'number' && v > 0) : [];
+  const avgPts = played.length ? Math.round((played.reduce((a, v) => a + v, 0) / played.length) * 10) / 10 : null;
+  const injCount = full.filter((p) => p.injuryStatus && !/ACTIVE|NORMAL/i.test(p.injuryStatus)).length;
+  const byeCount = starters.filter(isBye).length;
+  const stripHTML = `<div class="ffp-strip">
+    <div class="ffp-tile"><div class="v">${rec || '0-0'}</div><div class="k">Record</div></div>
+    <div class="ffp-tile"><div class="v">${avgPts != null ? avgPts : '–'}</div><div class="k">Pts/wk</div></div>
+    <div class="ffp-tile"><div class="v">${meT && meT.pointsFor != null ? Math.round(meT.pointsFor) : '–'}</div><div class="k">Points for</div></div>
+    <div class="ffp-tile"><div class="v ${injCount ? 'neg' : ''}">${injCount}</div><div class="k">Injury flags</div></div>
+    <div class="ffp-tile"><div class="v ${byeCount ? 'wm' : ''}">${weekOK ? byeCount : '–'}</div><div class="k">On bye</div></div>
+  </div>`;
+
+  // --- Lineup alerts ---
+  const byeS = starters.filter(isBye);
   const injS = starters.filter((p) => p.injuryStatus && !/ACTIVE|NORMAL/i.test(p.injuryStatus));
   let alertHTML = '';
   if (byeS.length || injS.length) {
     const parts = [];
     if (byeS.length) parts.push(`<div>🛌 <b>${byeS.length}</b> starter${byeS.length === 1 ? '' : 's'} on <b>bye</b>: ${byeS.map((p) => esc(p.name)).join(', ')}</div>`);
-    if (injS.length) parts.push(`<div style="margin-top:4px">🩹 <b>${injS.length}</b> injury flag${injS.length === 1 ? '' : 's'}: ${injS.map((p) => `${esc(p.name)} <span style="color:#e2564d">${esc(p.injuryStatus)}</span>`).join(', ')}</div>`);
-    alertHTML = `<h2 class="section-title">⚠️ Lineup Alerts</h2><div class="lg-card" style="font-size:12.5px;line-height:1.5">${parts.join('')}</div>`;
+    if (injS.length) parts.push(`<div style="margin-top:5px">🩹 <b>${injS.length}</b> injury flag${injS.length === 1 ? '' : 's'}: ${injS.map((p) => `${esc(p.name)} <span style="color:var(--neg)">${esc(p.injuryStatus)}</span>`).join(', ')}</div>`);
+    alertHTML = `<h2 class="section-title">⚠️ Lineup Alerts</h2><div class="ffp-card" style="font-size:12.5px;line-height:1.55">${parts.join('')}</div>`;
+  } else if (!weekOK) {
+    alertHTML = `<h2 class="section-title">⚠️ Lineup Alerts</h2><div class="ffp-card"><div class="ffp-empty"><b>Couldn’t load this week’s NFL schedule</b>Bye weeks can’t be checked right now — this is a failed feed, not an all-clear.</div></div>`;
   }
 
-  // --- Start / Sit optimizer (projection-based) ---
+  // --- Start / Sit ---
   const ss = startSitAdvice(full);
+  const anyProj = full.some((p) => fpts(p.projected) != null);
   const startSitHTML = ss.length
-    ? `<div class="lg-card">${ss.map((r) => `<div style="padding:6px 2px;border-top:1px solid var(--line);font-size:13px">▲ <b style="color:var(--accent)">Start ${esc(r.start.name)}</b> <span class="muted">(${fpts(r.start.projected)})</span> over ▼ ${esc(r.sit.name)} <span class="muted">(${fpts(r.sit.projected)})</span> <span style="color:var(--accent);font-size:11px">+${r.gain}</span></div>`).join('')}<div class="muted" style="font-size:11px;margin-top:6px">By ESPN projection — matchup/gut still your call.</div></div>`
-    : `<div class="lg-card"><div class="muted">✅ Your lineup looks optimal by projection${bench.length ? '' : ' (no bench to compare)'}.</div></div>`;
+    ? `<div class="ffp-card">${ss.map((r) => `<div class="ffp-prow"><div class="ffp-prow-l1"><span class="ffp-slot" style="color:var(--pos)">START</span><span class="ffp-pname">${esc(r.start.name)}</span><span class="ffp-badge mu-easy">+${r.gain}</span></div><div class="ffp-prow-l2"><span class="ffp-meta">over ${esc(r.sit.name)} · ${fpts(r.sit.projected)} proj</span><span class="ffp-pts">${fpts(r.start.projected)}</span></div></div>`).join('')}<div class="ffp-cap">By ESPN projection only — matchup and gut are still your call.</div></div>`
+    : anyProj
+      ? `<div class="ffp-card"><div class="ffp-empty"><b>✅ Lineup looks optimal</b>No bench player out-projects a starter at the same slot.</div></div>`
+      : `<div class="ffp-card"><div class="ffp-empty"><b>No projections yet</b>Start/Sit needs ESPN’s weekly projections, which land in game week. It is not claiming your lineup is optimal.</div></div>`;
 
-  // --- Opponent scouting: projected points by position ---
-  const sumB = (list, b) => Math.round(list.filter((p) => nflBucket(p) === b).reduce((s, p) => s + (fpts(p.projected) || 0), 0) * 10) / 10;
-  const oppName = (M && M.opponent && M.opponent.team) || (L.opponent || {}).opponent || 'Opponent';
-  const scoutHTML = oppEff.length
-    ? `<div class="lg-card">${NFL_BUCKETS.map((b) => {
-        const mv = sumB(starters, b), ov = sumB(oppEff, b);
-        if (mv === 0 && ov === 0) return '';
-        const meAhead = mv > ov;
-        return `<div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;padding:5px 4px;border-top:1px solid var(--line)">
-          <div style="text-align:right;font-weight:700;color:${meAhead ? 'var(--accent)' : 'var(--text)'}">${mv}</div>
-          <div style="text-align:center;font-size:11px;color:var(--muted);min-width:38px">${b}</div>
-          <div style="text-align:left;font-weight:700;color:${ov > mv ? 'var(--text)' : 'var(--muted)'}">${ov}</div></div>`;
-      }).join('')}
-      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;padding:6px 4px;border-top:2px solid var(--line);font-size:11.5px"><div style="text-align:right;font-weight:800">${projFor(starters) ?? '–'}</div><div style="text-align:center;color:var(--muted)">TOTAL</div><div style="text-align:left;font-weight:800">${projFor(oppEff) ?? '–'}</div></div>
-      <div class="muted" style="font-size:11px;margin-top:4px">Projected points · you vs ${esc(oppName)} · green = your edge.</div></div>`
-    : `<div class="lg-card"><div class="muted">Opponent scouting shows once this week's matchup is set.</div></div>`;
-
-  // --- Standings ---
-  const teams = ((L.standings || {}).teams) || [];
-  const standHTML = teams.length ? `<div class="lg-card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead><tr style="text-align:left;color:var(--muted)"><th style="padding:4px 6px;font-weight:600">Team</th><th style="font-weight:600">W-L</th><th style="font-weight:600">Strk</th><th style="text-align:right;padding-right:6px;font-weight:600">Pwr</th></tr></thead>
-      <tbody>${teams.map((t) => `<tr style="border-top:1px solid var(--line)${t.isMe ? ';background:rgba(58,210,159,.10)' : ''}">
-        <td style="padding:5px 6px;font-weight:${t.isMe ? '700' : '400'}">${esc(t.team || '')}</td>
-        <td>${t.wins ?? 0}-${t.losses ?? 0}${t.ties ? '-' + t.ties : ''}</td>
-        <td class="muted">${esc(t.streak || '')}</td>
-        <td style="text-align:right;padding-right:6px">${t.powerScore ?? '–'}</td></tr>`).join('')}</tbody></table></div>`
-    : '<div class="lg-card"><div class="muted">Standings will show once the league syncs.</div></div>';
-
-  // --- Roster (starters + bench, with weekly/projected points) ---
+  // --- Roster ---
   const posRank = (p) => { const i = NFL_SLOT_ORDER.indexOf((p.lineupSlot || p.pos || '').toUpperCase()); return i < 0 ? 90 : i; };
   const rosterRow = (p) => {
     const pts = fpts(p.points), proj = fpts(p.projected);
-    const g = week[String(p.proTeam || '').toUpperCase()];
-    const bye = p.proTeam && g === undefined;
-    const ctx = p.proTeam ? (bye ? '<span style="color:#e2564d">BYE</span>' : esc(gameChipText(g))) : '';
-    const inj = (p.injuryStatus && !/ACTIVE|NORMAL/i.test(p.injuryStatus)) ? ` <span style="color:#e2564d;font-size:10px">${esc(p.injuryStatus)}</span>` : '';
-    const val = pts != null ? `<b>${pts}</b>` : (proj != null ? `${proj} <span class="muted" style="font-size:10px">proj</span>` : '–');
-    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 2px;border-top:1px solid var(--line)">
-        <span><b style="font-size:10.5px;color:var(--muted);display:inline-block;min-width:34px">${esc(p.lineupSlot || p.pos || '')}</b> ${esc(p.name)}${inj} <span class="muted" style="font-size:11px">${esc(p.proTeam || '')}${ctx ? ' · ' + ctx : ''}</span></span>
-        <span style="font-size:12px">${val}</span></div>`;
+    const g = weekOK ? week[String(p.proTeam || '').toUpperCase()] : null;
+    const bye = isBye(p);
+    const inj = (p.injuryStatus && !/ACTIVE|NORMAL/i.test(p.injuryStatus)) ? p.injuryStatus : '';
+    const injCls = /OUT|IR|SUSPEND/i.test(inj) ? 'out' : 'warn';
+    const tone = fbTrend(p);
+    const hist = fbWeeks(p).map((w) => w.pts);
+    const val = pts != null ? `<span class="ffp-pts">${pts}</span>`
+      : proj != null ? `<span class="ffp-pts proj">${proj}</span>` : `<span class="ffp-pts proj">–</span>`;
+    const ctx = bye ? 'on bye this week' : (g ? gameChipText(g) : (p.proTeam || ''));
+    const avg = p.avg != null ? ` · ${Math.round(p.avg * 10) / 10} avg` : '';
+    return `<div class="ffp-prow${bye ? ' bye' : ''}">
+      <div class="ffp-prow-l1">
+        <span class="ffp-slot">${esc(p.lineupSlot || p.pos || '')}</span>
+        <span class="ffp-pname">${esc(p.name)}</span>
+        ${tone ? `<span class="ffp-badge ${tone === 'hot' ? 'mu-easy' : 'warn'}" title="last 3 weeks vs season average">${tone === 'hot' ? '▲ hot' : '▼ cold'}</span>` : ''}
+        ${inj ? `<span class="ffp-badge ${injCls}">${esc(inj.slice(0, 4))}</span>` : ''}
+        ${bye ? '<span class="ffp-badge bye">BYE</span>' : fbMatchupBadge(p)}
+      </div>
+      <div class="ffp-prow-l2">
+        <span class="ffp-meta">${esc(p.proTeam || '')}${ctx && ctx !== p.proTeam ? ' · ' + esc(ctx) : ''}${avg}</span>
+        ${fbSpark(hist, tone === 'cold' ? 'cold' : 'hot')}
+        ${val}</div></div>`;
   };
   const rosterHTML = full.length
-    ? `<div class="lg-card"><div style="font-size:11px;font-weight:700;color:var(--accent);margin:2px 0 4px">STARTERS</div>${starters.slice().sort((a, b) => posRank(a) - posRank(b)).map(rosterRow).join('')}${bench.length ? `<div style="font-size:11px;font-weight:700;color:var(--muted);margin:10px 0 4px">BENCH</div>${bench.map(rosterRow).join('')}` : ''}</div>`
-    : '<div class="lg-card"><div class="muted">Roster will show once the league syncs.</div></div>';
+    ? `<div class="ffp-card"><div class="ffp-grp st">Starters</div>${starters.slice().sort((a, b) => posRank(a) - posRank(b)).map(rosterRow).join('')}${bench.length ? `<div class="ffp-grp bn" style="margin-top:12px">Bench</div>${bench.map(rosterRow).join('')}` : ''}${L.live ? '' : '<div class="ffp-cap">Weekly points appear once ESPN posts a box score for the current week.</div>'}</div>`
+    : `<div class="ffp-card"><div class="ffp-empty"><b>Roster not loaded</b>Tap Refresh from ESPN above.</div></div>`;
 
-  // --- Waiver wire (top available) ---
+  // --- Waiver wire ---
   const fas = ((L.freeAgents || {}).players) || [];
   const waiverHTML = fas.length
-    ? `<div class="lg-card">${fas.slice(0, 12).map((p) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 2px;border-top:1px solid var(--line)">
-        <span>${esc(p.name)} <span class="muted" style="font-size:11px">${esc(p.pos || '')}${p.proTeam ? ' · ' + esc(p.proTeam) : ''}</span></span>
-        <span class="muted" style="font-size:12px">${fpts(p.projected) != null ? fpts(p.projected) + ' proj' : (p.owned != null ? Math.round(p.owned) + '% own' : '')}</span></div>`).join('')}</div>`
-    : '<div class="lg-card"><div class="muted">Top available players will show once the league syncs.</div></div>';
+    ? `<div class="ffp-card">${fas.slice(0, 12).map((p) => `<div class="ffp-prow"><div class="ffp-prow-l1"><span class="ffp-slot">${esc(p.pos || '')}</span><span class="ffp-pname">${esc(p.name)}</span>${fbMatchupBadge(p)}</div><div class="ffp-prow-l2"><span class="ffp-meta">${esc(p.proTeam || '')}${p.owned != null ? ' · ' + Math.round(p.owned) + '% rostered' : ''}</span>${fbSpark(fbWeeks(p).map((w) => w.pts), 'hot')}<span class="ffp-pts proj">${fpts(p.projected) != null ? fpts(p.projected) : '–'}</span></div></div>`).join('')}<div class="ffp-cap">Top available by ESPN projection. Waivers run Wed &amp; Sun 11 PM ET.</div></div>`
+    : `<div class="ffp-card"><div class="ffp-empty"><b>Waiver wire empty</b>Available players appear after the next sync.</div></div>`;
 
   box.innerHTML = `
     <div class="setup-card pp-hero">
       <div class="pp-kicker">🏈 ${esc(L.team || 'My Team')}${rec ? ' · ' + rec : ''}</div>
-      <div class="muted" style="margin-top:4px">Live ESPN football league — points scoring (${esc(NFL_SCORING)}).</div>
+      <div class="muted" style="margin-top:4px">Live ESPN league — points scoring (${esc(NFL_SCORING)}).</div>
     </div>
+    ${stripHTML}
     <h2 class="section-title">This Week</h2>
     ${matchupHTML}
     ${alertHTML}
     <h2 class="section-title">Start / Sit</h2>
     ${startSitHTML}
-    <h2 class="section-title">Opponent Scouting</h2>
-    ${scoutHTML}
-    <h2 class="section-title">Standings</h2>
-    ${standHTML}
     <h2 class="section-title">My Roster</h2>
     ${rosterHTML}
+    <h2 class="section-title">Roster Shape</h2>
+    ${fbDepthHTML(full)}
+    <h2 class="section-title">Scoring by Week</h2>
+    ${fbWeeklyHTML(season)}
+    <h2 class="section-title">Luck &amp; All-Play</h2>
+    ${fbLuckHTML(season)}
+    <h2 class="section-title">League</h2>
+    ${fbLeagueHTML(season, L.standings)}
     <h2 class="section-title">Waiver Wire</h2>
     ${waiverHTML}
-    <div style="margin-top:12px"><button id="fbl-prep" class="fan-btn ghost">🏈 Draft board & prep tools →</button></div>
-    <div class="muted" style="font-size:11px;margin-top:6px">Live league view — first pass; verify against ESPN once your season is underway.</div>`;
+    <div style="margin-top:14px"><button id="fbl-prep" class="fan-btn ghost">🏈 Draft board &amp; prep tools →</button></div>`;
 
   const rs = box.querySelector('#fbl-resync');
   if (rs) rs.onclick = async () => { rs.textContent = '🔄 Refreshing…'; rs.disabled = true; fanState.synced = fanState.synced || {}; fanState.synced.football = false; fanState.forceSync = true; await renderFantasy(); };

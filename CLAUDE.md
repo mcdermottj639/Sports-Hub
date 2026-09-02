@@ -68,7 +68,11 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > `/api/fantasy/{sport}/opponent`, `/api/fantasy/{sport}/freeagents`,
 > `/api/fantasy/{sport}/catranks` (per-team season category totals + league rank,
 > powers the opponent comparison), `/api/fantasy/{sport}/playoffs` (Monte-Carlo
-> playoff odds), `/api/draft/prospects?year=&limit=` (real NFL draft class as a
+> playoff odds — **baseball only**; football gets ESPN's OWN `Team.playoff_pct`
+> via `/season`, so do NOT build a second simulator),
+> `/api/fantasy/{sport}/season` (v195 — per-team weekly `scores`/`outcomes`/
+> `schedule`, `pointsFor`, `playoffPct`, plus a derived **all-play** record;
+> reads off the cached League snapshot, so it costs no extra ESPN call), `/api/draft/prospects?year=&limit=` (real NFL draft class as a
 > ranked board **plus that year's real round-1 pick order** for the Labs
 > mock-draft sim — pulled from ESPN's core API server-side since the browser
 > can't read it; **defaults to `year=2026`**, the most recent draft; cached
@@ -429,7 +433,112 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v194** (backend **b13-pregame-lines**).
+Current version as of this writing: **v195** (backend **b14-football-boxplayer**).
+
+- **🏈 The Fantasy Football page rebuilt — and the three bugs that made it worth
+  rebuilding (v195, backend `b14-football-boxplayer`)** — the owner, the day
+  after their draft: *"I hate the look right now of our fantasy page… Fantasy
+  baseball page had a lot more it seems but I want even more than that."* Four
+  Sonnet subagents scoped it (metrics research, feature audit vs baseball,
+  visual design). The look was the smaller half of the problem.
+  - **🚨 The roster endpoint could NEVER have shown a point, all season.**
+    `points`/`projected_points` exist ONLY on espn-api's **`BoxPlayer`**
+    (`football/box_player.py:61-64`); a plain **`Player`** never assigns them —
+    `football/player.py` sets only `total_points`/`avg_points` and the per-week
+    `stats` dict. `Team._fetch_roster` builds `team.roster` from plain
+    `Player`s (`team.py:54`), so `main.py`'s
+    `getattr(p, "points", None)` returned `None` **permanently**, not just
+    preseason. ⚠️ **This session initially told the owner the nulls were
+    "expected, the season hasn't started" — that was WRONG**, and it is exactly
+    the kind of claim to verify against library source before making.
+    Downstream it meant: Start/Sit printed "✅ lineup optimal" having compared
+    nothing, every Opponent Scouting bucket read `0` for the owner's side while
+    the opponent's showed real numbers, and the win% meter could say **8%**
+    directly under a card saying **"Leading"** (the verdict reads team-level
+    `BoxScore` totals, which were never broken). Fixed with `_box_lineup()`:
+    `roster()` now pulls the current week's lineup out of `league.box_scores()`
+    and only falls back to `team.roster`. `player_dict` also gained `_wk_stat`
+    (reads the latest scoring period out of `Player.stats` when the BoxPlayer
+    attribute is absent) so the fallback path degrades to real numbers too.
+  - **🚨 `nflBucket` counted 13 of the owner's 16 players as running backs.**
+    It scanned a CONCATENATED string of `pos + lineupSlot + eligibleSlots`, and
+    every WR's eligibility list contains **`"RB/WR"`** — so `\bRB\b` matched
+    inside it and won, before the `WR` test ever ran. Measured on the owner's
+    real payload: A.J. Brown, Marvin Harrison Jr., Sutton, Pittman, **McBride**,
+    Likely and Keenan Allen all bucketed **RB**. Opponent Scouting has therefore
+    been one meaningless RB row since v137. It now matches an **exact
+    single-position slot** (`NFL_EXACT`) from `lineupSlot`, then from
+    `eligibleSlots`, and only falls back to the old scan. ⚠️ **`pos` is no help
+    and must not be trusted here** — ESPN's real payload sends `"UTIL"` for
+    every player. Verified: all 16 real players correct (WR 7 · RB 3 · TE 3 ·
+    QB 1 · DST 1 · K 1).
+  - **🚨 An ESPN hiccup flagged the whole roster as on bye.** `nflWeekGames()`
+    returns `{}` on failure, and bye detection was `week[abbr] === undefined` —
+    so a failed scoreboard call read as "all 32 teams are on bye". New `weekOK`
+    gates every bye read, and the alerts card says the feed failed rather than
+    implying an all-clear.
+  - **🎨 Why it looked cheap, specifically.** `.lg-card` — the wrapper on every
+    football section — carried `box-shadow: … rgba(58,210,159,.15) inset`, the
+    **dead pre-v187 dark-theme mint accent**, tracking neither Champagne nor
+    Onyx: a third orphaned colour ringing every card in BOTH palettes. The view
+    had also never been given the v191 FLOW treatment (flat hairline rows while
+    the rest of the app floats on elevated surfaces) and was 100% inline styles,
+    so no design layer could reach it. Two more shipped alongside:
+    `.mk-draft:hover` was `#fff` on an accent fill (~1.9:1) and
+    `.mk-pk-val.neg` used `--live` (the brand accent), painting a NEGATIVE draft
+    value the same gold as a positive one.
+  - **New `.ffp-` CSS layer (layer 6), appended last.** Namespaced so the
+    v187/v189 specificity trap can't bite — nothing above targets that prefix.
+    Every colour is a token. The palette corrections above ride at the end of it
+    as `:root[data-palette]` rules rather than in-place edits, because the
+    originals sit in layer 1 and are out-specified by layer 2.
+  - **What the page shows now:** a 5-tile stat strip · a **mirrored
+    position-by-position matchup** with a win-probability meter (which now
+    renders only when BOTH sides carry numbers, so it can never contradict the
+    verdict above it) · lineup alerts · Start/Sit that says *"no projections
+    yet"* instead of falsely claiming optimal · a roster row carrying
+    **sparkline, hot/cold trend, ESPN's PRK matchup badge, injury and bye** ·
+    **Roster Shape** · **Scoring by Week** · **Luck & All-Play** · a league
+    table with **ESPN's own playoff odds** · waiver wire.
+  - **⚠️ Roster Shape must divide by PLAYER COUNT.** The first cut summed each
+    position group's points, which made WR read **+108%** purely because the
+    owner rosters seven of them and one QB — it measured roster counts, not
+    strength. Per-player it reads QB +93% / RB −22% / WR +18%, which is a real
+    signal. Depth count is reported separately, because "thin at RB" and "weak
+    at RB" are different problems and only the count one gets you eliminated.
+  - **Two findings that saved real work.** ESPN publishes **`Team.playoff_pct`**
+    (its OWN simulation, `team.py:24`) — so football needs **no Monte-Carlo
+    simulator**, unlike baseball's `/playoffs`, which exists only because ESPN
+    publishes nothing for it. And **`BoxPlayer.pro_pos_rank`** is ESPN's PRK
+    (how a defense ranks against a position) — free, per-player, per-week.
+    New backend endpoint **`/api/fantasy/{sport}/season`** carries `Team.scores`
+    / `outcomes` / `schedule` / `points_for` / `playoff_pct` plus a derived
+    **all-play record**, off the already-cached League snapshot — no extra ESPN
+    request.
+  - **⚠️ Deliberately NOT built: snap share, target share, YPRR, air yards,
+    WOPR.** These are the best predictors in the literature and **none are
+    obtainable from ESPN's free feeds** — they come from PFF/FTN charting. A
+    "YPRR" faked from box-score yards/target would be worse than showing
+    nothing. Target/touch share IS derivable from `receivingTargets`(58) /
+    `rushingAttempts`(23) if the backend ever serializes the stat `breakdown`;
+    that is the next real step, not a fake version of the others.
+  - Verified in headless Chromium at 390px in **both palettes** — **46 checks**
+    (sections present, real points rendering, 12 sparklines, 6 diverging bars,
+    mirrored matchup rows, 12 playoff-odds bars, the PRK badges, zero horizontal
+    overflow, nothing spilling the viewport, no dead mint ring on any card,
+    `--pos ≠ --neg ≠ --accent`, no console errors) plus **16 checks** driving
+    the real `nflBucket` against the owner's actual ESPN payload.
+  - ⚠️ **Test-harness note, the v185 lesson again:** section headings are
+    uppercased by CSS AND most sections start collapsed, so `innerText`
+    assertions must expand the accordions first and compare
+    case-insensitively. Eight checks failed against perfectly correct markup
+    before that was fixed.
+  - ⚠️ **Unverified live:** the sandbox reaches neither ESPN nor the Render
+    backend, so `_box_lineup`'s box-score shape, `pro_pos_rank`'s real range and
+    `playoff_pct` being non-zero are coded defensively but must be confirmed on
+    device. First check: `/api/health` → `version` should read
+    **`b14-football-boxplayer`**, then `/api/fantasy/football/roster` → `live`
+    and a non-null `points` on a played week.
 
 - **🔍 Draft-night audit — four subagents, four real findings (v194)** — the
   owner's fantasy draft was that night and asked for the draft plan to be
@@ -3655,9 +3764,14 @@ rewrite.**
     **Offseason Timeline (last)**. `renderFantasy` hides the baseball wrapper (`#fantasy-live`) and returns
     early for football; `injectJumpNav` now skips hidden headings so the hidden
     baseball sections don't produce dead chips. The **live** football league
-    view (points-based matchup/standings/roster/waivers) is **built as of v135**
-    (`renderFootballLive`) and shows when `cfg.football === true`; this prep view
-    is the pre-league / "Draft Tools" mode (toggle between them). The Labs rookie
+    view is **LIVE as of v195** (`renderFootballLive`, league `993612`) and shows
+    whenever `cfg.football === true`; this prep view is the pre-league / "Draft
+    Tools" mode (toggle between them). Live-view sections: stat strip · This Week
+    (mirrored position-by-position matchup + win% meter) · Lineup Alerts ·
+    Start/Sit · My Roster (sparkline + hot/cold + ESPN PRK badge) · Roster Shape ·
+    Scoring by Week · Luck & All-Play · League (ESPN's own playoff odds) · Waiver
+    Wire. Styled by the `.ffp-` **layer 6** in `styles.css` — all tokens, no
+    hardcoded colours; see the v195 entry for the three bugs it replaced. The Labs rookie
     **Mock Draft Simulator** is a different thing (real NFL draft of incoming rookies).
   - **🏈 Fantasy Mock Draft** (v100; moved out of the Fantasy tab in v106; the
     **Labs tab** became its own top-level tab in v107) — a client-side snake

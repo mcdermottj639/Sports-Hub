@@ -32,7 +32,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b13-pregame-lines"
+SERVER_VERSION = "b14-football-boxplayer"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -166,10 +166,64 @@ def player_dict(p) -> dict:
         "proTeam": getattr(p, "proTeam", "") or "",
         "injuryStatus": getattr(p, "injuryStatus", "") or "",
         "owned": getattr(p, "percent_owned", None),
-        "points": getattr(p, "points", None),            # actual fantasy pts (points leagues)
-        "projected": getattr(p, "projected_points", None),
-        "total": getattr(p, "total_points", None),       # season total (football)
+        "started": getattr(p, "percent_started", None),
+        # ⚠️ `points`/`projected_points` exist ONLY on espn-api's BoxPlayer, never
+        # on a plain Player (football/player.py never assigns them; box_player.py
+        # lines 61-64 do). Team.roster is built from plain Players, so reading
+        # these off a roster player returns None FOREVER — not just preseason.
+        # That was b13's bug. `roster()` now feeds us BoxPlayers; the per-week
+        # fallback below covers anything that still arrives as a plain Player.
+        "points": _wk_stat(p, "points"),
+        "projected": _wk_stat(p, "projected_points"),
+        "total": getattr(p, "total_points", None),       # season total
+        "avg": getattr(p, "avg_points", None),
+        "projAvg": getattr(p, "projected_avg_points", None),
+        # ESPN's own "PRK": how that pro defense ranks against this position.
+        # 1 = the most generous matchup. 0 means ESPN sent nothing.
+        "prk": getattr(p, "pro_pos_rank", None) or None,
+        "weeks": _week_points(p),                        # [{w, pts, proj}] history
     }
+
+
+def _wk_stat(p, attr):
+    """BoxPlayer carries `points`/`projected_points` directly. A plain Player
+    doesn't, but its `stats` dict holds the same numbers per scoring period, so
+    fall back to the latest period that actually has one."""
+    v = getattr(p, attr, None)
+    if v is not None:
+        return v
+    key = "points" if attr == "points" else "projected_points"
+    best = None
+    for period, row in (getattr(p, "stats", {}) or {}).items():
+        try:
+            wk = int(period)
+        except (TypeError, ValueError):
+            continue
+        if wk <= 0 or not isinstance(row, dict) or key not in row:
+            continue
+        if best is None or wk > best[0]:
+            best = (wk, row.get(key))
+    return best[1] if best else None
+
+
+def _week_points(p) -> list:
+    """Per-week scoring history from Player.stats — the raw material for
+    sparklines, hot/cold trend and boom-bust consistency. Period 0 is the
+    season aggregate, not a week, so it is skipped."""
+    out = []
+    for period, row in (getattr(p, "stats", {}) or {}).items():
+        try:
+            wk = int(period)
+        except (TypeError, ValueError):
+            continue
+        if wk <= 0 or not isinstance(row, dict):
+            continue
+        pts, proj = row.get("points"), row.get("projected_points")
+        if pts is None and proj is None:
+            continue
+        out.append({"w": wk, "pts": pts, "proj": proj})
+    out.sort(key=lambda r: r["w"])
+    return out
 
 
 # --- routes ------------------------------------------------------------------
@@ -186,6 +240,28 @@ def health():
     }
 
 
+def _box_lineup(league, team):
+    """This week's lineup as BoxPlayer objects, which carry per-week `points`,
+    `projected_points`, `pro_pos_rank` and the stat `breakdown`.
+
+    Team.roster gives plain Player objects that have NONE of those (see the note
+    in player_dict), so going through the box score is the only way the owner's
+    own roster ever shows a live or projected score. Returns [] rather than
+    raising: before week 1 there is no box score at all, and the caller falls
+    back to team.roster, which still has names/slots/injury status."""
+    want = _tid(team)
+    try:
+        boxes = league.box_scores()
+    except Exception:
+        return []
+    for b in boxes or []:
+        for side in ("home", "away"):
+            t = getattr(b, f"{side}_team", None)
+            if t is not None and _tid(t) == want:
+                return list(getattr(b, f"{side}_lineup", []) or [])
+    return []
+
+
 @app.get("/api/fantasy/{sport}/roster")
 def roster(sport: str):
     """Your real roster for the sport, grouped enough for the UI to render."""
@@ -193,6 +269,7 @@ def roster(sport: str):
     team = my_team(league, SPORTS[sport]["team_id"])
     if not team:
         raise HTTPException(404, "No teams found in that league.")
+    players = _box_lineup(league, team) or getattr(team, "roster", [])
     return {
         "sport": sport,
         "team": getattr(team, "team_name", "My Team"),
@@ -201,7 +278,10 @@ def roster(sport: str):
             "losses": getattr(team, "losses", None),
             "ties": getattr(team, "ties", None),
         },
-        "roster": [player_dict(p) for p in getattr(team, "roster", [])],
+        # True once the numbers came from a box score; the UI says so rather
+        # than showing an unexplained dash next to every player.
+        "live": bool(players) and players is not getattr(team, "roster", None),
+        "roster": [player_dict(p) for p in players],
     }
 
 
@@ -493,6 +573,86 @@ def _season_cats(league):
         vbs = t.get("valuesByStat") or {}
         totals[tid] = {int(k): v for k, v in vbs.items() if v is not None}
     return cats, totals
+
+
+@app.get("/api/fantasy/{sport}/season")
+def season(sport: str):
+    """Week-by-week season shape for every team — the raw material for the
+    scoring chart, the all-play luck read and playoff odds.
+
+    All of this comes off Team objects the league pull already built, so it
+    costs no extra ESPN request beyond the cached League snapshot.
+
+    `playoffPct` is ESPN's OWN simulation (Team.playoff_pct, espn-api
+    football/team.py:24). Baseball has no equivalent, which is why the
+    hand-rolled Monte-Carlo /playoffs endpoint exists for that sport — football
+    does not need it, so don't build a second simulator here.
+    """
+    league = get_league(sport)
+    me = my_team(league, SPORTS[sport]["team_id"])
+    mine = _tid(me) if me else ""
+    teams = []
+    for t in getattr(league, "teams", []) or []:
+        scores = [s for s in (getattr(t, "scores", []) or [])]
+        outcomes = list(getattr(t, "outcomes", []) or [])
+        # Team.schedule holds opponent Team objects (league.py resolves the ids).
+        sched = []
+        for opp in (getattr(t, "schedule", []) or []):
+            sched.append(_tid(opp) if hasattr(opp, "team_id") else str(opp or ""))
+        teams.append({
+            "teamId": _tid(t),
+            "team": getattr(t, "team_name", ""),
+            "abbrev": getattr(t, "team_abbrev", ""),
+            "isMe": _tid(t) == mine,
+            "wins": getattr(t, "wins", None),
+            "losses": getattr(t, "losses", None),
+            "ties": getattr(t, "ties", None),
+            "pointsFor": getattr(t, "points_for", None),
+            "pointsAgainst": getattr(t, "points_against", None),
+            "playoffPct": getattr(t, "playoff_pct", None),
+            "scores": scores,
+            "outcomes": outcomes,
+            "schedule": sched,
+        })
+    return {
+        "sport": sport,
+        "week": getattr(league, "current_week", None),
+        "playoffTeams": getattr(getattr(league, "settings", None), "playoff_team_count", None),
+        "regularSeasonWeeks": getattr(getattr(league, "settings", None), "reg_season_count", None),
+        "teams": teams,
+        "allPlay": _all_play(teams),
+    }
+
+
+def _all_play(teams: list) -> dict:
+    """All-play record: each week, score every team against EVERY other team,
+    not just the one it happened to be scheduled against. This is the luck
+    detector — a team can be 1-3 while outscoring most of the league, which
+    says the roster is fine and the schedule was not.
+
+    Only weeks where a team actually posted a score count, so an unplayed or
+    bye week can't be read as a 0-point loss.
+    """
+    out = {}
+    weeks = max((len(t["scores"]) for t in teams), default=0)
+    for t in teams:
+        w = l = 0
+        for i in range(weeks):
+            mine = t["scores"][i] if i < len(t["scores"]) else None
+            if not mine:
+                continue
+            for o in teams:
+                if o["teamId"] == t["teamId"]:
+                    continue
+                theirs = o["scores"][i] if i < len(o["scores"]) else None
+                if not theirs:
+                    continue
+                if mine > theirs:
+                    w += 1
+                elif mine < theirs:
+                    l += 1
+        out[t["teamId"]] = {"w": w, "l": l}
+    return out
 
 
 @app.get("/api/fantasy/{sport}/catranks")
