@@ -640,7 +640,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **320 checks** across twelve suites (behaviour, matchup/grid,
+    - Verified: **323 checks** across twelve suites (behaviour, matchup/grid,
       byes, four iPhone sizes, accessibility, audit fixes, the not-shared-yet
       guards, the deployment/stranded-link path, and the zero-touch relative
       experience).
@@ -689,13 +689,19 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     underdog wins, how contrarian), and form (streaks, average win/loss margin,
     biggest win, worst beat). Plus league-wide: **week winners**, **head to
     head**, and **most-picked teams**.
-    - **Every number carries a plain-English explainer** (`statDef`), not a
-      label and a figure. A stat nobody can read is worse than no stat — it
-      looks authoritative and means nothing. Each section also opens with a
-      sentence saying what it is for, and the explainers name the actual
-      values ("3 wins from picks worth about 3.9") rather than defining the
-      metric in the abstract. A test asserts every `.statdef` has one, that
-      the shortest is a real sentence, and that no statistical jargon
+    - **Every number carries a SHORT footnote** (`statRow` → `.st-n`), not a
+      paragraph. A stat nobody can read is worse than no stat, but the first
+      cut explained each one in two or three sentences and the sheet ran to
+      ~4600px; the owner: *"Don't take up so much space explaining. Small
+      footnotes. I like the colors and visuals u had."* So it is back to the
+      compact `.sh-t` tables with coloured values and a ≤40-character line
+      under each — and the full definitions live in a **folded "What do these
+      mean?"** accordion for anyone who wants them. Measured **1554px**.
+      ⚠️ The footnote is `text-align: left` inside a right-aligned cell: a
+      wrapped footnote reads far better ragged-right than ragged-left.
+      Tests assert every row has a footnote, that the longest stays ≤60
+      chars and under 15px, that the accordion exists and starts closed,
+      that the sheet stays under 3400px, and that no statistical jargon
       (variance, regression, EV, de-vig…) appears anywhere.
     - ⚠️ **Verb agreement matters here.** The copy is generated for "you" OR a
       named person, so `vb()` adds the -s: "you take coin flips" but "Patti

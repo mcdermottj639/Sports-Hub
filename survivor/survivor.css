@@ -600,14 +600,17 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 
 /* Each stat is a number AND a sentence saying what it means. A number nobody
    can read is worse than no number — it looks authoritative and says nothing. */
-.statdef {
-  padding: 14px 0; border-bottom: 1px solid var(--tr);
+/* Footnotes, not paragraphs: a short line under the value saying what it is.
+   The full definitions live in the folded "What do these mean?" block. */
+.sh-t td .st-n {
+  display: block; margin-top: 3px; color: var(--gy);
+  font-size: .78rem; font-weight: 400; line-height: 1.35;
+  /* Left-aligned inside a right-aligned cell: a wrapped footnote reads far
+     better ragged-right than ragged-left. */
+  text-align: left;
 }
-.statdef:last-child { border-bottom: 0; }
-.sd-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
-.sd-k { font-weight: 700; font-size: 1rem; }
-/* A long value (three team names) drops to its own line instead of squeezing
-   the label into "Best / left". */
-.sd-v { font-weight: 900; font-size: 1.25rem; text-align: right; margin-left: auto; }
-.sd-x { margin: 6px 0 0; color: var(--gy); font-size: .92rem; line-height: 1.5; }
-.sh-intro { margin: -4px 0 12px; color: var(--gy); font-size: .95rem; line-height: 1.5; }
+.sh-t td:last-child { max-width: 58%; }
+.statwhat { margin-top: 18px; }
+.statwhat p { margin: 0 0 12px; font-size: .92rem; line-height: 1.5; color: var(--ink2); }
+.statwhat p:last-child { margin-bottom: 0; }
+.statwhat b { color: var(--ink); }
