@@ -497,9 +497,27 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     10 Sep 2026** — with no completed games there is nothing to grade and the
     standings and history screens cannot be exercised at all. `demoGames()`
     builds a deterministic season off a circle-method round robin (16 games,
-    all 32 teams, nobody twice) with weeks 1–3 final and week 4 live, and
-    **game index 0 of week 4 is deliberately already final** so the per-game
-    lock and the hidden-pick reveal are both visible.
+    all 32 teams, nobody twice). It is a FULL season in progress, sized to the
+    real league, and every state the app can be in is present on purpose:
+    - `DEMO_WEEK` **10** — nine weeks played, week 10 underway: one game final
+      since Thursday, **three live right now** (`state: 'in'`), the rest ahead.
+    - **18 relatives** (`DEMO_FAMILY`), of whom `DEMO_UNCLAIMED` (4) have not
+      tapped their name yet and hold no picks — so the join screen has real
+      names to offer and the first-run welcome can be seen.
+    - `DEMO_MISSED` gives Nana weeks 2 and 7 off, `DEMO_NO_PICK_THIS_WEEK`
+      leaves two people off the current week (the chase list), `DEMO_TIE`
+      forces one real tie, and `DEMO_BYES` rests teams from week 5 on.
+    - ⚠️ **Kickoff times are relative to `Date.now()`, never a fixed clock
+      time.** They were pinned to 1pm, so opening the demo after lunch made
+      every upcoming game already-kicked-off and refused EVERY pick. Anything
+      added here must stay relative.
+    - ⚠️ **The seeder writes straight to the store and threads the admin token
+      through `addPlayer`** — the first add bootstraps the commissioner and
+      every later call must carry that token, or `addPlayer` correctly refuses
+      as "not an admin" and only one player is ever created.
+    - The Admin screen carries a "what's loaded and what to look at" guide
+      (`.demo-guide`), and the suites derive week/player counts from these
+      constants rather than hardcoding them.
   - ⚠️ **Two layout traps found while building it, both worth remembering:**
     (a) `.tabs { display: grid }` **out-specifies the browser's `[hidden]`
     rule**, so `el.hidden = true` silently stopped working and the tab bar
