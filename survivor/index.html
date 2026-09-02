@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en" data-palette="champagne" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Family Survivor League</title>
+<meta name="description" content="The family survivor football league — make your pick, see the standings.">
+<meta name="theme-color" content="#f3f1ec">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%88%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%88%3C/text%3E%3C/svg%3E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Survivor">
+<script>
+  // Palette + big-text before first paint, so nothing flashes.
+  try {
+    var p = localStorage.getItem('survivor:palette');
+    if (!p) p = matchMedia('(prefers-color-scheme: dark)').matches ? 'onyx' : 'champagne';
+    document.documentElement.setAttribute('data-palette', p);
+    document.documentElement.setAttribute('data-theme', p === 'onyx' ? 'dark' : 'light');
+    if (localStorage.getItem('survivor:big') === '1') document.documentElement.setAttribute('data-big', '1');
+  } catch (e) {}
+</script>
+<link rel="stylesheet" href="survivor.css?v=1">
+</head>
+<body>
+
+<header class="hd">
+  <div class="hd-in">
+    <div class="hd-brand">
+      <span class="hd-ball">🏈</span>
+      <span class="hd-name">Family Survivor</span>
+    </div>
+    <div class="hd-right">
+      <button id="big-btn" class="hd-btn" type="button" title="Bigger text">A<sup>+</sup></button>
+      <button id="pal-btn" class="hd-btn" type="button" title="Light or dark">◐</button>
+    </div>
+  </div>
+  <div id="whoami" class="hd-who" hidden></div>
+</header>
+
+<nav class="tabs" id="tabs" role="tablist" hidden>
+  <button role="tab" data-screen="pick"      class="tab on">Pick</button>
+  <button role="tab" data-screen="standings" class="tab">Standings</button>
+  <button role="tab" data-screen="history"   class="tab">My Picks</button>
+  <button role="tab" data-screen="admin"     class="tab" id="tab-admin" hidden>Admin</button>
+</nav>
+
+<main id="main">
+  <div id="boot" class="boot">Loading…</div>
+  <section id="s-pick"      class="screen" hidden></section>
+  <section id="s-standings" class="screen" hidden></section>
+  <section id="s-history"   class="screen" hidden></section>
+  <section id="s-admin"     class="screen" hidden></section>
+</main>
+
+<footer class="ft">
+  <span id="ft-mode"></span>
+</footer>
+
+<script src="survivor.js?v=1"></script>
+</body>
+</html>

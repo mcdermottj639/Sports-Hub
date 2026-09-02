@@ -412,6 +412,73 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     NOT part of the `APP_VERSION`/`?v=` ritual — but bump `workout.css`/`workout.js` `?v=`
     in `workout.html` on changes (currently **v4**), and its `styles.css?v=` (now 143) if
     you change shared CSS it leans on.
+- `survivor/` — **🏈 Family Survivor League**, a standalone mini-app for the
+  owner's family pool (`index.html` / `survivor.css` / `survivor.js` /
+  `schema.sql` / `README.md`). **It is NOT part of Sports-Hub**: no shared code,
+  no shared service worker, no shared localStorage keys, and it does **not**
+  participate in the `APP_VERSION`/`?v=` ritual. It is in this repo only so the
+  owner can test it on his phone; **it is meant to move to its own repo before
+  the family links go out**, so that deleting a path segment from the URL
+  doesn't land 20 relatives in the betting model. See `survivor/README.md`.
+  - **The league is non-elimination**: you are never knocked out, you just can
+    never pick the same team twice. Six house rules, settled 2 Sep 2026 and
+    written at the top of `survivor.js`: a missed week costs nothing (no loss,
+    no points, no team burned) · per-GAME deadline (pick or change until that
+    game kicks off) · picks hidden until their game starts, then public ·
+    regular season only, weeks 1–18 · standings sort on wins with cumulative
+    point margin as the tiebreak · a tie is neither a win nor a loss.
+  - ⚠️ **The no-repeat rule is a `UNIQUE` CONSTRAINT, not a UI check**
+    (`never_reuse_a_team` in `schema.sql`). Two open tabs or a stale phone page
+    would otherwise produce a duplicate that the commissioner has to adjudicate
+    by text message. Anything new that writes a pick must go through
+    `submit_pick`/`admin_set_pick`, never straight at the table.
+  - **Identity is a personal URL** (`?u=nana`), saved to localStorage on first
+    visit. No password, no account, no install — that is the only design that
+    a 95-year-old can actually use, and it is a trust model rather than a
+    security model on purpose. Tokens are NOT readable by the anon key: the app
+    reads a `players_public` VIEW that omits the column.
+  - **🚨 PICKS ARE THE ONLY THING STORED.** Records, margins and standings are
+    computed live from ESPN's free NFL scoreboard on every render. That deletes
+    a whole subsystem — no results table, no cron, no scraper, no write path a
+    viewer could poison — and it makes the standings tick live on a Sunday.
+    Do NOT add a results table; it would immediately be a second source of
+    truth that can drift.
+  - **Storage is pluggable**: `LocalStore` (localStorage, this device only) and
+    `SupaStore` (Supabase free tier, plain `fetch` against PostgREST, no SDK
+    and no build step). `pickStore()` picks one; nothing else in the file knows
+    which is live. Config goes in `survivor:sb` on the device OR hardcoded at
+    the top of `survivor.js`.
+  - **Demo mode is not a toy, it is the only way to test the app before
+    10 Sep 2026** — with no completed games there is nothing to grade and the
+    standings and history screens cannot be exercised at all. `demoGames()`
+    builds a deterministic season off a circle-method round robin (16 games,
+    all 32 teams, nobody twice) with weeks 1–3 final and week 4 live, and
+    **game index 0 of week 4 is deliberately already final** so the per-game
+    lock and the hidden-pick reveal are both visible.
+  - ⚠️ **Two layout traps found while building it, both worth remembering:**
+    (a) `.tabs { display: grid }` **out-specifies the browser's `[hidden]`
+    rule**, so `el.hidden = true` silently stopped working and the tab bar
+    showed on the sign-in screen — there is now an explicit
+    `[hidden] { display: none !important }`. (b) In a flex row, a long italic
+    label ("picked — hidden until kickoff") shrank the NAME column to a single
+    letter; the pick rows are a grid with a `minmax(84px, 1fr)` name column now.
+  - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
+    tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
+    lab documents). A "Bigger text" toggle takes the base to 22px.
+  - Verified by driving the real page in headless Chromium at 390px in both
+    palettes — **43 checks**: all six house rules (including the store refusing
+    a reused team and refusing a pick on a kicked-off game), no duplicate teams
+    across a seeded season, other players' picks not leaking onto the standings
+    screen, a missed week not counting as a loss, running point totals adding up
+    to the season total, sorting, the personal link signing someone in with no
+    password and NOT granting them admin, zero horizontal overflow at 320/390px,
+    the 44px tap-target floor on all four screens, and no console errors.
+  - ⚠️ **Unverified live:** the sandbox reaches neither ESPN nor Supabase, so
+    the real week-scoreboard shape
+    (`?dates=2026&seasontype=2&week=N`), `currentWeek()`'s read of
+    `season.type`/`week.number`, and every `schema.sql` function are coded
+    defensively but must be confirmed on device.
+
 - `scriptable/` — optional iOS Home Screen widgets ([Scriptable](https://scriptable.app), JS).
   **Companion scripts, NOT part of the web app** — they don't deploy with Pages and
   don't affect `APP_VERSION`. `SportsHubFantasy.js` renders the fantasy matchup
@@ -434,6 +501,29 @@ Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
 Current version as of this writing: **v198** (backend **b14-football-boxplayer**).
+
+- **🏈 Family Survivor League built (2 Sep 2026 — no `APP_VERSION` bump)** — the
+  owner's family has run a non-elimination survivor pool for years, built around
+  keeping his 95-year-old grandmother involved, and no off-the-shelf app models
+  it. Now `survivor/`, a standalone four-file mini-app; see **Files** for the
+  rules, the architecture and the traps. Three things worth carrying forward:
+  - **The hard part was never the UI, it was shared state.** Every previous
+    feature in this repo is either `localStorage` (per device) or a read-only
+    backend. Twenty people picking against each other needs a real shared
+    database, which is why this is the first thing here to use one (Supabase
+    free tier). **The Render backend cannot do this job** — its free tier is
+    in-memory with no disk, so the picks would vanish on every redeploy, and a
+    30–60s cold start is fatal for the one user the league exists for.
+  - **A separate repo is the plan, and the reason is not tidiness.** From
+    `/Sports-Hub/survivor/` any relative can delete a path segment and land on
+    the owner's betting model and fantasy team. It also sits under `sw.js`'s
+    scope, whose cache is keyed to `APP_VERSION`, so every Sports-Hub release
+    would invalidate grandma's page. It lives here for now ONLY so it can be
+    tested on a phone; move it before the links go out.
+  - **The six house rules were settled BEFORE any code was written**, because
+    each one changes what gets built — "a missed week is not a loss" in
+    particular is why `tallyFor` counts only graded picks and why a week with
+    no pick burns no team.
 
 - **🚨 Fantasy opened on the DRAFT-PREP view for up to a minute, every launch
   (v198)** — the owner: *"why when I open the app and click fantasy it shows
