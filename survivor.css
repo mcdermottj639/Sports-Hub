@@ -552,3 +552,23 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 
 /* Real family names ("Grandpa Joe", "Cousin Dave") need more than 112px. */
 .gr .gnm { max-width: 146px; }
+
+/* ---- confirm a pick --------------------------------------------------- */
+.cf-card { text-align: center; }
+.cf-k {
+  font-size: .8rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--mu); margin-bottom: 12px;
+}
+.cf-team { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 10px; }
+.cf-team img { width: 76px; height: 76px; object-fit: contain; }
+.cf-team span { font-size: 1.5rem; font-weight: 900; line-height: 1.15; }
+.cf-game { margin: 0 0 6px; color: var(--gy); font-size: 1rem; }
+.cf-replace {
+  margin: 12px 0 0; padding: 10px 12px; border-radius: 10px;
+  background: var(--sf2); border: 1px solid var(--tr); color: var(--ink2); font-size: .95rem;
+}
+/* Both answers are full size — the safe one must never be harder to hit than
+   the committing one. */
+.cf-yes { min-height: 66px; font-size: 1.05rem; margin-top: 20px; }
+.cf-no  { min-height: 66px; font-size: 1.05rem; margin-top: 10px; border-width: 2px; }
+.cf-note { margin: 14px 0 0; color: var(--gy); font-size: .92rem; }

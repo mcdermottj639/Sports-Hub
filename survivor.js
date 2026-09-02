@@ -139,6 +139,7 @@ const S = {
   weekPinned: false, // true once the user navigates weeks by hand
   stView: 'table',   // 'table' | 'grid' — the standings' two looks
   sheet: null,       // id of the game whose matchup card is open
+  confirming: null,  // { team, gameId } while the confirm step is up
   demo: lsGet('survivor:demo', '0') === '1',
   store: null,
   msg: null,         // { kind:'ok'|'bad', text }
@@ -389,6 +390,7 @@ function demoGames(week) {
     else if (i <= 3)           { state = 'in';   date = hours(-1);  }   // playing right now
     else if (i >= 12)          { state = 'pre';  date = hours(27);  }   // tomorrow night
     else                       { state = 'pre';  date = hours(3 + i); } // later today, staggered
+    date.setMinutes(0, 0, 0);   // whole hours read like real kickoff times
     const scored = state === 'post' || state === 'in';
     let hs = scored ? 10 + Math.floor(rnd() * 29) : null;
     let as = scored ? 10 + Math.floor(rnd() * 29) : null;
@@ -814,6 +816,60 @@ function matchupHTML(g) {
 }
 
 let _scrollY = 0;
+let _pinned = 0;
+function pinBody() {
+  if (_pinned++) return;
+  _scrollY = window.scrollY;
+  document.body.style.position = 'fixed';
+  document.body.style.top = `-${_scrollY}px`;
+  document.body.style.width = '100%';
+}
+function unpinBody(force) {
+  if (force) _pinned = 0; else if (--_pinned > 0) return;
+  _pinned = 0;
+  document.body.style.position = '';
+  document.body.style.top = '';
+  document.body.style.width = '';
+  window.scrollTo(0, _scrollY);
+}
+
+/* ---- confirm a pick ---------------------------------------------------
+   A tap on a team never saves straight away. Shaky hands, pockets and
+   scrolling all produce accidental taps, and a pick spends a team for the
+   whole season — so it always goes through this. */
+function askConfirm(team) {
+  const games = S.games[S.week] || [];
+  const g = gameForTeam(games, team);
+  if (!g) { say('bad', `The ${teamShort(team)} are not playing in week ${S.week}.`); render(); return; }
+  closeSheet();                                  // never stack two overlays
+  S.confirming = { team, gameId: g.id };
+  const opp = g.home.abbr === team ? g.away.abbr : g.home.abbr;
+  const where = g.home.abbr === team ? 'at home to' : 'away at';
+  const current = pickIn(S.me.id, S.week);
+  const replacing = current && current.team !== team ? current.team : null;
+
+  $('#confirm-body').innerHTML = `
+    <div class="cf-k">Week ${S.week} — is this right?</div>
+    <div class="cf-team">
+      <img src="${teamLogo(team)}" alt="" onerror="this.remove()">
+      <span>${esc(teamName(team))}</span>
+    </div>
+    <p class="cf-game">${esc(where)} the ${esc(teamShort(opp))} · ${esc(fmtKick(g.date))}</p>
+    ${replacing ? `<p class="cf-replace">This replaces your pick of the ${esc(teamShort(replacing))}.</p>` : ''}
+    <button class="btn pri wide cf-yes" id="cf-yes">Yes — that's my pick</button>
+    <button class="btn wide cf-no" id="cf-no">No, go back</button>
+    <p class="cf-note">You can still change it any time before this game starts.</p>`;
+  $('#confirm').hidden = false;
+  pinBody();
+  $('#cf-no').focus({ preventScroll: true });    // the SAFE option takes focus
+}
+function closeConfirm() {
+  if (!S.confirming) return;
+  S.confirming = null;
+  $('#confirm').hidden = true;
+  unpinBody();
+}
+
 function openSheet(gameId) {
   const g = (S.games[S.week] || []).find((x) => x.id === gameId);
   if (!g) return;
@@ -822,20 +878,14 @@ function openSheet(gameId) {
   $('#sheet').hidden = false;
   // iOS Safari ignores `overflow:hidden` on <body>, so the page carries on
   // scrolling behind the sheet. Pinning it is the only lock that holds.
-  _scrollY = window.scrollY;
-  document.body.style.position = 'fixed';
-  document.body.style.top = `-${_scrollY}px`;
-  document.body.style.width = '100%';
+  pinBody();
   $('#sheet-close').focus({ preventScroll: true });
 }
 function closeSheet() {
   if (!S.sheet) return;
   S.sheet = null;
   $('#sheet').hidden = true;
-  document.body.style.position = '';
-  document.body.style.top = '';
-  document.body.style.width = '';
-  window.scrollTo(0, _scrollY);
+  unpinBody();
 }
 
 /* ======================================================================
@@ -1508,6 +1558,16 @@ function weeksInPlay() {
 
 function say(kind, text) { S.msg = { kind, text }; }
 
+/* The only path that writes a pick from the player's side. */
+async function savePick(team) {
+  const g = gameForTeam(S.games[S.week] || [], team);
+  const r = await S.store.submitPick(S.me.token, S.week, team, g && g.date)
+    .catch((err) => ({ ok: false, error: String(err.message || err) }));
+  if (r && r.ok) { say('ok', `Locked in: the ${teamShort(team)} for week ${S.week}.`); await reloadPicks(); }
+  else say('bad', (r && r.error) || 'Could not save that pick.');
+  render();
+}
+
 /* One delegated listener for the whole app — every screen is re-rendered
    from scratch, so per-element handlers would leak. */
 document.addEventListener('click', async (e) => {
@@ -1583,21 +1643,22 @@ document.addEventListener('click', async (e) => {
 
   if (t.dataset.stview) { S.stView = t.dataset.stview; render(); return; }
 
+  // --- confirm a pick ---
+  if (t.id === 'cf-yes') {
+    const team = S.confirming && S.confirming.team;
+    if (!team) { closeConfirm(); return; }
+    t.disabled = true;
+    $('#cf-no').disabled = true;
+    closeConfirm();
+    await savePick(team);
+    return;
+  }
+  if (t.id === 'cf-no' || t.dataset.cfcancel) { closeConfirm(); return; }
+
   // --- matchup sheet ---
   if (t.dataset.info) { openSheet(t.dataset.info); return; }
   if (t.dataset.close) { closeSheet(); return; }
-  if (t.dataset.sheetpick) {
-    const team = t.dataset.team;
-    const g = (S.games[S.week] || []).find((x) => x.id === S.sheet);
-    t.disabled = true;
-    const r = await S.store.submitPick(S.me.token, S.week, team, g && g.date)
-      .catch((err) => ({ ok: false, error: String(err.message || err) }));
-    if (r && r.ok) { say('ok', `Locked in: the ${teamShort(team)} for week ${S.week}.`); await reloadPicks(); }
-    else say('bad', (r && r.error) || 'Could not save that pick.');
-    closeSheet();
-    render();
-    return;
-  }
+  if (t.dataset.sheetpick) { askConfirm(t.dataset.team); return; }
 
   // --- week nav ---
   if (t.dataset.week && t.dataset.week !== 'null') {
@@ -1610,16 +1671,7 @@ document.addEventListener('click', async (e) => {
 
   // --- making a pick ---
   if (t.dataset.team && S.screen === 'pick') {
-    const team = t.dataset.team;
-    const g = gameForTeam(S.games[S.week] || [], team);
-    // Lock the whole board, not just this button: two quick taps on different
-    // teams used to race, and the pick that landed last won rather than the
-    // one tapped last.
-    $$('#s-pick .pk').forEach((b) => { b.disabled = true; });
-    const r = await S.store.submitPick(S.me.token, S.week, team, g && g.date).catch((err) => ({ ok: false, error: String(err.message || err) }));
-    if (r && r.ok) { say('ok', `Locked in: the ${teamShort(team)} for week ${S.week}.`); await reloadPicks(); }
-    else say('bad', (r && r.error) || 'Could not save that pick.');
-    render();
+    askConfirm(t.dataset.team);
     return;
   }
 
@@ -1727,9 +1779,14 @@ document.addEventListener('change', async (e) => {
   render();
 });
 document.addEventListener('click', (e) => {
-  if (e.target.classList && e.target.classList.contains('sheet-back')) closeSheet();
+  if (!e.target.classList || !e.target.classList.contains('sheet-back')) return;
+  if (S.confirming) closeConfirm(); else closeSheet();
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.sheet) closeSheet(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (S.confirming) closeConfirm();
+  else if (S.sheet) closeSheet();
+});
 
 async function boot() {
   S.store = pickStore();
