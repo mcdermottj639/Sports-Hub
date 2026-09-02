@@ -549,3 +549,6 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .namebtn:last-child { margin-bottom: 0; }
 .namebtn:hover { border-color: var(--ac); }
 .pn-wait { color: var(--gy); font-weight: 400; font-size: .85rem; }
+
+/* Real family names ("Grandpa Joe", "Cousin Dave") need more than 112px. */
+.gr .gnm { max-width: 146px; }

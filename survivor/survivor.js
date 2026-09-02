@@ -322,11 +322,13 @@ function pickStore() {
    history screens cannot be exercised at all.
    ====================================================================== */
 
-const DEMO_WEEK = 4;   // the demo "today": weeks 1-3 are played, week 4 is live
+const DEMO_WEEK = 10;  // the demo "today": weeks 1-9 are played, week 10 is in progress
 /* Games REMOVED from a demo week, to put teams on bye. Without this the demo
    plays all 32 teams every week and bye handling cannot be exercised at all —
    which is exactly how the admin bye hole survived the first test pass. */
-const DEMO_BYES = { 3: 1, 4: 2 };
+const DEMO_BYES = { 5: 1, 6: 2, 7: 3, 8: 3, 9: 2, 10: 2 };
+/* One real tie, so the "neither a win nor a loss" rule can be seen. */
+const DEMO_TIE = { week: 3, game: 5 };
 
 function mulberry32(a) {
   return function () {
@@ -376,16 +378,22 @@ function demoGames(week) {
   const rec = week > 1 ? demoRecords(week) : null;
   const drop = DEMO_BYES[week] || 0;
   return roundRobin(week - 1).slice(0, 16 - drop).map((pair, i) => {
-    let dayOff, state;
-    if (week < DEMO_WEEK)      { dayOff = (week - DEMO_WEEK) * 7; state = 'post'; }
-    else if (week > DEMO_WEEK) { dayOff = (week - DEMO_WEEK) * 7; state = 'pre'; }
-    else if (i === 0)          { dayOff = -3; state = 'post'; }   // Thursday night, in the books
-    else if (i >= 14)          { dayOff = 3;  state = 'pre'; }    // Monday night
-    else                       { dayOff = 2;  state = 'pre'; }    // Sunday
-    const date = new Date(Date.now() + dayOff * dayMs);
-    date.setHours(i >= 14 ? 20 : (i === 0 ? 20 : 13), 0, 0, 0);
-    const hs = state === 'post' ? 10 + Math.floor(rnd() * 29) : null;
-    const as = state === 'post' ? 10 + Math.floor(rnd() * 29) : null;
+    // Times are relative to NOW, never a fixed clock time. Pinning the
+    // "upcoming" games to 1pm meant that opening the demo after lunch made
+    // every one of them already kicked off, and every pick was refused.
+    let state, date;
+    const hours = (h) => new Date(Date.now() + h * 3600000);
+    if (week < DEMO_WEEK)      { state = 'post'; date = new Date(Date.now() + (week - DEMO_WEEK) * 7 * dayMs); }
+    else if (week > DEMO_WEEK) { state = 'pre';  date = new Date(Date.now() + (week - DEMO_WEEK) * 7 * dayMs); }
+    else if (i === 0)          { state = 'post'; date = hours(-72); }   // Thursday night, done
+    else if (i <= 3)           { state = 'in';   date = hours(-1);  }   // playing right now
+    else if (i >= 12)          { state = 'pre';  date = hours(27);  }   // tomorrow night
+    else                       { state = 'pre';  date = hours(3 + i); } // later today, staggered
+    const scored = state === 'post' || state === 'in';
+    let hs = scored ? 10 + Math.floor(rnd() * 29) : null;
+    let as = scored ? 10 + Math.floor(rnd() * 29) : null;
+    if (state === 'in') { hs = Math.floor(hs * 0.6); as = Math.floor(as * 0.6); }  // partway through
+    if (state === 'post' && week === DEMO_TIE.week && i === DEMO_TIE.game) { as = hs; }
 
     // A plausible, deterministic line so the matchup card is testable offline.
     const homeFav = rnd() < 0.58;                       // home teams are favoured more often
@@ -407,7 +415,9 @@ function demoGames(week) {
     };
     return {
       id: `demo-${week}-${i}`, week, date: date.toISOString(), state,
-      statusText: state === 'post' ? 'Final' : fmtKick(date.toISOString()),
+      statusText: state === 'post' ? 'Final'
+        : state === 'in' ? `${1 + Math.floor(rnd() * 4)}Q · ${2 + Math.floor(rnd() * 12)}:0${Math.floor(rnd() * 6)}`
+        : fmtKick(date.toISOString()),
       tv: i === 0 ? 'Prime Video' : i >= 14 ? 'ESPN' : (i % 3 === 0 ? 'CBS' : 'FOX'),
       odds: {
         det: `${favAbbr} -${by}`, favAbbr, favBy: by,
@@ -1253,7 +1263,20 @@ async function renderAdmin() {
 
   // --- demo ---
   h += `<h2 class="hh">Demo season</h2>
-    <p class="sub">The real season starts 10 Sep 2026, so until then there is nothing to grade. Demo mode invents three finished weeks plus a live week 4 so you can try every screen.</p>
+    <p class="sub">The real season starts 10 Sep 2026, so until then there is nothing to grade. Demo mode invents a season already in progress so every screen has something real in it.</p>
+    <div class="card">
+      <b>What's loaded, and what to go and look at</b>
+      <ul class="steps demo-guide" style="margin-top:10px">
+        <li><b>18 relatives, 9 weeks played, week 10 live.</b> One game finished Thursday, three are in progress right now, the rest kick off later.</li>
+        <li><b>Standings → Week by week.</b> Scroll it sideways. Green won, red lost, the number under each team is the margin.</li>
+        <li><b>Four people haven't joined yet</b> (Colleen, Brian, Maureen, Little Jimmy). Open the league link in a private tab to see the join screen and tap one of them.</li>
+        <li><b>Nana missed weeks 2 and 7</b> — check My Picks and see it cost her nothing.</li>
+        <li><b>There's a real tie in week 3</b> — neither a win nor a loss.</li>
+        <li><b>Grandpa Joe and Patti haven't picked this week</b> — they're on the chase list at the bottom of Standings.</li>
+        <li><b>Teams are on bye from week 5 onward</b> — the Pick screen names them, and the admin form below won't offer them.</li>
+        <li><b>Tap ⓘ on any game</b> for the projected winner, the line and both records.</li>
+      </ul>
+    </div>
     <div class="card">
       <button class="btn ${S.demo ? 'pri' : ''} wide" id="dm-toggle">${S.demo ? 'Demo mode is ON — turn it off' : 'Turn demo mode ON'}</button>
       <button class="btn wide" id="dm-seed">Load a demo family &amp; three weeks of picks</button>
@@ -1300,36 +1323,60 @@ function adminTeamNote() {
 }
 
 /* ---- demo seed -------------------------------------------------------- */
-const DEMO_FAMILY = ['Jack', 'Nana', 'Uncle Bob', 'Aunt Mary', 'Cousin Dave', 'Kate', 'Tommy', 'Grandpa Joe'];
+/* Eighteen, to match the real league. The last four are deliberately left
+   UNCLAIMED and pickless so the join screen and the first-run welcome can
+   both be exercised. */
+const DEMO_FAMILY = [
+  'Jack', 'Nana', 'Uncle Bob', 'Aunt Mary', 'Cousin Dave', 'Kate', 'Tommy',
+  'Grandpa Joe', 'Aunt Sue', 'Michael', 'Rose', 'Danny', 'Patti', 'Uncle Rich',
+  'Colleen', 'Brian', 'Maureen', 'Little Jimmy',
+];
+const DEMO_UNCLAIMED = 4;                       // have not tapped their name yet
+const DEMO_NO_PICK_THIS_WEEK = ['Grandpa Joe', 'Patti'];   // the chase list
+const DEMO_MISSED = { Nana: [2, 7], 'Uncle Rich': [4] };   // missed weeks cost nothing
 
 async function seedDemo() {
   lsSet('survivor:demo', '1');
   S.demo = true;
+  lsDel('survivor:welcomed');
+  clearWeekCache();
   jSet('survivor:local', { players: [], picks: [], seq: 1 });
   const store = LocalStore;
-  const tokens = {};
+  // The first add bootstraps the commissioner; every add after it must carry
+  // that token, or addPlayer correctly refuses as "not an admin".
+  let adminToken = null;
   for (const n of DEMO_FAMILY) {
-    const r = await store.addPlayer(tokens.Jack || null, n);
-    if (r.ok) tokens[n] = r.token;
+    const r = await store.addPlayer(adminToken, n);
+    if (r && r.ok && !adminToken) adminToken = r.token;
   }
+
   const db = store._db();
-  const admin = db.players[0].token;
   const rnd = mulberry32(20260902);
-  // Writes go STRAIGHT into the store, not through adminSetPick. The demo
-  // backfills weeks that have already been played, and the commissioner path
-  // now correctly refuses a pick on a game that has kicked off — this is
-  // fixture generation, not a commissioner action, so it must not pretend to
-  // be one.
+
+  // Who has actually joined. The last few have not tapped their name yet, so
+  // the join screen has something to offer and the welcome card can be seen.
+  const claimedCount = db.players.length - DEMO_UNCLAIMED;
+  db.players.forEach((p, i) => { p.claimed_at = i < claimedCount ? new Date().toISOString() : null; });
+
+  // Pre-compute each week's schedule once — 10 weeks x 16 games otherwise gets
+  // rebuilt for every player.
+  const weeks = {};
+  for (let wk = 1; wk <= DEMO_WEEK; wk++) {
+    const byTeam = {};
+    for (const g of demoGames(wk)) { byTeam[g.away.abbr] = g; byTeam[g.home.abbr] = g; }
+    weeks[wk] = byTeam;
+  }
+
   for (const p of db.players) {
+    if (!p.claimed_at) continue;                       // hasn't joined, so no picks
     const used = new Set();
-    for (let wk = 1; wk <= 4; wk++) {
-      if (wk === 4 && rnd() < 0.3) continue;                 // a couple of stragglers
-      if (wk === 2 && p.display_name === 'Nana') continue;   // and one genuine miss
-      const byTeam = {};
-      for (const g of demoGames(wk)) { byTeam[g.away.abbr] = g; byTeam[g.home.abbr] = g; }
-      const free = Object.keys(byTeam).filter((t) => !used.has(t));
+    const missed = DEMO_MISSED[p.display_name] || [];
+    for (let wk = 1; wk <= DEMO_WEEK; wk++) {
+      if (missed.includes(wk)) continue;               // a missed week costs nothing
+      if (wk === DEMO_WEEK && DEMO_NO_PICK_THIS_WEEK.includes(p.display_name)) continue;
+      const free = Object.keys(weeks[wk]).filter((t) => !used.has(t));
+      if (!free.length) continue;
       const team = free[Math.floor(rnd() * free.length)];
-      if (!team) continue;
       used.add(team);
       db.picks.push({
         id: db.seq++, player_id: p.id, season: SEASON, week: wk, team,
@@ -1338,7 +1385,7 @@ async function seedDemo() {
     }
   }
   store._save(db);
-  lsSet('survivor:me', admin);   // land on the commissioner
+  lsSet('survivor:me', db.players[0].token);           // land on the commissioner
 }
 
 /* ---- identity --------------------------------------------------------- */
