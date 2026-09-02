@@ -2437,7 +2437,8 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ffp-empty b { display: block; color: var(--ink); font-size: 13.5px; font-weight: 700; margin-bottom: 3px; }
 
 /* --- stat strip ---------------------------------------------------------- */
-.ffp-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); gap: 8px; margin: 0 0 12px; }
+.ffp-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 12px; }
+@media (min-width: 700px) { .ffp-strip { grid-template-columns: repeat(6, 1fr); } }
 .ffp-tile { background: var(--sf); border-radius: var(--r1); box-shadow: var(--e1); padding: 10px 8px; text-align: center; }
 .ffp-tile .v { font-size: 17px; font-weight: 900; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.1; }
 .ffp-tile .k { font-size: 9.5px; font-weight: 700; color: var(--gy); text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
@@ -2481,10 +2482,13 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ffp-grp.st { color: var(--ac); } .ffp-grp.bn { color: var(--gy); }
 
 /* --- head-to-head mirrored comparison ------------------------------------ */
-.ffp-mu-head { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-weight: 800; color: var(--gy); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; gap: 8px; }
+.ffp-mu-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; font-size: 11px; font-weight: 800; color: var(--gy); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; gap: 8px; }
+.ffp-mu-head span:last-child { text-align: right; }
+/* flex:none — this is a 4-char state label, never the thing that truncates. */
+.ffp-mu-state { flex: none; font-size: 9.5px; padding: 2px 7px; border-radius: var(--rp); background: var(--tr); color: var(--gy); letter-spacing: .06em; }
 .ffp-mu-head .you { color: var(--ac); }
 .ffp-mu-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.ffp-mu-row { padding: 7px 0; display: grid; grid-template-columns: 1fr 40px 1fr; align-items: center; gap: 8px; }
+.ffp-mu-row { padding: 7px 0; display: grid; grid-template-columns: 1fr 56px 1fr; align-items: center; gap: 8px; }
 .ffp-mu-row + .ffp-mu-row { box-shadow: inset 0 1px 0 var(--l07); }
 .ffp-mu-side { display: flex; flex-direction: column; font-size: 11px; color: var(--gy); min-width: 0; }
 .ffp-mu-side b { font-size: 14px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -2492,10 +2496,11 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ffp-mu-side.opp { align-items: flex-end; text-align: right; }
 .ffp-mu-bar { display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .ffp-mu-pos { font-size: 9.5px; font-weight: 800; color: var(--gy); }
-.ffp-mu-track { position: relative; width: 40px; height: 18px; }
-.ffp-mu-fill { position: absolute; height: 6px; border-radius: var(--rp); }
-.ffp-mu-fill.you { right: 50%; top: 1px; background: var(--grad); }
-.ffp-mu-fill.opp { left: 50%; top: 11px; background: var(--tr); }
+.ffp-mu-track { position: relative; width: 56px; height: 16px; }
+.ffp-mu-track::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--l25); }
+.ffp-mu-fill { position: absolute; height: 5px; border-radius: var(--rp); max-width: 50%; }
+.ffp-mu-fill.you { right: 50%; top: 2px; background: var(--grad); }
+.ffp-mu-fill.opp { left: 50%; top: 9px; background: var(--mu2); }
 .ffp-mu-tot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; gap: 8px; padding-top: 10px; margin-top: 4px; box-shadow: inset 0 1px 0 var(--l25); font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .ffp-mu-tot span { font-size: 10px; font-weight: 700; color: var(--gy); text-align: center; text-transform: uppercase; letter-spacing: .04em; }
 .ffp-mu-tot b:last-child { text-align: right; }
@@ -2555,3 +2560,19 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
    same gold as a positive one. Good/bad belongs on the semantic ramp. */
 :root[data-palette] .mk-pk-val.pos { color: var(--pos); }
 :root[data-palette] .mk-pk-val.neg { color: var(--neg); }
+
+/* --- control row: stop the collapse-all button owning a tall empty column ---
+   `.ctl-row` is align-items:stretch so `.sec-all` inherits the height of the
+   whole wrapped chip block — 80x177px for the words "⌄ ALL 11", with a
+   full-height divider beside it. Fine when the chips fit one line; on a phone
+   the Fantasy tab now has 11 sections, so they wrap to three rows and the
+   button becomes a tall blank panel. Below 700px it takes its own line under
+   the chips instead, with a top rule rather than a side one. */
+@media (max-width: 699px) {
+  :root[data-palette] .ctl-row { flex-wrap: wrap; }
+  :root[data-palette] .ctl-row .ctl-chips { flex: 1 0 100%; padding-right: 14px; }
+  :root[data-palette] .ctl-row .sec-all {
+    flex: 1 0 100%; max-width: none; border-left: none;
+    border-top: 1px solid var(--l3); padding: 8px 14px;
+  }
+}

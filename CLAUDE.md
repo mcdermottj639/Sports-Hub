@@ -433,7 +433,48 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v195** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v196** (backend **b14-football-boxplayer**).
+
+- **📐 Football page — first on-device pass, and the bug the screenshots caught
+  (v196)** — the owner opened v195 on their phone: *"Some formatting alignment
+  errors to fix at first glance."* Three were alignment. One was not.
+  - **🚨 The matchup read `0 | TOTAL | 0` above rows full of real projections,
+    and called itself LIVE.** `meScore != null` was the test for "has this
+    game started" — but **ESPN sends `0`, not `null`, for a matchup that hasn't
+    kicked off**, so `fpts(0)` → `0`, which is not null, so the card took the
+    live branch and printed a zero total. Now gated on `started` =
+    *somebody has actually scored*; until then the projected totals are shown
+    and the header says **PROJ**. ⚠️ **The general trap: an ESPN numeric field
+    that is absent and one that is genuinely zero look identical through a
+    `!= null` test.** Ask whether the EVENT happened, not whether the field
+    exists.
+  - **The collapse-all button was an 80×177px empty column.** `.ctl-row` is
+    `align-items: stretch`, so `.sec-all` inherits the height of the whole
+    wrapped chip block — fine when the chips fit one line, but the Fantasy tab
+    now has **11 sections**, so on a phone they wrap to three rows and the
+    button becomes a tall blank panel with a full-height divider beside it.
+    Below 700px it now takes its own line under the chips with a top rule:
+    measured **80×177 → 358×27**, and the whole row got shorter.
+  - **The state label truncated to "LI…".** The matchup header was a
+    `space-between` flex, so the middle cell got squeezed between two long team
+    names. It is a `1fr auto 1fr` grid now — the four-character state label is
+    never the thing that truncates; the team names are.
+  - **The mirrored bars read as two stray dashes.** They mirrored around an
+    invisible centre, and the JS emitted a width as a % of the FULL track while
+    each side only owns half of it. Track widened 40→56px, a centre tick drawn,
+    and the scale halved so the leader fills its half exactly. The opponent bar
+    also moved `--tr`→`--mu2` so it reads as a mark rather than as track.
+  - **Stat strip: 5 tiles wrapped 4+1**, and the orphan read as broken. Six
+    tiles in a 3×2 grid (added **Proj wk**), 6-across above 700px.
+  - Verified: **56 checks** in both palettes (the v195 suite plus five new
+    alignment assertions — even tile rows, the button's height, the label not
+    clipping, totals not reading 0-0, the bar meeting the centre line) and a
+    dedicated **4-check pregame suite** reproducing the owner's exact state:
+    matchup posted, both scores `0`, players carrying projections.
+  - ⚠️ **Test-assertion note:** the tile-row check first failed against correct
+    markup because `fbLuckHTML` also emits `.ffp-tile`, so the selector counted
+    10 tiles across two different strips. Scope a layout assertion to the
+    container you mean, not to a class that appears twice.
 
 - **🏈 The Fantasy Football page rebuilt — and the three bugs that made it worth
   rebuilding (v195, backend `b14-football-boxplayer`)** — the owner, the day

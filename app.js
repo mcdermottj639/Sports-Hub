@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v195';
+const APP_VERSION = 'v196';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -6538,8 +6538,13 @@ async function renderFootballLive() {
   const M = L.matchup || null;
   const meScore = M && M.me ? fpts(M.me.score) : null;
   const opScore = M && M.opponent ? fpts(M.opponent.score) : null;
-  const meVal = meScore != null ? meScore : projFor(starters);
-  const opVal = opScore != null ? opScore : projFor(oppEff);
+  // ⚠️ ESPN sends 0, not null, for a matchup that hasn't kicked off. Testing
+  // `!= null` therefore treated a pregame week as LIVE and printed a 0-0 total
+  // above rows full of real projections. A week is only live once SOMEBODY has
+  // scored; until then the projected totals are the honest number.
+  const started = (meScore || 0) > 0 || (opScore || 0) > 0;
+  const meVal = started ? meScore : projFor(starters);
+  const opVal = started ? opScore : projFor(oppEff);
   const oppName = (M && M.opponent && M.opponent.team) || (L.opponent || {}).opponent || 'Opponent';
   let matchupHTML;
   if (M && M.me) {
@@ -6558,14 +6563,14 @@ async function renderFootballLive() {
       return `<div class="ffp-mu-row">
         <div class="ffp-mu-side"><b>${mv || '–'}</b><span>${esc(nm(starters))}</span></div>
         <div class="ffp-mu-bar"><div class="ffp-mu-pos">${b}</div><div class="ffp-mu-track">
-          <div class="ffp-mu-fill you" style="width:${Math.round((mv / top) * 100)}%"></div>
-          <div class="ffp-mu-fill opp" style="width:${Math.round((ov / top) * 100)}%"></div></div></div>
+          <div class="ffp-mu-fill you" style="width:${Math.round((mv / top) * 50)}%"></div>
+          <div class="ffp-mu-fill opp" style="width:${Math.round((ov / top) * 50)}%"></div></div></div>
         <div class="ffp-mu-side opp"><b>${ov || '–'}</b><span>${esc(nm(oppEff))}</span></div></div>`;
     }).join('');
     matchupHTML = `<div class="ffp-card">
-      <div class="ffp-mu-head"><span class="you">${esc(M.me.team || 'My Team')}</span><span>${meScore == null ? 'projected' : 'live'}</span><span>${esc(oppName)}</span></div>
+      <div class="ffp-mu-head"><span class="you">${esc(M.me.team || 'My Team')}</span><span class="ffp-mu-state">${started ? 'LIVE' : 'PROJ'}</span><span>${esc(oppName)}</span></div>
       ${rowsHTML || ''}
-      <div class="ffp-mu-tot"><b>${meVal != null ? meVal : '–'}</b><span>${rowsHTML ? 'total' : 'projected'}</span><b>${opVal != null ? opVal : '–'}</b></div>
+      <div class="ffp-mu-tot"><b>${meVal != null ? meVal : '–'}</b><span>${started ? 'total' : 'projected total'}</span><b>${opVal != null ? opVal : '–'}</b></div>
       ${pct != null ? `<div class="ffp-wp">
         <div class="ffp-wp-track"><div class="ffp-wp-fill" style="width:${Math.max(2, Math.min(98, pct))}%"></div><div class="ffp-wp-mid"></div></div>
         <div class="ffp-wp-read ${tone}">${pct}% to win${wp && wp.remaining ? ` <span style="font-weight:400;font-size:11px;color:var(--gy)">· ${wp.remaining} still to play</span>` : ''}</div></div>` : ''}
@@ -6582,11 +6587,13 @@ async function renderFootballLive() {
   const avgPts = played.length ? Math.round((played.reduce((a, v) => a + v, 0) / played.length) * 10) / 10 : null;
   const injCount = full.filter((p) => p.injuryStatus && !/ACTIVE|NORMAL/i.test(p.injuryStatus)).length;
   const byeCount = starters.filter(isBye).length;
+  const projWk = projFor(starters);
   const stripHTML = `<div class="ffp-strip">
     <div class="ffp-tile"><div class="v">${rec || '0-0'}</div><div class="k">Record</div></div>
     <div class="ffp-tile"><div class="v">${avgPts != null ? avgPts : '–'}</div><div class="k">Pts/wk</div></div>
     <div class="ffp-tile"><div class="v">${meT && meT.pointsFor != null ? Math.round(meT.pointsFor) : '–'}</div><div class="k">Points for</div></div>
-    <div class="ffp-tile"><div class="v ${injCount ? 'neg' : ''}">${injCount}</div><div class="k">Injury flags</div></div>
+    <div class="ffp-tile"><div class="v">${projWk != null ? projWk : '–'}</div><div class="k">Proj wk</div></div>
+    <div class="ffp-tile"><div class="v ${injCount ? 'neg' : ''}">${injCount}</div><div class="k">Injuries</div></div>
     <div class="ffp-tile"><div class="v ${byeCount ? 'wm' : ''}">${weekOK ? byeCount : '–'}</div><div class="k">On bye</div></div>
   </div>`;
 
