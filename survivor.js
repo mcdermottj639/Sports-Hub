@@ -32,6 +32,9 @@ const ESPN_SB = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scor
 let SUPABASE_URL = '';
 let SUPABASE_KEY = '';
 
+/* Named in the "ask X for your link" message. Change it to the commissioner. */
+const LEAGUE_ADMIN_NAME = 'Jack';
+
 const TEAMS = {
   ARI: ['Arizona Cardinals', 'Cardinals'],  ATL: ['Atlanta Falcons', 'Falcons'],
   BAL: ['Baltimore Ravens', 'Ravens'],      BUF: ['Buffalo Bills', 'Bills'],
@@ -1178,7 +1181,13 @@ async function renderAdmin() {
       <label class="fld"><span>Project URL</span><input id="sb-url" type="url" placeholder="https://xxxx.supabase.co" value="${esc(cfg.url || '')}"></label>
       <label class="fld"><span>Anon key</span><input id="sb-key" type="text" placeholder="eyJ..." value="${esc(cfg.key || '')}"></label>
       <button class="btn pri wide" id="sb-save">Save &amp; reload</button>
+      <button class="btn wide" id="sb-copycfg">Copy the 2 lines for the deployed app</button>
       <button class="btn wide" id="sb-clear">Disconnect (back to this device only)</button>
+    </div>
+    <div class="warnbox">
+      <b>⚠️ Saving here only configures THIS phone</b>
+      <p>The boxes above are stored on this device. Everyone else opens the same web address on their own phone, where there is nothing saved — so they would still be offline.</p>
+      <p>To make it work for the whole family the two values must be written into <b>survivor.js</b> itself and redeployed. Tap <b>Copy the 2 lines</b> and send them to whoever maintains the app.</p>
     </div>`;
 
   // --- demo ---
@@ -1278,20 +1287,38 @@ function renderPicker() {
   const host = $('#s-pick');
   host.hidden = false;
   $('#tabs').hidden = true;
-  const cloud = S.store.kind === 'cloud';
-  let h = `<h2 class="hh">Who are you?</h2>`;
+  const cloud = isShared();
+  const hadToken = !!new URLSearchParams(location.search).get('u');
+  let h = '';
+
+  // Somebody followed a personal link that did not resolve. Whatever we do,
+  // do NOT invite them to start a league of their own.
+  if (hadToken) {
+    host.innerHTML = `<h2 class="hh">This link isn't working</h2>
+      <div class="warnbox">
+        <b>⚠️ We couldn't sign you in</b>
+        <p>${cloud
+          ? 'That link is not recognised by the league. It may have been retyped, cut short by a text message, or replaced.'
+          : "This league hasn't been switched on yet, so there is nothing for the link to open."}</p>
+        <p>Ask ${esc(LEAGUE_ADMIN_NAME)} to send you your personal link again — nothing is wrong with your phone.</p>
+      </div>`;
+    return;
+  }
+
   if (!S.players.length) {
-    h += `<p class="sub">Nothing set up on this device yet.</p>
+    h += `<h2 class="hh">Set up the league</h2>
+      <p class="sub">Nothing on this device yet.</p>
       <div class="card">
-        <p class="note">Start by adding yourself — the first person added becomes the commissioner.</p>
+        <p class="note">Add yourself first — whoever is added first is the commissioner.</p>
         <label class="fld"><span>Your name</span><input id="first-name" type="text" placeholder="e.g. Jack" autocomplete="off"></label>
         <button class="btn pri wide" id="first-go">Start the league</button>
         <button class="btn wide" id="first-demo">Or load a demo family to poke around</button>
       </div>`;
   } else if (cloud) {
-    h += `<p class="sub">Open your own personal link to pick. Ask Jack to text it to you again if you've lost it.</p>`;
+    h += `<h2 class="hh">Who are you?</h2>
+      <p class="sub">Open your own personal link to pick. Ask ${esc(LEAGUE_ADMIN_NAME)} to text it to you again if you've lost it.</p>`;
   } else {
-    h += `<p class="sub">Tap your name.</p><div class="card">`;
+    h += `<h2 class="hh">Who are you?</h2><p class="sub">Tap your name.</p><div class="card">`;
     h += S.players.map((p) => `<button class="btn wide" data-be="${p.id}">${esc(p.display_name)}</button>`).join('');
     h += `</div>`;
   }
@@ -1499,6 +1526,17 @@ document.addEventListener('click', async (e) => {
     if (!url || !key) { say('bad', 'Need both the URL and the key.'); render(); return; }
     jSet('survivor:sb', { url, key });
     location.reload(); return;
+  }
+  if (t.id === 'sb-copycfg') {
+    const url = (($('#sb-url') || {}).value || '').trim().replace(/\/+$/, '');
+    const key = (($('#sb-key') || {}).value || '').trim();
+    if (!url || !key) { say('bad', 'Fill in both boxes first.'); render(); return; }
+    const snippet = `let SUPABASE_URL = '${url}';\nlet SUPABASE_KEY = '${key}';`;
+    const ok2 = await copyText(snippet);
+    say(ok2 ? 'ok' : 'bad', ok2
+      ? 'Copied. Those two lines replace the empty ones at the top of survivor.js.'
+      : 'Could not copy — the two lines are the URL and key you typed above.');
+    render(); return;
   }
   if (t.id === 'sb-clear') { lsDel('survivor:sb'); location.reload(); return; }
   if (t.id === 'dm-toggle') { lsSet('survivor:demo', S.demo ? '0' : '1'); location.reload(); return; }
