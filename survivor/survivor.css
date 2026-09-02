@@ -358,3 +358,14 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 .gr-legend i.w { border-color: var(--pos); background: var(--pos-bg); }
 .gr-legend i.l { border-color: var(--neg); background: var(--neg-bg); }
 .gr-legend i.n { border-style: dashed; border-color: var(--tr2); }
+
+/* Teams sitting the week out. Stated plainly rather than left as a silent
+   gap in the list — "where are the Bills?" is otherwise unanswerable. */
+.byebar {
+  margin: 18px 0 0; padding: 14px 16px; border-radius: 14px;
+  background: var(--sf2); border: 1px solid var(--tr);
+}
+.byebar b { display: block; font-size: .78em; font-weight: 800; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--mu); margin-bottom: 5px; }
+.byebar span { display: block; font-weight: 700; color: var(--ink2); line-height: 1.5; }
+.byebar em { display: block; margin-top: 6px; font-size: .88em; color: var(--gy); font-style: normal; }

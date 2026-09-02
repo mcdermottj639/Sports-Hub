@@ -462,6 +462,33 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     `[hidden] { display: none !important }`. (b) In a flex row, a long italic
     label ("picked — hidden until kickoff") shrank the NAME column to a single
     letter; the pick rows are a grid with a `minmax(84px, 1fr)` name column now.
+  - **🚨 BYE WEEKS — the hole was the ADMIN path, not the pick screen.** The
+    pick screen renders from that week's scoreboard, so a team on bye simply
+    has no button and was always safe. But the commissioner's "enter a pick for
+    someone" dropdown listed **all 32 teams every week** with no schedule check
+    — and that is the "Nana texted me her pick" path, i.e. the single most
+    likely way a bye team ever gets picked. The outcome was silent and bad:
+    `gradePick` returns `nogame`, `tallyFor` scores it as nothing, but
+    `usedTeams` still counts it — so **the team was burned for nothing**, which
+    house rule 1 makes strictly worse than not picking at all.
+    - Fixed in depth: `byeTeams(week)`/`gameFor(week, team)` derive byes from
+      the schedule (ESPN lists 13 games ⇒ the other 6 teams are on bye); the
+      admin dropdown offers only teams that play and names the byes; BOTH
+      stores refuse a pick carrying no kickoff; and `submit_pick` /
+      `admin_set_pick` in `schema.sql` reject a null `p_kickoff` as the
+      backstop. A stray legacy bye pick now renders ⚠️ in history instead of
+      scoring silently.
+    - ⚠️ **A no-kickoff pick IS a bye pick.** That equivalence is what lets the
+      database enforce the rule without knowing the NFL schedule, and it is why
+      `p_kickoff` is now required rather than optional.
+    - ⚠️ **The demo season played all 32 teams every week** (a 32-team circle
+      round robin is 16 games), so bye handling was **untestable** — which is
+      exactly how this survived the first test pass. `DEMO_BYES` now drops
+      games from weeks 3 and 4. **A fixture that cannot express the failure
+      cannot test the fix.**
+    - ⚠️ **A subagent reported this area as "already correct".** It had checked
+      only the pick screen. The owner pushed back, and he was right. Verify a
+      clean bill of health across EVERY write path before accepting it.
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.

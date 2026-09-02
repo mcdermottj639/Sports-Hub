@@ -99,6 +99,7 @@ const S = {
   week: 1,           // the week the Pick screen defaults to
   games: {},         // week -> [game]
   screen: 'pick',
+  apWeek: 1,         // the week the admin "enter a pick" card is looking at
   stView: 'table',   // 'table' | 'grid' — the standings' two looks
   sheet: null,       // id of the game whose matchup card is open
   demo: lsGet('survivor:demo', '0') === '1',
@@ -142,7 +143,11 @@ const LocalStore = {
     const db = this._db();
     const me = db.players.find((p) => p.token === token);
     if (!me) return { ok: false, error: 'Unknown link.' };
-    if (kickoffISO && new Date(kickoffISO) <= new Date()) return { ok: false, error: 'That game has already started.' };
+    // No kickoff means no game: the team is on bye (or the page is stale).
+    // House rule 1 makes NO pick free, so burning a team on a bye would be
+    // strictly worse than doing nothing — refuse it.
+    if (!kickoffISO) return { ok: false, error: `The ${teamShort(team)} are not playing in week ${week}.` };
+    if (new Date(kickoffISO) <= new Date()) return { ok: false, error: 'That game has already started.' };
     const dup = db.picks.find((p) => p.player_id === me.id && p.season === SEASON && p.team === team && p.week !== week);
     if (dup) return { ok: false, error: `You already used the ${teamShort(team)} in week ${dup.week}.` };
     const cur = db.picks.find((p) => p.player_id === me.id && p.season === SEASON && p.week === week);
@@ -170,9 +175,10 @@ const LocalStore = {
     this._save(db);
     return { ok: true };
   },
-  async adminSetPick(adminToken, playerId, week, team) {
+  async adminSetPick(adminToken, playerId, week, team, kickoffISO) {
     const db = this._db();
     if (!this._isAdmin(db, adminToken)) return { ok: false, error: 'Not an admin.' };
+    if (team && !kickoffISO) return { ok: false, error: `The ${teamShort(team)} are on bye in week ${week}.` };
     if (team) {
       const dup = db.picks.find((p) => p.player_id === playerId && p.season === SEASON && p.team === team && p.week !== week);
       if (dup) return { ok: false, error: `They already used the ${teamShort(team)} in week ${dup.week}.` };
@@ -221,7 +227,9 @@ const SupaStore = {
   },
   addPlayer(adminToken, name)        { return this._rpc('admin_add_player', { p_admin_token: adminToken, p_name: name }); },
   removePlayer(adminToken, id)       { return this._rpc('admin_del_player', { p_admin_token: adminToken, p_player_id: id }); },
-  adminSetPick(adminToken, id, w, t) { return this._rpc('admin_set_pick',   { p_admin_token: adminToken, p_player_id: id, p_week: w, p_team: t || null }); },
+  adminSetPick(adminToken, id, w, t, kickoffISO) {
+    return this._rpc('admin_set_pick', { p_admin_token: adminToken, p_player_id: id, p_week: w, p_team: t || null, p_kickoff: kickoffISO || null });
+  },
 };
 
 function pickStore() {
@@ -238,6 +246,10 @@ function pickStore() {
    ====================================================================== */
 
 const DEMO_WEEK = 4;   // the demo "today": weeks 1-3 are played, week 4 is live
+/* Games REMOVED from a demo week, to put teams on bye. Without this the demo
+   plays all 32 teams every week and bye handling cannot be exercised at all —
+   which is exactly how the admin bye hole survived the first test pass. */
+const DEMO_BYES = { 3: 1, 4: 2 };
 
 function mulberry32(a) {
   return function () {
@@ -285,7 +297,8 @@ function demoGames(week) {
   const rnd = mulberry32(week * 7919 + 13);
   const dayMs = 86400000;
   const rec = week > 1 ? demoRecords(week) : null;
-  return roundRobin(week - 1).map((pair, i) => {
+  const drop = DEMO_BYES[week] || 0;
+  return roundRobin(week - 1).slice(0, 16 - drop).map((pair, i) => {
     let dayOff, state;
     if (week < DEMO_WEEK)      { dayOff = (week - DEMO_WEEK) * 7; state = 'post'; }
     else if (week > DEMO_WEEK) { dayOff = (week - DEMO_WEEK) * 7; state = 'pre'; }
@@ -437,6 +450,21 @@ async function currentWeek() {
 /* ======================================================================
    SCORING
    ====================================================================== */
+
+/* Teams with NO game in a given week. Derived from the schedule rather than
+   stored, like everything else here — if ESPN lists 13 games, the other 6
+   teams are on bye by definition. */
+function byeTeams(week) {
+  const games = S.games[week];
+  if (!games || !games.length) return null;          // week not loaded: unknown, not "none"
+  const playing = new Set();
+  for (const g of games) { playing.add(g.home.abbr); playing.add(g.away.abbr); }
+  return ABBRS.filter((a) => !playing.has(a));
+}
+/* The game a team plays in a week, or null if they are on bye. */
+function gameFor(week, team) {
+  return ((S.games[week] || []).find((g) => g.home.abbr === team || g.away.abbr === team)) || null;
+}
 
 function gameForTeam(games, team) {
   return games.find((g) => g.home.abbr === team || g.away.abbr === team) || null;
@@ -817,6 +845,13 @@ function renderPick() {
     h += shut.map((g) => gameHTML(g, true)).join('');
   }
 
+  const bye = byeTeams(S.week);
+  if (bye && bye.length) {
+    h += `<div class="byebar"><b>On bye in week ${S.week}</b><span>${
+      esc(bye.map(teamShort).join(' · '))}</span>
+      <em>These teams are not playing, so they cannot be picked — and picking is never wasted on them.</em></div>`;
+  }
+
   const usedList = Object.entries(used).sort((a, b) => a[1] - b[1]);
   h += `<details class="usedstrip">
     <summary>Teams you've already used (${usedList.length} of 32)</summary>
@@ -968,10 +1003,11 @@ function renderHistory() {
     }
     const cls = r.status === 'win' ? 'w' : r.status === 'loss' ? 'l' : r.status === 'tie' ? 't' : '';
     const mar = r.status === 'pending' ? '—'
-      : r.status === 'nogame' ? 'bye'
+      : r.status === 'nogame' ? '⚠️'
       : r.status === 'tie' ? 'tie' : signed(r.margin);
     const line = r.status === 'pending'
       ? (r.opp ? `vs ${teamShort(r.opp)} · ${fmtKick(r.game.date)}` : 'not played yet')
+      : r.status === 'nogame' ? 'they were on bye — tell the commissioner, this should not happen'
       : r.opp ? `vs ${teamShort(r.opp)} · ${r.mine}-${r.them}` : '';
     h += `<div class="hrow">
       <span class="h-wk">WK ${r.week}</span>
@@ -1045,9 +1081,9 @@ async function renderAdmin() {
         S.players.map((p) => `<option value="${p.id}">${esc(p.display_name)}</option>`).join('')}</select></label>
       <label class="fld"><span>Week</span><select id="ap-week">${
         Array.from({ length: LAST_WEEK }, (_, i) => i + 1)
-          .map((w) => `<option value="${w}" ${w === S.week ? 'selected' : ''}>Week ${w}</option>`).join('')}</select></label>
-      <label class="fld"><span>Team</span><select id="ap-team"><option value="">— clear their pick —</option>${
-        ABBRS.map((a) => `<option value="${a}">${esc(teamName(a))}</option>`).join('')}</select></label>
+          .map((w) => `<option value="${w}" ${w === S.apWeek ? 'selected' : ''}>Week ${w}</option>`).join('')}</select></label>
+      <label class="fld"><span>Team</span><select id="ap-team">${adminTeamOptions()}</select></label>
+      <p class="note">${adminTeamNote()}</p>
       <button class="btn pri wide" id="ap-save">Save that pick</button>
     </div>`;
 
@@ -1074,6 +1110,29 @@ async function renderAdmin() {
   host.innerHTML = h;
 }
 
+/* Only teams that actually PLAY in the chosen week may be offered — this list
+   used to be all 32, which is how a commissioner could burn somebody's team on
+   a bye by taking a pick over the phone. */
+function adminTeamOptions() {
+  const wk = S.apWeek;
+  const games = S.games[wk];
+  let h = '<option value="">— clear their pick —</option>';
+  if (!games || !games.length) return h;
+  const playing = [];
+  for (const g of games) { playing.push(g.away.abbr); playing.push(g.home.abbr); }
+  playing.sort((a, b) => teamName(a).localeCompare(teamName(b)));
+  for (const a of playing) h += `<option value="${a}">${esc(teamName(a))}</option>`;
+  return h;
+}
+function adminTeamNote() {
+  const wk = S.apWeek;
+  if (!S.games[wk]) return `Loading week ${wk}'s schedule…`;
+  const bye = byeTeams(wk) || [];
+  return bye.length
+    ? `Only teams playing in week ${wk} are listed. On bye: ${bye.map(teamShort).join(', ')}.`
+    : `Only teams playing in week ${wk} are listed.`;
+}
+
 /* ---- demo seed -------------------------------------------------------- */
 const DEMO_FAMILY = ['Jack', 'Nana', 'Uncle Bob', 'Aunt Mary', 'Cousin Dave', 'Kate', 'Tommy', 'Grandpa Joe'];
 
@@ -1097,13 +1156,13 @@ async function seedDemo() {
       if (wk === 4 && rnd() < 0.3) continue;          // a couple of stragglers
       if (wk === 2 && p.display_name === 'Nana') continue; // and one genuine miss
       const games = demoGames(wk);
-      const options = [];
-      for (const g of games) { options.push(g.away.abbr); options.push(g.home.abbr); }
-      const free = options.filter((t) => !used.has(t));
+      const byTeam = {};
+      for (const g of games) { byTeam[g.away.abbr] = g; byTeam[g.home.abbr] = g; }
+      const free = Object.keys(byTeam).filter((t) => !used.has(t));
       const team = free[Math.floor(rnd() * free.length)];
       if (!team) continue;
       used.add(team);
-      await store.adminSetPick(admin, p.id, wk, team);
+      await store.adminSetPick(admin, p.id, wk, team, byTeam[team].date);
     }
   }
   lsSet('survivor:me', admin);   // land on the commissioner
@@ -1293,7 +1352,9 @@ document.addEventListener('click', async (e) => {
     const who = Number(($('#ap-who') || {}).value);
     const wk = Number(($('#ap-week') || {}).value);
     const team = ($('#ap-team') || {}).value;
-    const r = await S.store.adminSetPick(S.me.token, who, wk, team || null);
+    const g = team ? gameFor(wk, team) : null;
+    if (team && !g) { say('bad', `The ${teamShort(team)} are on bye in week ${wk} — pick somebody who is playing.`); render(); return; }
+    const r = await S.store.adminSetPick(S.me.token, who, wk, team || null, g && g.date);
     say(r && r.ok ? 'ok' : 'bad', r && r.ok ? 'Saved.' : (r && r.error) || 'Could not save.');
     await reloadPicks(); render(); return;
   }
@@ -1317,6 +1378,12 @@ document.addEventListener('click', async (e) => {
   }
 });
 
+document.addEventListener('change', async (e) => {
+  if (e.target.id !== 'ap-week') return;
+  S.apWeek = Number(e.target.value) || 1;
+  await ensureWeeks([S.apWeek]);          // we cannot know the byes until it is loaded
+  render();
+});
 document.addEventListener('click', (e) => {
   if (e.target.classList && e.target.classList.contains('sheet-back')) closeSheet();
 });
@@ -1341,6 +1408,7 @@ async function boot() {
   if (!S.me) { renderPicker(); return; }
 
   S.week = await currentWeek();
+  S.apWeek = S.week;
   const weeks = [];
   for (let w = 1; w <= S.week; w++) weeks.push(w);
   for (const p of S.picks) if (!weeks.includes(p.week)) weeks.push(p.week);
