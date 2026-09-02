@@ -43,9 +43,14 @@ read from your ESPN league URL:
 
 | Var | Value |
 |---|---|
-| `FOOTBALL_LEAGUE_ID` | the `leagueId=` number |
-| `FOOTBALL_TEAM_ID` | the `teamId=` number — **your** team |
-| `FOOTBALL_YEAR` | `2026` |
+| `FOOTBALL_LEAGUE_ID` | the `leagueId=` number — **`993612`** |
+| `FOOTBALL_TEAM_ID` | the `teamId=` number, **your** team — **`7`** |
+| `FOOTBALL_YEAR` | **`2026`** |
+
+All three are now in `render.yaml` as plain values, so a Blueprint that
+auto-syncs may pick them up on its own at the next deploy. Don't rely on it —
+check `/api/health` (below), and if `football` is still `false`, enter them in
+the dashboard as described next.
 
 **On a service that's already live**, do it in the dashboard (a `render.yaml`
 edit only re-prompts on a fresh Blueprint apply): Render → the

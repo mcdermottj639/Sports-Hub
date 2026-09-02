@@ -99,16 +99,18 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > scrape because fantasypros.com sends no CORS headers; cached
 > `ARTICLES_TTL_SECONDS`/30m, stdlib-only, self-diagnosing with `?debug=1`),
 > `/api/refresh` (also clears the VSiN + articles caches).
-> **Baseball is live** (league `42353353`, team "Duran Duran" id `2`); **football
-> is fully coded and is turned on by CONFIG ALONE — no code change** (v135's
-> `renderFootballLive` shows whenever `/api/health` reports
-> `configured.football === true`). Set `FOOTBALL_LEAGUE_ID` + `FOOTBALL_TEAM_ID`
-> + `FOOTBALL_YEAR` in Render's Environment tab — the `render.yaml` block is
-> uncommented as of the 2026 draft, but a **live** service takes new vars from
-> the dashboard, not from a repo edit. ⚠️ Both `YEAR` (fallback is 2025 → last
-> season's league, silently) and `TEAM_ID` (fallback is the league's FIRST team
-> → someone else's roster shown as yours) look optional and are not. Steps +
-> where the ids come from: `server/RENDER.md`. The Fantasy tab calls the API
+> **Baseball is live** (league `42353353`, team "Duran Duran" id `2`) but
+> SHELVED in the UI since v147; **football is now the configured league** —
+> `FOOTBALL_LEAGUE_ID` **`993612`**, `FOOTBALL_TEAM_ID` **`7`**, `FOOTBALL_YEAR`
+> **`2026`**, all in `render.yaml`. **Football is turned on by CONFIG ALONE — no
+> code change**: v135's `renderFootballLive` renders whenever `/api/health`
+> reports `configured.football === true`, otherwise the tab shows the draft-prep
+> view. ⚠️ A **live** Render service may not pick up repo-side env changes unless
+> the Blueprint auto-syncs — if `/api/health` still says `football: false`, add
+> the three vars in the dashboard's Environment tab. ⚠️ Both `YEAR` (fallback is
+> 2025 → last season's league, silently) and `TEAM_ID` (fallback is the league's
+> FIRST team → someone else's roster shown as yours) look optional and are not.
+> Steps: `server/RENDER.md`. The Fantasy tab calls the API
 > once per session (`syncFromLeague`), overwrites the saved roster with the real
 > one, shows a team/record/matchup header (`#fantasy-league`, `renderLeagueHeader`)
 > with a **🔄 Refresh from ESPN** button + "synced Xm ago" timestamp,

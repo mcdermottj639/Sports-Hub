@@ -35,15 +35,16 @@ services:
       # --- who may read the API (your GitHub Pages site) ---
       - key: ALLOW_ORIGINS
         value: "https://mcdermottj639.github.io"
-      # --- football league (live as of the 2026 draft) ---
-      # LEAGUE_ID + TEAM_ID are sync:false so Render prompts for them instead of
-      # them living in the repo — they come out of your ESPN league URL:
-      #   .../football/team?leagueId=<FOOTBALL_LEAGUE_ID>&teamId=<FOOTBALL_TEAM_ID>
-      # YEAR must be the CURRENT season: main.py's fallback is 2025, so leaving
-      # it unset silently serves last year's league.
+      # --- football league (LIVE from the 2026 draft). Not secret — same
+      #     treatment as baseball above. Straight out of the ESPN league URL:
+      #   .../football/team?leagueId=993612&teamId=7&seasonId=2026
+      #     YEAR must be the CURRENT season: main.py falls back to 2025, so
+      #     leaving it unset silently serves LAST year's league. TEAM_ID is not
+      #     optional either — without it my_team() takes the league's FIRST
+      #     team, i.e. someone else's roster rendered as yours.
       - key: FOOTBALL_LEAGUE_ID
-        sync: false
+        value: "993612"
       - key: FOOTBALL_YEAR
         value: "2026"
       - key: FOOTBALL_TEAM_ID
-        sync: false
+        value: "7"
