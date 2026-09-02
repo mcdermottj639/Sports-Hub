@@ -216,6 +216,24 @@ begin
   return json_build_object('ok', true, 'token', v_token);
 end $$;
 
+-- If somebody realises straight away that they tapped the wrong name, they
+-- undo it themselves rather than texting the commissioner. Only allowed while
+-- they have made no picks: once picks exist, sorting it out is a real decision
+-- and belongs with the commissioner.
+create or replace function release_me(p_token text)
+returns json language plpgsql security definer set search_path = public as $$
+declare v players%rowtype; v_picks int;
+begin
+  select * into v from players where token = p_token;
+  if not found then return json_build_object('ok', false, 'error', 'Unknown link.'); end if;
+  select count(*) into v_picks from picks where player_id = v.id and season = 2026;
+  if v_picks > 0 then
+    return json_build_object('ok', false, 'error', 'You have already made picks — ask the commissioner to sort this out.');
+  end if;
+  update players set claimed_at = null where id = v.id;
+  return json_build_object('ok', true);
+end $$;
+
 -- If somebody taps the wrong name, the commissioner puts it back.
 create or replace function admin_unclaim(p_admin_token text, p_player_id bigint)
 returns json language plpgsql security definer set search_path = public as $$
@@ -260,6 +278,7 @@ grant execute on function whoami(text)                                   to anon
 grant execute on function claim_player(bigint)                           to anon, authenticated;
 grant execute on function join_league(text)                              to anon, authenticated;
 grant execute on function admin_unclaim(text, bigint)                    to anon, authenticated;
+grant execute on function release_me(text)                               to anon, authenticated;
 grant execute on function submit_pick(text, int, text, timestamptz)      to anon, authenticated;
 grant execute on function admin_add_player(text, text)                   to anon, authenticated;
 grant execute on function admin_del_player(text, bigint)                 to anon, authenticated;
