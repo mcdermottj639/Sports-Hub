@@ -433,7 +433,34 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v197** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v198** (backend **b14-football-boxplayer**).
+
+- **🚨 Fantasy opened on the DRAFT-PREP view for up to a minute, every launch
+  (v198)** — the owner: *"why when I open the app and click fantasy it shows
+  the draft prep first"*. `fanState.cfg` is **in-memory only**, so every cold
+  start began not knowing whether a football league exists, and the football
+  branch renders the prep view while it finds out. The answer comes from
+  `/api/health` on Render's free tier — a **30-60s cold start** — so the owner
+  sat on draft-board tools until it returned, then the view swapped under them.
+  - Now cached on the device (`sportshub:cfg`, written by `leagueConfig`) and
+    read synchronously by `cachedCfg()`, so the live view paints immediately.
+    **The real check still runs**, and if it comes back saying the league is
+    gone the view drops back to prep — the cache is an optimistic head start,
+    not the source of truth.
+  - The live branch also awaits `syncFromLeague`, which waits out the same cold
+    start, so it now paints **"Loading your league… the free-tier backend takes
+    ~30s after it has been idle"** instead of leaving the tab blank.
+  - ⚠️ **The general shape:** any state that decides WHICH view renders must
+    survive a reload, or the app spends every launch showing the wrong one
+    while it re-derives something that changes once a year.
+
+- **The group total still carried one player's name (v198)** — v197's
+  "A.J. Brown +2" was better than "A.J. Brown" but still put a single player's
+  name beside a number that was three players'. Multi-player rows now list
+  every surname — **"Brown · Harrison · Sutton"**.
+  - ⚠️ `surname()` must skip generational suffixes: the last token of "Marvin
+    Harrison Jr." is **"Jr."**, which is what the first cut rendered. Verified
+    against 8 cases incl. "Robert Griffin III" and "Amon-Ra St. Brown".
 
 - **🚨 "ESPN is not projecting 30 points for AJ Brown" — correct, and it wasn't
   (v197)** — the owner read the This Week card as a per-player projection. It

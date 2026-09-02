@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v197';
+const APP_VERSION = 'v198';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -5926,17 +5926,27 @@ async function renderFantasy() {
   const fbBox = $('#fantasy-football');
   if (fanState.sport === 'football') {
     if (liveWrap) liveWrap.style.display = 'none';
-    const cfg = fanState.cfg;
+    const known = fanState.cfg;
+    // Trust the device's remembered answer on launch so the right view paints
+    // at once; `known === undefined` still triggers the real check below.
+    const cfg = known || cachedCfg() || undefined;
     // Live NFL league configured on the backend → show the points-based live
     // view (unless the user opened the draft-prep tools). Otherwise the prep view.
     if (cfg && cfg.football && fanState.footballView !== 'prep') {
       fanState.synced = fanState.synced || {};
       if (!fanState.synced.football || fanState.forceSync) {
+        // The roster fetch waits out the same cold start, so say what is
+        // happening instead of leaving the tab blank for up to 45 seconds.
+        if (fbBox && !fbBox.innerHTML.trim()) fbBox.innerHTML = '<div class="ffp-card"><div class="ffp-empty"><b>Loading your league…</b>Waking the ESPN sync — the free-tier backend takes ~30s after it has been idle.</div></div>';
         await syncFromLeague('football', !!fanState.forceSync);
         fanState.synced.football = true;
         fanState.forceSync = false;
       }
       await renderFootballLive();
+      // Verify the remembered answer; drop back to prep if the league is gone.
+      if (known === undefined) leagueConfig().then((c) => {
+        if (!c.football && fanState.sport === 'football') renderFantasy();
+      });
       return;
     }
     renderFantasyFootball();
@@ -5944,7 +5954,7 @@ async function renderFantasy() {
     applySections('fantasy');
     // Haven't checked config yet? Learn it, and upgrade to the live view if a
     // league exists (deferred so the prep view still paints instantly).
-    if (cfg === undefined) leagueConfig().then((c) => {
+    if (known === undefined) leagueConfig().then((c) => {
       if (c.football && fanState.sport === 'football' && fanState.footballView !== 'prep') renderFantasy();
     });
     return;
@@ -6126,10 +6136,25 @@ const MLB_ABBR2FULL = Object.fromEntries(Object.entries(MLB_ABBR).map(([full, ab
 const proTeamToFull = (ab) => MLB_ABBR2FULL[(ab || '').toUpperCase()] || '';
 
 // Which sports have a real league wired up on the backend (from /api/health).
+// ⚠️ `fanState.cfg` is in-memory only, so EVERY app launch started out not
+// knowing whether a football league exists — and the code renders the draft-prep
+// view while it finds out. On Render's free tier /api/health cold-starts in
+// 30-60s, so the owner sat on draft prep for up to a minute on every launch.
+// The answer changes about once a year, so it is cached on the device and the
+// live view paints immediately; the real check still runs and corrects it.
+const CFG_KEY = 'sportshub:cfg';
+function cachedCfg() {
+  try { const r = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); return (r && r.configured) || null; } catch (_) { return null; }
+}
+function saveCfg(c) { try { localStorage.setItem(CFG_KEY, JSON.stringify({ at: Date.now(), configured: c })); } catch (_) {} }
+
 async function leagueConfig() {
   if (fanState.cfg) return fanState.cfg;
-  try { fanState.cfg = (await fetchJSON(`${FANTASY_API}/api/health`, 300000)).configured || {}; fanState.backendDown = false; }
-  catch (_) { fanState.cfg = {}; fanState.backendDown = true; }
+  try {
+    fanState.cfg = (await fetchJSON(`${FANTASY_API}/api/health`, 300000)).configured || {};
+    fanState.backendDown = false;
+    saveCfg(fanState.cfg);
+  } catch (_) { fanState.cfg = {}; fanState.backendDown = true; }
   return fanState.cfg;
 }
 
@@ -6304,6 +6329,17 @@ const gameChipText = (g) => {
 // Projected points for one position bucket. Was a local inside
 // renderFootballLive; the mirrored matchup rows need it too, so it is a real
 // helper now rather than two copies that can drift (the v177 lesson).
+// Last name for a compact group label. The final token is NOT always the
+// surname — "Marvin Harrison Jr." would render as "Jr.".
+const NAME_SUFFIX = /^(JR|SR|II|III|IV|V)\.?$/i;
+function surname(full) {
+  const parts = String(full || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '';
+  let i = parts.length - 1;
+  while (i > 0 && NAME_SUFFIX.test(parts[i])) i--;
+  return parts[i];
+}
+
 function sumB(list, b) {
   return Math.round((list || []).filter((p) => nflBucket(p) === b)
     .reduce((s, p) => s + (fpts(p.projected) || 0), 0) * 10) / 10;
@@ -6562,10 +6598,14 @@ async function renderFootballLive() {
       // ⚠️ sumB is a POSITION-GROUP total, so naming only the top player made
       // "30.7" read as A.J. Brown's own projection when it was Brown + Harrison
       // + Sutton. Say how many players are in the number.
+      // The number is a GROUP total, so name everyone in it. "A.J. Brown +2"
+      // still put one player's name next to a number that wasn't his; listing
+      // surnames removes that reading entirely.
       const nm = (list) => {
         const g = list.filter((p) => nflBucket(p) === b).sort((x, y) => (fpts(y.projected) || 0) - (fpts(x.projected) || 0));
         if (!g.length) return '';
-        return g.length > 1 ? `${g[0].name} +${g.length - 1}` : g[0].name;
+        if (g.length === 1) return g[0].name;
+        return g.map((x) => surname(x.name)).join(' · ');
       };
       return `<div class="ffp-mu-row">
         <div class="ffp-mu-side"><b>${mv || '–'}</b><span>${esc(nm(starters))}</span></div>
@@ -6581,7 +6621,7 @@ async function renderFootballLive() {
       ${pct != null ? `<div class="ffp-wp">
         <div class="ffp-wp-track"><div class="ffp-wp-fill" style="width:${Math.max(2, Math.min(98, pct))}%"></div><div class="ffp-wp-mid"></div></div>
         <div class="ffp-wp-read ${tone}">${pct}% to win${wp && wp.remaining ? ` <span style="font-weight:400;font-size:11px;color:var(--gy)">· ${wp.remaining} still to play</span>` : ''}</div></div>` : ''}
-      <div class="ffp-cap">Each row is the <b style="color:var(--ink)">combined</b> projection for that position group — "+2" means two more players are in the number. ESPN's own projections, already scored to your league (half-PPR). ${synced ? esc(synced) + ' · ' : ''}${pct != null ? 'Win% is our estimate, not ESPN’s.' : 'Win% shows once both lineups carry projections.'}</div>
+      <div class="ffp-cap">Each row is the <b style="color:var(--ink)">combined</b> projection for every starter at that position — all the names listed, not one player. ESPN's own projections, already scored to your league (half-PPR). ${synced ? esc(synced) + ' · ' : ''}${pct != null ? 'Win% is our estimate, not ESPN’s.' : 'Win% shows once both lineups carry projections.'}</div>
       <button id="fbl-resync" class="fan-btn ghost" style="margin-top:10px">🔄 Refresh from ESPN</button></div>`;
   } else {
     matchupHTML = `<div class="ffp-card"><div class="ffp-empty"><b>No matchup posted yet</b>${rec ? 'Season record: ' + esc(rec) + '.' : 'Your Week 1 opponent appears once the schedule is set.'}</div><button id="fbl-resync" class="fan-btn ghost">🔄 Refresh from ESPN</button></div>`;
