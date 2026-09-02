@@ -572,3 +572,28 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .cf-yes { min-height: 66px; font-size: 1.05rem; margin-top: 20px; }
 .cf-no  { min-height: 66px; font-size: 1.05rem; margin-top: 10px; border-width: 2px; }
 .cf-note { margin: 14px 0 0; color: var(--gy); font-size: .92rem; }
+
+/* ---- stats ------------------------------------------------------------ */
+.statrow {
+  display: grid; grid-template-columns: 1fr auto 22px; grid-template-rows: auto auto;
+  gap: 2px 10px; width: 100%; min-height: 64px; padding: 12px 4px; text-align: left;
+  background: none; border: 0; border-bottom: 1px solid var(--tr); border-radius: 0;
+}
+.statrow:last-child { border-bottom: 0; }
+.sr-nm { grid-column: 1; font-weight: 700; font-size: 1rem; }
+.sr-v  { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-size: 1.3rem; font-weight: 900; }
+.sr-k  { grid-column: 1; color: var(--gy); font-size: .88rem; }
+.sr-go { grid-column: 3; grid-row: 1 / span 2; align-self: center; color: var(--mu); font-size: 1.2rem; }
+.statrow:active { background: var(--sf2); }
+
+.h2h { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 0 4px; }
+.h2h b { font-size: 1.05rem; }
+.h2h span { color: var(--mu); }
+
+.popr { display: grid; grid-template-columns: 62px 1fr 32px; gap: 10px; align-items: center; padding: 9px 0; }
+.pop-t { font-weight: 800; font-size: .95rem; }
+.pop-bar { height: 12px; background: var(--tr); border-radius: 999px; overflow: hidden; }
+.pop-bar i { display: block; height: 100%; background: var(--grad); }
+.pop-n { text-align: right; color: var(--gy); font-weight: 700; font-size: .95rem; }
+
+.st-n { display: block; color: var(--gy); font-size: .82rem; font-weight: 400; }

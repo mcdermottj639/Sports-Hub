@@ -889,6 +889,161 @@ function closeSheet() {
 }
 
 /* ======================================================================
+   DEEP STATS
+   Everything here is derived from picks x the ESPN scoreboard. Two rules it
+   must never break:
+     1. Anything that reads MORE THAN ONE player's picks goes through
+        pickVisible() — a stats screen must not become a side channel for
+        reading somebody's hidden pick before kickoff.
+     2. Anything built on the betting market states how many picks it could
+        actually use. We only ever see a finished game's LAST posted line, so
+        these are closing-line approximations, not pick-time ones.
+   ====================================================================== */
+
+/* Every team's win rate, from the most recent record we have seen for them. */
+function teamWinPct() {
+  const out = {};
+  const weeks = Object.keys(S.games).map(Number).sort((a, b) => a - b);
+  for (const wk of weeks) {
+    for (const g of S.games[wk] || []) {
+      for (const side of ['home', 'away']) {
+        const r = recTotals(g[side].rec);
+        if (!r) continue;
+        const n = r.w + r.l + r.t;
+        if (n) out[g[side].abbr] = (r.w + r.t / 2) / n;
+      }
+    }
+  }
+  return out;
+}
+
+/* The market's probability that a given pick won, or null when no line. */
+function pickProb(team, week) {
+  const g = gameForTeam(S.games[week] || [], team);
+  if (!g) return null;
+  const r = matchupRead(g);
+  if (r.pHome == null) return null;
+  return g.home.abbr === team ? r.pHome : 1 - r.pHome;
+}
+
+function statsFor(playerId) {
+  const t = tallyFor(playerId, S.games);
+  const graded = t.rows.filter((r) => r.pick && ['win', 'loss', 'tie'].includes(r.status));
+
+  // Luck vs skill: actual wins against what the market expected.
+  let xw = 0, xwN = 0;
+  for (const r of graded) {
+    const p = pickProb(r.pick.team, r.week);
+    if (p != null) { xw += p; xwN++; }
+  }
+
+  // Chalk vs dog: how big a favourite they tend to back (all picks, not just
+  // graded — this is about style, not results).
+  let chalk = 0, chalkN = 0, dogWins = 0;
+  for (const r of t.rows) {
+    if (!r.pick) continue;
+    const p = pickProb(r.pick.team, r.week);
+    if (p == null) continue;
+    chalk += p; chalkN++;
+    if (p < 0.5 && r.status === 'win') dogWins++;
+  }
+
+  // Streaks. A missed week neither extends nor breaks a run (house rule 1).
+  let cur = 0, best = 0;
+  for (const r of t.rows) {
+    if (!r.pick) continue;
+    if (r.status === 'win') { cur++; best = Math.max(best, cur); }
+    else if (r.status === 'loss' || r.status === 'tie') cur = 0;
+  }
+
+  // Bench strength: how good are the teams they have NOT spent.
+  const pct = teamWinPct();
+  const used = usedTeams(playerId, null);
+  const left = ABBRS.filter((a) => !used[a]);
+  const rated = left.filter((a) => pct[a] != null);
+  const bench = rated.length ? rated.reduce((s, a) => s + pct[a], 0) / rated.length : null;
+  const benchTop = rated.slice().sort((a, b) => pct[b] - pct[a]).slice(0, 3);
+
+  const wins = graded.filter((r) => r.status === 'win');
+  const losses = graded.filter((r) => r.status === 'loss');
+  const blowout = wins.length ? wins.reduce((a, b) => (b.margin > a.margin ? b : a)) : null;
+  const beat = losses.length ? losses.reduce((a, b) => (b.margin < a.margin ? b : a)) : null;
+
+  return {
+    t, graded: graded.length,
+    xw, xwN, luck: xwN ? t.w - xw : null,
+    chalk: chalkN ? chalk / chalkN : null, chalkN, dogWins,
+    streak: cur, best,
+    bench, benchTop, teamsLeft: left.length,
+    blowout, beat,
+    avgWin: wins.length ? wins.reduce((s, r) => s + r.margin, 0) / wins.length : null,
+    avgLoss: losses.length ? losses.reduce((s, r) => s + r.margin, 0) / losses.length : null,
+  };
+}
+
+/* How often somebody went their own way. Only weeks where at least two picks
+   are PUBLIC count, so this can never leak a hidden pick. */
+function contrarianFor(playerId) {
+  let sum = 0, n = 0;
+  for (let wk = 1; wk <= LAST_WEEK; wk++) {
+    const games = S.games[wk] || [];
+    if (!games.length) continue;
+    const field = S.picks.filter((p) => p.week === wk && pickVisible(p.team, games));
+    if (field.length < 2) continue;
+    const mine = field.find((p) => p.player_id === playerId);
+    if (!mine) continue;
+    const same = field.filter((p) => p.player_id !== playerId && p.team === mine.team).length;
+    sum += same / (field.length - 1);
+    n++;
+  }
+  return n ? { score: 1 - sum / n, weeks: n } : null;
+}
+
+/* Who had the best week. Same sort key as the season standings. */
+function weeklyWinners() {
+  const out = [];
+  for (let wk = 1; wk <= LAST_WEEK; wk++) {
+    const games = S.games[wk] || [];
+    if (!games.length) continue;
+    let best = null;
+    for (const p of S.players) {
+      const pk = pickIn(p.id, wk);
+      if (!pk) continue;
+      const g = gradePick(pk.team, games);
+      if (g.status !== 'win' && g.status !== 'loss' && g.status !== 'tie') continue;
+      const rank = (g.status === 'win' ? 1 : 0) * 1000 + g.margin;
+      if (!best || rank > best.rank) best = { rank, p, team: pk.team, margin: g.margin, status: g.status };
+    }
+    if (best && best.status === 'win') out.push({ week: wk, ...best });
+  }
+  return out.reverse();
+}
+
+/* Which teams the family has leaned on. Public picks only. */
+function teamPopularity() {
+  const n = {};
+  for (const p of S.picks) {
+    const games = S.games[p.week] || [];
+    if (!games.length || !pickVisible(p.team, games)) continue;
+    n[p.team] = (n[p.team] || 0) + 1;
+  }
+  return Object.entries(n).sort((a, b) => b[1] - a[1]);
+}
+
+function headToHead(aId, bId) {
+  const A = tallyFor(aId, S.games).rows, B = tallyFor(bId, S.games).rows;
+  let a = 0, b = 0, tie = 0;
+  for (let i = 0; i < A.length; i++) {
+    const x = A[i], y = B[i];
+    const ok = (r) => r.pick && ['win', 'loss', 'tie'].includes(r.status);
+    if (!ok(x) || !ok(y)) continue;
+    const mx = x.status === 'tie' ? 0 : x.margin, my = y.status === 'tie' ? 0 : y.margin;
+    if (mx > my) a++; else if (my > mx) b++; else tie++;
+  }
+  return { a, b, tie };
+}
+
+/* ======================================================================
    RENDER
    ====================================================================== */
 
@@ -1223,7 +1378,142 @@ async function copyText(text) {
   } catch (e) { return false; }
 }
 
-async function renderAdmin() {
+function pctStr(x) { return x == null ? '—' : `${Math.round(x * 100)}%`; }
+
+function renderStats() {
+  const host = $('#s-stats');
+  let h = msgHTML() + `<h2 class="hh">Stats</h2>
+    <p class="sub">The deeper read, for anyone who wants it. Nothing here changes how the league is scored.</p>`;
+
+  // ---- who's had the best weeks ----
+  const wins = weeklyWinners();
+  h += `<h2 class="hh">Week winners</h2>
+    <p class="sub">Best result each week — a fresh race every Sunday, whatever the season table says.</p>
+    <div class="card">`;
+  if (!wins.length) h += `<p class="note">No completed weeks yet.</p>`;
+  else h += wins.slice(0, 8).map((w) => `<div class="wp-row">
+      <span class="wp-nm">Week ${w.week}</span>
+      <span class="wp-team">${esc(w.p.display_name)}</span>
+      <span class="wp-res w">${esc(teamShort(w.team))} ${signed(w.margin)}</span>
+    </div>`).join('');
+  h += `</div>`;
+
+  // ---- per player ----
+  h += `<h2 class="hh">Everyone</h2>
+    <p class="sub">Tap a name for their full numbers. "Teams left" is how strong the teams they haven't spent yet are — the closest thing to a look ahead.</p>
+    <div class="card">`;
+  const rows = S.players.map((p) => ({ p, s: statsFor(p.id) }))
+    .sort((x, y) => (y.s.bench ?? -1) - (x.s.bench ?? -1));
+  for (const { p, s: st } of rows) {
+    h += `<button class="statrow" data-pstat="${p.id}">
+      <span class="sr-nm">${esc(p.display_name)}${p.id === S.me.id ? ' (you)' : ''}</span>
+      <span class="sr-v">${st.bench == null ? '—' : pctStr(st.bench)}</span>
+      <span class="sr-k">${st.teamsLeft} teams left${st.benchTop.length ? ` · best: ${esc(teamShort(st.benchTop[0]))}` : ''}</span>
+      <span class="sr-go">›</span>
+    </button>`;
+  }
+  h += `</div>`;
+
+  // ---- head to head ----
+  h += `<h2 class="hh">Head to head</h2>
+    <p class="sub">Pick two people and see who has won more weeks against the other.</p>
+    <div class="card">
+      <label class="fld"><span>Them</span><select id="h2h-a">${
+        S.players.map((p) => `<option value="${p.id}" ${p.id === S.me.id ? 'selected' : ''}>${esc(p.display_name)}</option>`).join('')}</select></label>
+      <label class="fld"><span>Against</span><select id="h2h-b">${
+        S.players.map((p, i) => `<option value="${p.id}" ${p.id !== S.me.id && i < 2 ? 'selected' : ''}>${esc(p.display_name)}</option>`).join('')}</select></label>
+      <div id="h2h-out"></div>
+    </div>`;
+
+  // ---- team popularity ----
+  const pop = teamPopularity();
+  h += `<h2 class="hh">Most-picked teams</h2>
+    <p class="sub">Across the whole family, all season. Only games that have kicked off.</p>
+    <div class="card">`;
+  if (!pop.length) h += `<p class="note">Nothing to count yet.</p>`;
+  else {
+    const max = pop[0][1];
+    h += pop.slice(0, 10).map(([t, n]) => `<div class="popr">
+      <span class="pop-t">${esc(teamShort(t))}</span>
+      <span class="pop-bar"><i style="width:${Math.round((n / max) * 100)}%"></i></span>
+      <span class="pop-n">${n}</span>
+    </div>`).join('');
+  }
+  h += `</div>`;
+  host.innerHTML = h;
+  paintH2H();
+}
+
+function paintH2H() {
+  const out = $('#h2h-out');
+  if (!out) return;
+  const a = Number(($('#h2h-a') || {}).value), b = Number(($('#h2h-b') || {}).value);
+  const A = S.players.find((p) => p.id === a), B = S.players.find((p) => p.id === b);
+  if (!A || !B || a === b) { out.innerHTML = `<p class="note">Pick two different people.</p>`; return; }
+  const r = headToHead(a, b);
+  const total = r.a + r.b + r.tie;
+  out.innerHTML = total
+    ? `<div class="h2h"><b>${esc(A.display_name)} ${r.a}</b><span>—</span><b>${r.b} ${esc(B.display_name)}</b></div>
+       <p class="note">${total} week${total === 1 ? '' : 's'} where both had a graded pick${r.tie ? `, ${r.tie} level` : ''}.</p>`
+    : `<p class="note">No completed weeks where both of them picked yet.</p>`;
+}
+
+/* One player's full numbers, in the same sheet the matchup card uses. */
+function openPlayerStats(playerId) {
+  const p = S.players.find((x) => x.id === playerId);
+  if (!p) return;
+  const st = statsFor(playerId);
+  const con = contrarianFor(playerId);
+  const row = (k, v, note) => `<tr><td>${esc(k)}</td><td>${v}${
+    note ? `<span class="st-n">${esc(note)}</span>` : ''}</td></tr>`;
+
+  let h = `<div class="sh-head"><div class="sh-title">${esc(p.display_name)}</div>
+    <div class="sh-when">${st.t.w}-${st.t.l}${st.t.t ? `-${st.t.t}` : ''} · ${signed(st.t.pts)} points</div></div>`;
+
+  h += `<h3 class="sh-h">Teams still in hand</h3>
+    <table class="sh-t"><tbody>
+      ${row('How strong', st.bench == null ? '—' : pctStr(st.bench), st.bench == null ? '' : 'average win rate')}
+      ${row('How many', st.teamsLeft)}
+      ${row('Best left', st.benchTop.length ? st.benchTop.map(teamShort).map(esc).join(' · ') : '—')}
+    </tbody></table>`;
+
+  h += `<h3 class="sh-h">Luck or judgement</h3>`;
+  if (st.xwN >= 3) {
+    const l = st.luck;
+    h += `<table class="sh-t"><tbody>
+      ${row('Wins expected', st.xw.toFixed(1), `from the odds on ${st.xwN} pick${st.xwN === 1 ? '' : 's'}`)}
+      ${row('Wins actually', String(st.t.w))}
+      ${row('Difference', `<b style="color:${l >= 0 ? 'var(--pos)' : 'var(--neg)'}">${l >= 0 ? '+' : ''}${l.toFixed(1)}</b>`,
+        l >= 0 ? 'better than the odds implied' : 'below what the odds implied')}
+    </tbody></table>
+    <p class="note sh-note">Based on the closing odds, not the line when the pick was made, and on a small number of games — read it as a hint, not a verdict.</p>`;
+  } else {
+    h += `<p class="note">Not enough games with a posted line yet.</p>`;
+  }
+
+  h += `<h3 class="sh-h">Style</h3><table class="sh-t"><tbody>
+      ${row('Backs favourites', st.chalkN >= 3 ? pctStr(st.chalk) : '—', st.chalkN >= 3 ? `average across ${st.chalkN} picks` : 'not enough priced games')}
+      ${row('Underdog wins', String(st.dogWins))}
+      ${row('Own way', con ? pctStr(con.score) : '—', con ? `over ${con.weeks} weeks` : '')}
+    </tbody></table>`;
+
+  h += `<h3 class="sh-h">Form</h3><table class="sh-t"><tbody>
+      ${row('Current run', st.streak ? `${st.streak} in a row` : 'none')}
+      ${row('Best run', st.best ? `${st.best} in a row` : '—')}
+      ${row('Average win by', st.avgWin == null ? '—' : `+${st.avgWin.toFixed(1)}`)}
+      ${row('Average loss by', st.avgLoss == null ? '—' : st.avgLoss.toFixed(1))}
+      ${row('Biggest win', st.blowout ? `${esc(teamShort(st.blowout.pick.team))} ${signed(st.blowout.margin)} (wk ${st.blowout.week})` : '—')}
+      ${row('Worst beat', st.beat ? `${esc(teamShort(st.beat.pick.team))} ${signed(st.beat.margin)} (wk ${st.beat.week})` : '—')}
+    </tbody></table>`;
+
+  $('#sheet-body').innerHTML = h;
+  S.sheet = `stats:${playerId}`;
+  $('#sheet').hidden = false;
+  pinBody();
+  $('#sheet-close').focus({ preventScroll: true });
+}
+
+function renderAdmin() {
   const host = $('#s-admin');
   const cloud = S.store.kind === 'cloud';
   let h = msgHTML() + `<h2 class="hh">Commissioner</h2>`;
@@ -1513,7 +1803,7 @@ function signInWith(token) {
 function setScreen(name, scroll) {
   const changed = S.screen !== name;
   S.screen = name;
-  for (const s of ['pick', 'standings', 'history', 'admin']) $(`#s-${s}`).hidden = s !== name;
+  for (const s of ['pick', 'standings', 'history', 'stats', 'admin']) $(`#s-${s}`).hidden = s !== name;
   $$('#tabs .tab').forEach((b) => b.classList.toggle('on', b.dataset.screen === name));
   // Only a genuine screen change jumps to the top. render() runs after every
   // pick and every week change too, and yanking the page up each time loses
@@ -1531,6 +1821,7 @@ function render() {
   if (S.screen === 'pick') renderPick();
   else if (S.screen === 'standings') renderStandings();
   else if (S.screen === 'history') renderHistory();
+  else if (S.screen === 'stats') renderStats();
   else if (S.screen === 'admin') renderAdmin();
   setScreen(S.screen);
 }
@@ -1592,7 +1883,7 @@ document.addEventListener('click', async (e) => {
   if (t.dataset.screen) {
     const to = t.dataset.screen;
     setScreen(to, true); render();
-    if (to === 'standings' || to === 'history') {
+    if (to === 'standings' || to === 'history' || to === 'stats') {
       // Load every week that has a pick before trusting the totals.
       const before = weeksInPlay().filter((w) => !(S.games[w] && S.games[w].length)).length;
       if (before) { await ensureWeeks(weeksInPlay()); render(); }
@@ -1642,6 +1933,7 @@ document.addEventListener('click', async (e) => {
   }
 
   if (t.dataset.stview) { S.stView = t.dataset.stview; render(); return; }
+  if (t.dataset.pstat) { openPlayerStats(Number(t.dataset.pstat)); return; }
 
   // --- confirm a pick ---
   if (t.id === 'cf-yes') {
@@ -1773,6 +2065,7 @@ document.addEventListener('click', async (e) => {
 });
 
 document.addEventListener('change', async (e) => {
+  if (e.target.id === 'h2h-a' || e.target.id === 'h2h-b') { paintH2H(); return; }
   if (e.target.id !== 'ap-week') return;
   S.apWeek = Number(e.target.value) || 1;
   await ensureWeeks([S.apWeek]);          // we cannot know the byes until it is loaded

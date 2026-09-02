@@ -21,8 +21,10 @@
 <script>
   // Palette + big-text before first paint, so nothing flashes.
   try {
-    var p = localStorage.getItem('survivor:palette');
-    if (!p) p = matchMedia('(prefers-color-scheme: dark)').matches ? 'onyx' : 'champagne';
+    // Always open light unless the person has chosen dark on this phone.
+    // Following the OS meant half the family got a dark app they never asked
+    // for, and dark is the harder read for aging eyes.
+    var p = localStorage.getItem('survivor:palette') || 'champagne';
     document.documentElement.setAttribute('data-palette', p);
     document.documentElement.setAttribute('data-theme', p === 'onyx' ? 'dark' : 'light');
     if (localStorage.getItem('survivor:big') === '1') document.documentElement.setAttribute('data-big', '1');
@@ -53,6 +55,7 @@
   <button role="tab" data-screen="pick"      class="tab on">Pick</button>
   <button role="tab" data-screen="standings" class="tab">Standings</button>
   <button role="tab" data-screen="history"   class="tab">My Picks</button>
+  <button role="tab" data-screen="stats"     class="tab">Stats</button>
   <button role="tab" data-screen="admin"     class="tab" id="tab-admin" hidden>Admin</button>
 </nav>
 
@@ -61,6 +64,7 @@
   <section id="s-pick"      class="screen" hidden></section>
   <section id="s-standings" class="screen" hidden></section>
   <section id="s-history"   class="screen" hidden></section>
+  <section id="s-stats"     class="screen" hidden></section>
   <section id="s-admin"     class="screen" hidden></section>
 </main>
 

@@ -640,7 +640,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **277 checks** across eleven suites (behaviour, matchup/grid,
+    - Verified: **313 checks** across twelve suites (behaviour, matchup/grid,
       byes, four iPhone sizes, accessibility, audit fixes, the not-shared-yet
       guards, the deployment/stranded-link path, and the zero-touch relative
       experience).
@@ -678,6 +678,36 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     - ⚠️ **Any test that taps a team must now also click `#cf-yes`** — five
       suites asserted the old direct-save behaviour and failed against
       perfectly correct code.
+  - **📊 Stats tab — the deep layer, built from the research spec.** Owner's
+    rule was *visible for all but never in the way*, so it is a fifth tab and
+    nothing about it touches the Pick screen. Per player: a headline **bench
+    strength** ("how strong are the teams you have NOT spent"), which is the
+    number that actually carries a non-elimination season — nobody is
+    eliminated, so *what have you got left* is the real tension. Tapping a row
+    opens their full numbers in the matchup sheet: luck vs judgement (actual
+    wins minus the market's expected wins), style (backs-favourites rate,
+    underdog wins, how contrarian), and form (streaks, average win/loss margin,
+    biggest win, worst beat). Plus league-wide: **week winners**, **head to
+    head**, and **most-picked teams**.
+    - ⚠️ **Two rules this screen may never break.** (1) Anything reading MORE
+      THAN ONE player's picks goes through `pickVisible()` — otherwise a stats
+      page becomes a side channel for reading a hidden Thursday pick. (2)
+      Market-derived numbers state their `n` and say they use the **closing**
+      line, not the line at pick time: ESPN only ever serves a finished game's
+      last posted odds. Storing odds at pick time was considered and rejected —
+      it breaks "picks are the only thing stored" for a family-fun stat.
+    - Head-to-head is a **count** ("Jack 5 — 3 Nana"), never a percentage;
+      at n=8 a percentage is noise wearing a confident face.
+    - 🚨 **`[object Promise]` bug worth remembering.** The insertion anchored on
+      `function renderAdmin` while the file had `async function renderAdmin`,
+      so the `async` was welded onto the new block's first line — `pctStr`
+      became async and every percentage rendered as `[object Promise]`, while
+      every heading assertion still passed. **Assert rendered VALUES, not just
+      labels**; the suite now checks for `[object ` and for real digits.
+  - **☀️ Opens in light mode always.** It used to follow the OS, so half the
+    family would get a dark app they never chose, and dark is the harder read
+    for aging eyes. A deliberate tap of the theme button is still remembered
+    per device (`survivor:palette`).
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.
