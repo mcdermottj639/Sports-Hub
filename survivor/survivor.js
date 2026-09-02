@@ -72,6 +72,13 @@ function el(tag, cls, html) {
   if (html != null) n.innerHTML = html;
   return n;
 }
+function setThemeColor(pal) {
+  const m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute('content', pal === 'onyx' ? '#14130f' : '#f3f1ec');
+  const sb = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if (sb) sb.setAttribute('content', pal === 'onyx' ? 'black' : 'default');
+}
+
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const lsDel = (k)    => { try { localStorage.removeItem(k); } catch (e) {} };
@@ -723,19 +730,29 @@ function matchupHTML(g) {
   return h;
 }
 
+let _scrollY = 0;
 function openSheet(gameId) {
   const g = (S.games[S.week] || []).find((x) => x.id === gameId);
   if (!g) return;
   S.sheet = gameId;
   $('#sheet-body').innerHTML = matchupHTML(g);
   $('#sheet').hidden = false;
-  document.body.style.overflow = 'hidden';
-  $('#sheet-close').focus();
+  // iOS Safari ignores `overflow:hidden` on <body>, so the page carries on
+  // scrolling behind the sheet. Pinning it is the only lock that holds.
+  _scrollY = window.scrollY;
+  document.body.style.position = 'fixed';
+  document.body.style.top = `-${_scrollY}px`;
+  document.body.style.width = '100%';
+  $('#sheet-close').focus({ preventScroll: true });
 }
 function closeSheet() {
+  if (!S.sheet) return;
   S.sheet = null;
   $('#sheet').hidden = true;
-  document.body.style.overflow = '';
+  document.body.style.position = '';
+  document.body.style.top = '';
+  document.body.style.width = '';
+  window.scrollTo(0, _scrollY);
 }
 
 /* ======================================================================
@@ -1244,6 +1261,7 @@ document.addEventListener('click', async (e) => {
     document.documentElement.setAttribute('data-palette', now);
     document.documentElement.setAttribute('data-theme', now === 'onyx' ? 'dark' : 'light');
     lsSet('survivor:palette', now);
+    setThemeColor(now);
     return;
   }
   if (t.id === 'big-btn') {

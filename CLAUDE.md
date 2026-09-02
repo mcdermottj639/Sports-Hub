@@ -489,6 +489,37 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     - ⚠️ **A subagent reported this area as "already correct".** It had checked
       only the pick screen. The owner pushed back, and he was right. Verify a
       clean bill of health across EVERY write path before accepting it.
+  - **📱 iPhone layer** (bottom of `survivor.css`, appended last so it wins).
+    The league runs on phones and the user who matters most opens it from a
+    Home Screen icon, where Safari's chrome is gone:
+    - ⚠️ **An `apple-touch-icon` MUST be a PNG.** iOS silently ignores an SVG
+      one and substitutes a screenshot of the page — which was the previous
+      state, i.e. grandma's icon would have been a picture of a sign-in
+      screen. `icon-180/192/512.png` are real files now, plus a manifest.
+    - `viewport-fit=cover` means the page runs UNDER the Dynamic Island and
+      the home indicator, so every edge takes `env(safe-area-inset-*)` — the
+      header, tabs, screens, footer and the sheet. Without it content is
+      physically unreachable on any notched phone.
+    - `dvh` on the sheet (with `vh` as fallback): Safari's toolbar grows and
+      shrinks while you scroll, so `vh` is a moving target.
+    - ⚠️ **iOS ignores `overflow:hidden` on `<body>`**, so the page scrolled
+      behind the open matchup sheet. `openSheet` pins the body with
+      `position:fixed` + a negative `top` and `closeSheet` restores the
+      offset — that is the only lock that actually holds.
+    - `-webkit-tap-highlight-color: transparent` (no grey flash) and
+      `-webkit-touch-callout: none` on buttons — a shaky hand rests on a
+      button longer, and the iOS copy/share bubble popping up over the team
+      you are trying to pick is alarming. ⚠️ **Chromium implements neither
+      property**, so the callout rule cannot be verified in the sandbox; the
+      suite asserts the shipped source and proves the block is live via
+      `user-select`, which Chromium does support.
+    - `theme-color` and `apple-mobile-web-app-status-bar-style` are updated by
+      `setThemeColor()` on every palette change AND in the inline `<head>`
+      script, or the notch stays light while the app is dark.
+    - Verified across **iPhone SE / 13 mini / 15 / 15 Pro Max** — 60 checks:
+      no sideways scroll on any of the four screens, every input ≥16px, every
+      tap target ≥44px, the scroll lock and its restore, the sheet clearing
+      the home indicator, and the status bar tracking the palette.
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.
@@ -500,6 +531,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     to the season total, sorting, the personal link signing someone in with no
     password and NOT granting them admin, zero horizontal overflow at 320/390px,
     the 44px tap-target floor on all four screens, and no console errors —
+    plus 14 bye-week checks and 60 iPhone checks across four device sizes —
     plus the matchup card (its three projection sources incl. both fallbacks,
     the favourite carrying the shorter moneyline, a used team offering no pick
     button, a final leading with its score) and the grid (one row per player,
