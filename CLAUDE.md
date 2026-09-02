@@ -603,9 +603,24 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **222 checks** across eight suites (behaviour, matchup/grid,
+    - Verified: **232 checks** across nine suites (behaviour, matchup/grid,
       byes, four iPhone sizes, accessibility, audit fixes, the not-shared-yet
-      guards, and the deployment/stranded-link path).
+      guards, the deployment/stranded-link path, and the zero-touch relative
+      experience).
+  - **The relatives do NOTHING but tap a link — verified, not assumed.** With
+    the two constants baked into the deployed file, a phone that has never
+    opened the app and has nothing in its localStorage lands in `cloud` mode
+    with: no password field, no sign-up, no install prompt, no setup screen and
+    **zero dialogs**. The config comes from the FILE, which is the whole reason
+    it must live there (see the `pickStore()` note above). The only person who
+    ever touches Supabase is the commissioner, once.
+  - **First-run welcome** (`.welcome`, `survivor:welcomed`) — someone opening a
+    link from a text message has no idea what they are looking at. One short
+    dismissible card names them, says "pick one team you think will win",
+    states the two rules that make this pool unusual (never knocked out, never
+    the same team twice) and promises nothing to install. It shows ONLY before
+    a player's first pick and only on the Pick screen, so it can never sit
+    between a returning player and the game list.
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.
