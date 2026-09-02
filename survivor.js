@@ -1383,12 +1383,12 @@ function pctStr(x) { return x == null ? '—' : `${Math.round(x * 100)}%`; }
 function renderStats() {
   const host = $('#s-stats');
   let h = msgHTML() + `<h2 class="hh">Stats</h2>
-    <p class="sub">The deeper read, for anyone who wants it. Nothing here changes how the league is scored.</p>`;
+    <p class="sub">The deeper read, for anyone who wants it. None of this changes how the league is scored — the standings are still just wins, then points. Every number here is explained in plain English; nothing is a secret formula.</p>`;
 
   // ---- who's had the best weeks ----
   const wins = weeklyWinners();
   h += `<h2 class="hh">Week winners</h2>
-    <p class="sub">Best result each week — a fresh race every Sunday, whatever the season table says.</p>
+    <p class="sub">Whoever had the best result that week — the biggest winning margin. It resets every Sunday, so being twelve wins behind in the table doesn't stop you winning a week.</p>
     <div class="card">`;
   if (!wins.length) h += `<p class="note">No completed weeks yet.</p>`;
   else h += wins.slice(0, 8).map((w) => `<div class="wp-row">
@@ -1400,7 +1400,7 @@ function renderStats() {
 
   // ---- per player ----
   h += `<h2 class="hh">Everyone</h2>
-    <p class="sub">Tap a name for their full numbers. "Teams left" is how strong the teams they haven't spent yet are — the closest thing to a look ahead.</p>
+    <p class="sub">The big number is how <b>strong the teams each person still has left</b> are — because you can never pick a team twice, the good teams you haven't spent yet are what you have to play with for the rest of the season. Higher is better. Tap anyone for their full numbers, all explained.</p>
     <div class="card">`;
   const rows = S.players.map((p) => ({ p, s: statsFor(p.id) }))
     .sort((x, y) => (y.s.bench ?? -1) - (x.s.bench ?? -1));
@@ -1416,7 +1416,7 @@ function renderStats() {
 
   // ---- head to head ----
   h += `<h2 class="hh">Head to head</h2>
-    <p class="sub">Pick two people and see who has won more weeks against the other.</p>
+    <p class="sub">Week by week, whose team won by more. Only weeks where both of them had a pick that has been graded count. Shown as a plain count rather than a percentage — over a handful of weeks a percentage would look far more certain than it is.</p>
     <div class="card">
       <label class="fld"><span>Them</span><select id="h2h-a">${
         S.players.map((p) => `<option value="${p.id}" ${p.id === S.me.id ? 'selected' : ''}>${esc(p.display_name)}</option>`).join('')}</select></label>
@@ -1428,7 +1428,7 @@ function renderStats() {
   // ---- team popularity ----
   const pop = teamPopularity();
   h += `<h2 class="hh">Most-picked teams</h2>
-    <p class="sub">Across the whole family, all season. Only games that have kicked off.</p>
+    <p class="sub">Which teams the family has leaned on most this season. Picks only appear here once their game has kicked off, so this can never reveal what somebody has chosen for a game still to come.</p>
     <div class="card">`;
   if (!pop.length) h += `<p class="note">Nothing to count yet.</p>`;
   else {
@@ -1458,53 +1458,102 @@ function paintH2H() {
     : `<p class="note">No completed weeks where both of them picked yet.</p>`;
 }
 
-/* One player's full numbers, in the same sheet the matchup card uses. */
+/* One player's full numbers, in the same sheet the matchup card uses.
+   EVERY number carries a plain-English explainer. A stat nobody can read is
+   worse than no stat — it looks authoritative and means nothing. */
+function statDef(label, value, explain, tone) {
+  const col = tone === 'pos' ? 'var(--pos)' : tone === 'neg' ? 'var(--neg)' : 'var(--ink)';
+  return `<div class="statdef">
+    <div class="sd-top"><span class="sd-k">${esc(label)}</span>
+      <span class="sd-v" style="color:${col}">${value}</span></div>
+    <p class="sd-x">${esc(explain)}</p>
+  </div>`;
+}
+
 function openPlayerStats(playerId) {
   const p = S.players.find((x) => x.id === playerId);
   if (!p) return;
   const st = statsFor(playerId);
   const con = contrarianFor(playerId);
-  const row = (k, v, note) => `<tr><td>${esc(k)}</td><td>${v}${
-    note ? `<span class="st-n">${esc(note)}</span>` : ''}</td></tr>`;
+  const name = p.id === S.me.id ? 'You' : p.display_name;
+  const has = p.id === S.me.id ? 'you have' : `${p.display_name} has`;
+  const they = p.id === S.me.id ? 'you' : p.display_name;
+  // "you take" but "Patti takes" — without this every sentence about somebody
+  // else reads as broken English.
+  const vb = (v) => (p.id === S.me.id ? v : `${v}s`);
 
   let h = `<div class="sh-head"><div class="sh-title">${esc(p.display_name)}</div>
     <div class="sh-when">${st.t.w}-${st.t.l}${st.t.t ? `-${st.t.t}` : ''} · ${signed(st.t.pts)} points</div></div>`;
 
+  // ---- teams in hand ----
   h += `<h3 class="sh-h">Teams still in hand</h3>
-    <table class="sh-t"><tbody>
-      ${row('How strong', st.bench == null ? '—' : pctStr(st.bench), st.bench == null ? '' : 'average win rate')}
-      ${row('How many', st.teamsLeft)}
-      ${row('Best left', st.benchTop.length ? st.benchTop.map(teamShort).map(esc).join(' · ') : '—')}
-    </tbody></table>`;
+    <p class="sh-intro">You can never pick the same team twice, so the teams ${has} left are ${
+      p.id === S.me.id ? 'your' : 'their'} ammunition for the rest of the season.</p>`;
+  h += statDef('How strong', st.bench == null ? '—' : pctStr(st.bench),
+    st.bench == null
+      ? 'Not enough games played yet to know how good those teams are.'
+      : `The teams ${has} not used yet win ${pctStr(st.bench)} of their games on average. Higher is better — it means the good teams have not been spent.`);
+  h += statDef('How many', String(st.teamsLeft),
+    `${st.teamsLeft} of the 32 teams are still available to ${they}. There are ${LAST_WEEK} weeks in the season, so running out is not a worry — running out of GOOD ones is.`);
+  h += statDef('Best left', st.benchTop.length ? st.benchTop.map(teamShort).map(esc).join(' · ') : '—',
+    'The strongest teams still available, by their record this season.');
 
-  h += `<h3 class="sh-h">Luck or judgement</h3>`;
+  // ---- luck ----
+  h += `<h3 class="sh-h">Luck or judgement</h3>
+    <p class="sh-intro">Did ${they} win because of good picks, or because the ball bounced their way? Comparing the results to what the bookmakers expected gets close to an answer.</p>`;
   if (st.xwN >= 3) {
     const l = st.luck;
-    h += `<table class="sh-t"><tbody>
-      ${row('Wins expected', st.xw.toFixed(1), `from the odds on ${st.xwN} pick${st.xwN === 1 ? '' : 's'}`)}
-      ${row('Wins actually', String(st.t.w))}
-      ${row('Difference', `<b style="color:${l >= 0 ? 'var(--pos)' : 'var(--neg)'}">${l >= 0 ? '+' : ''}${l.toFixed(1)}</b>`,
-        l >= 0 ? 'better than the odds implied' : 'below what the odds implied')}
-    </tbody></table>
-    <p class="note sh-note">Based on the closing odds, not the line when the pick was made, and on a small number of games — read it as a hint, not a verdict.</p>`;
+    h += statDef('Wins expected', st.xw.toFixed(1),
+      `Take each pick and ask what chance the bookmakers gave that team. Add those up and you get ${st.xw.toFixed(1)} — roughly the number of wins anybody would expect from the same ${st.xwN} picks.`);
+    h += statDef('Wins actually', String(st.t.w),
+      `${name === 'You' ? 'You' : name} actually won ${st.t.w} of those ${st.xwN} games. Comparing this to the line above is the whole point — it is the difference that tells you something.`);
+    h += statDef('Difference', `${l >= 0 ? '+' : ''}${l.toFixed(1)}`,
+      l >= 0
+        ? `${st.t.w} wins from picks worth about ${st.xw.toFixed(1)} — ${Math.abs(l).toFixed(1)} more than expected. Either good judgement or a run of luck; this alone cannot tell you which.`
+        : `${st.t.w} wins from picks worth about ${st.xw.toFixed(1)} — ${Math.abs(l).toFixed(1)} fewer than expected. The picks were reasonable and the results went the other way.`,
+      l >= 0 ? 'pos' : 'neg');
+    h += `<p class="note sh-note">Two caveats worth knowing: this uses each game's final odds rather than the odds at the moment the pick was made, and ${st.xwN} games is a small sample. Read it as a hint, not a verdict.</p>`;
   } else {
-    h += `<p class="note">Not enough games with a posted line yet.</p>`;
+    h += `<p class="note">Only ${st.xwN} of ${they === 'you' ? 'your' : 'their'} picks were on games with a posted betting line, which is not enough to say anything useful yet.</p>`;
   }
 
-  h += `<h3 class="sh-h">Style</h3><table class="sh-t"><tbody>
-      ${row('Backs favourites', st.chalkN >= 3 ? pctStr(st.chalk) : '—', st.chalkN >= 3 ? `average across ${st.chalkN} picks` : 'not enough priced games')}
-      ${row('Underdog wins', String(st.dogWins))}
-      ${row('Own way', con ? pctStr(con.score) : '—', con ? `over ${con.weeks} weeks` : '')}
-    </tbody></table>`;
+  // ---- style ----
+  h += `<h3 class="sh-h">Style</h3>
+    <p class="sh-intro">Not better or worse — just how ${they} ${vb('play')} it.</p>`;
+  h += statDef('Backs favourites', st.chalkN >= 3 ? pctStr(st.chalk) : '—',
+    st.chalkN >= 3
+      ? `On average the bookmakers gave ${they === 'you' ? 'your' : 'their'} picks a ${pctStr(st.chalk)} chance of winning. Around 50% means ${they} ${vb('take')} coin flips; 70% and up means ${they} ${vb('stick')} to safe teams.`
+      : 'Not enough games with a betting line yet.');
+  h += statDef('Underdog wins', String(st.dogWins),
+    st.dogWins
+      ? `${st.dogWins} time${st.dogWins === 1 ? '' : 's'} ${they} won with a team the bookmakers expected to LOSE. The gutsy ones.`
+      : `No wins yet with a team the bookmakers expected to lose.`);
+  h += statDef('Own way', con ? pctStr(con.score) : '—',
+    con
+      ? `How often ${they} picked a team nobody else in the family picked that week, across ${con.weeks} weeks. 100% means never once doubled up with anyone; a low number means ${they} ${vb('tend')} to land on the same teams as everybody else.`
+      : 'Not enough weeks where other picks were public yet.');
 
-  h += `<h3 class="sh-h">Form</h3><table class="sh-t"><tbody>
-      ${row('Current run', st.streak ? `${st.streak} in a row` : 'none')}
-      ${row('Best run', st.best ? `${st.best} in a row` : '—')}
-      ${row('Average win by', st.avgWin == null ? '—' : `+${st.avgWin.toFixed(1)}`)}
-      ${row('Average loss by', st.avgLoss == null ? '—' : st.avgLoss.toFixed(1))}
-      ${row('Biggest win', st.blowout ? `${esc(teamShort(st.blowout.pick.team))} ${signed(st.blowout.margin)} (wk ${st.blowout.week})` : '—')}
-      ${row('Worst beat', st.beat ? `${esc(teamShort(st.beat.pick.team))} ${signed(st.beat.margin)} (wk ${st.beat.week})` : '—')}
-    </tbody></table>`;
+  // ---- form ----
+  h += `<h3 class="sh-h">Form</h3>
+    <p class="sh-intro">How the season has actually gone, week to week.</p>`;
+  h += statDef('Current run', st.streak ? `${st.streak} in a row` : 'none',
+    st.streak
+      ? `${st.streak} winning week${st.streak === 1 ? '' : 's'} back to back, right now. A week with no pick does not break a run.`
+      : `The last graded week was not a win. A week with no pick would not have broken the run.`);
+  h += statDef('Best run', st.best ? `${st.best} in a row` : '—',
+    st.best ? `The longest winning streak of the season so far.` : 'No winning streak yet.');
+  h += statDef('Average win by', st.avgWin == null ? '—' : `+${st.avgWin.toFixed(1)}`,
+    st.avgWin == null ? 'No wins yet.'
+      : `When ${they} ${vb('win')}, it is by ${st.avgWin.toFixed(1)} points on average. Margins are the tiebreaker in the standings, so comfortable wins are worth more than narrow ones.`);
+  h += statDef('Average loss by', st.avgLoss == null ? '—' : st.avgLoss.toFixed(1),
+    st.avgLoss == null ? 'No losses yet.'
+      : `When ${they} ${vb('lose')}, it is by ${Math.abs(st.avgLoss).toFixed(1)} points on average. Narrow losses cost far less in the standings than blowouts.`);
+  h += statDef('Biggest win', st.blowout ? `${esc(teamShort(st.blowout.pick.team))} ${signed(st.blowout.margin)}` : '—',
+    st.blowout ? `Week ${st.blowout.week}: the ${teamShort(st.blowout.pick.team)} won by ${st.blowout.margin}, the best single week of the season.` : 'No wins yet.',
+    st.blowout ? 'pos' : '');
+  h += statDef('Worst beat', st.beat ? `${esc(teamShort(st.beat.pick.team))} ${signed(st.beat.margin)}` : '—',
+    st.beat ? `Week ${st.beat.week}: the ${teamShort(st.beat.pick.team)} lost by ${Math.abs(st.beat.margin)} — the most damaging week for the points total.` : 'No losses yet.',
+    st.beat ? 'neg' : '');
 
   $('#sheet-body').innerHTML = h;
   S.sheet = `stats:${playerId}`;

@@ -597,3 +597,17 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .pop-n { text-align: right; color: var(--gy); font-weight: 700; font-size: .95rem; }
 
 .st-n { display: block; color: var(--gy); font-size: .82rem; font-weight: 400; }
+
+/* Each stat is a number AND a sentence saying what it means. A number nobody
+   can read is worse than no number — it looks authoritative and says nothing. */
+.statdef {
+  padding: 14px 0; border-bottom: 1px solid var(--tr);
+}
+.statdef:last-child { border-bottom: 0; }
+.sd-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.sd-k { font-weight: 700; font-size: 1rem; }
+/* A long value (three team names) drops to its own line instead of squeezing
+   the label into "Best / left". */
+.sd-v { font-weight: 900; font-size: 1.25rem; text-align: right; margin-left: auto; }
+.sd-x { margin: 6px 0 0; color: var(--gy); font-size: .92rem; line-height: 1.5; }
+.sh-intro { margin: -4px 0 12px; color: var(--gy); font-size: .95rem; line-height: 1.5; }
