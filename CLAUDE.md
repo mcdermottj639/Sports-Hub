@@ -453,6 +453,22 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     the setup steps are numbered in-app including the SQL-editor commissioner
     seed the audit called for. `isShared()` is the one predicate for "picks
     actually travel between devices".
+  - 🚨 **THE CONFIG MUST BE IN THE FILE, NOT IN localStorage.** `pickStore()`
+    reads `survivor:sb` from the device and falls back to the module constants.
+    So pasting the Supabase URL/key into the Admin panel configures **only the
+    commissioner's own phone** — every relative opens the same web address with
+    nothing saved and silently gets `LocalStore`. Measured: device A `cloud`,
+    device B `local`. **The two constants at the top of `survivor.js` are the
+    real switch**; the paste box is a tester's override. Admin now says so in a
+    warning box and has a **"Copy the 2 lines for the deployed app"** button
+    that emits exactly the two `let SUPABASE_URL/KEY` lines.
+  - 🚨 **A stranded personal link used to offer "Start the league".** Anyone
+    arriving on `?u=…` before the league was switched on was shown the
+    first-run setup screen — so Nana could have created her own empty league
+    and become its commissioner. `renderPicker` now branches on whether the URL
+    carried a token: a failed token gets "This link isn't working · ask
+    {LEAGUE_ADMIN_NAME} · nothing is wrong with your phone" and **no way to
+    create anything**. Setup is only offered when there is no token at all.
   - **Storage is pluggable**: `LocalStore` (localStorage, this device only) and
     `SupaStore` (Supabase free tier, plain `fetch` against PostgREST, no SDK
     and no build step). `pickStore()` picks one; nothing else in the file knows
@@ -587,9 +603,9 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **207 checks** across seven suites (behaviour, matchup/grid,
-      byes, four iPhone sizes, accessibility, audit fixes, and the
-      not-shared-yet guards).
+    - Verified: **222 checks** across eight suites (behaviour, matchup/grid,
+      byes, four iPhone sizes, accessibility, audit fixes, the not-shared-yet
+      guards, and the deployment/stranded-link path).
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.
