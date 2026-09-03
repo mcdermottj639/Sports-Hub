@@ -446,12 +446,37 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     - ⚠️ **Cross-origin is never intercepted** (`url.origin !== self.location.origin`),
       so ESPN scores and Supabase picks always come from the network. A stale
       score or a stale pick would be worse than none.
-    - A new worker taking over a running page triggers ONE reload, guarded so
-      it never fires on first install and never loops.
+    - **🔄 An "Update now" button, and NO self-reload (v23).** The worker
+      only helps a COLD open; on a phone the app is never really closed —
+      a Home Screen icon resumes the SAME page for days — so a change could
+      sit on the server all week unseen. The page now watches for one and
+      raises a gold bar above everything (`#updbar`, `paintUpdate`), and the
+      person taps it.
+      - ⚠️ **It used to reload ITSELF** the instant a new worker took over.
+        That is worse than being a build behind: it can throw somebody out
+        of a half-made pick with no warning and no explanation. Offering
+        beats yanking. `controllerchange` now calls `showUpdate()`.
+      - **Two independent signals, because each alone has a hole.** (1) A
+        **HEAD on `survivor.js`** comparing ETag/Last-Modified/length against
+        the copy booted with (`fileStamp`/`checkForUpdate`) — this needs **no
+        version bookkeeping at all**, which is the point: a number somebody
+        must remember to bump is a number that eventually lies, and that is
+        precisely how `?v=1` survived sixteen releases here. (2) The worker
+        taking over — free, but it only fires when **`sw.js` itself changed
+        byte-wise**, which is why `sw.js` now carries its own `APP_V` marker
+        that nothing reads. Forgetting that marker costs only signal 2.
+      - Checked at boot, on `visibilitychange`/`focus` (coming back to the
+        app is when a stale page is both most likely and most visible), and
+        every 15 min. Throttled to one check per 30s so tab-flapping can't
+        hammer the host. The first read is the baseline and can never itself
+        count as a change.
+      - The tap is a plain `location.reload()` — the worker is network-first
+        with `cache: 'no-store'`, so there is no stale copy left to serve.
     - `APP_V` shows in the footer, so the commissioner can ask "what does
       yours say?" and know at once whether somebody is on an old copy. It is
       the **build number** — one per shipped change to `survivor/` — so a
-      bigger number is always newer. ⚠️ **Bump it on every ship.** It does not
+      bigger number is always newer. ⚠️ **Bump it on every ship — in BOTH
+      `survivor.js` and `sw.js`.** It does not
       affect delivery (the worker does that), but a version that lies is worse
       than none, which is exactly how `?v=1` sat unchanged for sixteen
       releases. It was briefly `v1` for one commit, which read as "brand new

@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v22';
+const APP_V = 'v23';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -2252,18 +2252,108 @@ async function boot() {
   }, 60000);
 }
 
-/* Keep every phone current. The worker is network-first, so an open of the
-   app always pulls the newest deploy; this only handles the case where a NEW
-   worker takes over a page that was already running an old one. */
+/* ======================================================================
+   UPDATES — "a new version is ready", with a button
+   The worker is network-first, so a COLD open always lands on the newest
+   deploy. This is the other case, and on a phone it is the common one: the
+   app is never really closed. A Home Screen icon resumes the SAME page for
+   days, so a change can sit on the server all week and the person holding
+   the phone never sees it.
+
+   ⚠️ It used to reload ITSELF the instant a new worker took over. That is
+   worse than being one build behind — it can throw somebody out of a
+   half-made pick with no warning and no explanation of what just happened.
+   The page offers now; the tap is theirs.
+
+   Two independent signals, because each alone has a hole:
+     1. A HEAD on survivor.js, comparing the ETag/Last-Modified against the
+        copy we booted with. This needs NO version bookkeeping — it notices
+        any ship at all. That matters: a version number somebody has to
+        remember to bump is a version number that eventually lies, which is
+        exactly how `?v=1` survived sixteen releases here.
+     2. The service worker taking over (`controllerchange`). Free, but it
+        only fires when sw.js ITSELF changed, so it is the weaker of the two.
+   ====================================================================== */
+
+const UPDATE_POLL_MS = 15 * 60 * 1000;  // a quiet background check
+const UPDATE_MIN_GAP = 30 * 1000;       // don't re-check on every tab flap
+let updStamp = null;                    // fingerprint of the copy we are RUNNING
+let updLastCheck = 0;
+let updReady = false;
+
+function paintUpdate() {
+  const bar = $('#updbar');
+  if (!bar) return;
+  bar.hidden = !updReady;
+  if (!updReady) return;
+  bar.innerHTML = `<span class="upd-t">\u{1F504} A newer version of the app is ready.</span>
+    <button class="btn pri" id="upd-go" type="button">Update now</button>`;
+}
+
+function showUpdate() {
+  if (updReady) return;
+  updReady = true;
+  paintUpdate();
+}
+
+/* The fingerprint. Whatever the host gives us — GitHub Pages sends an ETag,
+   a plain file server usually sends Last-Modified — as long as BOTH reads
+   are taken the same way, a change means a change. Null when the host sends
+   neither, in which case signal 2 is all we have and that is fine. */
+async function fileStamp() {
+  try {
+    const res = await fetch('survivor.js', { method: 'HEAD', cache: 'no-store' });
+    if (!res || !res.ok) return null;
+    const s = [res.headers.get('etag'), res.headers.get('last-modified'),
+               res.headers.get('content-length')].map((v) => v || '').join('|');
+    return /[^|]/.test(s) ? s : null;
+  } catch (e) { return null; }
+}
+
+async function checkForUpdate(force) {
+  if (updReady) return;
+  const now = Date.now();
+  if (!force && now - updLastCheck < UPDATE_MIN_GAP) return;
+  updLastCheck = now;
+  const s = await fileStamp();
+  if (!s) return;
+  if (updStamp == null) { updStamp = s; return; }   // the first read IS what we run
+  if (s !== updStamp) showUpdate();
+}
+
+function applyUpdate() {
+  const btn = $('#upd-go');
+  if (btn) { btn.disabled = true; btn.textContent = 'Updating\u2026'; }
+  if (S.reloading) return;
+  S.reloading = true;
+  // The worker fetches every same-origin file with `cache: 'no-store'`, so a
+  // plain reload is enough — there is no stale copy left for it to serve.
+  location.reload();
+}
+
+// Its own listener, not the screen delegate: the bar can appear on the
+// sign-in screen, before any screen is rendered.
+document.addEventListener('click', (e) => {
+  const b = e.target && e.target.closest && e.target.closest('#upd-go');
+  if (b) { e.preventDefault(); applyUpdate(); }
+});
+
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
-  navigator.serviceWorker.register('sw.js').catch((e) => console.warn('[survivor] sw', e));
+  navigator.serviceWorker.register('sw.js')
+    .then((reg) => { if (reg) setInterval(() => { reg.update().catch(() => {}); }, UPDATE_POLL_MS); })
+    .catch((e) => console.warn('[survivor] sw', e));
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    // Not on first install (there was nothing to replace), and only once.
-    if (!hadController || S.reloading) return;
-    S.reloading = true;
-    location.reload();
+    if (!hadController) return;   // first install replaced nothing
+    showUpdate();
   });
 }
+
+checkForUpdate(true);
+// Coming back to the app is the moment a stale page is most likely, and the
+// moment somebody is looking at it.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+window.addEventListener('focus', () => { checkForUpdate(); });
+setInterval(() => { checkForUpdate(); }, UPDATE_POLL_MS);
 
 boot();
