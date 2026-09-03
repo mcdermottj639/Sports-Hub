@@ -432,6 +432,27 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     would otherwise produce a duplicate that the commissioner has to adjudicate
     by text message. Anything new that writes a pick must go through
     `submit_pick`/`admin_set_pick`, never straight at the table.
+  - **🔄 Updates reach every phone by themselves — `survivor/sw.js`.** The
+    owner: *"if I update the survivor app it needs to update for all the
+    family."* It does, but only because of this worker. **The `?v=N` ritual
+    had already failed silently: `survivor.js` changed 16 times while
+    `index.html` still asked for `?v=1`**, so a returning phone could have
+    served a months-old copy of the CSS and JS. Its own **network-first**
+    worker now fetches every same-origin file with `cache: 'no-store'`,
+    bypassing both the browser cache and GitHub Pages' ~10-minute one; the
+    Cache API copy is only the offline fallback. That is the opposite of
+    normal PWA advice and is deliberate — being CURRENT matters far more than
+    being fast here, and the files are a few KB.
+    - ⚠️ **Cross-origin is never intercepted** (`url.origin !== self.location.origin`),
+      so ESPN scores and Supabase picks always come from the network. A stale
+      score or a stale pick would be worse than none.
+    - A new worker taking over a running page triggers ONE reload, guarded so
+      it never fires on first install and never loops.
+    - `APP_V` shows in the footer, so the commissioner can ask "what does
+      yours say?" and know at once whether somebody is on an old copy.
+    - ⚠️ Survivor sits under the Sports-Hub worker's `/Sports-Hub/` scope
+      today; its own worker is more specific and wins, and it is what
+      survives the move to a separate repo.
   - **🔗 ONE league link, and each person taps their own NAME.** The owner's
     rule: *"For them on the other end there can be no required work. Just click
     link, add name and pick as we go."* So the commissioner texts a single
@@ -649,7 +670,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **343 checks** across thirteen suites (behaviour, matchup/grid,
+    - Verified: **352 checks** across fourteen suites (behaviour, matchup/grid,
       byes, four iPhone sizes, accessibility, audit fixes, the not-shared-yet
       guards, the deployment/stranded-link path, and the zero-touch relative
       experience).
