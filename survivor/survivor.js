@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v38';
+const APP_V = 'v39';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -858,7 +858,11 @@ function mlProb(ml) {
   return ml < 0 ? (-ml) / (-ml + 100) : 100 / (ml + 100);
 }
 const fmtML = (v) => (v == null ? '' : v > 0 ? `+${v}` : String(v));
-const NFL_SD = 13.5;   // points; the usual spread-to-win-probability conversion
+/* ⚠️ Deliberately UNUSED for win probability since v39 — the percentage comes
+   from the moneyline only. Kept as the demo's own spread-to-price conversion
+   (`demoGames` prices its fixtures with it) and as a note that the conversion
+   exists and was rejected for the real read. */
+const NFL_SD = 13.5;   // points; the textbook spread-to-win-probability scale
 
 function recTotals(str) {
   const m = String(str || '').match(/^(\d+)-(\d+)(?:-(\d+))?$/);
@@ -876,11 +880,21 @@ function matchupRead(g) {
     else if (o.awayFav) homeSpread = o.favBy;
   }
 
-  // Win probability: de-vigged moneylines if both are posted, else the spread.
+  /* Win probability comes from the DE-VIGGED MONEYLINE and nothing else.
+     ⚠️ It used to fall back to converting the spread through a normal curve
+     (`ncdf(-spread / 13.5)`), which is a rule of thumb, not a market price:
+     it assumes every game has the same scoring variance and it invents a
+     precision the book never quoted. The owner's call — "the win percentage
+     should be based on money line not the spread as well" — and he is right,
+     because the two look identical on screen while only one of them is
+     actually somebody's money.
+     The SPREAD is still read, still shown on the card and still names the
+     favourite when no moneyline is posted; it just no longer becomes a
+     percentage. When there is no moneyline the card shows the projected
+     winner with no number, which is the honest amount to say. */
   let pHome = null, basis = null;
   const ph = mlProb(o.hML), pa = mlProb(o.aML);
   if (ph != null && pa != null && ph + pa > 0) { pHome = ph / (ph + pa); basis = 'moneyline'; }
-  else if (homeSpread != null) { pHome = ncdf(-homeSpread / NFL_SD); basis = 'spread'; }
 
   let favSide = null;
   if (pHome != null) favSide = pHome >= 0.5 ? 'home' : 'away';
@@ -934,7 +948,8 @@ function matchupBlurb(g, r) {
     const where = r.favSide === 'home' ? 'at home' : 'on the road';
     const pct = r.pFav == null ? null : Math.round(r.pFav * 100);
     out.push(`${teamShort(r.fav.abbr)} are favoured by ${r.favBy} ${where}`
-      + (pct ? `, which the betting market puts at about a ${pct}% chance of winning.` : '.'));
+      + (pct ? `, and the moneyline puts them at about a ${pct}% chance of winning.`
+             : '. No moneyline is posted, so there is no percentage to quote.'));
   } else if (r.fav && r.fromRecords) {
     out.push(`No line is posted yet. On records alone ${teamShort(r.fav.abbr)} (${r.fav.rec}) look the stronger side — a much rougher guide than a real line.`);
   } else {
@@ -975,7 +990,7 @@ function matchupHTML(g) {
       <div class="sh-k">${g.state === 'post' ? 'Was projected to win' : 'Projected winner'}</div>
       <div class="sh-team">${esc(teamName(r.fav.abbr))}</div>
       <div class="sh-sub">${r.fromRecords ? 'on records only — no line posted'
-        : `${esc(teamShort(r.fav.abbr))} by ${r.favBy}${pct ? ` · about ${pct}%` : ''}`}</div>
+        : `${esc(teamShort(r.fav.abbr))} by ${r.favBy}${pct ? ` · about ${pct}% on the moneyline` : ''}`}</div>
       ${pct ? `<div class="sh-bar"><i style="width:${Math.max(2, Math.min(98, pct))}%"></i></div>
         <div class="sh-split"><span>${esc(teamShort(r.fav.abbr))} ${pct}%</span><span>${esc(teamShort(r.dog.abbr))} ${100 - pct}%</span></div>` : ''}
     </div>`;
@@ -1433,7 +1448,7 @@ function renderPick() {
   } else {
     h += `<h2 class="hh">Week ${S.week} — tap who you think wins</h2>
       <p class="sub">Pick one team. You can change your mind right up until that game starts.
-        The percentages are the betting market's view of who wins — not a guarantee.</p>`;
+        The percentages come from the moneyline — the betting market's own price on each team winning, not a guarantee.</p>`;
   }
 
   if (!games.length) {
