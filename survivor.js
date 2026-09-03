@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v21';
+const APP_V = 'v22';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -1404,9 +1404,6 @@ function renderHistory() {
 
 /* ---- admin ------------------------------------------------------------ */
 
-function linkFor(token) {
-  return `${location.origin}${location.pathname}?u=${encodeURIComponent(token)}`;
-}
 /* True only when picks actually travel between devices. */
 const isShared = () => S.store && S.store.kind === 'cloud';
 
@@ -1627,10 +1624,9 @@ function renderAdmin() {
     <details class="usedstrip">
       <summary>What do these buttons do?</summary>
       <div class="ub" style="display:block">
-        <p><b>Their link</b> — that one person's private link. You almost never need it: everyone uses the league link above and taps their own name. It is for when somebody gets a new phone and their name is already taken, so it is no longer on the join list.</p>
-        <p><b>Release name</b> — puts their name back on the join list, for when the wrong person tapped it.</p>
-        <p><b>View as</b> — see the app exactly as they see it. A bar at the top brings you back.</p>
-        <p><b>Remove</b> — deletes them and all their picks. There is no undo.</p>
+        <p><b>Put back on list</b> — makes their name tappable on the join screen again. Two reasons you'd use it: somebody tapped the <em>wrong</em> name, or somebody got a new phone and needs to sign in on it. Their picks are kept either way, and a phone they are already signed in on keeps working.</p>
+        <p><b>View as</b> — see the app exactly as they see it, to help over the phone. A bar across the top brings you back to your own account.</p>
+        <p><b>Remove</b> — deletes them <em>and all their picks</em>. There is no undo. If you only want to hand their name to somebody else, use Put back on list instead.</p>
       </div>
     </details>
     <div class="card">`;
@@ -1641,8 +1637,7 @@ function renderAdmin() {
       <summary><span class="pn">${esc(p.display_name)}${p.is_admin ? ' 👑' : ''}</span>${
         p.claimed ? '' : '<span class="pn-wait">not joined yet</span>'}</summary>
       <div class="plrow-acts">
-        ${p.claimed ? `<button class="btn sm" data-unclaim="${p.id}" title="Put this name back on the join list">Release name</button>` : ''}
-        <button class="btn sm" data-copy="${p.id}" title="Copy this one person's private link">Their link</button>
+        ${p.claimed ? `<button class="btn sm" data-unclaim="${p.id}" title="Put this name back on the join list">Put back on list</button>` : ''}
         <button class="btn sm" data-view="${p.id}">View as</button>
         <button class="btn sm" data-del="${p.id}" title="Remove from the league" aria-label="Remove ${esc(p.display_name)}">Remove</button>
       </div>
@@ -1653,7 +1648,6 @@ function renderAdmin() {
     <div class="card">
       <label class="fld"><span>Add somebody</span><input id="ad-name" type="text" placeholder="e.g. Nana" autocomplete="off"></label>
       <button class="btn pri wide" id="ad-add">Add to the league</button>
-      <button class="btn wide" id="ad-copyall">Copy every personal link (rarely needed)</button>
     </div>`;
 
   // --- enter a pick on someone's behalf ---
@@ -2108,31 +2102,11 @@ document.addEventListener('click', async (e) => {
   }
 
   // --- admin ---
-  if (t.dataset.copy) {
-    if (!linkWarnOK('That personal link')) return;
-    const tok = await S.store.tokenFor(S.me.token, Number(t.dataset.copy));
-    const p = S.players.find((x) => x.id === Number(t.dataset.copy));
-    if (!tok) { say('bad', 'Could not read that link.'); render(); return; }
-    const ok = await copyText(`${p.display_name}, here's your Family Survivor link — bookmark it:\n${linkFor(tok)}`);
-    say(ok ? 'ok' : 'bad', ok ? `Copied ${p.display_name}'s link.` : `Could not copy. Link: ${linkFor(tok)}`);
-    render(); return;
-  }
   if (t.id === 'ad-copyjoin') {
     if (!linkWarnOK('The league link')) return;
     const url = location.origin + location.pathname;
     const ok2 = await copyText(`Family survivor pool — tap this, then tap your name:\n${url}`);
     say(ok2 ? 'ok' : 'bad', ok2 ? 'Copied. Paste it into the family group text.' : `Could not copy. The link is ${url}`);
-    render(); return;
-  }
-  if (t.id === 'ad-copyall') {
-    if (!linkWarnOK('These personal links')) return;
-    const lines = [];
-    for (const p of S.players) {
-      const tok = await S.store.tokenFor(S.me.token, p.id);
-      if (tok) lines.push(`${p.display_name}: ${linkFor(tok)}`);
-    }
-    const ok = await copyText(lines.join('\n'));
-    say(ok ? 'ok' : 'bad', ok ? `Copied ${lines.length} links.` : 'Could not copy.');
     render(); return;
   }
   if (t.dataset.view) {
