@@ -591,9 +591,23 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     10, Ravens 38". The distinction is structural, not a matter of reading
     punctuation correctly, which is the right call for the reader this app
     exists for.
-    - ⚠️ **The locked card is a GOLD fill taking dark ink**, so win/loss must
-      NOT be coloured there — green on gold is unreadable (the same rule
-      Sports-Hub's `--on-ac` note states). The words carry it.
+    - **And in v25 the WHOLE card is the result.** The owner, looking back
+      through the demo: *"change the card to green for a win or red for a
+      lose so it's clear too."* Right — v24 kept the card gold and left the
+      distinction to the words, because coloured TEXT on gold is unreadable.
+      Recolouring the fill itself solves the same problem the other way, and
+      a season's history now reads at arm's length without parsing a word.
+      - **Gold is now reserved for "still your pick"** — the current week,
+        and a game still being played. A colour means something is settled.
+      - ⚠️ **The fills are NOT `--pos`/`--neg`.** Those are tuned to be read
+        AS text against the page ground, so they are far too light to sit
+        under white type (Onyx's `--pos` #4fb383 measures ~2:1). The card
+        uses deep dedicated fills — `#17694a` / `#9d2b23` / `#4a4636` for
+        the tie — one pair serving both palettes, and `.lk-k`/`.lk-score`
+        lift from .75/.72 to .92/.88 because white at low alpha over a
+        colour is a grey, where over gold it was only a shade.
+      - Measured, not eyeballed: every line on all three cards in both
+        palettes, 5.57:1 at worst.
   - ⚠️ **Two layout traps found while building it, both worth remembering:**
     (a) `.tabs { display: grid }` **out-specifies the browser's `[hidden]`
     rule**, so `el.hidden = true` silently stopped working and the tab bar
