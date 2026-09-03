@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v28';
+const APP_V = 'v29';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -940,6 +940,16 @@ function unpinBody(force) {
    A tap on a team never saves straight away. Shaky hands, pockets and
    scrolling all produce accidental taps, and a pick spends a team for the
    whole season — so it always goes through this. */
+/* "away at the Lions · Thu, 11/19, 8:15 PM" — the one description of a game,
+   used by the pick card and the confirmation alike so they can never word the
+   same fixture differently. */
+function matchupLine(g, team) {
+  if (!g) return '';
+  const opp = g.home.abbr === team ? g.away.abbr : g.home.abbr;
+  const where = g.home.abbr === team ? 'at home to' : 'away at';
+  return `${where} the ${teamShort(opp)} · ${kickWhen(g)}`;
+}
+
 function askConfirm(team) {
   const games = S.games[S.week] || [];
   const g = gameForTeam(games, team);
@@ -957,7 +967,7 @@ function askConfirm(team) {
       <img src="${teamLogo(team)}" alt="" onerror="this.remove()">
       <span>${esc(teamName(team))}</span>
     </div>
-    <p class="cf-game">${esc(where)} the ${esc(teamShort(opp))} · ${esc(kickWhen(g))}</p>
+    <p class="cf-game">${esc(matchupLine(g, team))}</p>
     ${g.tv ? `<p class="cf-tv">📺 ${esc(g.tv)}</p>` : ''}
     ${replacing ? `<p class="cf-replace">This replaces your pick of the ${esc(teamShort(replacing))}.</p>` : ''}
     <button class="btn pri wide cf-yes" id="cf-yes">Yes — that's my pick</button>
@@ -1199,10 +1209,14 @@ function teamBtnHTML(abbr, opts) {
   const cls = ['pk', o.chosen ? 'chosen' : '', o.used ? 'used' : ''].filter(Boolean).join(' ');
   const tag = o.used ? `<span class="pk-used-tag">USED WK ${o.used}</span>` : (o.rec ? `<span class="pk-rec">${esc(o.rec)}</span>` : '');
   const score = o.score == null ? '' : `<span class="pk-rec">${o.score}</span>`;
+  // The market's chance this side wins THIS game — the same number the ⓘ card
+  // shows, so the two can never disagree. Absent when no line is posted.
+  const win = o.win == null ? '' : `<span class="pk-win">${Math.round(o.win * 100)}% to win</span>`;
   return `<button class="${cls}" type="button" data-team="${abbr}" ${o.disabled ? 'disabled' : ''}>
     <img src="${teamLogo(abbr)}" alt="" loading="lazy" onerror="this.remove()">
     <span class="pk-name">${esc(teamShort(abbr))}</span>
     ${score || tag}
+    ${win}
   </button>`;
 }
 
@@ -1253,7 +1267,8 @@ function renderPick() {
           myGame.home.abbr === mine.team ? myGame.away.score : myGame.home.score}` : '';
     const res = g.status === 'pending'
       ? `<span class="lk-res">Playing now…</span>${
-          liveScore ? `<span class="lk-score">${esc(myGame.statusText || 'In progress')} · ${liveScore}</span>` : ''}`
+          liveScore ? `<span class="lk-score">${esc(myGame.statusText || 'In progress')} · ${liveScore}</span>` : ''}${
+          myGame && myGame.tv ? `<span class="lk-meta">📺 ${esc(myGame.tv)}</span>` : ''}`
       : verdict ? `<span class="lk-res ${g.status}">${esc(verdict)}</span>${
           score ? `<span class="lk-score">Final score: ${score}</span>` : ''}`
       : '';
@@ -1266,14 +1281,19 @@ function renderPick() {
       <div class="lk-sub">${res}</div>
     </div>`;
   } else if (mine) {
+    // Everything you would otherwise have to go hunting for: who they play,
+    // when, and where to watch it.
     h += `<div class="locked">
       <div class="lk-k">Your Week ${S.week} pick</div>
       <div class="lk-team">${esc(teamName(mine.team))}</div>
-      <div class="lk-sub">You can still change it — just tap a different team.</div>
+      <div class="lk-sub">${myGame ? `<span class="lk-meta">${esc(matchupLine(myGame, mine.team))}</span>` : ''}${
+        myGame && myGame.tv ? `<span class="lk-meta">📺 ${esc(myGame.tv)}</span>` : ''}
+        <span class="lk-hint">You can still change it — just tap a different team.</span></div>
     </div>`;
   } else {
     h += `<h2 class="hh">Week ${S.week} — tap who you think wins</h2>
-      <p class="sub">Pick one team. You can change your mind right up until that game starts.</p>`;
+      <p class="sub">Pick one team. You can change your mind right up until that game starts.
+        The percentages are the betting market's view of who wins — not a guarantee.</p>`;
   }
 
   if (!games.length) {
@@ -1287,6 +1307,7 @@ function renderPick() {
   const shut = games.filter((g) => g.state !== 'pre');
 
   const gameHTML = (g, started) => {
+    const r = matchupRead(g);
     const row = (side) => {
       const abbr = g[side].abbr;
       const isUsed = used[abbr];
@@ -1296,9 +1317,11 @@ function renderPick() {
         rec: g[side].rec,
         score: started ? g[side].score : null,
         disabled: started || !!isUsed,
+        // Only before kickoff: a chance-to-win on a game already played is
+        // noise at best and contradicts the score at worst.
+        win: started || r.pHome == null ? null : (side === 'home' ? r.pHome : 1 - r.pHome),
       });
     };
-    const r = matchupRead(g);
     const tip = started ? '' : (r.fav && r.hasLine
       ? `${teamShort(r.fav.abbr)} -${r.favBy}`
       : r.fav ? `${teamShort(r.fav.abbr)} favoured` : 'no line yet');
