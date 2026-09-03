@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v37';
+const APP_V = 'v38';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -650,22 +650,60 @@ async function weekGames(week) {
 }
 
 /* Which week are we in? ESPN's dateless scoreboard tells us directly. */
+/* ======================================================================
+   WHEN THE LEAGUE MOVES ON
+   The owner's rule: the app rolls to the following week on **TUESDAY at
+   4 AM Eastern** — after Monday night is finished and everyone is asleep,
+   and Eastern because everybody in this league is.
+   ⚠️ This is the league's OWN clock, not ESPN's. ESPN flips its `week.number`
+   on its own schedule (often Tuesday afternoon, sometimes Wednesday), so the
+   app could sit on a finished week for a day and a half, still offering picks
+   for games that had already been played. The clock decides now; ESPN is only
+   asked for scores.
+   ⚠️ 4 AM, not midnight, for the same reason Sports-Hub's `sportsDate()` uses
+   it: a west-coast Monday-night game can run past midnight Eastern, and
+   somebody looking at the app right after it should still see that week.
+   ====================================================================== */
+const ROLLOVER_HOUR = 4;                       // 4 AM, Eastern
+const ROLLOVER_TZ = 'America/New_York';
+/* The first rollover of the season: the Tuesday after week 1's Monday night
+   game. Week 1 opens Thu 10 Sep 2026, so week 2 begins Tue 15 Sep at 4 AM.
+   ⚠️ ONE DATE TO CHANGE EACH SEASON, and it must be a TUESDAY. */
+const WEEK2_TUESDAY = Date.UTC(2026, 8, 15);   // 15 Sep 2026
+
+/* Eastern wall-clock parts of an instant. Uses Intl rather than a fixed UTC
+   offset so the November switch out of daylight saving is handled for us —
+   4 AM Eastern is 08:00 UTC in September and 09:00 UTC in December, and
+   hardcoding either one would slip the rollover by an hour for half the
+   season. */
+function etParts(d) {
+  const f = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ROLLOVER_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', hour12: false,
+  });
+  const p = {};
+  for (const part of f.formatToParts(d)) if (part.type !== 'literal') p[part.type] = part.value;
+  return { y: +p.year, m: +p.month, d: +p.day, h: +p.hour % 24 };
+}
+
+/* The date the league considers "today": Eastern, with anything before 4 AM
+   still belonging to the day before. */
+function leagueDay(now) {
+  const t = etParts(now);
+  const ms = Date.UTC(t.y, t.m - 1, t.d);
+  return t.h < ROLLOVER_HOUR ? ms - 86400000 : ms;
+}
+
+/* Which week the league is on, from the clock alone. */
+function weekFromClock(now) {
+  const day = leagueDay(now || new Date());
+  if (day < WEEK2_TUESDAY) return 1;
+  return Math.min(LAST_WEEK, 2 + Math.floor((day - WEEK2_TUESDAY) / (7 * 86400000)));
+}
+
 async function currentWeek() {
   if (S.demo) return DEMO_WEEK;
-  try {
-    const ctl = new AbortController();
-    const to = setTimeout(() => ctl.abort(), 9000);
-    const r = await fetch(ESPN_SB, { signal: ctl.signal });
-    clearTimeout(to);
-    const j = await r.json();
-    const type = Number(j.season && j.season.type);
-    const n = Number(j.week && j.week.number);
-    if (type === 2 && n >= 1 && n <= LAST_WEEK) return n;
-    if (type === 3) return LAST_WEEK;      // playoffs: league is over, show the last week
-    return 1;                               // preseason / anything odd: week 1
-  } catch (e) {
-    return 1;
-  }
+  return weekFromClock();
 }
 
 /* ======================================================================

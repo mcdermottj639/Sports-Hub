@@ -785,6 +785,25 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
   auto-scrolls to the newest week (otherwise it opens on week 1 with the
   live column off the right edge) and **honours the hidden-pick rule**, so
   an unstarted pick shows 🔒 rather than the team.
+- **🕓 The week turns over on TUESDAY at 4 AM EASTERN (v38).** The owner's
+  rule. `weekFromClock` decides the week from the clock alone; `currentWeek`
+  is now just that plus the demo override, and **makes no network call**.
+  - ⚠️ **It used to read ESPN's `week.number`,** which flips on ESPN's own
+    schedule — often Tuesday afternoon, sometimes Wednesday. The app could sit
+    on a finished week for a day and a half, still offering picks on games
+    that had already been played. **The clock decides the week now; ESPN is
+    asked only for scores.**
+  - **4 AM, not midnight**, for the same reason Sports-Hub's `sportsDate()`
+    uses it: a west-coast Monday-night game can run past midnight Eastern, and
+    somebody opening the app right afterwards should still see that week.
+  - **Eastern, because everybody in the league is** — and via `Intl` with a
+    real time zone, NOT a fixed UTC offset. 4 AM Eastern is 08:00 UTC in
+    September and 09:00 UTC in December; hardcoding either slips the rollover
+    by an hour for half the season. There is a test for exactly that boundary.
+  - ⚠️ **`WEEK2_TUESDAY` is the ONE date to change each season**, and it must
+    be a Tuesday: the first rollover, i.e. the Tuesday after week 1's Monday
+    night game. Everything else is derived. Weeks clamp to 1–18, so the
+    off-season can never produce week 0 or week 40.
 - ⚠️ **Unverified live:** the sandbox reaches neither ESPN nor Supabase, so
   the real week-scoreboard shape
   (`?dates=2026&seasontype=2&week=N`), `currentWeek()`'s read of
