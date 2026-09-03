@@ -2,6 +2,7 @@ const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwr
 let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{fail++;console.log('  ✗ '+m);}};
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 // a 1x1 green PNG, standing in for ESPN's helmet
+const pickableWeek=require('./_pickable');
 const PNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==','base64');
 (async()=>{
  const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',args:['--no-sandbox']});
@@ -9,9 +10,11 @@ const PNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42
    await p.goto('http://127.0.0.1:8099/',{waitUntil:'networkidle'});
    if (await p.locator('#first-demo').count()) { await p.click('#first-demo'); await p.waitForSelector('#tabs:not([hidden])'); }
    await sleep(1500);
-   // The current week's pick is locked in the demo, which folds the slate away
-   // — there are no team buttons (and so no helmets) until it is opened.
-   if (await p.locator('#cg-more').count()) { await p.click('#cg-more'); await sleep(500); }
+   // The demo's current week is DECIDED — its pick already kicked off — so
+   // the slate is folded away and (since v44) every team button on it is
+   // disabled. Walk to a week that can still be picked, which is where the
+   // helmets people actually tap live.
+   await pickableWeek(p, sleep);
    return p; };
  try {
 
@@ -40,6 +43,9 @@ const PNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42
    if (!r.request().url().includes('?r=')) return r.abort();
    return r.fulfill({status:200,contentType:'image/png',body:PNG}); });
  p=await boot(ctx);
+ // Lazy images below the fold are never requested, so they never retry —
+ // scroll first or the per-logo retry count is really a page-height count.
+ await p.evaluate(async()=>{ for(let y=0;y<document.body.scrollHeight;y+=400){window.scrollTo(0,y);await new Promise(r=>setTimeout(r,60));} window.scrollTo(0,0); });
  await sleep(1800);                       // the 700ms retry plus slack
  const after=await p.evaluate(()=>({img:document.querySelectorAll('.pk img').length,fb:document.querySelectorAll('.lg-fb').length}));
  ok(after.img>0,`the helmets came back on the retry (${after.img} images)`);
@@ -51,6 +57,18 @@ const PNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42
  ctx=await b.newContext({viewport:{width:390,height:844},timezoneId:'America/New_York'});
  await ctx.route('https://a.espncdn.com/**',(r)=>r.abort());
  p=await boot(ctx);
+ // ⚠️ The logos are `loading="lazy"`, so one below the fold is never
+ // requested, never fails, and therefore never falls back — which is
+ // CORRECT (it will fall back when it scrolls into view) but makes a
+ // whole-page count depend on how tall the page happens to be. This
+ // assertion passed for months purely because everything fitted; adding a
+ // ~56px control to the Pick screen pushed two images past the threshold
+ // and it "failed" against perfectly good markup. Scroll the page first so
+ // every image has actually been asked for.
+ await p.evaluate(async()=>{
+   for (let y=0; y<document.body.scrollHeight; y+=400) { window.scrollTo(0,y); await new Promise(r=>setTimeout(r,60)); }
+   window.scrollTo(0,0);
+ });
  await sleep(2200);
  const dead=await p.evaluate(()=>{
    const fb=[...document.querySelectorAll('.pk .lg-fb')];

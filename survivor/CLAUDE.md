@@ -30,8 +30,8 @@
 
 > ## 🧪 The tests live in `survivor/tests/` — run them
 > `node survivor/tests/run.js` runs every suite (it starts its own server);
-> `node survivor/tests/run.js a11y ios` runs just those. **808 checks across
-> 34 suites, all driving the real app in headless Chromium.**
+> `node survivor/tests/run.js a11y ios` runs just those. **856 checks across
+> 35 suites, all driving the real app in headless Chromium.**
 > - They used to live in `/tmp` and were lost at the end of every session,
 >   which meant each change re-proved the same ground by hand. They are in the
 >   repo now. **Add to them rather than starting over.**
@@ -52,7 +52,7 @@
 | Storage prefix | `sportshub:` | `survivor:` |
 | Shared state | none — localStorage + read-only backends | **Supabase** (the only real database in the repo) |
 | Design floor | none stated | **18px base, ≥56px targets, ≥16px inputs** |
-| Tests | `node --check` only | 34 suites, 808 checks (33 headless-Chromium + a Postgres-parser one) |
+| Tests | `node --check` only | 35 suites, 856 checks (34 headless-Chromium + a Postgres-parser one) |
 
 ⚠️ **The traps that come from them sharing a repo today**, all of which the
 move to a separate repo removes:
@@ -980,6 +980,78 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
   - ⚠️ **Still unverified:** `schema.sql`'s new guards have never met a live
     Postgres — the sandbox has none — so they are written carefully and must
     be confirmed when the project is created.
+
+- **🥈 "Best chance" — a second way to order the slate (v44).** The owner:
+  *"For current week and future weeks allow us to be sorted by time like it
+  is now as default, but then they can sort by % to win which sorts out the
+  ones they already picked and gives the remaining options with highest % to
+  win."*
+  - **The two orders answer different questions, and that is why the second
+    one is a list of TEAMS rather than of games.** Kickoff order is the
+    schedule — how the week actually happens, and what you want when you are
+    looking for a particular game. "Best chance" is the question you ask when
+    you are *choosing*: out of the teams I have left, who is most likely to
+    win? A game has two sides and you can only take one, so ranking games
+    would have answered a question nobody asked.
+  - ⚠️ **A team you have already used is ABSENT, not greyed out.** That is
+    the owner's word — "sorts out" — and it is right: in a list headed "what
+    can I still pick", a spent team is not a dimmed option, it is not an
+    option. (In the kickoff view it stays visible and struck through, because
+    that view is the slate, not a set of choices.)
+  - **The percentage is `matchupRead`'s own number** — the de-vigged
+    moneyline and nothing else, per v39 — so the list, the team button and
+    the ⓘ card physically cannot disagree. A test asserts every rendered
+    percentage equals `matchupRead`'s to the point.
+  - ⚠️ **A team with no line posted is MOVED, never dropped.** It sorts to
+    the end under a line saying why it carries no number. Silently hiding a
+    team you could legitimately pick would be a worse error than showing one
+    without a percentage.
+  - **`.pk` is reused verbatim**, `data-team` and all, so a tap goes through
+    the same `askConfirm` as every other pick. ⚠️ It must never become a
+    second write path.
+  - **Kickoff order stays the default and is unchanged**, and `S.pickSort`
+    lives in memory only — a reload returns to kickoff order, which is what
+    "default" has to mean, while switching weeks inside one visit keeps your
+    choice.
+  - 🚨 **It surfaced that the app was still OFFERING picks the store refuses.**
+    v41 closed the "a decided week can be re-picked" hole in both stores and
+    in `schema.sql`, but the UI never caught up: on a locked week "Show the
+    full matchups" still drew live team buttons, so a tap now produced an
+    error message instead of doing nothing. The buttons are `disabled` on a
+    locked week, and the sort control is not offered there at all — there is
+    nothing to choose, so there is nothing to sort. **When a rule moves into
+    the store, check what the screen is still advertising.**
+  - 🚨 **`.wknav-l i` — "not this week" — had been at 14.04px all along**, and
+    no suite had ever measured it, because `a11y.js` only ever ran on the
+    LIVE week where that line does not render. It is the one thing telling
+    somebody why they cannot pick on a week they wandered into. Now `.88rem`.
+    **Fifth instance of "a check that never looks is worse than one that
+    fails."**
+  - ⚠️ **`tests/_pickable.js` — the shared setup, and why it exists.** Three
+    suites broke at once on the disabled-buttons change, all doing
+    `[...document.querySelectorAll('#s-pick .pk')].find(x => !x.disabled)` on
+    the demo's week 10, whose pick has already kicked off. The walk-to-a-
+    pickable-week is written once now and **throws if it lands somewhere with
+    no live buttons**, rather than letting the suite below it measure
+    nothing. `run.js` skips `_`-prefixed files so a helper is not run as a
+    suite.
+  - ⚠️ **`helmet.js` was passing on page height.** It asserted "a badge for
+    every team" and "a second request per logo" over the whole page, but the
+    logos are `loading="lazy"` — one below the fold is never requested, so it
+    never fails, so it never falls back. Both assertions were true only
+    because everything happened to fit; adding a ~56px control pushed two
+    images past the threshold and it "failed" against correct markup. It
+    scrolls the page first now. **A lazy image is not a rendered image.**
+  - Verified: **44 checks** in `tests/sortodds.js` — kickoff order still the
+    default and still in real kickoff order (read from the DOM, not from
+    `S.games`, which is fetch order); used teams absent; one row per
+    remaining option, none disabled, none duplicated; strictly descending;
+    the top row equal to the best remaining option; every percentage matching
+    `matchupRead`; unpriced teams last and still present; a tap going through
+    the confirmation and saving; the view holding across the save; the
+    control absent on a past week and present on a future one; no sideways
+    scroll or sub-floor type at 320 and 390; and a decided week offering
+    neither a sort control nor a live button.
 
 - **🗄️ `schema.sql` is no longer unverified — `tests/schema.js` (45 checks).**
   It was the only component with zero coverage and it is the one that will

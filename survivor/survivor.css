@@ -806,8 +806,12 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 /* Getting home from a week you wandered into. Only rendered when you are not
    on the current week, so it is never noise. */
 .backnow { margin: -4px 0 16px; }
+/* ⚠️ 14.04px until v44, and no suite had ever measured it: a11y only ever
+   ran on the LIVE week, where this line does not render at all. It is the
+   one thing telling somebody why they cannot pick on the week they have
+   wandered into, so it is exactly the wrong place to go under the floor. */
 .wknav-l i {
-  display: block; font-style: normal; font-weight: 700; font-size: .78rem;
+  display: block; font-style: normal; font-weight: 700; font-size: .88rem;
   color: var(--neg); letter-spacing: .02em; margin-top: 1px;
 }
 
@@ -839,3 +843,43 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .plrow .pn { font-weight: 700; font-size: 1rem; }
 .plrow-acts { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 14px; }
 .plrow-acts .btn { flex: 0 0 auto; padding: 0 14px; font-size: .88rem; }
+
+/* ---- "Best chance" ordering on the Pick screen -------------------------
+   A list of the teams you can still pick, ranked by the market's chance
+   that each one wins its own game. It is a list of TEAMS, not of games —
+   the question it answers is "who should I pick", so a team already spent
+   is simply not in it.
+   ⚠️ The row reuses `.pk` and its data-team, so a tap goes through exactly
+   the same confirmation as tapping a team on a matchup card. It must never
+   become a second way to save a pick. */
+.psort { margin-top: 4px; }
+.psort-n { margin-top: 0; }
+.oplist { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; }
+.op { background: var(--sf); border: 2px solid var(--tr); border-radius: 16px; overflow: hidden; }
+
+/* Horizontal, because a column of 26 stacked cards is a scroll, not a
+   ranking — the whole value here is being able to read down the top of it. */
+.pk.pkrow {
+  flex-direction: row; align-items: center; justify-content: flex-start;
+  gap: 12px; width: 100%; min-height: 68px; padding: 12px 14px;
+  text-align: left; border: 0; border-radius: 0; background: transparent;
+  box-shadow: none;
+}
+.pk.pkrow .pk-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-size: 1.05rem; }
+.pk.pkrow .pk-rec { flex: 0 0 auto; }
+/* The number is why this list exists, so it is the one thing set solid and
+   right-aligned — the eye reads straight down the column of percentages. */
+.pk.pkrow .pk-win {
+  flex: 0 0 auto; margin-left: auto; color: var(--ink);
+  font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.op:has(.pk.chosen) { border-color: transparent; box-shadow: var(--glow); }
+.pk.pkrow.chosen { background: var(--grad); color: var(--on-ac); }
+.pk.pkrow.chosen .pk-win { color: var(--on-ac); }
+
+.op-m {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 14px 10px; color: var(--gy); font-size: .9rem;
+}
+.op-vs { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.op-m .ibtn { flex: 0 0 auto; }
