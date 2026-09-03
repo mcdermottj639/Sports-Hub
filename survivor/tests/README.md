@@ -19,6 +19,10 @@ this environment and `node_modules/` is deliberately not committed, so on a
 fresh clone install playwright-core and point the two paths at whatever
 browser you have — they are the first two lines of every suite.
 
+`schema` is the exception: it drives no browser at all and needs the python
+package **`pglast`** (`pip install pglast`) instead. Without it that one suite
+prints why and skips, rather than passing while measuring nothing.
+
 ## Sandbox facts that look like bugs and are not
 - **No ESPN and no Supabase.** The demo season (`survivor:demo`) is the only
   fixture. Anything asserting live data must stub it with `ctx.route()`.
@@ -92,3 +96,26 @@ browser you have — they are the first two lines of every suite.
 setup then failed silently, and every assertion below it measured a locked
 slate with no buttons on it. It walks forward to a week with unstarted games
 and asserts they are there before measuring anything.
+
+## `schema` — the one component with no browser coverage
+The sandbox has no Postgres SERVER, so `schema.sql` can never be *run* here.
+It can still be checked for the two things that would otherwise fail silently
+on the family's phones, and this suite does both:
+- **It parses, PL/pgSQL bodies included**, under libpg_query — the same parser
+  Postgres itself uses. A syntax error inside a function body is invisible to
+  any amount of reading; it would surface only when the commissioner pasted
+  the file into the SQL editor.
+- **Every RPC the app calls exists, with exactly the argument names it sends.**
+  PostgREST resolves a function by its *named* arguments, so one renamed
+  parameter is not a type error anywhere — it is a 404 at the moment a
+  relative taps a team, and no browser suite can see it because the sandbox
+  never reaches Supabase.
+
+It also pins the grants (anon can reach every RPC and nothing else), that
+`picks` is revoked at the table so writes can only go through `submit_pick`,
+that `players_public` does not `select *` over the token column, and that the
+guards the v41 fixes depend on are really in the SQL.
+
+⚠️ **This still is not proof of behaviour.** It proves the file will install
+and that the app is calling it correctly. What each function DOES with a real
+row is confirmed the first time the project exists.

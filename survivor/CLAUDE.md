@@ -30,8 +30,8 @@
 
 > ## 🧪 The tests live in `survivor/tests/` — run them
 > `node survivor/tests/run.js` runs every suite (it starts its own server);
-> `node survivor/tests/run.js a11y ios` runs just those. **763 checks across
-> 33 suites, all driving the real app in headless Chromium.**
+> `node survivor/tests/run.js a11y ios` runs just those. **808 checks across
+> 34 suites, all driving the real app in headless Chromium.**
 > - They used to live in `/tmp` and were lost at the end of every session,
 >   which meant each change re-proved the same ground by hand. They are in the
 >   repo now. **Add to them rather than starting over.**
@@ -52,7 +52,7 @@
 | Storage prefix | `sportshub:` | `survivor:` |
 | Shared state | none — localStorage + read-only backends | **Supabase** (the only real database in the repo) |
 | Design floor | none stated | **18px base, ≥56px targets, ≥16px inputs** |
-| Tests | `node --check` only | 33 headless-Chromium suites, 763 checks |
+| Tests | `node --check` only | 34 suites, 808 checks (33 headless-Chromium + a Postgres-parser one) |
 
 ⚠️ **The traps that come from them sharing a repo today**, all of which the
 move to a separate repo removes:
@@ -972,11 +972,42 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
     Postgres — the sandbox has none — so they are written carefully and must
     be confirmed when the project is created.
 
+- **🗄️ `schema.sql` is no longer unverified — `tests/schema.js` (45 checks).**
+  It was the only component with zero coverage and it is the one that will
+  actually run in production. There is no Postgres SERVER in the sandbox, so
+  behaviour still cannot be proved — but the two things that would otherwise
+  fail *silently on the family's phones* now are:
+  - **It parses, PL/pgSQL function bodies included**, under **libpg_query**
+    (`pip install pglast`) — the same parser Postgres itself uses. A syntax
+    error inside a `$$ … $$` body is opaque to the outer parser and invisible
+    to any amount of reading; it would have surfaced only when the
+    commissioner pasted the file into the SQL editor and the league failed to
+    exist. All 35 statements and all 10 plpgsql bodies parse.
+  - **Every RPC the app calls exists, with EXACTLY the argument names it
+    sends.** ⚠️ **PostgREST resolves a function by its NAMED arguments**, so
+    one renamed parameter is not a type error anywhere in the JS — it is a
+    404 at the moment a relative taps a team, and no browser suite can ever
+    see it because the sandbox never reaches Supabase. The suite reads the
+    call sites out of `survivor.js` and the signatures out of the SQL and
+    compares them both ways, so an argument the app stops sending is caught
+    as well as one the database stops accepting.
+  - It also pins: every RPC granted to `anon` (a missing grant is a 403),
+    `picks` revoked at the table so a write can only go through
+    `submit_pick`, `players_public` never selecting the token column,
+    `SECURITY DEFINER` on the four functions that touch rows anon cannot, and
+    that the v41 guards (`p_kickoff is null`, `now()` in both `submit_pick`
+    and `admin_set_pick`, the `UNIQUE` no-repeat constraint) are really in
+    the file rather than only in the changelog.
+  - ⚠️ **Without `pglast` it SKIPS and says so, rather than passing.** A suite
+    that quietly measures nothing is the failure mode this repo has recorded
+    three times.
 - ⚠️ **Unverified live:** the sandbox reaches neither ESPN nor Supabase, so
   the real week-scoreboard shape
   (`?dates=2026&seasontype=2&week=N`), `currentWeek()`'s read of
-  `season.type`/`week.number`, and every `schema.sql` function are coded
-  defensively but must be confirmed on device.
+  `season.type`/`week.number`, and what each `schema.sql` function DOES with
+  a real row are coded defensively but must be confirmed on device. (That the
+  file installs, and that the app calls it correctly, is now covered — see
+  above.)
 
 ## How it came about
 
