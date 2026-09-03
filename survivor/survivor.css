@@ -278,8 +278,7 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 .st th:nth-child(2), .st td:nth-child(2) {
   text-align: left; width: 99%; white-space: normal; overflow-wrap: break-word; line-height: 1.25;
 }
-/* The header is two words; let it stack rather than steal the name's width. */
-.st th:last-child { white-space: normal; }
+
 .st td:nth-child(1) { color: var(--mu); font-weight: 800; }
 .st .nm { font-weight: 700; }
 .st tr.you td { background: var(--pos-bg); }
