@@ -18,7 +18,7 @@
 > **`--ac`, `--ac6`, `--wm`, `--on-ac`, `--grad` and `--glow` are frozen in
 > both palettes.** They have been touched exactly once, in the commit that
 > created the app, and that is how it stays.
-> - **`survivor/test-gold.js` pins all twelve values** and fails loudly if any
+> - **`survivor/tests/gold.js` pins all twelve values** and fails loudly if any
 >   of them moves. ⚠️ **If it fails, the change is wrong — do NOT update the
 >   expectations to match it.** Ask him.
 > - Adding a NEW colour beside the gold is fine and has been done: v35's
@@ -27,6 +27,17 @@
 >   **Copy the recipe, never the tokens.**
 > - ⚠️ Accent fills take **dark** ink (`--on-ac`). White on gold measures about
 >   1.9:1 and is unreadable. That rule is part of why the gold works.
+
+> ## 🧪 The tests live in `survivor/tests/` — run them
+> `node survivor/tests/run.js` runs every suite (it starts its own server);
+> `node survivor/tests/run.js a11y ios` runs just those. **~500 checks across
+> 29 suites, all driving the real app in headless Chromium.**
+> - They used to live in `/tmp` and were lost at the end of every session,
+>   which meant each change re-proved the same ground by hand. They are in the
+>   repo now. **Add to them rather than starting over.**
+> - `survivor/tests/README.md` lists what each suite holds down, the sandbox
+>   facts that look like bugs and are not, and the five ways a test in this
+>   app has previously managed to pass while measuring nothing.
 
 ## The two apps, side by side
 
