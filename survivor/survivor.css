@@ -632,6 +632,9 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .cf-team img { width: 76px; height: 76px; object-fit: contain; }
 .cf-team span { font-size: 1.5rem; font-weight: 900; line-height: 1.15; }
 .cf-game { margin: 0 0 6px; color: var(--gy); font-size: 1rem; }
+/* Where to watch it. Its own line rather than another clause on the kickoff
+   line, which is already carrying the venue and the time. */
+.cf-tv { margin: 0 0 6px; color: var(--gy); font-size: 1rem; font-weight: 700; }
 .cf-replace {
   margin: 12px 0 0; padding: 10px 12px; border-radius: 10px;
   background: var(--sf2); border: 1px solid var(--tr); color: var(--ink2); font-size: .95rem;

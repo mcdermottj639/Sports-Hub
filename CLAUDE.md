@@ -827,6 +827,17 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     ceremony.
     - **The SAFE option takes focus, and both answers are the same size** (66px).
       A cancel that is harder to hit than a commit is not a real cancel.
+    - **It names the CHANNEL (v28)** — owner's ask. The panel already carried
+      the opponent and the kickoff, so where to watch it is the last thing you
+      would otherwise go looking for. Its own line (`.cf-tv`), not another
+      clause on a line already holding a venue and a time; absent entirely
+      when ESPN lists no broadcast rather than an empty 📺.
+      - ⚠️ **`normGame` was only reading `broadcasts`.** ESPN publishes the
+        channel in TWO shapes and which one it uses varies by sport and week —
+        `geoBroadcasts[].media.shortName/callLetters` is the richer one. The
+        main app's `tvFor()` has read both for many versions; survivor now
+        does too, deduped. Reading only one would have shown a blank channel
+        on live NFL games while every demo game showed one.
     - Backing out via the button, Escape, or the backdrop all leave the
       existing pick untouched.
     - ⚠️ **`pinBody`/`unpinBody` replaced the inline body-pinning in
