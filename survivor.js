@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v40';
+const APP_V = 'v42';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -131,6 +131,22 @@ function clearWeekCache() {
   return n;
 }
 
+/* Does this browser actually remember anything? Safari in private mode throws
+   on access, and iOS evicts site storage from apps that have not been opened
+   in a while — which is precisely this app's usage pattern, once a week. When
+   storage is dead the app cannot sign anybody in, and the difference between
+   "your link is wrong" and "your phone is not saving anything" is the
+   difference between texting the commissioner and fixing it yourself. */
+function storageWorks() {
+  try {
+    const k = 'survivor:canary';
+    localStorage.setItem(k, '1');
+    const ok = localStorage.getItem(k) === '1';
+    localStorage.removeItem(k);
+    return ok;
+  } catch (e) { return false; }
+}
+
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const lsDel = (k)    => { try { localStorage.removeItem(k); } catch (e) {} };
@@ -209,7 +225,18 @@ const S = {
 const LocalStore = {
   kind: 'local',
   _db() { return jGet('survivor:local', { players: [], picks: [], seq: 1 }); },
-  _save(db) { jSet('survivor:local', db); },
+  /* ⚠️ Returns whether it actually stored. `jSet` swallows its exception, so
+     a full or disabled localStorage used to look identical to a successful
+     write — and `submitPick` returned {ok:true} regardless, so the app said
+     "Locked in" over a pick that was never saved and the very next render
+     showed no pick at all. */
+  _save(db) {
+    // ⚠️ NOT via `jSet` — that swallows the exception, and reading the key back
+    // afterwards proves nothing because the PREVIOUS value is still sitting
+    // there. Write directly so a refusal is actually visible.
+    try { localStorage.setItem('survivor:local', JSON.stringify(db)); return true; }
+    catch (e) { return false; }
+  },
   _isAdmin(db, token) {
     const a = db.players.find((p) => p.token === token);
     return !!(a && a.is_admin);
@@ -241,13 +268,29 @@ const LocalStore = {
     // House rule 1 makes NO pick free, so burning a team on a bye would be
     // strictly worse than doing nothing — refuse it.
     if (!kickoffISO) return { ok: false, error: `The ${teamShort(team)} are not playing in week ${week}.` };
-    if (new Date(kickoffISO) <= new Date()) return { ok: false, error: 'That game has already started.' };
+    // ⚠️ Fail CLOSED. `new Date('nonsense') <= new Date()` is FALSE, so a
+    // corrupt kickoff from ESPN made the deadline check silently never fire
+    // and the game pickable forever. A date we cannot read is a game we
+    // cannot judge, which is the same as no game at all.
+    const kick = new Date(kickoffISO);
+    if (isNaN(kick)) return { ok: false, error: `We can't read the kickoff time for the ${teamShort(team)} — try again in a minute.` };
+    if (kick <= new Date()) return { ok: false, error: 'That game has already started.' };
     const dup = db.picks.find((p) => p.player_id === me.id && p.season === SEASON && p.team === team && p.week !== week);
     if (dup) return { ok: false, error: `You already used the ${teamShort(team)} in week ${dup.week}.` };
     const cur = db.picks.find((p) => p.player_id === me.id && p.season === SEASON && p.week === week);
-    if (cur) { cur.team = team; cur.entered_by = 'self'; cur.updated_at = new Date().toISOString(); }
-    else db.picks.push({ id: db.seq++, player_id: me.id, season: SEASON, week, team, entered_by: 'self', updated_at: new Date().toISOString() });
-    this._save(db);
+    // 🚨 Your week locks when YOUR game starts, not when the new one does.
+    // Without this you could pick a Thursday team, watch it lose, then switch
+    // to a Sunday team — the loss vanishes AND the spent team comes back,
+    // because the row is overwritten rather than added to. That breaks "never
+    // the same team twice", which is not a matter of interpretation.
+    if (cur && cur.team !== team && cur.kickoff && new Date(cur.kickoff) <= new Date()) {
+      return { ok: false, error: `Your ${teamShort(cur.team)} game has already started, so week ${week} is locked in.` };
+    }
+    if (cur) { cur.team = team; cur.kickoff = kickoffISO; cur.entered_by = 'self'; cur.updated_at = new Date().toISOString(); }
+    else db.picks.push({ id: db.seq++, player_id: me.id, season: SEASON, week, team, kickoff: kickoffISO, entered_by: 'self', updated_at: new Date().toISOString() });
+    if (!this._save(db)) {
+      return { ok: false, error: 'This phone would not save your pick — its storage may be full, or Private Browsing is on.' };
+    }
     return { ok: true };
   },
 
@@ -264,6 +307,10 @@ const LocalStore = {
     const db = this._db();
     const nm = String(name || '').trim();
     if (!nm) return { ok: false, error: 'Please type your name.' };
+    // `maxlength` is a keyboard courtesy, not a rule — a paste or a stale page
+    // walks straight past it, and a 500-character name breaks a card layout
+    // somewhere for everybody.
+    if (nm.length > 28) return { ok: false, error: 'That name is too long — 28 letters at most.' };
     if (db.players.some((p) => p.display_name.toLowerCase() === nm.toLowerCase())) {
       return { ok: false, error: 'That name is already in the league — tap it in the list instead.' };
     }
@@ -316,6 +363,9 @@ const LocalStore = {
     if (team && !kickoffISO) return { ok: false, error: `The ${teamShort(team)} are on bye in week ${week}.` };
     // Without this the commissioner could enter a pick on a game that has
     // already kicked off — or finished — which is a pick made with hindsight.
+    if (team && isNaN(new Date(kickoffISO))) {
+      return { ok: false, error: `We can't read the kickoff time for the ${teamShort(team)} — try again in a minute.` };
+    }
     if (team && new Date(kickoffISO) <= new Date()) {
       return { ok: false, error: `That game has already started — you cannot enter a pick for it.` };
     }
@@ -323,8 +373,15 @@ const LocalStore = {
       const dup = db.picks.find((p) => p.player_id === playerId && p.season === SEASON && p.team === team && p.week !== week);
       if (dup) return { ok: false, error: `They already used the ${teamShort(team)} in week ${dup.week}.` };
     }
+    // 🚨 A decided week is decided for the commissioner too — otherwise
+    // "helping Nana with her late pick" erases the result she already has and
+    // hands her spent team back. Same guard as submitPick.
+    const cur = db.picks.find((p) => p.player_id === playerId && p.season === SEASON && p.week === week);
+    if (cur && cur.team !== team && cur.kickoff && new Date(cur.kickoff) <= new Date()) {
+      return { ok: false, error: `Their ${teamShort(cur.team)} game has already started, so week ${week} is locked in.` };
+    }
     db.picks = db.picks.filter((p) => !(p.player_id === playerId && p.season === SEASON && p.week === week));
-    if (team) db.picks.push({ id: db.seq++, player_id: playerId, season: SEASON, week, team, entered_by: 'admin', updated_at: new Date().toISOString() });
+    if (team) db.picks.push({ id: db.seq++, player_id: playerId, season: SEASON, week, team, kickoff: kickoffISO, entered_by: 'admin', updated_at: new Date().toISOString() });
     this._save(db);
     return { ok: true };
   },
@@ -334,12 +391,34 @@ const LocalStore = {
 const SupaStore = {
   kind: 'cloud',
   async _rpc(fn, body) {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
-      method: 'POST',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body || {}),
-    });
-    if (!r.ok) throw new Error(`${fn} failed (${r.status})`);
+    // ⚠️ A ceiling, like the ESPN calls have. Without one, a phone on a bad
+    // signal sits on a silently pending write with the dialog already closed
+    // and no way to tell whether it worked.
+    const ctl = new AbortController();
+    const to = setTimeout(() => ctl.abort(), 20000);
+    let r;
+    try {
+      r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+        method: 'POST', signal: ctl.signal,
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {}),
+      });
+    } catch (e) {
+      throw new Error(e && e.name === 'AbortError'
+        ? 'That took too long — check your signal and try again.'
+        : "Couldn't reach the league. Check your signal and try again.");
+    } finally { clearTimeout(to); }
+    if (!r.ok) {
+      // ⚠️ Read the body. Postgres puts the useful sentence in `message`, and
+      // throwing the bare status put "submit_pick failed (409)" on a
+      // 95-year-old's screen — which reads as "the app is broken" and ends in
+      // a phone call to the commissioner.
+      let why = '';
+      try { const j = await r.json(); why = j && (j.message || j.hint || j.details) || ''; } catch (e) {}
+      throw new Error(why || (r.status >= 500
+        ? 'The league is not answering right now. Try again in a minute.'
+        : 'That did not save. Try again.'));
+    }
     return r.json();
   },
   async _get(path) {
@@ -357,7 +436,7 @@ const SupaStore = {
   joinLeague(name)      { return this._rpc('join_league', { p_name: name }); },
   unclaim(adminToken, id) { return this._rpc('admin_unclaim', { p_admin_token: adminToken, p_player_id: id }); },
   releaseMe(token)        { return this._rpc('release_me', { p_token: token }); },
-  listPicks()   { return this._get(`picks?season=eq.${SEASON}&select=player_id,week,team,entered_by`); },
+  listPicks()   { return this._get(`picks?season=eq.${SEASON}&select=player_id,week,team,kickoff,entered_by`); },
   async whoami(token) {
     const r = await this._rpc('whoami', { p_token: token });
     return r && r.id ? r : null;
@@ -626,7 +705,14 @@ async function weekGames(week) {
   // keeping on the device — grandma's phone then loads history instantly.
   const ck = `survivor:wk:${SEASON}:${week}`;
   const cached = jGet(ck, null);
-  if (cached && cached.length) return (S.games[week] = cached);
+  // ⚠️ Re-check on the way OUT as well as on the way in: a copy written by a
+  // version before this guard existed is already sitting on real phones, and
+  // it must not be trusted just because it is there. A bad one is dropped and
+  // re-fetched.
+  const usable = cached && cached.length && cached.every((g) => g && g.home && g.away
+    && typeof g.home.score === 'number' && typeof g.away.score === 'number');
+  if (usable) return (S.games[week] = cached);
+  if (cached) { try { localStorage.removeItem(ck); } catch (e) {} }
 
   const mk = `w${week}`;
   const hit = memCache[mk];
@@ -644,7 +730,17 @@ async function weekGames(week) {
     console.warn('[survivor] week', week, 'unavailable', e);
   }
   memCache[mk] = { at: Date.now(), games };
-  if (games.length && games.every((g) => g.state === 'post')) jSet(ck, games);
+  /* 🚨 "Final" is not enough to cache forever — it also has to have SCORES.
+     ESPN can report a game `post` with one side's score still null for a
+     moment at the final whistle. Caching that pinned the broken copy to the
+     device permanently: `gradePick` reads it as pending, so the result never
+     counted, the week was never re-fetched, and two relatives could see
+     different standings for the same finished game for the rest of the season.
+     A week is only frozen once every game is final AND both scores are real
+     numbers; anything else is re-fetched next load, which self-heals. */
+  const settled = games.length && games.every((g) => g.state === 'post'
+    && typeof g.home.score === 'number' && typeof g.away.score === 'number');
+  if (settled) jSet(ck, games);
   S.games[week] = games;
   return games;
 }
@@ -761,6 +857,26 @@ function pickIn(playerId, week) {
 function usedTeams(playerId, exceptWeek) {
   const m = {};
   for (const p of picksOf(playerId)) if (p.week !== exceptWeek) m[p.team] = p.week;
+  return m;
+}
+
+/* 🚨 The same thing, but safe to show ABOUT SOMEBODY ELSE.
+   House rule 3 hides a pick until its own game starts — and a count can give
+   it away as surely as a name can. "Teams left" and "best left" are computed
+   from what a player has spent, so folding in this week's secret pick drops
+   their count by one and removes that team from their best-left list. Since
+   the sensible play is usually your best remaining team, the name that
+   disappeared very often IS the hidden pick.
+   Your own hidden pick is still yours to see; everyone else's is withheld
+   until kickoff, exactly as the season grid already does. */
+function usedTeamsVisible(playerId, exceptWeek) {
+  const mine = S.me && S.me.id === playerId;
+  const m = {};
+  for (const p of picksOf(playerId)) {
+    if (p.week === exceptWeek) continue;
+    if (!mine && !pickVisible(p.team, S.games[p.week] || [])) continue;
+    m[p.team] = p.week;
+  }
   return m;
 }
 
@@ -1211,8 +1327,9 @@ function statsFor(playerId) {
   }
 
   // Bench strength: how good are the teams they have NOT spent.
+  // ⚠️ The VISIBLE view — this is rendered about other people.
   const pct = teamWinPct();
-  const used = usedTeams(playerId, null);
+  const used = usedTeamsVisible(playerId, null);
   const left = ABBRS.filter((a) => !used[a]);
   const rated = left.filter((a) => pct[a] != null);
   const bench = rated.length ? rated.reduce((s, a) => s + pct[a], 0) / rated.length : null;
@@ -2011,7 +2128,7 @@ function renderAdmin() {
   if (!S.players.length) h += `<p class="note">Nobody yet. Add yourself first — the first person added becomes the commissioner.</p>`;
   h += `</div>
     <div class="card">
-      <label class="fld"><span>Add somebody</span><input id="ad-name" type="text" placeholder="e.g. Nana" autocomplete="off"></label>
+      <label class="fld"><span>Add somebody</span><input maxlength="28" id="ad-name" type="text" placeholder="e.g. Nana" autocomplete="off"></label>
       <button class="btn pri wide" id="ad-add">Add to the league</button>
     </div>`;
 
@@ -2173,8 +2290,14 @@ async function seedDemo() {
       if (!free.length) continue;
       const team = free[Math.floor(rnd() * free.length)];
       used.add(team);
+      // ⚠️ The kickoff has to be seeded too, or every demo pick looks like it
+      // was made on a game that never started and the "your week is locked"
+      // guard has nothing to test — i.e. the fixture could not express the
+      // rule it is meant to prove.
+      const g = (weeks[wk] || {})[team];
       db.picks.push({
         id: db.seq++, player_id: p.id, season: SEASON, week: wk, team,
+        kickoff: g && g.date ? g.date : null,
         entered_by: 'self', updated_at: new Date().toISOString(),
       });
     }
@@ -2196,6 +2319,19 @@ function renderPicker() {
   // A personal link that did not resolve. Never offer to start a league here —
   // they would create an empty one of their own and be lost.
   if (hadToken) {
+    // 🚨 Blame the right thing. If the browser is not storing anything, the
+    // link is fine and "ask the commissioner" sends somebody down a dead end
+    // they cannot get out of — the token is in the URL, so this screen would
+    // otherwise be permanent.
+    if (!storageWorks()) {
+      host.innerHTML = `<h2 class="hh">This phone isn't saving anything</h2>
+        <div class="warnbox">
+          <b>⚠️ Nothing is wrong with your link</b>
+          <p>Your browser is refusing to remember anything, so the app can't sign you in or keep your pick.</p>
+          <p>This is usually <b>Private Browsing</b>. Close this tab, open your normal browser window, and tap the link again.</p>
+        </div>`;
+      return;
+    }
     host.innerHTML = `<h2 class="hh">This link isn't working</h2>
       <div class="warnbox">
         <b>⚠️ We couldn't sign you in</b>
@@ -2213,7 +2349,7 @@ function renderPicker() {
       <p class="sub">Nothing on this device yet.</p>
       <div class="card">
         <p class="note">Add yourself first — whoever is added first is the commissioner.</p>
-        <label class="fld"><span>Your name</span><input id="first-name" type="text" placeholder="e.g. Jack" autocomplete="off"></label>
+        <label class="fld"><span>Your name</span><input maxlength="28" id="first-name" type="text" placeholder="e.g. Jack" autocomplete="off"></label>
         <button class="btn pri wide" id="first-go">Start the league</button>
         <button class="btn wide" id="first-demo">Or load a demo family to poke around</button>
       </div>`;
@@ -2236,7 +2372,7 @@ function renderPicker() {
   h += `<details class="usedstrip" ${free.length ? '' : 'open'}>
       <summary>My name isn't on the list</summary>
       <div class="ub" style="display:block">
-        <label class="fld"><span>Type your name</span><input id="join-name" type="text" placeholder="e.g. Aunt Mary" autocomplete="name"></label>
+        <label class="fld"><span>Type your name</span><input maxlength="28" id="join-name" type="text" placeholder="e.g. Aunt Mary" autocomplete="name"></label>
         <button class="btn pri wide" id="join-go">Join the league</button>
       </div>
     </details>
@@ -2331,6 +2467,11 @@ function say(kind, text) { S.msg = { kind, text }; }
 async function savePick(team) {
   const g = gameForTeam(S.games[S.week] || [], team);
   S.saving = true;   // an auto-update must not reload over a pick being written
+  // On a bad signal this is a network round trip with the dialog already
+  // closed, so SAY something. Silence reads as "did that work?" and the usual
+  // answer to that is tapping again.
+  say('ok', `Saving your ${teamShort(team)} pick…`);
+  render();
   try {
     const r = await S.store.submitPick(S.me.token, S.week, team, g && g.date)
       .catch((err) => ({ ok: false, error: String(err.message || err) }));
@@ -2419,13 +2560,6 @@ document.addEventListener('click', async (e) => {
     say(r && r.ok ? 'ok' : 'bad', r && r.ok ? 'That name is free again.' : (r && r.error) || 'Could not release it.');
     await reloadPlayers(); render(); return;
   }
-  if (t.dataset.be) {
-    const tok = await LocalStore.tokenFor(null, Number(t.dataset.be))
-      || (LocalStore._db().players.find((p) => p.id === Number(t.dataset.be)) || {}).token;
-    if (tok) { lsSet('survivor:me', tok); location.search = `?u=${encodeURIComponent(tok)}`; }
-    return;
-  }
-
   if (t.dataset.stview) { S.stView = t.dataset.stview; render(); return; }
   if (t.dataset.pstat) { openPlayerStats(Number(t.dataset.pstat)); return; }
 
@@ -2517,6 +2651,18 @@ document.addEventListener('click', async (e) => {
     const g = team ? gameFor(wk, team) : null;
     if (team && !g) { say('bad', `The ${teamShort(team)} are on bye in week ${wk} — pick somebody who is playing.`); render(); return; }
     if (g && new Date(g.date) <= new Date()) { say('bad', `That game has already started — you cannot enter a pick for it.`); render(); return; }
+    /* ⚠️ The player's own pick flow has asked "is this right?" since v18. This
+       one wrote straight through — so a mis-tapped name or week on a phone
+       silently replaced somebody's pick, and the commissioner was never even
+       told they had one. Two 18-long dropdowns is exactly where that happens. */
+    const whoP = S.players.find((x) => x.id === who);
+    const had = pickIn(who, wk);
+    if (had && had.team !== team) {
+      const msg = team
+        ? `${whoP ? whoP.display_name : 'They'} already have the ${teamShort(had.team)} for week ${wk}.\n\nReplace it with the ${teamShort(team)}?`
+        : `Clear ${whoP ? whoP.display_name + "'s" : 'their'} week ${wk} pick (the ${teamShort(had.team)})?\n\nThey will have no pick for that week.`;
+      if (!confirm(msg)) { say('ok', 'Left it alone.'); render(); return; }
+    }
     const r = await S.store.adminSetPick(S.me.token, who, wk, team || null, g && g.date);
     say(r && r.ok ? 'ok' : 'bad', r && r.ok ? 'Saved.' : (r && r.error) || 'Could not save.');
     await reloadPicks(); render(); return;
@@ -2540,7 +2686,16 @@ document.addEventListener('click', async (e) => {
     render(); return;
   }
   if (t.id === 'sb-clear') { lsDel('survivor:sb'); location.reload(); return; }
-  if (t.id === 'dm-toggle') { lsSet('survivor:demo', S.demo ? '0' : '1'); location.reload(); return; }
+  if (t.id === 'dm-toggle') {
+    // ⚠️ Demo mode swaps the SCHEDULE for a synthetic one but keeps writing to
+    // the real league, so a pick made while it is on carries a made-up kickoff
+    // and can slip past the real deadline. Fine on a test device, not on a
+    // live one — so say so before turning it on.
+    if (!S.demo && isShared() && !confirm(
+      'Demo mode replaces the real NFL schedule with a made-up one, but this phone is connected to the REAL league.\n\n'
+      + 'Any pick you make while it is on is written to the real league with a fake kickoff time.\n\nTurn it on anyway?')) return;
+    lsSet('survivor:demo', S.demo ? '0' : '1'); location.reload(); return;
+  }
   if (t.id === 'dm-seed') {
     if (!confirm('This replaces everything stored on this device with a demo family. Continue?')) return;
     await seedDemo(); location.search = ''; return;
@@ -2606,16 +2761,28 @@ async function boot() {
   // While games are in progress the standings genuinely move, so refresh.
   setInterval(async () => {
     if (document.hidden) return;
-    // Refresh whenever the week is UNFINISHED, not only when we can already
-    // see something live — deciding from the stale snapshot meant we could
-    // never discover the first kickoff of the day.
-    const games = S.games[S.week] || [];
-    const unfinished = !games.length || games.some((g) => g.state !== 'post');
-    if (!unfinished) return;
-    delete S.games[S.week]; memCache[`w${S.week}`] = null;
-    const wk = await currentWeek();            // a tab left open crosses weeks
+    /* 🚨 The WEEK is re-derived every time, unconditionally. This used to sit
+       behind the "is anything still being played" test below — but once the
+       last game of a week goes final that test is false FOREVER on that page,
+       so the interval quietly stopped doing anything at all and the app never
+       crossed into the next week. On a phone that matters: the app is never
+       really closed, so somebody could sit on Monday's finished results until
+       they happened to force-quit, and never be shown the new week's games at
+       all. Reading the clock is free — there is no reason to gate it. */
+    const wk = await currentWeek();
+    const rolled = wk !== S.liveWeek;
     S.liveWeek = wk;
     if (wk !== S.week && !S.weekPinned) { S.week = wk; S.apWeek = wk; }
+
+    // Re-FETCHING scores is the expensive half, so that still only happens
+    // while something is unfinished — or when the week has just turned over.
+    // Deciding that from the stale snapshot is deliberate and safe: an empty
+    // week counts as unfinished, so the first kickoff of the day is always
+    // discovered.
+    const games = S.games[S.week] || [];
+    const unfinished = !games.length || games.some((g) => g.state !== 'post');
+    if (!unfinished && !rolled) return;
+    delete S.games[S.week]; memCache[`w${S.week}`] = null;
     await ensureWeeks([S.week]);
     if (S.screen !== 'admin' && !S.sheet) render();
   }, 60000);

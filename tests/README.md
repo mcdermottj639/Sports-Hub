@@ -78,3 +78,10 @@ browser you have — they are the first two lines of every suite.
 | `winpct` | the per-team win chance on the pick buttons |
 | `wrongname` | tapping the wrong name, and undoing it |
 | `nana` | prints a report, not a tally: what a first-time relative faces |
+
+## Added by the overnight stress test (v41–v42)
+| Suite | The bug it holds down |
+|---|---|
+| `locked` | a decided week cannot be re-picked — the loss stays, the team stays spent |
+| `leak` | "teams left" and "best left" never count somebody else's hidden pick |
+| `resilience` | a scoreless "final" is never cached; a dead browser store is named, not blamed on the link; a failed save is never reported as success; an unreadable kickoff fails closed |
