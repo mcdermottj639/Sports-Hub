@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v18';
+const APP_V = 'v19';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -146,6 +146,7 @@ const S = {
   screen: 'pick',
   apWeek: 1,         // the week the admin "enter a pick" card is looking at
   weekPinned: false, // true once the user navigates weeks by hand
+  liveWeek: null,    // the week the NFL is actually on, so we can offer a way back
   stView: 'table',   // 'table' | 'grid' — the standings' two looks
   sheet: null,       // id of the game whose matchup card is open
   confirming: null,  // { team, gameId } while the confirm step is up
@@ -1098,11 +1099,19 @@ function msgHTML() {
 function weekNavHTML(week) {
   const prev = week > 1 ? week - 1 : null;
   const next = week < LAST_WEEK ? week + 1 : null;
+  const live = S.liveWeek;
+  // Wandering a few weeks back and not finding the way home is exactly the
+  // kind of stuck this app cannot afford, so the way back is always one tap
+  // and always says where it goes.
+  const lost = live && week !== live
+    ? `<button class="btn pri wide backnow" data-nowweek="${live}">${
+        week < live ? '↩︎' : '↩︎'} Back to this week (Week ${live})</button>`
+    : '';
   return `<div class="wknav">
     <button class="btn sm" data-week="${prev}" ${prev ? '' : 'disabled'} aria-label="Previous week">‹</button>
-    <span class="wknav-l">Week ${week}</span>
+    <span class="wknav-l">Week ${week}${live && week !== live ? '<i>not this week</i>' : ''}</span>
     <button class="btn sm" data-week="${next}" ${next ? '' : 'disabled'} aria-label="Next week">›</button>
-  </div>`;
+  </div>${lost}`;
 }
 
 function teamBtnHTML(abbr, opts) {
@@ -2049,6 +2058,14 @@ document.addEventListener('click', async (e) => {
   if (t.dataset.sheetpick) { askConfirm(t.dataset.team); return; }
 
   // --- week nav ---
+  if (t.dataset.nowweek) {
+    S.week = Number(t.dataset.nowweek);
+    S.weekPinned = false;          // let it follow the season again
+    S.apWeek = S.week;
+    await ensureWeeks([S.week]);
+    render();
+    return;
+  }
   if (t.dataset.week && t.dataset.week !== 'null') {
     S.week = Number(t.dataset.week);
     S.weekPinned = true;
@@ -2196,6 +2213,7 @@ async function boot() {
   if (!S.me) { renderPicker(); return; }
 
   S.week = await currentWeek();
+  S.liveWeek = S.week;
   S.apWeek = S.week;
   const weeks = [];
   for (let w = 1; w <= S.week; w++) weeks.push(w);
@@ -2214,6 +2232,7 @@ async function boot() {
     if (!unfinished) return;
     delete S.games[S.week]; memCache[`w${S.week}`] = null;
     const wk = await currentWeek();            // a tab left open crosses weeks
+    S.liveWeek = wk;
     if (wk !== S.week && !S.weekPinned) { S.week = wk; S.apWeek = wk; }
     await ensureWeeks([S.week]);
     if (S.screen !== 'admin' && !S.sheet) render();

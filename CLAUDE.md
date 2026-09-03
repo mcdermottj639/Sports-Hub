@@ -676,7 +676,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **352 checks** across fourteen suites (behaviour, matchup/grid,
+    - Verified: **370 checks** across fifteen suites (behaviour, matchup/grid,
       byes, four iPhone sizes, accessibility, audit fixes, the not-shared-yet
       guards, the deployment/stranded-link path, and the zero-touch relative
       experience).
@@ -763,6 +763,16 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     family would get a dark app they never chose, and dark is the harder read
     for aging eyes. A deliberate tap of the theme button is still remembered
     per device (`survivor:palette`).
+  - **↩︎ A way back to the current week.** Someone who taps ‹ a few times to
+    look at earlier weeks has no obvious route home, and being stranded in
+    week 4 wondering why they cannot pick is exactly the kind of stuck this
+    app cannot afford. `S.liveWeek` tracks the week the NFL is actually on
+    (separately from `S.week`, which is the week being LOOKED at), and the
+    week nav renders **"↩︎ Back to this week (Week 10)"** whenever they differ
+    — naming the destination rather than just saying "back". The label also
+    gains a red "not this week". Tapping it clears `weekPinned`, so the app
+    resumes following the season on its own. Shown on both the Pick and
+    Standings navs; absent entirely when you are already on the current week.
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.
