@@ -12,6 +12,13 @@ node survivor/tests/run.js a11y ios     # just these
 The runner starts a static server on :8099 if nothing is listening, and stops
 it again afterwards.
 
+**What they need:** `playwright-core` (1.62 here) resolved from
+`survivor/node_modules/`, and a Chromium at
+`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`. Both are provided by
+this environment and `node_modules/` is deliberately not committed, so on a
+fresh clone install playwright-core and point the two paths at whatever
+browser you have — they are the first two lines of every suite.
+
 ## Sandbox facts that look like bugs and are not
 - **No ESPN and no Supabase.** The demo season (`survivor:demo`) is the only
   fixture. Anything asserting live data must stub it with `ctx.route()`.
