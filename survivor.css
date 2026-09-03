@@ -122,11 +122,26 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 /* "Lost by 7 — 19-26" ran an em dash straight into a hyphen, so the margin
    and the score read as one string of numbers. Two lines now, and the score
    names both teams: the distinction is structural, not a matter of reading
-   punctuation correctly. ⚠️ The card is a GOLD fill taking dark ink, so
-   win/loss must NOT be coloured here — green on gold is unreadable. The
-   words "Won by"/"Lost by" carry it. */
+   punctuation correctly. */
 .locked .lk-res { display: block; font-weight: 800; }
 .locked .lk-score { display: block; margin-top: 5px; font-weight: 700; font-size: .88em; opacity: .72; }
+
+/* A GRADED week recolours the WHOLE card — green won, red lost — so looking
+   back through the season reads at arm's length without anybody parsing a
+   word. Gold stays the "this is your pick" state: the current week, and a
+   game still being played.
+   ⚠️ These are DEEP fills carrying WHITE type, deliberately not `--pos` /
+   `--neg`, which are tuned to be read AS text on the page ground and are far
+   too light to sit under white (Onyx's --pos #4fb383 measures ~2:1). One
+   pair serves both palettes: dark enough for white in Champagne, saturated
+   enough to separate from Onyx's near-black ground. Measured in both. */
+.locked.win  { background: #17694a; color: #fff; box-shadow: 0 4px 14px rgba(23,105,74,.30); }
+.locked.loss { background: #9d2b23; color: #fff; box-shadow: 0 4px 14px rgba(157,43,35,.30); }
+.locked.tie  { background: #4a4636; color: #fff; box-shadow: 0 4px 14px rgba(74,70,54,.30); }
+/* White at .75 is a grey on a coloured fill, where it was only a shade on
+   gold — these two lift so the small print keeps clearing AA. */
+.locked.win .lk-k, .locked.loss .lk-k, .locked.tie .lk-k { opacity: .92; }
+.locked.win .lk-score, .locked.loss .lk-score, .locked.tie .lk-score { opacity: .88; }
 
 .game { margin: 0 0 14px; }
 .game-when {

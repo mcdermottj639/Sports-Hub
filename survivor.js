@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v24';
+const APP_V = 'v25';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -1169,7 +1169,10 @@ function renderPick() {
       : verdict ? `<span class="lk-res ${g.status}">${esc(verdict)}</span>${
           score ? `<span class="lk-score">Final score: ${score}</span>` : ''}`
       : '';
-    h += `<div class="locked">
+    // The whole card carries the result: green won, red lost, gold still
+    // playing. Looking back through the season should not need reading.
+    const tone = ['win', 'loss', 'tie'].includes(g.status) ? ` ${g.status}` : '';
+    h += `<div class="locked${tone}">
       <div class="lk-k">Your Week ${S.week} pick — locked in</div>
       <div class="lk-team">${esc(teamName(mine.team))}</div>
       <div class="lk-sub">${res}</div>
