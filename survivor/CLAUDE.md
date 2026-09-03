@@ -11,6 +11,23 @@
 > root `CLAUDE.md` describes a different app; do not apply its rules here.
 > If you are working on Sports-Hub, nothing in this file applies to you.
 
+> ## 🥇 THE GOLD IS NOT TO BE CHANGED
+> The owner, unprompted: *"Don't change the gold I love the gold."* It is the
+> app's whole identity — the tabs, the pick card, the buttons, the bars.
+>
+> **`--ac`, `--ac6`, `--wm`, `--on-ac`, `--grad` and `--glow` are frozen in
+> both palettes.** They have been touched exactly once, in the commit that
+> created the app, and that is how it stays.
+> - **`survivor/test-gold.js` pins all twelve values** and fails loudly if any
+>   of them moves. ⚠️ **If it fails, the change is wrong — do NOT update the
+>   expectations to match it.** Ask him.
+> - Adding a NEW colour beside the gold is fine and has been done: v35's
+>   `--grad-pos` / `--grad-neg` / `--grad-tie` copy its *construction* (a
+>   five-stop plate with a double highlight) without touching the gold itself.
+>   **Copy the recipe, never the tokens.**
+> - ⚠️ Accent fills take **dark** ink (`--on-ac`). White on gold measures about
+>   1.9:1 and is unreadable. That rule is part of why the gold works.
+
 ## The two apps, side by side
 
 |  | **Sports-Hub** (repo root) | **Family Survivor** (`survivor/`) |
