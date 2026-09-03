@@ -1,7 +1,8 @@
 /* Family Survivor League — standalone styles.
-   Self-contained on purpose: this app must never break when Sports-Hub ships.
-   The palette tokens are copied from styles.css so it looks like the same
-   family of apps, but nothing here imports anything from there.
+   Self-contained on purpose — it imports nothing and depends on nothing.
+   The palette tokens were copied from the owner's other app so the two look
+   like a family, but that was a one-time copy, not a link: a change there has
+   never reached this file and cannot.
 
    DESIGN RULE THAT OVERRIDES TASTE: a 95-year-old uses this on a phone.
    Base type is 18px, every tap target is >= 56px, and contrast is high.
