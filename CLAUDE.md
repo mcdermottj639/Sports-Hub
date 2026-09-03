@@ -449,7 +449,13 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     - A new worker taking over a running page triggers ONE reload, guarded so
       it never fires on first install and never loops.
     - `APP_V` shows in the footer, so the commissioner can ask "what does
-      yours say?" and know at once whether somebody is on an old copy.
+      yours say?" and know at once whether somebody is on an old copy. It is
+      the **build number** — one per shipped change to `survivor/` — so a
+      bigger number is always newer. ⚠️ **Bump it on every ship.** It does not
+      affect delivery (the worker does that), but a version that lies is worse
+      than none, which is exactly how `?v=1` sat unchanged for sixteen
+      releases. It was briefly `v1` for one commit, which read as "brand new
+      app" when it was build 17.
     - ⚠️ Survivor sits under the Sports-Hub worker's `/Sports-Hub/` scope
       today; its own worker is more specific and wins, and it is what
       survives the move to a separate repo.

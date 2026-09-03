@@ -18,10 +18,14 @@
 
 'use strict';
 
-/* Shown in the footer and on the Admin screen, so the commissioner can ask
-   "what does yours say?" and know instantly whether somebody is on an old
-   copy. Bump it with any change worth identifying. */
-const APP_V = 'v1';
+/* Shown in the footer so the commissioner can ask "what does yours say?" and
+   tell instantly whether somebody is on an old copy. It is the app's BUILD
+   NUMBER — one per shipped change to survivor/ — so a bigger number is
+   always newer and two people can compare at a glance.
+   ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
+   what actually delivers updates), but a version that lies is worse than no
+   version — that is exactly how `?v=1` went stale for sixteen releases. */
+const APP_V = 'v18';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
