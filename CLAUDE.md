@@ -30,8 +30,8 @@
 
 > ## 🧪 The tests live in `survivor/tests/` — run them
 > `node survivor/tests/run.js` runs every suite (it starts its own server);
-> `node survivor/tests/run.js a11y ios` runs just those. **~500 checks across
-> 29 suites, all driving the real app in headless Chromium.**
+> `node survivor/tests/run.js a11y ios` runs just those. **763 checks across
+> 33 suites, all driving the real app in headless Chromium.**
 > - They used to live in `/tmp` and were lost at the end of every session,
 >   which meant each change re-proved the same ground by hand. They are in the
 >   repo now. **Add to them rather than starting over.**
@@ -52,7 +52,7 @@
 | Storage prefix | `sportshub:` | `survivor:` |
 | Shared state | none — localStorage + read-only backends | **Supabase** (the only real database in the repo) |
 | Design floor | none stated | **18px base, ≥56px targets, ≥16px inputs** |
-| Tests | `node --check` only | ~20 headless-Chromium suites, ~450 checks |
+| Tests | `node --check` only | 33 headless-Chromium suites, 763 checks |
 
 ⚠️ **The traps that come from them sharing a repo today**, all of which the
 move to a separate repo removes:
@@ -848,6 +848,130 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
     be a Tuesday: the first rollover, i.e. the Tuesday after week 1's Monday
     night game. Everything else is derived. Weeks clamp to 1–18, so the
     off-season can never produce week 0 or week 40.
+- **🧪 THE OVERNIGHT STRESS TEST (v41–v43).** The owner, going to bed:
+  *"deploy some sub sonnet agents to stress test this app. Use tons of real
+  scenarios and things that could go wrong structurally visually or anything
+  in between."* Five agents attacked from different directions — house rules,
+  security, failure modes, visual/layout, and a relative's journey. **Four
+  correctness blockers and one visual blocker came back.** They are worth
+  reading as a set, because every one of them is a thing the existing ~600
+  checks could not see, and each failure mode has a general shape.
+  - 🚨 **A DECIDED WEEK COULD BE RE-PICKED — the open question from v26,
+    answered.** Take the Broncos on Thursday, watch them lose, then switch to
+    a Sunday team: **the loss vanished AND the spent team came back.** A pick
+    is one row per player per week, so a change overwrites rather than adds —
+    which is right before kickoff and catastrophic after it. It breaks "never
+    the same team twice", which is not a matter of interpretation, so it was
+    closed rather than asked about.
+    - **The pick row stores its own `kickoff` now.** That is the whole fix:
+      the guard needs to know when YOUR pick's game starts, and previously
+      only the NEW team's kickoff was ever checked. So `submit_pick` in
+      `schema.sql` can enforce it without knowing the NFL schedule — the same
+      trick that lets the database enforce the bye rule.
+    - Held in **four places**: both stores, `submit_pick`, and
+      `admin_set_pick`. **The commissioner is not exempt** — "helping Nana
+      with her late pick" would erase the result she already has.
+    - Changing a pick whose game has NOT started works exactly as before, and
+      still frees the team you moved away from.
+  - 🚨 **The Stats tab leaked hidden picks.** "Teams left" and "best left"
+    counted a player's secret pick, so mid-week their count dropped by one and
+    a team disappeared from their best-left list. Since the sensible play is
+    usually your best remaining team, **the name that vanished often WAS the
+    pick** — a subtraction is a side channel exactly like a list is.
+    `usedTeamsVisible` withholds other people's unstarted picks; your own
+    still count against your own bench, because you already know them.
+    - ⚠️ **This is the second time this rule has been broken by a screen that
+      never displays a pick.** `pickVisible` is not a rendering helper — it
+      gates anything that READS more than one player's picks, including a
+      count, a maximum, or a difference.
+  - 🚨 **A scoreless "final" froze the week forever.** ESPN can report a game
+    `post` with one score still `null` at the whistle. The week cached to the
+    device permanently: the result never counted, the week was never
+    re-fetched, and **two relatives could see different standings for the same
+    finished game all season**. A week only freezes now when every game is
+    final AND both scores are real numbers, and a bad copy already on a phone
+    is dropped on sight. ⚠️ `state === 'post'` is not the same claim as "this
+    game has a result".
+  - 🚨 **A dead browser store stranded people permanently.** Safari private
+    mode, or iOS evicting storage from an app opened once a week, produced
+    "This link isn't working — ask Jack" **with no way out**, because the
+    token lives in the URL and could not be written down. `storageWorks()` is
+    a canary write that tells the two cases apart and names the real cause.
+    ⚠️ The wrong diagnosis is worse than none: it sends the one person who
+    could fix it to the one person who cannot.
+  - 🚨 **THE ADMIN TAB WAS OFF-SCREEN — for the commissioner, on his own
+    phone (v43).** `.tabs` was `grid-auto-columns: 1fr` with `nowrap` labels,
+    so the row's intrinsic width was the sum of five labels: on a 320px phone
+    the **whole page** became 376px and the Admin tab rendered entirely
+    outside the viewport, with no scrollbar and nothing hinting the page could
+    move sideways. In **Bigger Text** — the grandmother-facing accommodation —
+    it happened at 375, 390 and 430 too, i.e. every phone size this app tests.
+    - **A relative sees four tabs and they fit.** That is why every prior
+      layout pass missed it: they were all run signed in as a relative.
+      `tests/fit.js` signs in as the **commissioner** and is the only suite
+      that does.
+    - It is `flex-wrap` now. Whatever does not fit moves to a second row, at
+      full size — a wrapping bar cannot hide a control, and shrinking the type
+      to make five fit would have broken the floor this app exists for.
+  - **Three more of the same bug, and the shape is worth naming.** A CSS grid
+    track that cannot shrink does not clip locally — it **pushes the DOCUMENT
+    wider than the phone**, and the overflow is then only reachable by
+    scrolling the entire app sideways, which nothing advertises. It cost:
+    - **Week winners lost the result.** "Buccaneers +20" painted past the right
+      edge, so most rows read as a team name and nothing — the answer to the
+      question the section exists to answer, silently gone. ⚠️ **Shrinking the
+      tracks was not enough**: at 22px Bigger Text the single word
+      "Buccaneers" is wider than any share of 320px it can be given, so the
+      result **wraps to its own line** instead.
+    - **Most-picked teams printed the name over its own bar** — a hard 62px
+      column could not hold "Commanders", at *every* width, with stock data.
+    - **My Picks** rows crowded their running total against the card edge.
+  - 🚨 **The week-by-week grid truncated names — the one rule this app has
+    already learned twice.** `.gr .gnm` still had `text-overflow: ellipsis`,
+    so "Grandpa Bartholomew" rendered as "Grandpa Bar…" in the one screen
+    built for everybody to find their own row. **A person's name is the one
+    thing in a table that must never be cut**; the standings table and the
+    admin roster were both fixed for this and the grid was never brought
+    along. Fixed here and in `.wp-nm`, `.cw-nm` and `.plrow .pn` at the same
+    time — grep for `text-overflow` before adding another.
+  - **`--mu2` carried text for a third time**, on `.cg-go` — the `›` that is
+    the ONLY cue a condensed row is tappable, at **2.56:1** in the default
+    palette. It is `--gy` now. That token must never carry text; it has now
+    been caught three times.
+  - **Also fixed:** the week never advanced on a page left open (the refresh
+    gate went false forever once a week finished — the clock is re-read every
+    tick now, and only the score re-fetch stays gated); admin proxy-picks
+    overwrote silently and never showed what was already there; a raw
+    `submit_pick failed (409)` could reach a relative's screen; `claim_player`
+    could hand two people the same identity (TOCTOU — it is a conditional
+    `update … where claimed_at is null returning *` now); a failed save
+    reported success (the verification read back the value it had just failed
+    to write); an unreadable kickoff **failed open**; a slow submit had no
+    timeout and no "saving…"; names had no length cap; and an unreachable
+    branch that read a token with no admin check is gone. Matchup-sheet
+    labels sitting at 13.3–14.0px were lifted and moved to `rem`.
+  - **New suites: `locked` (14), `leak` (9), `resilience` (11), `fit` (116).**
+    ⚠️ **`fit` is the durable half of the visual fix** — it checks the thing
+    the user experiences ("is any of it off the edge of my phone") rather than
+    any one selector, **as the commissioner**, on all five screens, at
+    320/375/390/430, with Bigger Text on and off. A selector-level assertion
+    would have passed on all four of these bugs.
+  - ⚠️ **One regression this found in my own tests:** `confirm.js` cleared the
+    current week with `adminSetPick(…, null)` to get a clean slate, which the
+    new locked-week guard correctly refuses — so the SETUP failed silently and
+    every assertion below it then ran against a locked slate with no buttons
+    to measure. It walks to a pickable week now and **asserts the slate has
+    pickable games before measuring anything.** Same lesson as v26 and v29: a
+    check that measures nothing is worse than one that fails.
+  - ⚠️ **An agent's contrast harness produced ~4,970 false positives** by
+    reading a gradient's stops without accounting for **alpha** — the v40
+    sticky-name fix layers a .12 tint over an opaque surface, which it read as
+    solid green. Same family as the trap this file already documents for
+    plated fills. Verify a "failure" against the composite before believing it.
+  - ⚠️ **Still unverified:** `schema.sql`'s new guards have never met a live
+    Postgres — the sandbox has none — so they are written carefully and must
+    be confirmed when the project is created.
+
 - ⚠️ **Unverified live:** the sandbox reaches neither ESPN nor Supabase, so
   the real week-scoreboard shape
   (`?dates=2026&seasontype=2&week=N`), `currentWeek()`'s read of

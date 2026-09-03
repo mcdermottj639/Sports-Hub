@@ -6,9 +6,24 @@ let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{f
  const page=await ctx.newPage(); const errs=[]; page.on('pageerror',e=>errs.push(e.message));
  await page.goto('http://127.0.0.1:8099/',{waitUntil:'networkidle'});
  await page.click('#first-demo'); await page.waitForSelector('#tabs:not([hidden])'); await page.waitForTimeout(1200);
- // start from a clean slate this week
- await page.evaluate(async()=>{await S.store.adminSetPick(S.me.token,S.me.id,S.week,null);await reloadPicks();render();});
- await page.waitForTimeout(300);
+ // Start from a week that can still be picked. ⚠️ It used to clear THIS
+ // week via adminSetPick(..., null) — which the locked-week guard now
+ // correctly refuses, because week 10's pick has already kicked off. The
+ // setup failed silently and every assertion below then ran against a
+ // locked slate with no .pk buttons at all. Walk forward instead.
+ await page.evaluate(async()=>{
+   for (let w=S.liveWeek; w<=18; w++) {
+     await ensureWeeks([w]);
+     const cur=pickIn(S.me.id,w);
+     if (cur && new Date(cur.kickoff)<=new Date()) continue;         // locked
+     if (!(S.games[w]||[]).some(g=>g.state==='pre')) continue;        // nothing left to pick
+     S.week=w; S.weekPinned=true; break;
+   }
+   render();
+ });
+ await page.waitForTimeout(600);
+ // If this ever fails the rest of the suite is measuring nothing.
+ ok(await page.locator('#s-pick .pk:not([disabled])').count()>0,'the slate has games that can still be picked');
 
  console.log('\n— an accidental tap does NOT save —');
  const before=await page.evaluate(()=>(pickIn(S.me.id,S.week)||{}).team||null);

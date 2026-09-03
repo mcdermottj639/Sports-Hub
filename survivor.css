@@ -88,7 +88,7 @@ button { cursor: pointer; }
 }
 .hd-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .hd-ball { font-size: 1.3em; }
-.hd-name { font-weight: 800; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hd-name { font-weight: 800; letter-spacing: -.01em; min-width: 0; overflow-wrap: anywhere; }
 .hd-right { display: flex; gap: 6px; flex: 0 0 auto; }
 .hd-btn {
   min-width: 46px; height: 46px; border-radius: 12px;
@@ -103,13 +103,21 @@ button { cursor: pointer; }
 
 /* ---- tabs ------------------------------------------------------------- */
 .tabs {
-  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  display: flex; flex-wrap: wrap;
   gap: 6px; max-width: 720px; margin: 0 auto; padding: 10px 16px 4px;
 }
+/* 🚨 FLEX-WRAP, NOT A FIXED GRID. As `grid-auto-columns: 1fr` the row's
+   intrinsic width was the sum of five nowrap labels, which on a 320px phone
+   pushed the whole PAGE to 376px and put the Admin tab entirely off-screen —
+   for the commissioner, the one person who needs it, with no scrollbar and
+   nothing hinting the page could move sideways. Wrapping can never do that:
+   whatever does not fit moves to a second row, still full size, still read
+   at the same type size. `flex: 1 1 auto` keeps four tabs evenly spread. */
 .tab {
+  flex: 1 1 auto; min-width: 0;
   min-height: 56px; border-radius: 14px; font-weight: 700; font-size: .88em;
   background: var(--sf); border: 1px solid var(--tr); color: var(--gy);
-  padding: 0 4px; white-space: nowrap;   /* "My Picks" wrapped and doubled the bar's height */
+  padding: 0 10px; white-space: nowrap;   /* "My Picks" wrapped and doubled the bar's height */
 }
 .tab.on { background: var(--grad); border-color: transparent; color: var(--on-ac); box-shadow: var(--glow); }
 
@@ -217,7 +225,7 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 .cg-t { font-weight: 700; font-size: .95em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cg-s { font-weight: 900; font-size: .95em; font-variant-numeric: tabular-nums; }
 .cg-at { flex: 0 0 auto; color: var(--mu); font-size: .88em; font-weight: 700; }
-.cg-go { flex: 0 0 auto; color: var(--mu2); font-size: 1.1em; font-weight: 700; }
+.cg-go { flex: 0 0 auto; color: var(--gy); font-size: 1.1rem; font-weight: 700; }
 /* The loser dims rather than the winner shouting, so a finished row still
    reads as one line and the eye lands on who won. */
 .cg.done .cg-side:not(.w) { opacity: .55; }
@@ -312,15 +320,26 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 .wk-picks { display: flex; flex-direction: column; gap: 8px; }
 /* A grid, not a flex row: the italic "hidden until kickoff" text is long
    enough that flex shrinking crushed the NAME column down to one letter. */
+/* 🚨 IT WRAPS TO A SECOND LINE. It was a fixed 3-track grid, and a track that
+   cannot shrink pushes the whole PAGE wider instead of clipping — so
+   "Buccaneers +20", the entire point of the row, painted off the right edge
+   of a 320px phone with no ellipsis and nothing saying anything was missing.
+   Shrinking the tracks is not enough either: at 22px Bigger Text the single
+   word "Buccaneers" is wider than any share of 320px it can be given. So the
+   result moves to its own line when it has to, still right-aligned, still
+   full size — the one outcome that is always readable.
+   ⚠️ `.wp-nm` may not shrink below 84px: a long italic "hidden until
+   kickoff" beside it once crushed the NAME to a single letter, which is what
+   made this a grid in the first place. */
 .wp-row {
-  display: grid; grid-template-columns: minmax(84px, 1fr) auto auto;
-  align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--tr);
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 4px 10px; padding: 11px 0; border-bottom: 1px solid var(--tr);
 }
 .wp-row:last-child { border-bottom: 0; }
-.wp-nm { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-team { font-weight: 800; }
-.wp-hidden { color: var(--mu); font-style: italic; font-weight: 400; font-size: .88em; }
-.wp-res { font-weight: 800; min-width: 44px; text-align: right; white-space: nowrap; }
+.wp-nm { flex: 1 0 84px; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.wp-team { flex: 0 1 auto; font-weight: 800; min-width: 0; overflow-wrap: anywhere; }
+.wp-hidden { flex: 1 1 auto; min-width: 0; color: var(--mu); font-style: italic; font-weight: 400; font-size: .88em; }
+.wp-res { flex: 0 1 auto; margin-left: auto; font-weight: 800; min-width: 0; text-align: right; overflow-wrap: anywhere; }
 .wp-res.w { color: var(--pos); } .wp-res.l { color: var(--neg); } .wp-res.t { color: var(--wm); }
 
 /* Week nav: one slim row. It used to be a 100px tile that pushed the games
@@ -334,16 +353,18 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 
 /* ---- history ---------------------------------------------------------- */
 .hrow {
-  display: grid; grid-template-columns: 62px 1fr auto auto; gap: 10px; align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto) minmax(0, auto);
+  gap: 10px; align-items: center;
   padding: 14px 0; border-bottom: 1px solid var(--tr);
 }
 .hrow:last-child { border-bottom: 0; }
 .h-wk { color: var(--mu); font-weight: 800; font-size: .9em; }
 .h-team { font-weight: 800; }
 .h-opp { color: var(--gy); font-size: .88rem; display: block; font-weight: 400; }
-.h-mar { font-weight: 800; min-width: 56px; text-align: right; }
+.h-mar { font-weight: 800; text-align: right; white-space: nowrap; }
 .h-mar.w { color: var(--pos); } .h-mar.l { color: var(--neg); } .h-mar.t { color: var(--wm); }
-.h-run { color: var(--mu); font-size: .85em; min-width: 54px; text-align: right; }
+.h-run { color: var(--mu); font-size: .85em; text-align: right; white-space: nowrap; }
 .hrow.miss .h-team { color: var(--mu); font-style: italic; font-weight: 400; }
 
 .tot { display: flex; gap: 10px; margin: 0 0 14px; }
@@ -371,7 +392,7 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
   background: var(--sf2); border: 1px solid var(--tr2); border-radius: 12px;
 }
 .plrow { display: flex; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--tr); }
-.plrow .pn { flex: 1; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.plrow .pn { flex: 1; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8em; color: var(--mu); word-break: break-all; }
 
 .msg { padding: 12px 14px; border-radius: 12px; margin: 0 0 14px; font-weight: 600; }
@@ -424,21 +445,21 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 .sh-when { color: var(--gy); font-size: .9em; margin-top: 4px; }
 
 .sh-proj { background: var(--grad); color: var(--on-ac); border-radius: 16px; padding: 16px; box-shadow: var(--glow); }
-.sh-k { font-size: .76em; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .72; }
+.sh-k { font-size: .86rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .72; }
 .sh-team { font-size: 1.35em; font-weight: 900; line-height: 1.2; margin: 3px 0 1px; }
 .sh-sub { font-size: .9em; opacity: .8; }
 .sh-bar { height: 10px; border-radius: 999px; background: rgba(0,0,0,.22); margin: 12px 0 5px; overflow: hidden; }
 .sh-bar i { display: block; height: 100%; background: var(--on-ac); opacity: .78; }
 .sh-split { display: flex; justify-content: space-between; font-size: .8em; font-weight: 800; opacity: .82; }
 
-.sh-h { font-size: .78em; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--mu); margin: 22px 0 8px; }
+.sh-h { font-size: .86rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--mu); margin: 22px 0 8px; }
 .sh-blurb p { margin: 0 0 10px; line-height: 1.55; }
 .sh-blurb p:last-child { margin-bottom: 0; }
 .sh-t { width: 100%; border-collapse: collapse; background: var(--sf); border: 1px solid var(--tr); border-radius: 12px; overflow: hidden; }
-.sh-t th, .sh-t td { padding: 11px 12px; text-align: right; border-bottom: 1px solid var(--tr); font-size: .95em; }
+.sh-t th, .sh-t td { padding: 11px 12px; text-align: right; border-bottom: 1px solid var(--tr); font-size: .95rem; }
 .sh-t td:first-child { white-space: nowrap; }
 .sh-t tr:last-child td { border-bottom: 0; }
-.sh-t th { color: var(--mu); font-size: .74em; text-transform: uppercase; letter-spacing: .05em; font-weight: 800; }
+.sh-t th { color: var(--mu); font-size: .82rem; text-transform: uppercase; letter-spacing: .05em; font-weight: 800; }
 .sh-t td:first-child, .sh-t th:first-child { text-align: left; color: var(--gy); }
 .sh-t .sh-tm { font-weight: 800; color: var(--ink); }
 .sh-note { margin: 8px 0 0; }
@@ -461,10 +482,13 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 .gr th, .gr td { padding: 8px 6px; text-align: center; border-bottom: 1px solid var(--tr); }
 .gr thead th { color: var(--mu); font-size: .7em; text-transform: uppercase; letter-spacing: .04em; font-weight: 800; white-space: nowrap; }
 .gr tbody tr:last-child td { border-bottom: 0; }
+/* ⚠️ It WRAPS, it does not ellipsis. "Grandpa Bartholomew" came out as
+   "Grandpa Bar…" — and this grid exists precisely so everyone can find their
+   own row. Same rule the standings table already follows. */
 .gr .gnm {
   position: sticky; left: 0; z-index: 2; background: var(--sf);
-  text-align: left; font-weight: 700; white-space: nowrap; padding-left: 14px;
-  border-right: 1px solid var(--tr); max-width: 112px; overflow: hidden; text-overflow: ellipsis;
+  text-align: left; font-weight: 700; padding-left: 14px;
+  border-right: 1px solid var(--tr); max-width: 146px; overflow-wrap: anywhere;
 }
 /* 🚨 The sticky name column must be OPAQUE on every row, or the cells
    scrolling underneath show straight through it. `--pos-bg` is an rgba tint
@@ -680,9 +704,6 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .namebtn:hover { border-color: var(--ac); }
 .pn-wait { color: var(--gy); font-weight: 400; font-size: .88rem; }
 
-/* Real family names ("Grandpa Joe", "Cousin Dave") need more than 112px. */
-.gr .gnm { max-width: 146px; }
-
 /* ---- confirm a pick --------------------------------------------------- */
 .cf-card { text-align: center; }
 .cf-k {
@@ -732,7 +753,7 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .cw-hd { min-height: 0; padding-bottom: 6px; margin-bottom: 4px; align-items: end; border-bottom: 1px solid var(--tr); }
 .cw-h2, .cw-h3 { font-size: .88rem; font-weight: 800; color: var(--mu); line-height: 1.2; text-align: right; }
 .cw-with { display: flex; align-items: center; gap: 7px; }
-.cw-nm { font-weight: 700; font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cw-nm { font-weight: 700; font-size: .95rem; min-width: 0; overflow-wrap: anywhere; }
 .cw-bar { flex: 1; height: 9px; border-radius: 999px; background: var(--tr); overflow: hidden; }
 .cw-bar i { display: block; height: 100%; background: var(--grad); }
 .cw-v { flex: 0 0 auto; font-weight: 800; font-size: .88rem; color: var(--gy); white-space: nowrap; }
@@ -745,7 +766,11 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .cw-n { display: block; color: var(--gy); font-size: .88rem; line-height: 1.35; }
 .cw-key { margin-top: 8px; }
 
-.popr { display: grid; grid-template-columns: 62px 1fr 32px; gap: 10px; align-items: center; padding: 9px 0; }
+/* ⚠️ A hard 62px could not hold "Commanders"/"Buccaneers"/"Cardinals", so the
+   name printed straight over the gold bar beside it — at EVERY width, since a
+   px track does not care how wide the phone is. max-content gives the name
+   exactly what it needs and the bar takes what is left. */
+.popr { display: grid; grid-template-columns: minmax(0, max-content) minmax(40px, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; }
 .pop-t { font-weight: 800; font-size: .95rem; }
 .pop-bar { height: 12px; background: var(--tr); border-radius: 999px; overflow: hidden; }
 .pop-bar i { display: block; height: 100%; background: var(--grad); }
