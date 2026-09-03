@@ -89,6 +89,17 @@ It is four self-contained files. Copy the folder, enable GitHub Pages, done.
 This should happen **before** the family gets their links, so that deleting a
 path segment from the URL doesn't land them in Sports-Hub.
 
+## Shipping a change
+
+There is no build step and no `?v=` ritual — `sw.js` is network-first, so any
+push reaches every phone on their next open. The one manual step:
+
+**Bump `APP_V` at the top of `survivor.js`.** It is the build number shown in
+the footer, and it exists so the commissioner can ask "what does yours say?"
+and tell at a glance whether somebody is on an old copy. It does not affect
+delivery, but a version that lies is worse than none — that is precisely how
+`?v=1` sat unchanged through sixteen releases.
+
 ## Testing
 
 No build step and no test runner. `node --check survivor.js` is the syntax gate;
