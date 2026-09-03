@@ -722,9 +722,25 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
   not a model of our own**, and the copy says so. Porting Sports-Hub's model
   would drag half of `app.js` into a page twenty relatives can open, and the
   de-vigged moneyline is both a better forecaster and honestly stateable.
-  Order of preference: de-vigged moneylines → spread through `ncdf(-s/13.5)`
-  → records, each labelled. With no odds AND no records it says so rather
-  than guessing.
+  - 🚨 **The PERCENTAGE comes from the de-vigged MONEYLINE and nothing else
+    (v39).** The owner: *"The win percentage should be based on money line not
+    the spread as well... but still show the spread in the little information
+    widget."* It used to fall back to converting the spread through
+    `ncdf(-s/13.5)`, which is a **rule of thumb, not a market price** — it
+    assumes every game carries the same scoring variance and it invents a
+    precision the book never quoted. On screen the two were indistinguishable
+    while only one of them was actually somebody's money.
+  - **The spread is untouched as INFORMATION**: it still shows in the ⓘ pill,
+    still fills the Vegas-line table, and still names the favourite when no
+    moneyline is posted. It just never becomes a percentage.
+  - With a spread but no moneyline the card shows the projected winner with
+    **no number**, and the read says *"No moneyline is posted, so there is no
+    percentage to quote."* Records remain the last resort for naming a
+    favourite, labelled as such. With neither it says so rather than guessing.
+  - ⚠️ `NFL_SD` and `ncdf` survive — the DEMO prices its fixtures with them —
+    so grepping for `ncdf` still hits `matchupRead`'s comment, which names the
+    conversion it deliberately does not do. **A test asserting its absence
+    must strip comments first**, or the explanation reads as the offence.
 - **"What does LEFT mean here?" → the column is GONE (v31 → v32).** It was
   `32 - used`, how many NFL teams you still have available. v31 renamed it
   "Teams left" and explained it in the note; the owner's answer was better:
