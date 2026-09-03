@@ -20,7 +20,7 @@
    new worker when sw.js itself changed byte-wise. Forgetting it costs only
    the weaker of the app's two update signals (the page also fingerprints
    survivor.js directly), but bump it anyway. */
-const APP_V = 'v23';
+const APP_V = 'v24';
 
 const CACHE = 'survivor-v1';
 
