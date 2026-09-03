@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v27';
+const APP_V = 'v28';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -568,13 +568,21 @@ function normGame(ev, week) {
     recHome: recOf(c, 'home'),
     recRoad: recOf(c, 'road'),
   });
-  const bc = (comp.broadcasts || [])[0] || {};
+  // ESPN publishes the channel in two shapes and which one it uses varies by
+  // sport and by week, so read both — the main Sports-Hub app learned this the
+  // same way. `geoBroadcasts` is the richer one when it is there.
+  const names = [];
+  (comp.geoBroadcasts || []).forEach((b) => {
+    const n = (b.media && (b.media.shortName || b.media.callLetters)) || '';
+    if (n) names.push(n);
+  });
+  if (!names.length) (comp.broadcasts || []).forEach((b) => (b.names || []).forEach((n) => n && names.push(n)));
   return {
     id: ev.id, week,
     date: ev.date || comp.date,
     state: st.state || 'pre',                       // 'pre' | 'in' | 'post'
     statusText: st.shortDetail || st.detail || st.description || '',
-    tv: (bc.names || []).join(', '),
+    tv: [...new Set(names)].join(', '),
     odds: normOdds(comp),
     home: side(h), away: side(a),
   };
@@ -950,6 +958,7 @@ function askConfirm(team) {
       <span>${esc(teamName(team))}</span>
     </div>
     <p class="cf-game">${esc(where)} the ${esc(teamShort(opp))} · ${esc(kickWhen(g))}</p>
+    ${g.tv ? `<p class="cf-tv">📺 ${esc(g.tv)}</p>` : ''}
     ${replacing ? `<p class="cf-replace">This replaces your pick of the ${esc(teamShort(replacing))}.</p>` : ''}
     <button class="btn pri wide cf-yes" id="cf-yes">Yes — that's my pick</button>
     <button class="btn wide cf-no" id="cf-no">No, go back</button>
