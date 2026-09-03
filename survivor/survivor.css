@@ -110,21 +110,39 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 }
 .note { color: var(--gy); font-size: .95em; }
 
+/* ⚠️ TYPE FLOOR — 15.5px, everywhere, on every screen. Several rules below
+   used `em` inside a parent that had already shrunk, so they computed to
+   13-15px and shipped that way for versions: the a11y sweep only ever looked
+   at ONE screen and never saw them. They are `rem` now, anchored to :root.
+   Use `rem` for any small label. */
+
 /* ---- the pick screen -------------------------------------------------- */
 .locked {
   background: var(--grad); color: var(--on-ac); border: 0;
   border-radius: 18px; padding: 20px 18px; margin: 0 0 18px;
   box-shadow: var(--glow);
 }
-.locked .lk-k { font-size: .85em; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .75; }
+.locked .lk-k { font-size: .88rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .75; }
 .locked .lk-team { font-size: 1.8em; font-weight: 900; line-height: 1.15; margin: 4px 0 2px; }
 .locked .lk-sub { font-size: .95em; }
 /* "Lost by 7 — 19-26" ran an em dash straight into a hyphen, so the margin
    and the score read as one string of numbers. Two lines now, and the score
    names both teams: the distinction is structural, not a matter of reading
    punctuation correctly. */
+/* The pick card's supporting lines. `.lk-meta` is the fixture — who they
+   play, when, what channel — and `.lk-hint` is the instruction, which has to
+   sit BELOW it: the fixture is what you are checking, the instruction is what
+   you already know by the second week. */
+/* ⚠️ `rem`, not `em` — these sit inside `.lk-sub` (.95em), so `.9em` here
+   compounded to 15.39px and broke the app's 15.5px floor. The same trap the
+   `.gcell` note in CLAUDE.md records. `:root` is the anchor. */
+.locked .lk-meta { display: block; font-weight: 700; font-size: .95rem; opacity: .82; }
+.locked .lk-meta + .lk-meta { margin-top: 2px; }
+.locked .lk-hint { display: block; margin-top: 8px; font-size: .92rem; opacity: .74; }
 .locked .lk-res { display: block; font-weight: 800; }
-.locked .lk-score { display: block; margin-top: 5px; font-weight: 700; font-size: .88em; opacity: .72; }
+/* ⚠️ `rem` for the same reason as `.lk-meta` — nested in `.lk-sub` (.95em),
+   `.88em` computed to 15.05px and had been under the 15.5px floor since v24. */
+.locked .lk-score { display: block; margin-top: 5px; font-weight: 700; font-size: .88rem; opacity: .72; }
 
 /* A GRADED week recolours the WHOLE card — green won, red lost — so looking
    back through the season reads at arm's length without anybody parsing a
@@ -195,7 +213,7 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
   text-transform: uppercase; letter-spacing: .06em; margin: 0 0 6px 4px;
 }
 .game-pair { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: stretch; }
-.game-at { align-self: center; color: var(--mu); font-size: .85em; font-weight: 700; }
+.game-at { align-self: center; color: var(--mu); font-size: .88rem; font-weight: 700; }
 
 .pk {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -206,6 +224,9 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 .pk img { width: 34px; height: 34px; object-fit: contain; }
 .pk-name { font-weight: 800; font-size: 1.02em; line-height: 1.2; }
 .pk-rec { color: var(--mu); font-size: .82em; }
+/* The market's chance this side wins. `rem`, per the type-floor note above. */
+.pk-win { color: var(--gy); font-size: .88rem; font-weight: 700; }
+.pk.chosen .pk-win { color: var(--on-ac); opacity: .8; }
 .pk:hover:not(:disabled) { border-color: var(--ac); }
 .pk.chosen { background: var(--grad); border-color: transparent; color: var(--on-ac); box-shadow: var(--glow); }
 .pk.chosen .pk-rec { color: var(--on-ac); opacity: .75; }
@@ -286,7 +307,7 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 .hrow:last-child { border-bottom: 0; }
 .h-wk { color: var(--mu); font-weight: 800; font-size: .9em; }
 .h-team { font-weight: 800; }
-.h-opp { color: var(--gy); font-size: .85em; display: block; font-weight: 400; }
+.h-opp { color: var(--gy); font-size: .88rem; display: block; font-weight: 400; }
 .h-mar { font-weight: 800; min-width: 56px; text-align: right; }
 .h-mar.w { color: var(--pos); } .h-mar.l { color: var(--neg); } .h-mar.t { color: var(--wm); }
 .h-run { color: var(--mu); font-size: .85em; min-width: 54px; text-align: right; }
@@ -346,8 +367,8 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
   background: var(--sf); border: 1px solid var(--tr); color: var(--gy);
   font-size: .82em; font-weight: 800; letter-spacing: 0; text-transform: none;
 }
-.ibtn-i { font-size: 1.15em; color: var(--ac6); }
-.ibtn-l { color: var(--gy); }
+.ibtn-i { font-size: 1.1rem; color: var(--ac6); }
+.ibtn-l { color: var(--gy); font-size: .88rem; }
 
 .sheet { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
 .sheet-back { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
@@ -438,7 +459,7 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
   margin: 18px 0 0; padding: 14px 16px; border-radius: 14px;
   background: var(--sf2); border: 1px solid var(--tr);
 }
-.byebar b { display: block; font-size: .78em; font-weight: 800; letter-spacing: .08em;
+.byebar b { display: block; font-size: .88rem; font-weight: 800; letter-spacing: .08em;
   text-transform: uppercase; color: var(--mu); margin-bottom: 5px; }
 .byebar span { display: block; font-weight: 700; color: var(--ink2); line-height: 1.5; }
 .byebar em { display: block; margin-top: 6px; font-size: .88em; color: var(--gy); font-style: normal; }
@@ -617,7 +638,7 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 }
 .namebtn:last-child { margin-bottom: 0; }
 .namebtn:hover { border-color: var(--ac); }
-.pn-wait { color: var(--gy); font-weight: 400; font-size: .85rem; }
+.pn-wait { color: var(--gy); font-weight: 400; font-size: .88rem; }
 
 /* Real family names ("Grandpa Joe", "Cousin Dave") need more than 112px. */
 .gr .gnm { max-width: 146px; }

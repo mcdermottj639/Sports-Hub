@@ -942,9 +942,37 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       `data-view`), and removing `linkFor` swallowed `isShared`/`linkWarnOK`.
       Both were caught by tests. Cut by NAME, not by "everything up to the
       next function".
+  - **The pick card carries the FIXTURE, and every team button its chance
+    (v29).** Two owner asks in a row, and they are the same instinct: put the
+    thing you would otherwise go hunting for on the screen you are already on.
+    - The "you can still change it" card now reads **team → who they play and
+      when → 📺 channel → the instruction**, in that order, because the
+      instruction is what you already know by the second week. A live card
+      gains the channel too, which is the moment you most want it.
+    - `matchupLine(g, team)` is the ONE description of a fixture, used by the
+      card and the confirmation alike, so they can never word it differently.
+    - Every team button shows **"68% to win"** — `matchupRead`'s own number, so
+      it can never disagree with the ⓘ card, and absent entirely when no line
+      is posted or the game has already started. It is the MARKET's view, said
+      once under the heading rather than on thirty-two buttons.
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.
+    - 🚨 **They were being broken in seven places, and the check could not see
+      it (v29).** `.lk-score` (15.05px, since v24), `.lk-k`, `.game-at`,
+      `.h-opp`, `.ibtn-l` (**13.28px** — the spread pill), `.ibtn-i` and
+      `.byebar b` all used `em` inside a parent that had already shrunk, so
+      they computed under 15.5px. Every one is `rem` now.
+    - ⚠️ **The reason it went unnoticed is the lesson.** `a11y.js` swept for
+      small text on *whichever screen the previous section happened to leave
+      it on* — the standings — so nothing on the Pick or My Picks screen was
+      ever measured. It now walks all five screens. Same shape as the two
+      suites that went quiet in v26: **a check that never looks is worse than
+      one that fails.**
+    - The commissioner's own Admin panel is exempt where it renders keys and
+      SQL in monospace — that screen is one person, not the family — and
+      `.ibtn` (the little ⓘ) is deliberately 44px, the iOS floor, asserted
+      separately so the exemption is visible rather than waived.
   - Verified by driving the real page in headless Chromium at 390px in both
     palettes — **86 checks across two suites**: all six house rules (including the store refusing
     a reused team and refusing a pick on a kicked-off game), no duplicate teams
