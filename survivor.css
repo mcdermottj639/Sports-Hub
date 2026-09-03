@@ -12,24 +12,40 @@
   --ink: #17150f; --ink2: #3a3529; --gy: #5f584a;
   --mu: #8a8272; --mu2: #a9a193; --tr: #e0dbcd; --tr2: #c9c2b0;
   --ac: #b8942f; --ac6: #a07f24; --wm: #8a7a58;
-  --pos: #1d7a52; --neg: #b0332a;
+  --pos: #116b48; --neg: #a52a1e;
   --base: 23, 21, 15;
   --on-ac: #1a1509;
   --grad: linear-gradient(135deg, #f0dc9e 0%, #d7b34a 26%, #b8942f 52%, #e6d290 74%, #bf9c33 100%);
   --glow: 0 4px 14px rgba(184,148,47,.34);
-  --pos-bg: rgba(29,122,82,.12); --neg-bg: rgba(176,51,42,.10);
+  --pos-bg: rgba(17,107,72,.12); --neg-bg: rgba(165,42,30,.10);
+  /* Plated, exactly like `--grad`: the metal is the DOUBLE highlight, not one
+     flat stop. These carry WHITE type, so unlike gold the highlight is the
+     DARKEST-permissible bright stop rather than the lightest — every stop is
+     measured to clear 4.5:1 under white at .88 alpha. */
+  --grad-pos: linear-gradient(135deg, #1d7350 0%, #115a40 26%, #0b4632 52%, #1a6d4c 74%, #0f523a 100%);
+  --grad-neg: linear-gradient(135deg, #b3392c 0%, #8f2620 26%, #741b16 52%, #ab3327 74%, #85231c 100%);
+  --grad-tie: linear-gradient(135deg, #545040 0%, #45402f 26%, #383327 52%, #5a5443 74%, #403b2b 100%);
+  --glow-pos: 0 4px 16px rgba(17,107,72,.34);
+  --glow-neg: 0 4px 16px rgba(165,42,30,.34);
 }
 :root[data-palette="onyx"] {
   --gr: #14130f; --sf: #1d1b15; --sf2: #24221a;
   --ink: #f6f2e7; --ink2: #ded8c7; --gy: #b4ac98;
   --mu: #918a77; --mu2: #6f695b; --tr: #332f26; --tr2: #4b4537;
   --ac: #d9b445; --ac6: #e8d089; --wm: #a89263;
-  --pos: #4fb383; --neg: #e8635a;
+  --pos: #43c793; --neg: #f26a5c;
   --base: 246, 242, 231;
   --on-ac: #17140b;
   --grad: linear-gradient(135deg, #f6e7b4 0%, #dcb84c 28%, #c9a234 54%, #f0dda0 76%, #d3ac3e 100%);
   --glow: 0 4px 16px rgba(217,180,69,.30);
-  --pos-bg: rgba(79,179,131,.14); --neg-bg: rgba(232,99,90,.13);
+  --pos-bg: rgba(67,199,147,.14); --neg-bg: rgba(242,106,92,.13);
+  /* Same plate on the dark ground — the fill carries white type either way,
+     so the metal does not change; only the text tokens above do. */
+  --grad-pos: linear-gradient(135deg, #1d7350 0%, #115a40 26%, #0b4632 52%, #1a6d4c 74%, #0f523a 100%);
+  --grad-neg: linear-gradient(135deg, #b3392c 0%, #8f2620 26%, #741b16 52%, #ab3327 74%, #85231c 100%);
+  --grad-tie: linear-gradient(135deg, #545040 0%, #45402f 26%, #383327 52%, #5a5443 74%, #403b2b 100%);
+  --glow-pos: 0 4px 18px rgba(29,115,80,.42);
+  --glow-neg: 0 4px 18px rgba(179,57,44,.42);
 }
 :root[data-palette] {
   --l07: rgba(var(--base), .07); --l12: rgba(var(--base), .12);
@@ -148,14 +164,13 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
    back through the season reads at arm's length without anybody parsing a
    word. Gold stays the "this is your pick" state: the current week, and a
    game still being played.
-   ⚠️ These are DEEP fills carrying WHITE type, deliberately not `--pos` /
+   ⚠️ These are PLATED fills carrying WHITE type, deliberately not `--pos` /
    `--neg`, which are tuned to be read AS text on the page ground and are far
-   too light to sit under white (Onyx's --pos #4fb383 measures ~2:1). One
-   pair serves both palettes: dark enough for white in Champagne, saturated
-   enough to separate from Onyx's near-black ground. Measured in both. */
-.locked.win  { background: #17694a; color: #fff; box-shadow: 0 4px 14px rgba(23,105,74,.30); }
-.locked.loss { background: #9d2b23; color: #fff; box-shadow: 0 4px 14px rgba(157,43,35,.30); }
-.locked.tie  { background: #4a4636; color: #fff; box-shadow: 0 4px 14px rgba(74,70,54,.30); }
+   too light to sit under white (Onyx's --pos measures ~2:1 that way). One set
+   serves both palettes; every stop is measured under white at .88 alpha. */
+.locked.win  { background: var(--grad-pos); color: #fff; box-shadow: var(--glow-pos); }
+.locked.loss { background: var(--grad-neg); color: #fff; box-shadow: var(--glow-neg); }
+.locked.tie  { background: var(--grad-tie); color: #fff; box-shadow: 0 4px 16px rgba(72,68,52,.34); }
 /* White at .75 is a grey on a coloured fill, where it was only a shade on
    gold — these two lift so the small print keeps clearing AA. */
 .locked.win .lk-k, .locked.loss .lk-k, .locked.tie .lk-k { opacity: .92; }
@@ -460,8 +475,8 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
   font-size: .78em; font-weight: 800; letter-spacing: .02em;
   border: 2px solid var(--tr); background: var(--sf2); color: var(--gy);
 }
-.gcell.w { border-color: var(--pos); background: var(--pos-bg); color: var(--pos); }
-.gcell.l { border-color: var(--neg); background: var(--neg-bg); color: var(--neg); }
+.gcell.w { border-color: var(--pos); background: linear-gradient(150deg, var(--pos-bg), transparent 85%), var(--pos-bg); color: var(--pos); }
+.gcell.l { border-color: var(--neg); background: linear-gradient(150deg, var(--neg-bg), transparent 85%), var(--neg-bg); color: var(--neg); }
 .gcell.t { border-color: var(--wm); color: var(--wm); }
 .gcell.p { border-style: dashed; color: var(--ink2); }
 .gcell.none { border-style: dashed; border-color: var(--tr2); color: var(--mu2); font-weight: 600; }
@@ -708,7 +723,7 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 }
 .cw-nm { font-weight: 700; font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cw-bar { height: 9px; border-radius: 999px; background: var(--tr); overflow: hidden; }
-.cw-bar i { display: block; height: 100%; background: var(--ac); }
+.cw-bar i { display: block; height: 100%; background: var(--grad); }
 .cw-v { text-align: right; font-weight: 800; font-size: .9rem; color: var(--gy); }
 .cw-s { text-align: right; font-weight: 800; font-size: .9rem; color: var(--gy); }
 .cw-s.p { color: var(--pos); }
