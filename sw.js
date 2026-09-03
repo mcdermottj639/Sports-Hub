@@ -15,6 +15,13 @@
    failed: survivor.js changed 16 times while index.html still asked for
    `?v=1`, so a returning phone could have served a months-old copy. */
 
+/* Bumped with APP_V in survivor.js. Nothing here reads it — its whole job is
+   to make this FILE different on a ship, because a browser only looks for a
+   new worker when sw.js itself changed byte-wise. Forgetting it costs only
+   the weaker of the app's two update signals (the page also fingerprints
+   survivor.js directly), but bump it anyway. */
+const APP_V = 'v23';
+
 const CACHE = 'survivor-v1';
 
 self.addEventListener('install', () => self.skipWaiting());
