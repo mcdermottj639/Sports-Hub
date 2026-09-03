@@ -79,9 +79,16 @@ browser you have — they are the first two lines of every suite.
 | `wrongname` | tapping the wrong name, and undoing it |
 | `nana` | prints a report, not a tally: what a first-time relative faces |
 
-## Added by the overnight stress test (v41–v42)
+## Added by the overnight stress test (v41–v43)
 | Suite | The bug it holds down |
 |---|---|
 | `locked` | a decided week cannot be re-picked — the loss stays, the team stays spent |
 | `leak` | "teams left" and "best left" never count somebody else's hidden pick |
 | `resilience` | a scoreless "final" is never cached; a dead browser store is named, not blamed on the link; a failed save is never reported as success; an unreadable kickoff fails closed |
+| `fit` | **nothing is off the edge of the phone — signed in as the COMMISSIONER.** Five tabs, not four, on all five screens, at 320/375/390/430, with Bigger Text on and off. Every earlier layout pass ran as a relative, who sees four tabs and no overflow, which is exactly how the Admin tab came to render off-screen. It asserts the *page* is never wider than the viewport rather than checking any one selector — a selector-level test would have passed on all four of the overflow bugs it now pins. Also: no player name is ever truncated, and no team name prints over its bar. |
+
+⚠️ **`confirm` needs a PICKABLE week.** It used to clear the current one with
+`adminSetPick(…, null)`; the v41 locked-week guard correctly refuses that, the
+setup then failed silently, and every assertion below it measured a locked
+slate with no buttons on it. It walks forward to a week with unstarted games
+and asserts they are there before measuring anything.
