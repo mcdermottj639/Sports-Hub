@@ -466,7 +466,14 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
   text-align: left; font-weight: 700; white-space: nowrap; padding-left: 14px;
   border-right: 1px solid var(--tr); max-width: 112px; overflow: hidden; text-overflow: ellipsis;
 }
-.gr tr.you .gnm, .gr tr.you td { background: var(--pos-bg); }
+/* 🚨 The sticky name column must be OPAQUE on every row, or the cells
+   scrolling underneath show straight through it. `--pos-bg` is an rgba tint
+   (.12 alpha), so highlighting your own row this way made your NAME
+   transparent and week 6 slid over the top of it. The tint is layered over
+   an opaque surface here: same colour, nothing behind it. The scrolling
+   cells can stay translucent — they sit on the card, not over anything. */
+.gr tr.you .gnm { background: linear-gradient(var(--pos-bg), var(--pos-bg)), var(--sf); }
+.gr tr.you td { background: var(--pos-bg); }
 .gr .grec { color: var(--gy); font-size: .78em; font-weight: 700; white-space: nowrap; }
 .gcell {
   display: inline-flex; align-items: center; justify-content: center;
