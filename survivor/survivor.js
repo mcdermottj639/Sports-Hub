@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v32';
+const APP_V = 'v33';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -728,10 +728,14 @@ function usedTeams(playerId, exceptWeek) {
 
 /* Full-season tally for one player. Missed weeks contribute nothing at all
    (house rule 1): not a loss, no points, no team burned. */
-function tallyFor(playerId, allGames) {
+function tallyFor(playerId, allGames, uptoWeek) {
   let w = 0, l = 0, t = 0, pts = 0;
   const rows = [];
-  for (let wk = 1; wk <= LAST_WEEK; wk++) {
+  // `uptoWeek` exists ONLY so the standings can rank the league as it stood a
+  // week ago and show which way each person is moving. Every other caller
+  // omits it and gets the full season, unchanged.
+  const last = uptoWeek == null ? LAST_WEEK : uptoWeek;
+  for (let wk = 1; wk <= last; wk++) {
     const p = pickIn(playerId, wk);
     if (!p) { rows.push({ week: wk, pick: null }); continue; }
     const g = gradePick(p.team, allGames[wk] || []);
@@ -743,10 +747,45 @@ function tallyFor(playerId, allGames) {
   return { w, l, t, pts, rows, used: picksOf(playerId).length };
 }
 
+/* The last week that actually produced a result. The trend compares the table
+   now against the table BEFORE that week, so it answers "who moved when this
+   week's games were played" — not "who moved since some arbitrary date". */
+function lastGradedWeek(allGames) {
+  for (let wk = LAST_WEEK; wk >= 1; wk--) {
+    const games = allGames[wk] || [];
+    if (!games.length) continue;
+    if (S.picks.some((p) => p.week === wk && ['win', 'loss', 'tie'].includes(gradePick(p.team, games).status))) return wk;
+  }
+  return 0;
+}
+
+/* Where each player sat a week ago, so the table can show an arrow. Returns
+   null when there is nothing to compare against (week 1, or a fresh league) —
+   an arrow with no history behind it would be a lie. */
+function trendMap(allGames) {
+  const wk = lastGradedWeek(allGames);
+  if (wk < 2) return null;
+  // Mid-week this legitimately reads as all dashes — only the people whose
+  // game has actually finished can have moved. The table SAYS what it is
+  // comparing against, so a row of dashes reads as "nothing has changed yet"
+  // rather than as a broken feature.
+  const baseline = wk - 1;
+  const before = standings(allGames, wk - 1);
+  const now = standings(allGames);
+  const was = new Map(before.map((r) => [r.p.id, r.rank]));
+  const m = new Map();
+  for (const r of now) {
+    const w = was.get(r.p.id);
+    if (w != null) m.set(r.p.id, w - r.rank);   // positive = climbed
+  }
+  m.baseline = baseline;
+  return m;
+}
+
 /* House rule 5: wins first, cumulative margin as the tiebreak. */
-function standings(allGames) {
+function standings(allGames, uptoWeek) {
   return S.players
-    .map((p) => ({ p, ...tallyFor(p.id, allGames) }))
+    .map((p) => ({ p, ...tallyFor(p.id, allGames, uptoWeek) }))
     .sort((a, b) => b.w - a.w || b.pts - a.pts || a.p.display_name.localeCompare(b.p.display_name))
     .map((r, i, arr) => {
       const prev = arr[i - 1];
@@ -1489,12 +1528,20 @@ function renderStandings() {
   const host = $('#s-standings');
   const rows = standings(S.games);
   const games = S.games[S.week] || [];
+  // ⚠️ `S.games` (the whole season, week -> games), NOT `games`, which is only
+  // THIS week's slate — passing that produced no arrows at all and no error,
+  // exactly the kind of silent nothing a test has to catch rather than an eye.
+  const trend = trendMap(S.games);
+  const trendNote = trend
+    ? `▲▼ is how far each person has moved since the end of week ${trend.baseline}.`
+    : '';
 
   const grid = S.stView === 'grid';
   let h = msgHTML() + `<h2 class="hh">Standings</h2>
     <p class="sub">${grid
       ? 'Every pick of the season, week by week.'
-      : "Sorted by wins. Points are how much your teams have won or lost by, added up all season — that's the tiebreaker."}</p>
+      : `Sorted by wins. Points are how much your teams have won or lost by, added up all season — that's the tiebreaker.${
+          trendNote ? ` ${trendNote}` : ''}`}</p>
     <div class="vtog">
       <button type="button" data-stview="table" class="${grid ? '' : 'on'}">Table</button>
       <button type="button" data-stview="grid" class="${grid ? 'on' : ''}">Week by week</button>
@@ -1514,8 +1561,15 @@ function renderStandings() {
     <thead><tr><th>#</th><th>Name</th><th>W-L-T</th><th>Points</th></tr></thead><tbody>`;
   for (const r of rows) {
     const cls = r.pts > 0 ? 'p' : r.pts < 0 ? 'n' : '';
+    // Stacked under the rank rather than given a column of its own: the names
+    // only just fit, and a "Teams left"-shaped column is what crowded them.
+    const mv = trend ? trend.get(r.p.id) : null;
+    const arrow = mv == null ? ''
+      : mv > 0 ? `<span class="tr up" title="Up ${mv} since last week">▲${mv}</span>`
+      : mv < 0 ? `<span class="tr dn" title="Down ${-mv} since last week">▼${-mv}</span>`
+      : `<span class="tr sm" title="No change since last week">–</span>`;
     h += `<tr class="${r.p.id === S.me.id ? 'you' : ''}">
-      <td>${r.rank}</td>
+      <td>${r.rank}${arrow}</td>
       <td class="nm">${esc(r.p.display_name)}</td>
       <td>${r.w}-${r.l}${r.t ? `-${r.t}` : ''}</td>
       <td class="pts ${cls}">${signed(r.pts)}</td>

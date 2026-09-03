@@ -665,6 +665,29 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
     the one thing in a table that must never be cut. The name column wraps
     instead of ellipsing; **that fix stays**, and with the column gone every
     name now fits on one line anyway.
+- **▲▼ Rank movement in the standings (v33).** Owner: *"put a trend arrow to
+  show the rising and falling each week."* `trendMap` ranks the league twice —
+  as it stands now, and as it stood at the end of the week before the last
+  graded one — and stacks the difference under the rank number.
+  - **Stacked under the rank, not given a column.** A fifth column is what
+    crowded the names in the first place (see the "Teams left" entry); this
+    costs the name column nothing.
+  - **`tallyFor` gained an optional `uptoWeek`.** Every other caller omits it
+    and is unchanged; it exists only so the league can be ranked as of a past
+    week.
+  - ⚠️ **Mid-week it legitimately reads as all dashes** — only people whose
+    game has actually finished can have moved. The note under the table names
+    the baseline ("since the end of week 9"), which turns a row of dashes from
+    "broken" into "nothing has changed yet".
+  - ⚠️ **Ranks are NOT a permutation**: tied players share a rank and the next
+    is skipped, so the moves do **not** have to sum to zero. A test asserting
+    that fails against correct code — assert instead that the table starts at
+    1, never goes backwards, and that each arrow equals a re-derived
+    `was - now`.
+  - 🚨 **Caught by test, invisible to the eye:** the first cut passed
+    `renderStandings`'s local `games` (THIS week's slate) where `trendMap`
+    wanted `S.games` (the whole season, week -> games). It threw nothing and
+    rendered nothing at all.
 - **Standings has two views** (`S.stView`): the W-L-T table (default) and a
   **week-by-week grid** (`seasonGridHTML`) — player rows × week columns,
   colour-coded win/loss/tie/no-pick, modelled on the pool app the family
