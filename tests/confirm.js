@@ -1,5 +1,6 @@
 const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
 let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{fail++;console.log('  ✗ '+m);}};
+const pickableWeek=require('./_pickable');
 (async()=>{
  const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',args:['--no-sandbox']});
  const ctx=await b.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
@@ -10,20 +11,9 @@ let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{f
  // week via adminSetPick(..., null) — which the locked-week guard now
  // correctly refuses, because week 10's pick has already kicked off. The
  // setup failed silently and every assertion below then ran against a
- // locked slate with no .pk buttons at all. Walk forward instead.
- await page.evaluate(async()=>{
-   for (let w=S.liveWeek; w<=18; w++) {
-     await ensureWeeks([w]);
-     const cur=pickIn(S.me.id,w);
-     if (cur && new Date(cur.kickoff)<=new Date()) continue;         // locked
-     if (!(S.games[w]||[]).some(g=>g.state==='pre')) continue;        // nothing left to pick
-     S.week=w; S.weekPinned=true; break;
-   }
-   render();
- });
- await page.waitForTimeout(600);
- // If this ever fails the rest of the suite is measuring nothing.
- ok(await page.locator('#s-pick .pk:not([disabled])').count()>0,'the slate has games that can still be picked');
+ // locked slate with no .pk buttons at all. See tests/_pickable.js.
+ const wk=await pickableWeek(page,(ms)=>page.waitForTimeout(ms));
+ ok(await page.locator('#s-pick .pk:not([disabled])').count()>0,`week ${wk} has games that can still be picked`);
 
  console.log('\n— an accidental tap does NOT save —');
  const before=await page.evaluate(()=>(pickIn(S.me.id,S.week)||{}).team||null);

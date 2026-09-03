@@ -16,7 +16,8 @@ const DIR = __dirname;
 const PORT = 8099;
 const only = process.argv.slice(2);
 const suites = fs.readdirSync(DIR)
-  .filter((f) => f.endsWith('.js') && f !== 'run.js')
+  // `_name.js` is a shared helper, not a suite.
+  .filter((f) => f.endsWith('.js') && f !== 'run.js' && !f.startsWith('_'))
   .map((f) => f.replace(/\.js$/, ''))
   .filter((n) => !only.length || only.includes(n))
   .sort();

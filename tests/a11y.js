@@ -5,6 +5,7 @@ const lum=h=>{h=h.replace(/[^0-9a-f]/gi,'');const[r,g,b]=[0,2,4].map(i=>parseInt
   const f=c=>c<=0.03928?c/12.92:Math.pow((c+0.055)/1.055,2.4);return 0.2126*f(r)+0.7152*f(g)+0.0722*f(b);};
 const rgb2hex=s=>{const m=s.match(/\d+/g);return m?m.slice(0,3).map(n=>(+n).toString(16).padStart(2,'0')).join(''):'000000';};
 const cr=(a,b)=>{const[L1,L2]=[lum(a),lum(b)].sort((x,y)=>y-x);return (L1+0.05)/(L2+0.05);};
+const pickableWeek=require('./_pickable');
 (async()=>{
   const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',args:['--no-sandbox']});
   const ctx=await b.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
@@ -18,9 +19,11 @@ const cr=(a,b)=>{const[L1,L2]=[lum(a),lum(b)].sort((x,y)=>y-x);return (L1+0.05)/
       document.documentElement.setAttribute('data-theme',p==='onyx'?'dark':'light');},pal);
     await page.waitForTimeout(150);
     console.log(`\n— contrast, ${pal} —`);
-    // A locked pick folds the slate — open it, or .pk-rec below measures
-    // nothing and the check silently disappears instead of failing.
-    if (await page.locator('#cg-more').count()) { await page.click('#cg-more'); await page.waitForTimeout(300); }
+    // A decided week folds the slate away AND (since v44) disables every
+    // team button on it, so .pk-rec below would measure nothing and the
+    // check would silently disappear instead of failing. Go where the
+    // buttons are live.
+    await pickableWeek(page, (ms) => page.waitForTimeout(ms));
     const checks=await page.evaluate(()=>{
       const out=[];
       const grab=(sel,label)=>{const e=document.querySelector(sel); if(!e||!e.offsetParent) return;

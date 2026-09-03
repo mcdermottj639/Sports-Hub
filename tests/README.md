@@ -89,6 +89,7 @@ prints why and skips, rather than passing while measuring nothing.
 | `locked` | a decided week cannot be re-picked — the loss stays, the team stays spent |
 | `leak` | "teams left" and "best left" never count somebody else's hidden pick |
 | `resilience` | a scoreless "final" is never cached; a dead browser store is named, not blamed on the link; a failed save is never reported as success; an unreadable kickoff fails closed |
+| `sortodds` | the Pick screen's two orders: kickoff stays the default, "Best chance" ranks the teams you can STILL pick and leaves the spent ones out, every percentage equals `matchupRead`'s, unpriced teams move rather than vanish, a tap still confirms, and a decided week offers neither the control nor a live button |
 | `fit` | **nothing is off the edge of the phone — signed in as the COMMISSIONER.** Five tabs, not four, on all five screens, at 320/375/390/430, with Bigger Text on and off. Every earlier layout pass ran as a relative, who sees four tabs and no overflow, which is exactly how the Admin tab came to render off-screen. It asserts the *page* is never wider than the viewport rather than checking any one selector — a selector-level test would have passed on all four of the overflow bugs it now pins. Also: no player name is ever truncated, and no team name prints over its bar. |
 
 ⚠️ **`confirm` needs a PICKABLE week.** It used to clear the current one with
@@ -119,3 +120,16 @@ guards the v41 fixes depend on are really in the SQL.
 ⚠️ **This still is not proof of behaviour.** It proves the file will install
 and that the app is calling it correctly. What each function DOES with a real
 row is confirmed the first time the project exists.
+
+⚠️ **`_pickable.js` is a helper, not a suite** (`run.js` skips `_`-prefixed
+files). Call it first in anything that needs to MAKE a pick: the demo opens on
+week 10, whose pick has already kicked off, and since v41 a decided week is
+decided — so every team button there is disabled and there is nothing to tap.
+Three suites broke on that at once. It throws if it lands on a week with no
+live buttons, rather than letting the assertions below it measure nothing.
+
+⚠️ **A lazy image is not a rendered image.** The logos are `loading="lazy"`,
+so one below the fold is never requested, never fails, and never falls back.
+`helmet.js` counted badges across the whole page and passed for months purely
+because everything fitted; a ~56px control on the Pick screen pushed two past
+the threshold and it "failed" against correct markup. It scrolls first now.

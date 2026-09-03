@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v43';
+const APP_V = 'v44';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -204,6 +204,13 @@ const S = {
   weekPinned: false, // true once the user navigates weeks by hand
   liveWeek: null,    // the week the NFL is actually on, so we can offer a way back
   stView: 'table',   // 'table' | 'grid' — the standings' two looks
+  /* How the Pick screen orders the slate. 'time' is the default and is the
+     schedule as the NFL plays it. 'odds' answers a different question — "who
+     is most likely to win, out of the teams I have LEFT" — so it drops the
+     teams already spent and ranks what remains. Deliberately in memory only:
+     the owner's rule is that the week opens on kickoff order, so a reload
+     goes back to it, while switching weeks inside one visit does not. */
+  pickSort: 'time',  // 'time' | 'odds'
   fullWeek: null,    // the week the user asked to see in full, once locked
   sheet: null,       // id of the game whose matchup card is open
   confirming: null,  // { team, gameId } while the confirm step is up
@@ -1484,7 +1491,7 @@ function teamBtnHTML(abbr, opts) {
   // The market's chance this side wins THIS game — the same number the ⓘ card
   // shows, so the two can never disagree. Absent when no line is posted.
   const win = o.win == null ? '' : `<span class="pk-win">${Math.round(o.win * 100)}% to win</span>`;
-  return `<button class="${cls}" type="button" data-team="${abbr}" ${o.disabled ? 'disabled' : ''}>
+  return `<button class="${cls}${o.row ? ' pkrow' : ''}" type="button" data-team="${abbr}" ${o.disabled ? 'disabled' : ''}>
     ${logoHTML(abbr, true)}
     <span class="pk-name">${esc(teamShort(abbr))}</span>
     ${score || tag}
@@ -1588,7 +1595,10 @@ function renderPick() {
         used: isUsed,
         rec: g[side].rec,
         score: started ? g[side].score : null,
-        disabled: started || !!isUsed,
+        // ⚠️ `locked` too: a decided week cannot be re-picked, so a live
+        // button there is an invitation to an error message. Before v41 the
+        // store accepted the change, which was the bug.
+        disabled: started || !!isUsed || locked,
         // Only before kickoff: a chance-to-win on a game already played is
         // noise at best and contradicts the score at worst.
         win: started || r.pHome == null ? null : (side === 'home' ? r.pHome : 1 - r.pHome),
@@ -1616,7 +1626,92 @@ function renderPick() {
      to another week starts condensed again, with no extra bookkeeping. */
   const showFull = !locked || S.fullWeek === S.week;
 
-  if (showFull) {
+  /* ---- ordering the slate ------------------------------------------------
+     Two questions, and they are not the same one. Kickoff order is the
+     schedule — it is the default because it is how the week actually
+     happens, and it is what someone looking for a particular game expects.
+     "Best chance" is the question you ask when you are choosing: out of the
+     teams I have LEFT, who is most likely to win? So that view is a list of
+     TEAMS, not of games — a used team is not an option, and showing it
+     greyed out among your options would be answering the question wrongly.
+     ⚠️ Only offered on this week and the ones ahead of it. A past week has
+     nothing to choose, so a "best chance" ranking there is a ranking of
+     decisions already made. */
+  /* ⚠️ `!locked` matters. Once your own game has kicked off the v41 rule
+     says the week is decided, so the store refuses a change — and a list
+     headed "every team you can still pick" would be offering something that
+     comes back as an error message. There is nothing to choose, so there is
+     nothing to sort. */
+  const canSort = showFull && !locked && S.week >= S.liveWeek && open.length > 1;
+  const byOdds = canSort && S.pickSort === 'odds';
+
+  /* One entry per team you could still pick. `p` is the market's chance that
+     side wins ITS game — the same number the ⓘ card and the team button
+     show, so the three can never disagree. It is null when no moneyline is
+     posted, which per the v39 rule is the only source we will quote. */
+  const optionsFor = () => {
+    const out = [];
+    for (const g of open) {
+      const r = matchupRead(g);
+      for (const side of ['away', 'home']) {
+        const abbr = g[side].abbr;
+        if (used[abbr]) continue;                    // spent — not an option
+        out.push({ g, side, abbr, rec: g[side].rec,
+          p: r.pHome == null ? null : (side === 'home' ? r.pHome : 1 - r.pHome) });
+      }
+    }
+    /* ⚠️ A team with no line posted is NOT dropped — it is still a team you
+       could pick, and silently hiding an option is worse than showing one
+       without a number. It sorts to the end, in kickoff order, under a line
+       saying why it has no percentage. */
+    out.sort((a, b) => {
+      if ((a.p == null) !== (b.p == null)) return a.p == null ? 1 : -1;
+      if (a.p == null) return new Date(a.g.date) - new Date(b.g.date);
+      return b.p - a.p;
+    });
+    return out;
+  };
+
+  const optRow = (o) => {
+    const g = o.g, opp = g[other(o.side)].abbr;
+    return `<div class="op">
+      ${teamBtnHTML(o.abbr, { chosen: mine && mine.team === o.abbr, rec: o.rec, win: o.p, row: true })}
+      <div class="op-m">
+        <span class="op-vs">${esc(o.side === 'away' ? 'at' : 'vs')} ${esc(teamShort(opp))} · ${esc(kickWhen(g))}</span>
+        <button class="ibtn" type="button" data-info="${esc(g.id)}" aria-label="Matchup details for ${esc(teamShort(o.abbr))}"><span class="ibtn-i">\u24d8</span></button>
+      </div>
+    </div>`;
+  };
+
+  if (canSort) {
+    h += `<div class="vtog psort">
+      <button type="button" data-psort="time" class="${byOdds ? '' : 'on'}">By kickoff</button>
+      <button type="button" data-psort="odds" class="${byOdds ? 'on' : ''}">Best chance</button>
+    </div>`;
+  }
+
+  if (showFull && byOdds) {
+    const opts = optionsFor();
+    const priced = opts.filter((o) => o.p != null);
+    const unpriced = opts.filter((o) => o.p == null);
+    const spent = Object.keys(used).length;
+    h += `<p class="sub psort-n">Every team you can still pick this week, most likely to win first.${
+      spent ? ` The ${spent} team${spent === 1 ? '' : 's'} you've already used ${spent === 1 ? 'is' : 'are'} not in this list.` : ''}</p>`;
+    if (!opts.length) {
+      h += `<div class="card"><p class="note">Every team playing this week is one you've already used. Skipping a week costs you nothing — no loss, and no team used up.</p></div>`;
+    } else {
+      h += `<div class="oplist">${priced.map(optRow).join('')}</div>`;
+      if (unpriced.length) {
+        h += `<p class="sub psort-n">No moneyline posted yet for ${unpriced.length === 1 ? 'this one' : 'these'}, so there is no percentage to quote — they are still yours to pick.</p>
+          <div class="oplist">${unpriced.map(optRow).join('')}</div>`;
+      }
+    }
+    if (shut.length) {
+      h += `<h2 class="hh">Already started</h2><p class="sub">These can't be picked any more.</p>`;
+      h += shut.map((g) => gameHTML(g, true)).join('');
+    }
+    if (locked) h += `<button class="btn wide" id="cg-less" type="button">Back to the short list</button>`;
+  } else if (showFull) {
     h += open.map((g) => gameHTML(g, false)).join('');
     if (shut.length) {
       h += `<h2 class="hh">Already started</h2><p class="sub">These can't be picked any more.</p>`;
@@ -2561,6 +2656,7 @@ document.addEventListener('click', async (e) => {
     await reloadPlayers(); render(); return;
   }
   if (t.dataset.stview) { S.stView = t.dataset.stview; render(); return; }
+  if (t.dataset.psort) { S.pickSort = t.dataset.psort; render(); return; }
   if (t.dataset.pstat) { openPlayerStats(Number(t.dataset.pstat)); return; }
 
   // --- confirm a pick ---
