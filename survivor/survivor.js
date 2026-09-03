@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v23';
+const APP_V = 'v24';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -152,6 +152,7 @@ const S = {
   confirming: null,  // { team, gameId } while the confirm step is up
   naming: null,      // player id awaiting "are you X?" confirmation
   reloading: false,  // guards the one-shot reload when a new version lands
+  saving: false,     // a pick is being written — hold any auto-reload
   demo: lsGet('survivor:demo', '0') === '1',
   store: null,
   msg: null,         // { kind:'ok'|'bad', text }
@@ -1156,14 +1157,22 @@ function renderPick() {
 
   if (locked) {
     const g = gradePick(mine.team, games);
-    const res = g.status === 'pending' ? 'Playing now…'
-      : g.status === 'win'  ? `Won by ${g.margin} — ${g.mine}-${g.them}`
-      : g.status === 'loss' ? `Lost by ${Math.abs(g.margin)} — ${g.mine}-${g.them}`
-      : g.status === 'tie'  ? 'Tied — 0 points' : '';
+    // "Lost by 7 — 19-26" put an em dash and a hyphen side by side, so the
+    // margin and the score read as one run of numbers. The score is its own
+    // element now and names both teams, so there is nothing to untangle.
+    const score = g.opp && g.mine != null
+      ? `${esc(teamShort(mine.team))} ${g.mine},&nbsp;${esc(teamShort(g.opp))} ${g.them}` : '';
+    const verdict = g.status === 'win' ? `Won by ${g.margin}`
+      : g.status === 'loss' ? `Lost by ${Math.abs(g.margin)}`
+      : g.status === 'tie'  ? 'Tied — worth 0 points' : '';
+    const res = g.status === 'pending' ? '<span class="lk-res">Playing now…</span>'
+      : verdict ? `<span class="lk-res ${g.status}">${esc(verdict)}</span>${
+          score ? `<span class="lk-score">Final score: ${score}</span>` : ''}`
+      : '';
     h += `<div class="locked">
       <div class="lk-k">Your Week ${S.week} pick — locked in</div>
       <div class="lk-team">${esc(teamName(mine.team))}</div>
-      <div class="lk-sub">${esc(res)}</div>
+      <div class="lk-sub">${res}</div>
     </div>`;
   } else if (mine) {
     h += `<div class="locked">
@@ -1965,10 +1974,13 @@ function say(kind, text) { S.msg = { kind, text }; }
 /* The only path that writes a pick from the player's side. */
 async function savePick(team) {
   const g = gameForTeam(S.games[S.week] || [], team);
-  const r = await S.store.submitPick(S.me.token, S.week, team, g && g.date)
-    .catch((err) => ({ ok: false, error: String(err.message || err) }));
-  if (r && r.ok) { say('ok', `Locked in: the ${teamShort(team)} for week ${S.week}.`); await reloadPicks(); }
-  else say('bad', (r && r.error) || 'Could not save that pick.');
+  S.saving = true;   // an auto-update must not reload over a pick being written
+  try {
+    const r = await S.store.submitPick(S.me.token, S.week, team, g && g.date)
+      .catch((err) => ({ ok: false, error: String(err.message || err) }));
+    if (r && r.ok) { say('ok', `Locked in: the ${teamShort(team)} for week ${S.week}.`); await reloadPicks(); }
+    else say('bad', (r && r.error) || 'Could not save that pick.');
+  } finally { S.saving = false; }
   render();
 }
 
@@ -2253,24 +2265,24 @@ async function boot() {
 }
 
 /* ======================================================================
-   UPDATES — "a new version is ready", with a button
+   UPDATES — a new version installs itself
    The worker is network-first, so a COLD open always lands on the newest
    deploy. This is the other case, and on a phone it is the common one: the
    app is never really closed. A Home Screen icon resumes the SAME page for
-   days, so a change can sit on the server all week and the person holding
-   the phone never sees it.
+   days, so a change could sit on the server all week and the person holding
+   the phone would never see it.
 
-   ⚠️ It used to reload ITSELF the instant a new worker took over. That is
-   worse than being one build behind — it can throw somebody out of a
-   half-made pick with no warning and no explanation of what just happened.
-   The page offers now; the tap is theirs.
+   ⚠️ v23 put a button here instead and the owner rejected it — correctly.
+   For this league the whole promise is that nobody has to do anything, and
+   an "Update now" bar is a chore handed to twenty relatives who have no way
+   to judge whether it matters. It reloads itself again.
 
    Two independent signals, because each alone has a hole:
      1. A HEAD on survivor.js, comparing the ETag/Last-Modified against the
         copy we booted with. This needs NO version bookkeeping — it notices
         any ship at all. That matters: a version number somebody has to
-        remember to bump is a version number that eventually lies, which is
-        exactly how `?v=1` survived sixteen releases here.
+        remember to bump is a number that eventually lies, which is exactly
+        how `?v=1` survived sixteen releases here.
      2. The service worker taking over (`controllerchange`). Free, but it
         only fires when sw.js ITSELF changed, so it is the weaker of the two.
    ====================================================================== */
@@ -2279,22 +2291,6 @@ const UPDATE_POLL_MS = 15 * 60 * 1000;  // a quiet background check
 const UPDATE_MIN_GAP = 30 * 1000;       // don't re-check on every tab flap
 let updStamp = null;                    // fingerprint of the copy we are RUNNING
 let updLastCheck = 0;
-let updReady = false;
-
-function paintUpdate() {
-  const bar = $('#updbar');
-  if (!bar) return;
-  bar.hidden = !updReady;
-  if (!updReady) return;
-  bar.innerHTML = `<span class="upd-t">\u{1F504} A newer version of the app is ready.</span>
-    <button class="btn pri" id="upd-go" type="button">Update now</button>`;
-}
-
-function showUpdate() {
-  if (updReady) return;
-  updReady = true;
-  paintUpdate();
-}
 
 /* The fingerprint. Whatever the host gives us — GitHub Pages sends an ETag,
    a plain file server usually sends Last-Modified — as long as BOTH reads
@@ -2310,33 +2306,29 @@ async function fileStamp() {
   } catch (e) { return null; }
 }
 
-async function checkForUpdate(force) {
-  if (updReady) return;
-  const now = Date.now();
-  if (!force && now - updLastCheck < UPDATE_MIN_GAP) return;
-  updLastCheck = now;
-  const s = await fileStamp();
-  if (!s) return;
-  if (updStamp == null) { updStamp = s; return; }   // the first read IS what we run
-  if (s !== updStamp) showUpdate();
-}
-
+/* The ONE thing a silent reload must not interrupt: a pick being confirmed
+   or written. Everything else on screen is re-derived on the way back up, so
+   losing it costs nothing. Waits rather than skips — the update still lands,
+   a few seconds later. */
 function applyUpdate() {
-  const btn = $('#upd-go');
-  if (btn) { btn.disabled = true; btn.textContent = 'Updating\u2026'; }
   if (S.reloading) return;
+  if (S.confirming || S.saving) { setTimeout(applyUpdate, 4000); return; }
   S.reloading = true;
   // The worker fetches every same-origin file with `cache: 'no-store'`, so a
   // plain reload is enough — there is no stale copy left for it to serve.
   location.reload();
 }
 
-// Its own listener, not the screen delegate: the bar can appear on the
-// sign-in screen, before any screen is rendered.
-document.addEventListener('click', (e) => {
-  const b = e.target && e.target.closest && e.target.closest('#upd-go');
-  if (b) { e.preventDefault(); applyUpdate(); }
-});
+async function checkForUpdate(force) {
+  if (S.reloading) return;
+  const now = Date.now();
+  if (!force && now - updLastCheck < UPDATE_MIN_GAP) return;
+  updLastCheck = now;
+  const s = await fileStamp();
+  if (!s) return;
+  if (updStamp == null) { updStamp = s; return; }   // the first read IS what we run
+  if (s !== updStamp) applyUpdate();
+}
 
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
@@ -2345,13 +2337,13 @@ if ('serviceWorker' in navigator) {
     .catch((e) => console.warn('[survivor] sw', e));
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!hadController) return;   // first install replaced nothing
-    showUpdate();
+    applyUpdate();
   });
 }
 
 checkForUpdate(true);
 // Coming back to the app is the moment a stale page is most likely, and the
-// moment somebody is looking at it.
+// cheapest moment to swap it.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
 window.addEventListener('focus', () => { checkForUpdate(); });
 setInterval(() => { checkForUpdate(); }, UPDATE_POLL_MS);

@@ -118,7 +118,15 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 }
 .locked .lk-k { font-size: .85em; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .75; }
 .locked .lk-team { font-size: 1.8em; font-weight: 900; line-height: 1.15; margin: 4px 0 2px; }
-.locked .lk-sub { font-size: .95em; opacity: .8; }
+.locked .lk-sub { font-size: .95em; }
+/* "Lost by 7 — 19-26" ran an em dash straight into a hyphen, so the margin
+   and the score read as one string of numbers. Two lines now, and the score
+   names both teams: the distinction is structural, not a matter of reading
+   punctuation correctly. ⚠️ The card is a GOLD fill taking dark ink, so
+   win/loss must NOT be coloured here — green on gold is unreadable. The
+   words "Won by"/"Lost by" carry it. */
+.locked .lk-res { display: block; font-weight: 800; }
+.locked .lk-score { display: block; margin-top: 5px; font-weight: 700; font-size: .88em; opacity: .72; }
 
 .game { margin: 0 0 14px; }
 .game-when {
@@ -633,21 +641,6 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 
 /* Impersonating somebody is a state you must never be able to forget you are
    in, so this rides above the tabs on every screen. */
-/* The "there's a new version" bar. Sits above everything, including the
-   view-as bar, because it is the one thing that changes what you are
-   looking at. Gold rather than red: this is good news, not a problem. */
-.updbar {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  flex-wrap: wrap;
-  max-width: 720px; margin: 0 auto;
-  padding: 10px calc(16px + env(safe-area-inset-right, 0px)) 10px calc(16px + env(safe-area-inset-left, 0px));
-  background: rgba(184,148,47,.14); border-bottom: 2px solid var(--ac);
-  color: var(--ink); font-size: .95rem; font-weight: 700;
-}
-.updbar .upd-t { flex: 1 1 auto; min-width: 0; }
-.updbar .btn { flex: 0 0 auto; min-height: 48px; font-size: .9rem; padding: 0 16px; }
-:root[data-palette="onyx"] .updbar { background: rgba(217,180,69,.13); }
-
 .viewbar {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   flex-wrap: wrap;
