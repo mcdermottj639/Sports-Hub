@@ -955,6 +955,21 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       it can never disagree with the ⓘ card, and absent entirely when no line
       is posted or the game has already started. It is the MARKET's view, said
       once under the heading rather than on thirty-two buttons.
+  - **🪖 The helmets survive a bad moment now (v30).** The owner: *"Bring back
+    the helmet logos i liked that."* They were never removed — but they are
+    fetched from `a.espncdn.com` and were wired `onerror="this.remove()"`,
+    which is **permanent**: one failed load (a tunnel, a dead spot, an ESPN
+    hiccup) deleted that logo for the life of the render, and because a whole
+    slate loads at once a single bad moment could strip every helmet on the
+    page. That is almost certainly what he saw.
+    - `logoHTML`/`logoFail` retry once after 700ms and, only if that also
+      fails, leave the team's **abbreviation in a badge occupying the exact
+      same 34px box** (76px in the confirmation). There is always something,
+      the hole never appears, and nothing on the page shifts.
+    - ⚠️ **A sandbox screenshot can never show these** — egress to
+      `a.espncdn.com` is blocked, so every helmet fails here and always will.
+      Route-fulfil them in the test (`ctx.route('https://a.espncdn.com/**')`)
+      rather than concluding anything from a blank card.
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.
