@@ -260,6 +260,24 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
     a season's history now reads at arm's length without parsing a word.
     - **Gold is now reserved for "still your pick"** — the current week,
       and a game still being played. A colour means something is settled.
+    - **🥇 PLATED, like the gold (v35).** The owner: *"The golds are beautiful
+      but the reds and greens are cheap and stale. How can we strengthen those
+      colors like the gold plated is."* Right, and the reason is structural:
+      the gold was a five-stop metal with a DOUBLE highlight while green and
+      red were single flat hexes — two design languages on one card.
+      `--grad-pos` / `--grad-neg` / `--grad-tie` mirror `--grad`'s exact
+      construction now, with `--glow-pos` / `--glow-neg` to match, and the
+      crowd bars and season-grid swatches pick up the same treatment.
+      - ⚠️ **The highlight goes the OTHER WAY from gold.** Gold carries dark
+        type, so its bright stop can be very light. These carry WHITE type, so
+        the shine is *the lightest stop white can still survive* — every stop
+        is measured at 4.5:1 under white at .88 alpha, and the first attempt
+        failed on exactly that (a #22855c highlight measured 3.92 and had to
+        come down to #1d7350).
+      - The semantic TEXT tokens were deepened with them — Champagne `--pos`
+        #1d7a52 → **#116b48** and `--neg` #b0332a → **#a52a1e**; Onyx `--pos`
+        #4fb383 → **#43c793** and `--neg` #e8635a → **#f26a5c** — each
+        re-measured on both the card and the page ground.
     - ⚠️ **The fills are NOT `--pos`/`--neg`.** Those are tuned to be read
       AS text against the page ground, so they are far too light to sit
       under white type (Onyx's `--pos` #4fb383 measures ~2:1). The card
@@ -268,7 +286,15 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
       lift from .75/.72 to .92/.88 because white at low alpha over a
       colour is a grey, where over gold it was only a shade.
     - Measured, not eyeballed: every line on all three cards in both
-      palettes, 5.57:1 at worst.
+      palettes, against EVERY STOP of the plate — 4.90:1 at worst.
+    - 🚨 **A plated fill breaks a naive contrast harness.** A gradient is a
+      background-IMAGE, so `backgroundColor` is transparent and a parent-walk
+      measures the text against the PAGE — which reported 18.59:1 (white on
+      black) and a bogus "a win looks like a loss", because both fills read as
+      `rgba(0,0,0,0)`. The harness reads the gradient's own stops now and
+      takes the WORST, which is the honest question anyway: the type sits over
+      all of them. **Any new check comparing fills must compare
+      `backgroundImage`, not `backgroundColor`.**
 - **📋 Once your own game kicks off, the rest of the week folds into a list
   (v26).** Mocked first and approved before a line changed — the owner:
   *"Show me a screenshot of what that would look like before u change a
