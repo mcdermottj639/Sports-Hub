@@ -676,7 +676,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **389 checks** across sixteen suites (behaviour, matchup/grid,
+    - Verified: **390 checks** across sixteen suites (behaviour, matchup/grid,
       byes, four iPhone sizes, accessibility, audit fixes, the not-shared-yet
       guards, the deployment/stranded-link path, and the zero-touch relative
       experience).
@@ -790,14 +790,24 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     as "C... D...". Each person is now a `<details>`: the name is the summary
     (56px tap target), the four actions open underneath. For 18 people that is
     **1457px instead of ~6100px**, and nothing truncates at any width.
-    - The actions are also named for what they DO rather than what they are —
-      "Release name", "Their link", "View as", "Remove" — with a folded "What
-      do these buttons do?" explaining each, because **"Link" was genuinely
-      ambiguous once the one-league-link design landed**: it is that ONE
-      person's private link, needed only when somebody gets a new phone and
-      their name is no longer on the join list because they already claimed it.
-    - ⚠️ Any test clicking `[data-copy]`/`[data-unclaim]`/`[data-view]` must
-      open the containing `<details>` first.
+    - **Per-person private links are GONE**, along with the bulk "copy every
+      link" — both were from the superseded mint-and-text-20-links design.
+      The one case they covered (new phone, name already claimed so it is no
+      longer on the join list) is covered better by **Put back on list**,
+      which uses the flow everybody already knows. ⚠️ It does NOT disturb a
+      phone that is already signed in: `whoami` ignores `claimed_at`, so the
+      old device keeps working and a second device can claim the same name.
+    - Three actions remain, named for what they DO — **Put back on list**
+      (was the jargony "Release"), **View as**, **Remove** — with a folded
+      "What do these buttons do?" explaining each, including that Remove
+      deletes their picks and Put back on list does not.
+    - ⚠️ Any test clicking `[data-unclaim]`/`[data-view]` must open the
+      containing `<details>` first.
+    - ⚠️ **Deleting dead code by line range bit twice here.** Removing the
+      `data-copy` handler swallowed `ad-copyjoin` (which sat between it and
+      `data-view`), and removing `linkFor` swallowed `isShared`/`linkWarnOK`.
+      Both were caught by tests. Cut by NAME, not by "everything up to the
+      next function".
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.
