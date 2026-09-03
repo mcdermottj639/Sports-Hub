@@ -18,6 +18,11 @@
 
 'use strict';
 
+/* Shown in the footer and on the Admin screen, so the commissioner can ask
+   "what does yours say?" and know instantly whether somebody is on an old
+   copy. Bump it with any change worth identifying. */
+const APP_V = 'v1';
+
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
 const ESPN_SB = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
@@ -141,6 +146,7 @@ const S = {
   sheet: null,       // id of the game whose matchup card is open
   confirming: null,  // { team, gameId } while the confirm step is up
   naming: null,      // player id awaiting "are you X?" confirmation
+  reloading: false,  // guards the one-shot reload when a new version lands
   demo: lsGet('survivor:demo', '0') === '1',
   store: null,
   msg: null,         // { kind:'ok'|'bad', text }
@@ -1881,7 +1887,7 @@ function render() {
   $('#tab-admin').hidden = !S.me.is_admin;
   $('#whoami').hidden = false;
   $('#whoami').innerHTML = `Signed in as <b>${esc(S.me.display_name)}</b> · Week ${S.week}${S.demo ? ' · <b>DEMO</b>' : ''}`;
-  $('#ft-mode').innerHTML = `<span class="pillmode">${S.store.kind === 'cloud' ? '☁️ shared league' : '📱 this device only'}${S.demo ? ' · demo season' : ''}</span>`;
+  $('#ft-mode').innerHTML = `<span class="pillmode">${S.store.kind === 'cloud' ? '☁️ shared league' : '📱 this device only'}${S.demo ? ' · demo season' : ''} · ${APP_V}</span>`;
   if (S.screen === 'pick') renderPick();
   else if (S.screen === 'standings') renderStandings();
   else if (S.screen === 'history') renderHistory();
@@ -2208,6 +2214,20 @@ async function boot() {
     await ensureWeeks([S.week]);
     if (S.screen !== 'admin' && !S.sheet) render();
   }, 60000);
+}
+
+/* Keep every phone current. The worker is network-first, so an open of the
+   app always pulls the newest deploy; this only handles the case where a NEW
+   worker takes over a page that was already running an old one. */
+if ('serviceWorker' in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').catch((e) => console.warn('[survivor] sw', e));
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // Not on first install (there was nothing to replace), and only once.
+    if (!hadController || S.reloading) return;
+    S.reloading = true;
+    location.reload();
+  });
 }
 
 boot();
