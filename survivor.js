@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v30';
+const APP_V = 'v31';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -1494,7 +1494,7 @@ function renderStandings() {
   let h = msgHTML() + `<h2 class="hh">Standings</h2>
     <p class="sub">${grid
       ? 'Every pick of the season, week by week.'
-      : "Sorted by wins. Points are how much your teams have won or lost by, added up all season — that's the tiebreaker."}</p>
+      : "Sorted by wins. Points are how much your teams have won or lost by, added up all season — that's the tiebreaker. Teams left is how many of the 32 NFL teams you still have available, since nobody can pick the same team twice."}</p>
     <div class="vtog">
       <button type="button" data-stview="table" class="${grid ? '' : 'on'}">Table</button>
       <button type="button" data-stview="grid" class="${grid ? 'on' : ''}">Week by week</button>
@@ -1511,7 +1511,7 @@ function renderStandings() {
   } else {
 
   h += `<div class="card" style="padding:6px 16px"><table class="st">
-    <thead><tr><th>#</th><th>Name</th><th>W-L-T</th><th>Points</th><th>Left</th></tr></thead><tbody>`;
+    <thead><tr><th>#</th><th>Name</th><th>W-L-T</th><th>Points</th><th>Teams left</th></tr></thead><tbody>`;
   for (const r of rows) {
     const cls = r.pts > 0 ? 'p' : r.pts < 0 ? 'n' : '';
     h += `<tr class="${r.p.id === S.me.id ? 'you' : ''}">
