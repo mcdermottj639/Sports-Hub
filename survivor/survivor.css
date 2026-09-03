@@ -643,3 +643,19 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 }
 .viewbar b { color: var(--ink); }
 .viewbar .btn { flex: 0 0 auto; min-height: 44px; border-color: var(--neg); font-size: .9rem; }
+
+/* The admin roster row. Four actions plus a name never fitted on one line —
+   "Cousin Dave" was rendering as "C... D...". Name on its own line, actions
+   underneath, so nothing truncates at any width. */
+.plrow { display: block; border-bottom: 1px solid var(--tr); }
+.plrow:last-child { border-bottom: 0; }
+.plrow > summary {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  min-height: 56px; padding: 8px 2px; list-style: none;
+}
+.plrow > summary::-webkit-details-marker { display: none; }
+.plrow > summary::after { content: '›'; margin-left: auto; color: var(--mu); font-size: 1.2rem; }
+.plrow[open] > summary::after { content: '⌄'; }
+.plrow .pn { font-weight: 700; font-size: 1rem; }
+.plrow-acts { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 14px; }
+.plrow-acts .btn { flex: 0 0 auto; padding: 0 14px; font-size: .88rem; }

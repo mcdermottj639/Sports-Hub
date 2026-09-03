@@ -785,6 +785,19 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       on the second hop.
     - The bar survives a reload, and a stale stash (already back on your own
       account) clears itself rather than nagging.
+  - **The admin roster is one collapsed row per person.** Four actions plus a
+    name on one flex line crushed the name to ~40px — "Cousin Dave" rendered
+    as "C... D...". Each person is now a `<details>`: the name is the summary
+    (56px tap target), the four actions open underneath. For 18 people that is
+    **1457px instead of ~6100px**, and nothing truncates at any width.
+    - The actions are also named for what they DO rather than what they are —
+      "Release name", "Their link", "View as", "Remove" — with a folded "What
+      do these buttons do?" explaining each, because **"Link" was genuinely
+      ambiguous once the one-league-link design landed**: it is that ONE
+      person's private link, needed only when somebody gets a new phone and
+      their name is no longer on the join list because they already claimed it.
+    - ⚠️ Any test clicking `[data-copy]`/`[data-unclaim]`/`[data-view]` must
+      open the containing `<details>` first.
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.
