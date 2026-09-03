@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v25';
+const APP_V = 'v26';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -136,6 +136,13 @@ function fmtKick(iso) {
   return d.toLocaleString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+/* The condensed list splits the kickoff string: the day becomes a section
+   heading, the clock stays on the row. A locale with no comma degrades to
+   the whole string on the row, which is wrong-looking but never wrong. */
+const other = (k) => (k === 'home' ? 'away' : 'home');
+const kickClock = (iso) => String(fmtKick(iso)).split(',').pop().trim();
+const kickDay   = (iso) => String(fmtKick(iso)).split(',').slice(0, 2).join(',').trim();
+
 /* ---- app state -------------------------------------------------------- */
 const S = {
   me: null,          // { id, display_name, is_admin, token }
@@ -148,6 +155,7 @@ const S = {
   weekPinned: false, // true once the user navigates weeks by hand
   liveWeek: null,    // the week the NFL is actually on, so we can offer a way back
   stView: 'table',   // 'table' | 'grid' — the standings' two looks
+  fullWeek: null,    // the week the user asked to see in full, once locked
   sheet: null,       // id of the game whose matchup card is open
   confirming: null,  // { team, gameId } while the confirm step is up
   naming: null,      // player id awaiting "are you X?" confirmation
@@ -1165,7 +1173,16 @@ function renderPick() {
     const verdict = g.status === 'win' ? `Won by ${g.margin}`
       : g.status === 'loss' ? `Lost by ${Math.abs(g.margin)}`
       : g.status === 'tie'  ? 'Tied — worth 0 points' : '';
-    const res = g.status === 'pending' ? '<span class="lk-res">Playing now…</span>'
+    // ⚠️ A live game's score used to live ONLY in the "Already started" list,
+    // which the condensed view folds away — so it moves onto the card, or the
+    // one game you care most about becomes the one game with no score.
+    const liveScore = myGame && myGame.state === 'in' && myGame.home.score != null
+      ? `${esc(teamShort(mine.team))} ${g.mine != null ? g.mine : (myGame.home.abbr === mine.team ? myGame.home.score : myGame.away.score)},&nbsp;${
+          esc(teamShort(myGame.home.abbr === mine.team ? myGame.away.abbr : myGame.home.abbr))} ${
+          myGame.home.abbr === mine.team ? myGame.away.score : myGame.home.score}` : '';
+    const res = g.status === 'pending'
+      ? `<span class="lk-res">Playing now…</span>${
+          liveScore ? `<span class="lk-score">${esc(myGame.statusText || 'In progress')} · ${liveScore}</span>` : ''}`
       : verdict ? `<span class="lk-res ${g.status}">${esc(verdict)}</span>${
           score ? `<span class="lk-score">Final score: ${score}</span>` : ''}`
       : '';
@@ -1224,10 +1241,60 @@ function renderPick() {
     </div>`;
   };
 
-  h += open.map((g) => gameHTML(g, false)).join('');
-  if (shut.length) {
-    h += `<h2 class="hh">Already started</h2><p class="sub">These can't be picked any more.</p>`;
-    h += shut.map((g) => gameHTML(g, true)).join('');
+  /* Once YOUR game has kicked off there is nothing left to do this week —
+     the pick cannot change and no other team can be picked — so the rest of
+     the slate stops being a set of choices and becomes something to follow.
+     It folds into one row per game. Nothing is removed: the toggle restores
+     the full cards, and every row still opens the same matchup card.
+     `S.fullWeek` holds a week number rather than a boolean so that walking
+     to another week starts condensed again, with no extra bookkeeping. */
+  const showFull = !locked || S.fullWeek === S.week;
+
+  if (showFull) {
+    h += open.map((g) => gameHTML(g, false)).join('');
+    if (shut.length) {
+      h += `<h2 class="hh">Already started</h2><p class="sub">These can't be picked any more.</p>`;
+      h += shut.map((g) => gameHTML(g, true)).join('');
+    }
+    if (locked) h += `<button class="btn wide" id="cg-less" type="button">Back to the short list</button>`;
+  } else {
+    const rest = games.filter((g) => g !== myGame);
+    const cgRow = (g) => {
+      const done = g.state !== 'pre';
+      const side = (k) => {
+        const win = done && g[k].score != null && g[other(k)].score != null && g[k].score > g[other(k)].score;
+        return `<span class="cg-side${win ? ' w' : ''}"><span class="cg-t">${esc(teamShort(g[k].abbr))}</span>${
+          done ? `<span class="cg-s">${g[k].score == null ? '–' : g[k].score}</span>` : ''}</span>`;
+      };
+      // Under a FINAL heading, repeating "Final" on every row says nothing —
+      // the day it was played does. A status that carries more than that
+      // ("Final/OT") still wins.
+      const when = g.state === 'post'
+        ? (g.statusText && !/^final$/i.test(g.statusText.trim()) ? g.statusText : kickDay(g.date))
+        : g.state === 'in' ? (g.statusText || 'Live') : kickClock(g.date);
+      return `<button class="cg${done ? ' done' : ''}" type="button" data-info="${esc(g.id)}">
+        <span class="cg-when">${esc(when)}</span>
+        <span class="cg-body">${side('away')}<span class="cg-at">at</span>${side('home')}</span>
+        <span class="cg-go">›</span>
+      </button>`;
+    };
+    const sec = (label, list, byDay) => {
+      if (!list.length) return '';
+      if (!byDay) return `<div class="cg-lab">${esc(label)}</div>` + list.map(cgRow).join('');
+      // A day change has to be visible, or Friday's 5:00 AM reads as today's.
+      const days = [...new Set(list.map((g) => kickDay(g.date)))];
+      return days.map((d, i) => `<div class="cg-lab">${esc(i ? d : `${label} · ${d}`)}</div>`
+        + list.filter((g) => kickDay(g.date) === d).map(cgRow).join('')).join('');
+    };
+    h += `<div class="restbar">
+      <div class="rb-h"><b>Rest of week ${S.week}</b><span>${rest.length} game${rest.length === 1 ? '' : 's'}</span></div>
+      <p class="rb-n">Your pick is locked in${myGame && myGame.state === 'in' ? ' and playing' : ''} — these are just to follow along.</p>
+    </div>
+    <div class="cglist">${
+      sec('Playing now', rest.filter((g) => g.state === 'in'), false)
+      + sec('Final', rest.filter((g) => g.state === 'post'), false)
+      + sec('Still to play', rest.filter((g) => g.state === 'pre'), true)}</div>
+    <button class="btn wide" id="cg-more" type="button">Show the full matchups</button>`;
   }
 
   const bye = byeTeams(S.week);
@@ -2089,6 +2156,8 @@ document.addEventListener('click', async (e) => {
   if (t.id === 'cf-no' || t.dataset.cfcancel) { closeConfirm(); return; }
 
   // --- matchup sheet ---
+  if (t.id === 'cg-more') { S.fullWeek = S.week; render(); return; }
+  if (t.id === 'cg-less') { S.fullWeek = null; render(); return; }
   if (t.dataset.info) { openSheet(t.dataset.info); return; }
   if (t.dataset.close) { closeSheet(); return; }
   if (t.dataset.sheetpick) { askConfirm(t.dataset.team); return; }

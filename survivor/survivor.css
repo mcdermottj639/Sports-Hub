@@ -143,6 +143,48 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 .locked.win .lk-k, .locked.loss .lk-k, .locked.tie .lk-k { opacity: .92; }
 .locked.win .lk-score, .locked.loss .lk-score, .locked.tie .lk-score { opacity: .88; }
 
+
+/* ---- the condensed slate ----------------------------------------------
+   Once your own game has kicked off the week is decided for you — the pick
+   cannot change and no other team can be picked — so the remaining games
+   stop being choices and become something to follow. One row each.
+   ⚠️ Every size here is held above the app's 15.5px type floor on purpose;
+   this list exists to be READ by the people the league is for, and a
+   condensed view that shrinks the type is just a smaller problem. The row
+   is one 56px button that opens the same matchup card the ⓘ did, which is
+   also where the width for full team names came from. */
+.restbar { margin: 2px 0 12px; }
+.rb-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.rb-h b { font-size: 1.05em; }
+.rb-h span { color: var(--mu); font-size: .88em; font-weight: 700; white-space: nowrap; }
+.rb-n { margin: 3px 0 0; color: var(--gy); font-size: .9em; }
+
+.cglist { background: var(--sf); border: 1px solid var(--tr); border-radius: 16px; overflow: hidden; }
+.cg-lab {
+  font-size: .88em; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--gy); padding: 10px 14px 6px; background: var(--sf2);
+  border-top: 1px solid var(--tr);
+}
+.cglist > .cg-lab:first-child { border-top: 0; }
+.cg {
+  display: flex; align-items: center; gap: 9px; width: 100%; min-height: 56px;
+  padding: 8px 10px 8px 14px; text-align: left;
+  border: 0; border-top: 1px solid var(--tr); border-radius: 0;
+  background: var(--sf); color: var(--ink); font: inherit;
+}
+.cg-lab + .cg { border-top: 0; }
+.cg:active { background: var(--sf2); }
+.cg-when { flex: 0 0 66px; font-size: .88em; font-weight: 800; color: var(--gy); line-height: 1.15; }
+.cg-body { flex: 1; display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.cg-side { flex: 1 1 auto; display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.cg-t { font-weight: 700; font-size: .95em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cg-s { font-weight: 900; font-size: .95em; font-variant-numeric: tabular-nums; }
+.cg-at { flex: 0 0 auto; color: var(--mu); font-size: .88em; font-weight: 700; }
+.cg-go { flex: 0 0 auto; color: var(--mu2); font-size: 1.1em; font-weight: 700; }
+/* The loser dims rather than the winner shouting, so a finished row still
+   reads as one line and the eye lands on who won. */
+.cg.done .cg-side:not(.w) { opacity: .55; }
+
 .game { margin: 0 0 14px; }
 .game-when {
   color: var(--gy); font-size: .9em; font-weight: 700;

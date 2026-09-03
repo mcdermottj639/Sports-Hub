@@ -608,6 +608,50 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
         colour is a grey, where over gold it was only a shade.
       - Measured, not eyeballed: every line on all three cards in both
         palettes, 5.57:1 at worst.
+  - **📋 Once your own game kicks off, the rest of the week folds into a list
+    (v26).** Mocked first and approved before a line changed — the owner:
+    *"Show me a screenshot of what that would look like before u change a
+    thing."* Worth repeating as a habit for anything that changes what a
+    screen IS rather than what it says.
+    - **The trigger is `locked`** — you have a pick and its game has started.
+      Until then every card stays full, because you can still change your
+      mind and a list is a worse thing to choose from.
+    - Order is **Playing now → Final → Still to play** (the owner's call:
+      *"Put final scores above upcoming games"*), with still-to-play split by
+      DAY, or Friday's 5:00 AM reads as today's. Each row is one 56px button
+      carrying the same `data-info` the ⓘ did, so **dropping that button is
+      where the width for full team names came from** — nothing truncates.
+    - Measured on the demo's week 10: **2,863px of scrolling → 1,491px**.
+    - **Nothing is removed.** "Show the full matchups" restores the cards and
+      "Back to the short list" returns. The state is **`S.fullWeek`, a WEEK
+      NUMBER rather than a boolean**, so walking to another week starts
+      condensed again with no extra bookkeeping.
+    - ⚠️ **A live game's score had to move onto the locked card**, because
+      the "Already started" list was the only place it existed and this folds
+      that away — the one game you care most about would have been the one
+      game with no score.
+    - ⚠️ **Every size in `.cg*` sits above the app's 15.5px type floor on
+      purpose.** A condensed view that shrinks the type is just a smaller
+      problem, and this league's whole reason for existing is a reader with
+      aging eyes.
+    - ⚠️ **Two suites went QUIET rather than red** when this shipped: they
+      reach for `.pk` team buttons on the Pick screen, which a locked pick no
+      longer draws, and a `querySelector` that finds nothing measured nothing
+      and printed nothing. `a11y.js` silently lost both of its "team record"
+      contrast checks — 18 passed, still 0 failed. **A check that vanishes is
+      worse than one that fails**; it now asserts the buttons are there before
+      measuring them.
+  - 🚨 **OPEN RULES QUESTION this surfaced, NOT a bug I introduced:
+    `submitPick` still lets you replace a pick whose game has already
+    finished.** Its only deadline test is on the NEW team's kickoff, so
+    picking the Broncos on Thursday, watching them lose, and switching to a
+    Sunday team erases the loss and its margin. The UI has always called that
+    week "LOCKED IN" while the store would have accepted the change, and
+    v26's fold hides the path without closing it — "Show the full matchups"
+    still gives you working buttons. **Ask the owner before changing it**: it
+    is a reading of house rule 2 ("per-GAME deadline"), not an implementation
+    detail, and closing it means refusing a change once YOUR OWN pick has
+    kicked off, in both stores and `submit_pick`.
   - ⚠️ **Two layout traps found while building it, both worth remembering:**
     (a) `.tabs { display: grid }` **out-specifies the browser's `[hidden]`
     rule**, so `el.hidden = true` silently stopped working and the tab bar
