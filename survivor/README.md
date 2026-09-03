@@ -106,3 +106,12 @@ No build step and no test runner. `node --check survivor.js` is the syntax gate;
 the behaviour was verified by driving the real page in headless Chromium at
 390px in both palettes — 43 checks covering all six house rules, the no-repeat
 constraint, pick visibility, layout at 320/390px and the 44px tap-target floor.
+
+---
+
+## For anyone (or any Claude session) working on this
+
+**Read `survivor/CLAUDE.md` first.** This is a separate application from the
+Sports-Hub app in the parent directory — different audience, different release
+ritual, different styling, different storage, different service worker. The
+root `CLAUDE.md` documents that other app and its rules do not apply here.
