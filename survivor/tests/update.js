@@ -14,6 +14,24 @@ let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{f
  ok(reg,'a service worker is registered for the survivor app');
  ok(await p.evaluate(()=>typeof APP_V==='string'),'the app carries a version constant: '+await p.evaluate(()=>APP_V));
 
+ // 🚨 A version that lies is worse than none — the exact failure this app
+ // already had, where survivor.js changed 16 times while index.html still
+ // asked for ?v=1. The worker means the query string no longer DELIVERS
+ // anything (proved below), but three numbers that are supposed to say
+ // "this is build N" must not be free to drift apart.
+ console.log('\n— the three version numbers cannot drift apart —');
+ const SRC='/home/user/Sports-Hub/survivor/';
+ const jsv=(fs.readFileSync(SRC+'survivor.js','utf8').match(/const APP_V = '(v\d+)'/)||[])[1];
+ const swv=(fs.readFileSync(SRC+'sw.js','utf8').match(/const APP_V = '(v\d+)'/)||[])[1];
+ const html=fs.readFileSync(SRC+'index.html','utf8');
+ ok(!!jsv,'survivor.js declares APP_V ('+jsv+')');
+ ok(swv===jsv,`sw.js carries the same one (${swv}) — forgetting it costs the take-over update signal`);
+ const n=jsv.slice(1);
+ for (const f of ['survivor.css','survivor.js']) {
+   const q=(html.match(new RegExp(f.replace('.','\\.')+'\\?v=(\\d+)'))||[])[1];
+   ok(q===n,`index.html asks for ${f}?v=${n}${q===n?'':` — it says ?v=${q}, which is build ${q} pretending to be build ${n}`}`);
+ }
+
  console.log('\n— ESPN and Supabase are never intercepted —');
  const sw=fs.readFileSync('/home/user/Sports-Hub/survivor/sw.js','utf8');
  ok(/url\.origin !== self\.location\.origin\) return/.test(sw),'cross-origin requests bypass the worker entirely');

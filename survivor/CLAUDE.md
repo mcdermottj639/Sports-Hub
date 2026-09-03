@@ -46,7 +46,7 @@
 | Who uses it | the owner, alone | ~20 relatives, incl. a 95-year-old |
 | What it is | betting model, fantasy, scores | one NFL survivor pool |
 | Version constant | `APP_VERSION` in `app.js` | `APP_V` in **`survivor.js` AND `survivor/sw.js`** |
-| Release ritual | bump `APP_VERSION` + `?v=` on `styles.css`/`app.js` in `index.html` | bump `APP_V` in both files + `?v=` in `survivor/index.html` |
+| Release ritual | bump `APP_VERSION` + `?v=` on `styles.css`/`app.js` in `index.html` | bump `APP_V` in **both** `survivor.js` and `sw.js` **and** both `?v=` in `survivor/index.html` — all four are pinned to each other by `tests/update.js` |
 | Delivery | root `sw.js`, cache keyed to `APP_VERSION` | **its own** `survivor/sw.js`, network-first, self-reloading |
 | Styling | `styles.css` (6 layers, palettes) | **`survivor/survivor.css`, standalone** |
 | Storage prefix | `sportshub:` | `survivor:` |
@@ -148,6 +148,15 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
     than none, which is exactly how `?v=1` sat unchanged for sixteen
     releases. It was briefly `v1` for one commit, which read as "brand new
     app" when it was build 17.
+    - **🔒 All THREE numbers are now pinned to each other by test** — `APP_V`
+      in `survivor.js`, `APP_V` in `sw.js`, and the `?v=` on both assets in
+      `index.html` (`tests/update.js`). They had drifted again: at build 43
+      the page was still asking for `?v=18` and `?v=22`. The query string no
+      longer *delivers* anything — the worker does that, and the same suite
+      proves it — but three numbers that all claim to say "this is build N"
+      must not be free to disagree, which is precisely the failure this app
+      already had once. **Bump `APP_V` in both files and the two `?v=` in
+      `index.html` together, or the suite fails and names which is lying.**
   - ⚠️ Survivor sits under the Sports-Hub worker's `/Sports-Hub/` scope
     today; its own worker is more specific and wins, and it is what
     survives the move to a separate repo.
