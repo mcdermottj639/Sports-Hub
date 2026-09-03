@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v36';
+const APP_V = 'v37';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -747,14 +747,19 @@ function tallyFor(playerId, allGames, uptoWeek) {
   return { w, l, t, pts, rows, used: picksOf(playerId).length };
 }
 
-/* The last week that actually produced a result. The trend compares the table
-   now against the table BEFORE that week, so it answers "who moved when this
-   week's games were played" — not "who moved since some arbitrary date". */
-function lastGradedWeek(allGames) {
+/* The last week that is FINISHED — every game in it final.
+   ⚠️ This used to be the last week with any GRADED pick, which mid-week is the
+   week in progress: the arrows then measured a half-played week, so they sat
+   empty all Sunday morning and appeared one at a time as games ended. The
+   owner: "The trend should still be live from the week before... just make it
+   show the trend that we have and then when final game in finished we update
+   standings for the new." So the arrows hold the completed week's shake-up and
+   only move on once the next week is genuinely done. */
+function lastCompleteWeek(allGames) {
   for (let wk = LAST_WEEK; wk >= 1; wk--) {
     const games = allGames[wk] || [];
     if (!games.length) continue;
-    if (S.picks.some((p) => p.week === wk && ['win', 'loss', 'tie'].includes(gradePick(p.team, games).status))) return wk;
+    if (games.every((g) => g.state === 'post')) return wk;
   }
   return 0;
 }
@@ -763,15 +768,14 @@ function lastGradedWeek(allGames) {
    null when there is nothing to compare against (week 1, or a fresh league) —
    an arrow with no history behind it would be a lie. */
 function trendMap(allGames) {
-  const wk = lastGradedWeek(allGames);
+  const wk = lastCompleteWeek(allGames);
   if (wk < 2) return null;
-  // Mid-week this legitimately reads as all dashes — only the people whose
-  // game has actually finished can have moved. The table SAYS what it is
-  // comparing against, so a row of dashes reads as "nothing has changed yet"
-  // rather than as a broken feature.
-  const baseline = wk - 1;
+  // Both sides are settled weeks, so the arrows are stable: they say what the
+  // completed week did to the table and do not flicker while the next one is
+  // being played. The note above the table names the week they belong to.
+  const baseline = wk;                     // the week whose results these are
   const before = standings(allGames, wk - 1);
-  const now = standings(allGames);
+  const now = standings(allGames, wk);
   const was = new Map(before.map((r) => [r.p.id, r.rank]));
   const m = new Map();
   for (const r of now) {
@@ -1566,7 +1570,7 @@ function renderStandings() {
   // exactly the kind of silent nothing a test has to catch rather than an eye.
   const trend = trendMap(S.games);
   const trendNote = trend
-    ? `▲▼ is how far each person has moved since the end of week ${trend.baseline}.`
+    ? `▲▼ is how the table moved when week ${trend.baseline} was played.`
     : '';
 
   const grid = S.stView === 'grid';
@@ -1775,18 +1779,28 @@ function renderStats() {
         : cw.crowdW * 2 < cn ? 'Following the crowd has NOT paid off so far.'
         : 'The crowd is exactly even so far.'}</span>
     </div>
-    <div class="cw-list">`;
+    <div class="cw-list">
+      <div class="cw-row cw-hd">
+        <span></span>
+        <span class="cw-h2">Went with them</span>
+        <span class="cw-h3">On your own</span>
+      </div>`;
     for (const r of cw.per) {
       const solo = r.alone ? `${r.aw}-${r.al}` : '—';
+      // ⚠️ A COUNT, not a percentage. "0%" beside "4-1" is what made the owner
+      // ask whether 4-1 was somehow 0%, and at five weeks a percentage is
+      // false precision anyway — the same reason head to head was a count.
       h += `<div class="cw-row">
         <span class="cw-nm">${esc(r.pl.display_name)}${r.pl.id === S.me.id ? ' (you)' : ''}</span>
-        <span class="cw-bar"><i style="width:${Math.round(r.rate * 100)}%"></i></span>
-        <span class="cw-v">${Math.round(r.rate * 100)}%</span>
+        <span class="cw-with">
+          <span class="cw-bar"><i style="width:${Math.round(r.rate * 100)}%"></i></span>
+          <span class="cw-v">${r.withN} of ${r.played}</span>
+        </span>
         <span class="cw-s ${r.aw > r.al ? 'p' : r.al > r.aw ? 'n' : ''}">${solo}</span>
       </div>`;
     }
     h += `</div>
-      <p class="cw-n cw-key">Bar and % = how often you were on the popular team. Last column = your record on the weeks you weren't.</p>`;
+      <p class="cw-n cw-key">Two different sets of weeks: the ones you went with the crowd, and how you did on the rest.</p>`;
   }
   h += `</div>`;
 

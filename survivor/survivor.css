@@ -717,13 +717,18 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .cw-head b { display: block; font-size: 1rem; line-height: 1.35; }
 .cw-list { display: flex; flex-direction: column; }
 .cw-row {
-  display: grid; grid-template-columns: minmax(74px, 1fr) 64px 44px 46px;
+  display: grid; grid-template-columns: minmax(60px, 1fr) 100px 54px;
   align-items: center; gap: 8px; min-height: 40px;
 }
+/* The two numbers are different KINDS of thing about different WEEKS, so they
+   are labelled. Unlabelled, the eye reads "0%" and "4-1" as one statement. */
+.cw-hd { min-height: 0; padding-bottom: 6px; margin-bottom: 4px; align-items: end; border-bottom: 1px solid var(--tr); }
+.cw-h2, .cw-h3 { font-size: .88rem; font-weight: 800; color: var(--mu); line-height: 1.2; text-align: right; }
+.cw-with { display: flex; align-items: center; gap: 7px; }
 .cw-nm { font-weight: 700; font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cw-bar { height: 9px; border-radius: 999px; background: var(--tr); overflow: hidden; }
+.cw-bar { flex: 1; height: 9px; border-radius: 999px; background: var(--tr); overflow: hidden; }
 .cw-bar i { display: block; height: 100%; background: var(--grad); }
-.cw-v { text-align: right; font-weight: 800; font-size: .9rem; color: var(--gy); }
+.cw-v { flex: 0 0 auto; font-weight: 800; font-size: .88rem; color: var(--gy); white-space: nowrap; }
 .cw-s { text-align: right; font-weight: 800; font-size: .9rem; color: var(--gy); }
 .cw-s.p { color: var(--pos); }
 .cw-s.n { color: var(--neg); }

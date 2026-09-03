@@ -536,6 +536,13 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
     ("has won 0 of 3 weeks, and tied 2") and lists each person by **how often
     they were on it**, with their W-L on the weeks they were not.
   - **Sorted most-contrarian first**, because that is the interesting end.
+  - ⚠️ **A COUNT ("1 of 5"), never a percentage (v37).** The owner read "0%"
+    beside a "4-1" record and asked *"Just so I get it like 4-1 is 0%?"* —
+    which is exactly the confusion two adjacent numbers of different KINDS
+    create. At five weeks a percentage is false precision anyway, the same
+    reason head to head was always a count. **The two columns are labelled
+    now** ("Went with them" / "On your own"), because a footnote at the bottom
+    of the card does not reach the eye that is reading row six.
   - ⚠️ **A tie is a real outcome (house rule 6)**, so wins + losses does NOT
     equal the week count and the card names the tied weeks separately. A test
     asserting W+L === weeks fails against correct code.
@@ -744,6 +751,16 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
   - **`tallyFor` gained an optional `uptoWeek`.** Every other caller omits it
     and is unchanged; it exists only so the league can be ranked as of a past
     week.
+  - **The baseline is the last COMPLETE week (v37).** It used to be the last
+    week with any graded pick — which mid-week is the week in progress, so the
+    arrows measured a half-played week: empty all Sunday morning, then
+    appearing one at a time as games ended. The owner: *"The trend should
+    still be live from the week before... just make it show the trend that we
+    have and then when final game in finished we update standings for the
+    new."* `lastCompleteWeek` requires every game in the week to be final, and
+    both sides of the comparison are settled weeks, so the arrows are **stable
+    all week** and roll over only when the next week is genuinely done. The
+    note names the week they belong to ("when week 9 was played").
   - ⚠️ **Nobody who has not moved carries a mark (v36).** v33 drew a dash on
     every unchanged row, which mid-week is EVERY row — and under a rank number
     a dash reads as a stray mark, or worse as a minus sign attached to the
