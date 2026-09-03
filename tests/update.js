@@ -1,6 +1,6 @@
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 const fs=require('fs');
-const CSS='/home/user/Sports-Hub/survivor/survivor.css';
+const CSS='/tmp/fs/survivor.css';
 let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{fail++;console.log('  ✗ '+m);}};
 (async()=>{
  const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',args:['--no-sandbox']});
@@ -20,7 +20,7 @@ let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{f
  // anything (proved below), but three numbers that are supposed to say
  // "this is build N" must not be free to drift apart.
  console.log('\n— the three version numbers cannot drift apart —');
- const SRC='/home/user/Sports-Hub/survivor/';
+ const SRC='/tmp/fs/';
  const jsv=(fs.readFileSync(SRC+'survivor.js','utf8').match(/const APP_V = '(v\d+)'/)||[])[1];
  const swv=(fs.readFileSync(SRC+'sw.js','utf8').match(/const APP_V = '(v\d+)'/)||[])[1];
  const html=fs.readFileSync(SRC+'index.html','utf8');
@@ -33,7 +33,7 @@ let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{f
  }
 
  console.log('\n— ESPN and Supabase are never intercepted —');
- const sw=fs.readFileSync('/home/user/Sports-Hub/survivor/sw.js','utf8');
+ const sw=fs.readFileSync('/tmp/fs/sw.js','utf8');
  ok(/url\.origin !== self\.location\.origin\) return/.test(sw),'cross-origin requests bypass the worker entirely');
  ok(/no-store/.test(sw),'and same-origin requests are fetched network-first with no-store');
 

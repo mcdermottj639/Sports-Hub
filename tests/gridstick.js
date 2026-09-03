@@ -1,4 +1,4 @@
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{fail++;console.log('  ✗ '+m);}};
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 const alpha=(c)=>{const m=String(c).match(/[\d.]+/g)||[];return m.length>3?+m[3]:1;};

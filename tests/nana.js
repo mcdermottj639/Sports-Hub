@@ -1,4 +1,4 @@
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 (async()=>{
  const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',args:['--no-sandbox']});
  // A phone that has NEVER opened this app. No localStorage, no config, nothing.

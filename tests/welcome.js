@@ -1,4 +1,4 @@
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{fail++;console.log('  ✗ '+m);}};
 (async()=>{
  const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',args:['--no-sandbox']});

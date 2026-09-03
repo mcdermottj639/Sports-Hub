@@ -1,15 +1,17 @@
-# CLAUDE.md — 🏈 Family Survivor League (`survivor/`)
+# CLAUDE.md — 🏈 Family Survivor League
 
-> # ⛔ THIS IS NOT SPORTS-HUB
-> `survivor/` is a **separate application** that happens to live in the
-> Sports-Hub repository so the owner can test it on his phone. It shares **no
-> code, no CSS, no service worker, no storage keys and no release ritual** with
-> the app in the parent directory. **It is meant to move to its own repo before
-> the family links go out** — see "Why it must move" below.
+> ## What this is
+> A standalone NFL survivor-pool web app for the owner's family — about 20
+> relatives, including a 95-year-old grandmother. Pure static HTML/CSS/JS, no
+> build step, no framework. It ships from this repo via GitHub Pages:
+> **https://mcdermottj639.github.io/family-survivor/**
 >
-> **If you are working in `survivor/`, this file is your instructions.** The
-> root `CLAUDE.md` describes a different app; do not apply its rules here.
-> If you are working on Sports-Hub, nothing in this file applies to you.
+> **It has its own repo as of 3 Sep 2026**, having been developed inside
+> `mcdermottj639/Sports-Hub` under `survivor/` so the owner could test it on
+> his phone. It never shared code with that app and it does not now. See
+> "Why it moved" below — the reasons are worth knowing, because two of them
+> are traps that would come straight back if anyone ever vendored this into
+> another site.
 
 > ## 🥇 THE GOLD IS NOT TO BE CHANGED
 > The owner, unprompted: *"Don't change the gold I love the gold."* It is the
@@ -18,8 +20,8 @@
 > **`--ac`, `--ac6`, `--wm`, `--on-ac`, `--grad` and `--glow` are frozen in
 > both palettes.** They have been touched exactly once, in the commit that
 > created the app, and that is how it stays.
-> - **`survivor/tests/gold.js` pins all twelve values** and fails loudly if any
->   of them moves. ⚠️ **If it fails, the change is wrong — do NOT update the
+> - **`tests/gold.js` pins all twelve values** and fails loudly if any of them
+>   moves. ⚠️ **If it fails, the change is wrong — do NOT update the
 >   expectations to match it.** Ask him.
 > - Adding a NEW colour beside the gold is fine and has been done: v35's
 >   `--grad-pos` / `--grad-neg` / `--grad-tie` copy its *construction* (a
@@ -28,62 +30,56 @@
 > - ⚠️ Accent fills take **dark** ink (`--on-ac`). White on gold measures about
 >   1.9:1 and is unreadable. That rule is part of why the gold works.
 
-> ## 🧪 The tests live in `survivor/tests/` — run them
-> `node survivor/tests/run.js` runs every suite (it starts its own server);
-> `node survivor/tests/run.js a11y ios` runs just those. **856 checks across
-> 35 suites, all driving the real app in headless Chromium.**
+> ## 🧪 The tests live in `tests/` — run them
+> `node tests/run.js` runs every suite (it starts its own server);
+> `node tests/run.js a11y ios` runs just those. **856 checks across 35
+> suites**, all driving the real app in headless Chromium.
 > - They used to live in `/tmp` and were lost at the end of every session,
 >   which meant each change re-proved the same ground by hand. They are in the
 >   repo now. **Add to them rather than starting over.**
-> - `survivor/tests/README.md` lists what each suite holds down, the sandbox
->   facts that look like bugs and are not, and the five ways a test in this
->   app has previously managed to pass while measuring nothing.
+> - `tests/README.md` lists what each suite holds down, the sandbox facts that
+>   look like bugs and are not, and the several ways a test in this app has
+>   previously managed to pass while measuring nothing.
 
-## The two apps, side by side
+## Why it moved (3 Sep 2026), and what that fixed
 
-|  | **Sports-Hub** (repo root) | **Family Survivor** (`survivor/`) |
-|---|---|---|
-| Who uses it | the owner, alone | ~20 relatives, incl. a 95-year-old |
-| What it is | betting model, fantasy, scores | one NFL survivor pool |
-| Version constant | `APP_VERSION` in `app.js` | `APP_V` in **`survivor.js` AND `survivor/sw.js`** |
-| Release ritual | bump `APP_VERSION` + `?v=` on `styles.css`/`app.js` in `index.html` | bump `APP_V` in **both** `survivor.js` and `sw.js` **and** both `?v=` in `survivor/index.html` — all four are pinned to each other by `tests/update.js` |
-| Delivery | root `sw.js`, cache keyed to `APP_VERSION` | **its own** `survivor/sw.js`, network-first, self-reloading |
-| Styling | `styles.css` (6 layers, palettes) | **`survivor/survivor.css`, standalone** |
-| Storage prefix | `sportshub:` | `survivor:` |
-| Shared state | none — localStorage + read-only backends | **Supabase** (the only real database in the repo) |
-| Design floor | none stated | **18px base, ≥56px targets, ≥16px inputs** |
-| Tests | `node --check` only | 35 suites, 856 checks (34 headless-Chromium + a Postgres-parser one) |
+It was developed inside the owner's `Sports-Hub` repo, at `/Sports-Hub/survivor/`,
+purely so he could open it on his phone while it was being built. Three things
+made that untenable the moment the family got links, and all three are gone now
+that it has its own origin:
 
-⚠️ **The traps that come from them sharing a repo today**, all of which the
-move to a separate repo removes:
-1. **One origin, one localStorage bucket.** Both apps are served from
-   `mcdermottj639.github.io`, and localStorage is per-ORIGIN, not per-path — so
-   they share one quota (~5 MB in Safari). The `sportshub:` / `survivor:`
-   prefixes stop collisions, not competition for space. Sports-Hub's
-   `sportshub:aitally` is the one that grows without bound.
-2. **Service-worker scope.** The root `sw.js` is scoped to `/Sports-Hub/`,
-   which contains `/Sports-Hub/survivor/`. Survivor's own worker is more
-   specific and wins, but the root cache is keyed to `APP_VERSION`, so every
-   Sports-Hub release churns the cache covering grandma's page.
-3. **Path deletion.** From `/Sports-Hub/survivor/` any relative can delete a
-   path segment and land on the owner's betting model and fantasy team.
+1. **Path deletion.** From `/Sports-Hub/survivor/` any relative could delete one
+   path segment and land on the owner's personal betting model and fantasy team.
+   This was the reason with a deadline on it.
+2. **One origin, one localStorage bucket.** localStorage is per-ORIGIN, not
+   per-path, so both apps shared one ~5 MB quota in Safari. The `sportshub:` /
+   `survivor:` prefixes stopped collisions, not competition for space — and
+   Sports-Hub's own pick tally grows without bound.
+3. **Service-worker scope.** The root `sw.js` was scoped to `/Sports-Hub/`,
+   which contains `/Sports-Hub/survivor/`. This app's own worker is more
+   specific and won, but that root cache was keyed to the *other* app's version,
+   so every Sports-Hub release churned the cache covering grandma's page.
 
-## Why it must move (and it is the LAST step before links go out)
+⚠️ **All three come straight back if this is ever served from a subdirectory of
+something else.** It is designed to own its origin.
 
-Reasons 1–3 above, in that order of severity. Nothing else is blocking it: the
-app is finished and verified. The move needs a new repo, Pages enabled on it,
-and the two Supabase constants carried across.
+**The move itself needed no code changes** — every path in `index.html`, the
+manifest and the service-worker registration is relative (`./`, `sw.js`,
+`survivor.css`), which was checked rather than assumed. History was carried
+across with `git subtree split`, so the 50-odd commits that built it are intact.
+
+⚠️ **Conventions that exist because of where it grew up.** Some rules in this
+file are phrased against Sports-Hub because that is what they were defending
+against. They still hold on their own terms: the version constant is `APP_V`
+(not `APP_VERSION`), storage keys are prefixed `survivor:`, the styling is
+`survivor.css` alone, and the release ritual is this file's, not that one's.
 
 ## What it is
 
-`survivor/` — **🏈 Family Survivor League**, a standalone mini-app for the
-owner's family pool (`index.html` / `survivor.css` / `survivor.js` /
-`schema.sql` / `README.md`). **It is NOT part of Sports-Hub**: no shared code,
-no shared service worker, no shared localStorage keys, and it does **not**
-participate in the `APP_VERSION`/`?v=` ritual. It is in this repo only so the
-owner can test it on his phone; **it is meant to move to its own repo before
-the family links go out**, so that deleting a path segment from the URL
-doesn't land 20 relatives in the betting model. See `survivor/README.md`.
+**🏈 Family Survivor League** — the owner's family survivor pool
+(`index.html` / `survivor.css` / `survivor.js` / `sw.js` / `schema.sql` /
+`tests/`). Six files and a test directory; there is no build step and nothing
+is generated. See `README.md` for the setup steps and the honest limits.
 - **The league is non-elimination**: you are never knocked out, you just can
   never pick the same team twice. Six house rules, settled 2 Sep 2026 and
   written at the top of `survivor.js`: a missed week costs nothing (no loss,
@@ -96,7 +92,7 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
   would otherwise produce a duplicate that the commissioner has to adjudicate
   by text message. Anything new that writes a pick must go through
   `submit_pick`/`admin_set_pick`, never straight at the table.
-- **🔄 Updates reach every phone by themselves — `survivor/sw.js`.** The
+- **🔄 Updates reach every phone by themselves — `sw.js`.** The
   owner: *"if I update the survivor app it needs to update for all the
   family."* It does, but only because of this worker. **The `?v=N` ritual
   had already failed silently: `survivor.js` changed 16 times while
@@ -141,7 +137,7 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
       Everything else on screen is re-derived on the way back up.
   - `APP_V` shows in the footer, so the commissioner can ask "what does
     yours say?" and know at once whether somebody is on an old copy. It is
-    the **build number** — one per shipped change to `survivor/` — so a
+    the **build number** — one per shipped change — so a
     bigger number is always newer. ⚠️ **Bump it on every ship — in BOTH
     `survivor.js` and `sw.js`.** It does not
     affect delivery (the worker does that), but a version that lies is worse
@@ -157,9 +153,10 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
       must not be free to disagree, which is precisely the failure this app
       already had once. **Bump `APP_V` in both files and the two `?v=` in
       `index.html` together, or the suite fails and names which is lying.**
-  - ⚠️ Survivor sits under the Sports-Hub worker's `/Sports-Hub/` scope
-    today; its own worker is more specific and wins, and it is what
-    survives the move to a separate repo.
+  - ⚠️ It used to sit under another app's worker scope, whose cache was keyed
+    to THAT app's version — so somebody else's release churned the cache
+    covering grandma's page. Owning the origin is what fixed it. Do not serve
+    this from a subdirectory of anything.
 - **🔗 ONE league link, and each person taps their own NAME.** The owner's
   rule: *"For them on the other end there can be no required work. Just click
   link, add name and pick as we go."* So the commissioner texts a single
@@ -1095,8 +1092,8 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
 **🏈 Family Survivor League built (2 Sep 2026 — no `APP_VERSION` bump)** — the
 owner's family has run a non-elimination survivor pool for years, built around
 keeping his 95-year-old grandmother involved, and no off-the-shelf app models
-it. Now `survivor/`, a standalone four-file mini-app; see **Files** for the
-rules, the architecture and the traps. Three things worth carrying forward:
+it. Built as a standalone mini-app; see **Files** for the rules, the
+architecture and the traps. Three things worth carrying forward:
 - **The hard part was never the UI, it was shared state.** Every previous
   feature in this repo is either `localStorage` (per device) or a read-only
   backend. Twenty people picking against each other needs a real shared
@@ -1104,12 +1101,12 @@ rules, the architecture and the traps. Three things worth carrying forward:
   free tier). **The Render backend cannot do this job** — its free tier is
   in-memory with no disk, so the picks would vanish on every redeploy, and a
   30–60s cold start is fatal for the one user the league exists for.
-- **A separate repo is the plan, and the reason is not tidiness.** From
-  `/Sports-Hub/survivor/` any relative can delete a path segment and land on
-  the owner's betting model and fantasy team. It also sits under `sw.js`'s
-  scope, whose cache is keyed to `APP_VERSION`, so every Sports-Hub release
-  would invalidate grandma's page. It lives here for now ONLY so it can be
-  tested on a phone; move it before the links go out.
+- **A separate repo was always the plan, and the reason was never tidiness.**
+  It was built inside the owner's Sports-Hub repo only so it could be opened
+  on a phone; it moved to its own on 3 Sep 2026, before any family link went
+  out. **See "Why it moved" above for the three reasons** — the first of them
+  is that a relative could delete one path segment and land on the owner's
+  betting model.
 - **The six house rules were settled BEFORE any code was written**, because
   each one changes what gets built — "a missed week is not a loss" in
   particular is why `tallyFor` counts only graded picks and why a week with

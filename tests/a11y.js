@@ -1,4 +1,4 @@
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 let pass=0, fail=0;
 const ok=(c,m)=>{ if(c){pass++;console.log('  ✓ '+m);} else {fail++;console.log('  ✗ '+m);} };
 const lum=h=>{h=h.replace(/[^0-9a-f]/gi,'');const[r,g,b]=[0,2,4].map(i=>parseInt(h.substr(i,2),16)/255);

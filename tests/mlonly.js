@@ -1,4 +1,4 @@
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{fail++;console.log('  ✗ '+m);}};
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
@@ -19,7 +19,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  });
  ok(basis.every(x=>x.p==null||x.b==='moneyline'),'no game gets a probability from anything but the moneyline');
  ok(basis.some(x=>x.b==='moneyline'),'and the demo games do have moneylines');
- const src=require('fs').readFileSync('/home/user/Sports-Hub/survivor/survivor.js','utf8');
+ const src=require('fs').readFileSync('/tmp/fs/survivor.js','utf8');
  const fn=src.split('function matchupRead')[1].split('\nfunction ')[0];
  ok(!/basis = 'spread'/.test(fn),'the spread-to-probability branch is gone from matchupRead');
  // ⚠️ Strip comments first — the function's own comment NAMES the conversion

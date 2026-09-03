@@ -11,7 +11,7 @@
    3. The number is the same one the team button and the ⓘ card already show
       (the de-vigged moneyline, v39), so the three can never disagree, and a
       team with no line is moved to the end rather than dropped. */
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.log('  ✗ ' + m); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -1,8 +1,15 @@
 # 🏈 Family Survivor League
 
-A tiny, standalone web app for the family's season-long survivor pool. It is
-**not** part of Sports-Hub — it shares no code, no service worker and no data
-with it, and it is meant to move to its own repo before the links go out.
+A small, standalone web app for a family's season-long NFL survivor pool.
+Pure static HTML/CSS/JS — no build step, no framework, no install. Everyone
+opens one link, taps their own name once, and picks a team each week.
+
+**Live:** https://mcdermottj639.github.io/family-survivor/
+
+Built for ~20 relatives including a 95-year-old, which is the constraint that
+shaped every decision in it: 18px base type, ≥56px tap targets, no password,
+no account, no app store, and a confirmation before anything that costs you a
+team for the season.
 
 ## The house rules it implements
 
@@ -19,14 +26,20 @@ And the one that makes it a survivor pool: **you can never pick the same team
 twice.** That is a `UNIQUE` constraint in the database, not a UI check, so two
 open tabs or a stale phone page cannot get around it.
 
+A decided week is decided: once *your* game has kicked off you cannot change
+that week, which is enforced in both storage back ends and in `schema.sql`.
+Otherwise you could pick a Thursday team, watch it lose, and switch away — and
+the loss and the spent team would both vanish.
+
 ## How people use it
 
-Everybody gets a personal link — `.../?u=nana` — and that link **is** their
-login. No password, no account, no app to install. On an iPhone, "Add to Home
-Screen" turns it into an icon that opens them straight to their own pick screen.
+The commissioner texts **one link** to the family group. Each person opens it,
+taps their own name once, and that phone remembers them forever. On an iPhone,
+"Add to Home Screen" turns it into an icon that opens straight to their pick
+screen.
 
-Three screens: **Pick**, **Standings**, **My Picks**. The commissioner also gets
-an **Admin** tab.
+Five screens: **Pick**, **Standings**, **My Picks**, **Stats**, and an
+**Admin** tab that only the commissioner sees.
 
 ## Files
 
@@ -35,7 +48,9 @@ an **Admin** tab.
 | `index.html` | The shell. Sets palette + big-text before first paint. |
 | `survivor.css` | All styling. Base type is 18px and every tap target is ≥56px — that floor is deliberate and must not be lowered. |
 | `survivor.js` | All logic: storage, ESPN, scoring, screens. |
+| `sw.js` | Network-first service worker. It is why a change reaches every phone by itself. |
 | `schema.sql` | Paste into the Supabase SQL editor once. |
+| `tests/` | 35 suites, 856 checks. `node tests/run.js`. |
 
 ## Where the data lives
 
@@ -46,20 +61,23 @@ and it means the standings tick live on a Sunday afternoon.
 
 Two storage back ends sit behind one interface:
 
-- **On-device** (default) — `localStorage`. Nobody else sees it. Fine for trying
-  it out, useless for a real league.
+- **On-device** (the default when nothing is configured) — `localStorage`.
+  Nobody else sees it. Fine for trying it out, useless for a real league.
 - **Supabase** — a free Postgres project. This is the real one.
 
 ## Turning on the shared league
 
 1. Make a free project at [supabase.com](https://supabase.com).
 2. SQL Editor → paste all of `schema.sql` → Run.
-3. Settings → API → copy the **Project URL** and the **anon / publishable key**.
-4. Open the app → **Admin** → *Shared database* → paste both → Save & reload.
-   (Or hardcode them at the top of `survivor.js` if you prefer.)
-5. Admin → add yourself first (the first person added becomes commissioner),
-   then everyone else. **Copy everyone's links** puts the whole list on your
-   clipboard for the group text.
+3. In the same SQL editor, seed yourself as commissioner (**not** in the app —
+   the anon key is public the moment the site deploys, and the in-app path lets
+   the first caller claim admin while the table is empty).
+4. Settings → API → copy the **Project URL** and the **anon / publishable key**.
+5. 🚨 **Put them in `survivor.js`, at the top.** The Admin panel's paste box
+   writes to `localStorage`, which configures *your phone only* — every
+   relative would open the same address with nothing saved and silently get
+   the on-device store. Admin has a button that emits the exact two lines.
+6. Admin → add everyone's names, so they tap rather than type.
 
 ### Is the anon key safe in a public file?
 
@@ -68,50 +86,53 @@ Yes, *here*, because of how `schema.sql` is written:
 - The `players` table holds everyone's token and has **no read policy**, so the
   anon key cannot read it. The app reads `players_public`, a view without the
   token column. Nobody can scrape the roster and pick as somebody else.
-- There are **no insert/update/delete policies on any table**. Every write goes
-  through a `SECURITY DEFINER` function that checks the token first.
+- `picks` is revoked at the table, so **every write goes through a
+  `SECURITY DEFINER` function** that checks the token, the kickoff and the
+  no-repeat rule first.
 
-The honest limit: the kickoff time is passed in from the browser, so a
-determined family member could spoof a late pick. The deterrent is social — every
-pick is timestamped and becomes public at kickoff. The no-repeat rule is *not*
-spoofable; it is a database constraint.
+The honest limit, written into `schema.sql`'s own header: "picks are hidden
+until kickoff" is a **UI convention, not a security boundary**. The client
+computes the standings itself, so it must be able to read every pick — anyone
+who opens dev tools can see this week's picks early. Closing that properly
+means gating reads behind a function that knows the kickoff times.
 
 ## Demo mode
 
-The 2026 season starts **10 Sep**, so until then there are no finished games and
-nothing to grade. **Admin → Demo season** invents three completed weeks plus a
-live week 4 (with one game already final, so the locking and the hidden-pick
-reveal are both visible) and a demo family of eight. Turn it off to go live.
-
-## Moving it to its own repo
-
-It is four self-contained files. Copy the folder, enable GitHub Pages, done.
-This should happen **before** the family gets their links, so that deleting a
-path segment from the URL doesn't land them in Sports-Hub.
+The season starts **10 Sep**, so until then there are no finished games and
+nothing to grade — the standings and history screens cannot be exercised at
+all. **Admin → Demo season** builds a deterministic season in progress: week 10
+of 18, one game final since Thursday, three live right now, the rest ahead, and
+18 relatives of whom four have not tapped their name yet. Every state the app
+can be in is present on purpose. Turn it off to go live.
 
 ## Shipping a change
 
-There is no build step and no `?v=` ritual — `sw.js` is network-first, so any
-push reaches every phone on their next open. The one manual step:
+There is no build step. `sw.js` is network-first with `cache: 'no-store'`, so a
+push reaches every phone on its next open, and the page also watches for a new
+build and reloads itself. The manual step:
 
-**Bump `APP_V` at the top of `survivor.js`.** It is the build number shown in
-the footer, and it exists so the commissioner can ask "what does yours say?"
-and tell at a glance whether somebody is on an old copy. It does not affect
-delivery, but a version that lies is worse than none — that is precisely how
-`?v=1` sat unchanged through sixteen releases.
+**Bump `APP_V` in `survivor.js` AND in `sw.js`, and both `?v=` in
+`index.html`.** All four are pinned to each other by `tests/update.js`. The
+version does not affect delivery — the worker does that — but it shows in the
+footer so the commissioner can ask "what does yours say?", and a version that
+lies is worse than none. That is precisely how `?v=1` sat unchanged through
+sixteen releases.
 
 ## Testing
 
-No build step and no test runner. `node --check survivor.js` is the syntax gate;
-the behaviour was verified by driving the real page in headless Chromium at
-390px in both palettes — 43 checks covering all six house rules, the no-repeat
-constraint, pick visibility, layout at 320/390px and the 44px tap-target floor.
+`node tests/run.js` — **35 suites, 856 checks**, driving the real app in
+headless Chromium. `node tests/run.js a11y ios` runs just those. See
+`tests/README.md` for what each suite holds down, the sandbox facts that look
+like bugs and are not, and the several ways a test in this app has previously
+managed to pass while measuring nothing.
+
+Needs `playwright-core` and a Chromium; `tests/schema.js` needs `pglast`
+(`pip install pglast`) and skips loudly without it.
 
 ---
 
 ## For anyone (or any Claude session) working on this
 
-**Read `survivor/CLAUDE.md` first.** This is a separate application from the
-Sports-Hub app in the parent directory — different audience, different release
-ritual, different styling, different storage, different service worker. The
-root `CLAUDE.md` documents that other app and its rules do not apply here.
+**Read `CLAUDE.md` first.** It holds the six house rules, the architecture, and
+every trap already found and paid for — including the ones that look like
+reasonable changes and are not.

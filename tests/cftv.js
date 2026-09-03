@@ -1,4 +1,4 @@
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{fail++;console.log('  ✗ '+m);}};
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
@@ -38,7 +38,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  await p.click('#cf-no'); await sleep(250);
 
  console.log('\n— the channel is read the way ESPN publishes it —');
- const src=require('fs').readFileSync('/home/user/Sports-Hub/survivor/survivor.js','utf8');
+ const src=require('fs').readFileSync('/tmp/fs/survivor.js','utf8');
  ok(/geoBroadcasts/.test(src),'geoBroadcasts is read');
  ok(/comp\.broadcasts \|\| \[\]/.test(src),'with broadcasts as the fallback');
  const shapes=await p.evaluate(()=>{

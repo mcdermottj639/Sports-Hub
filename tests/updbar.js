@@ -1,6 +1,6 @@
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 const fs=require('fs');
-const JS='/home/user/Sports-Hub/survivor/survivor.js';
+const JS='/tmp/fs/survivor.js';
 let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{fail++;console.log('  ✗ '+m);}};
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
@@ -14,7 +14,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  await p.goto('http://127.0.0.1:8099/',{waitUntil:'networkidle'});
  await sleep(900);
  ok(await p.locator('#updbar').count()===0,'the "Update now" bar is gone from the shell');
- ok(!/updbar/.test(fs.readFileSync('/home/user/Sports-Hub/survivor/survivor.css','utf8')),'and its CSS with it');
+ ok(!/updbar/.test(fs.readFileSync('/tmp/fs/survivor.css','utf8')),'and its CSS with it');
  ok(await p.evaluate(()=>updStamp!==null),'the running copy was fingerprinted at boot');
 
  console.log('\n— a shipped change reloads the phone by itself —');

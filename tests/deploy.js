@@ -1,4 +1,4 @@
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{fail++;console.log('  ✗ '+m);}};
 (async()=>{
  const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',args:['--no-sandbox']});
@@ -42,10 +42,10 @@ let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{f
 
  console.log('\n— and those two lines really do switch everyone on —');
  const fs=require('fs');
- const src=fs.readFileSync('/home/user/Sports-Hub/survivor/survivor.js','utf8');
+ const src=fs.readFileSync('/tmp/fs/survivor.js','utf8');
  const patched=src.replace("let SUPABASE_URL = '';","let SUPABASE_URL = 'https://demo.supabase.co';")
                   .replace("let SUPABASE_KEY = '';","let SUPABASE_KEY = 'anon-key-123';");
- fs.writeFileSync('/home/user/Sports-Hub/survivor/.tmp-check.js',patched);
+ fs.writeFileSync('/tmp/fs/.tmp-check.js',patched);
  const C=await b.newContext(); const c=await C.newPage();
  await c.goto('http://127.0.0.1:8099/');
  const kind=await c.evaluate(async()=>{
@@ -54,7 +54,7 @@ let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{f
    return /let SUPABASE_URL = 'https:\/\/demo\.supabase\.co'/.test(t) && /let SUPABASE_KEY = 'anon-key-123'/.test(t);
  });
  ok(kind,'a fresh device with the values baked into the FILE needs no local config');
- fs.unlinkSync('/home/user/Sports-Hub/survivor/.tmp-check.js');
+ fs.unlinkSync('/tmp/fs/.tmp-check.js');
 
  ok(errs.length===0,'no page errors'+(errs.length?': '+errs[0]:''));
  console.log(`\n${pass} passed, ${fail} failed\n`);

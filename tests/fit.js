@@ -12,7 +12,7 @@
    So this suite checks the thing the user experiences — "is any of it
    off the edge of my phone" — rather than any one selector, and it checks
    it AS ADMIN, at the smallest size, in Bigger Text, on every screen. */
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.log('  ✗ ' + m); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

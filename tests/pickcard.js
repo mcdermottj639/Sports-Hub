@@ -1,4 +1,4 @@
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{fail++;console.log('  ✗ '+m);}};
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
@@ -34,7 +34,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  await p.click('#cf-yes'); await sleep(800);
  const m2=(await p.locator('.locked .lk-meta').first().innerText()).trim();
  ok(cf===m2,`the card and the confirmation word it identically ("${m2}")`);
- ok(/matchupLine\(g, team\)/.test(require('fs').readFileSync('/home/user/Sports-Hub/survivor/survivor.js','utf8')),'because both call one function');
+ ok(/matchupLine\(g, team\)/.test(require('fs').readFileSync('/tmp/fs/survivor.js','utf8')),'because both call one function');
 
  console.log('\n— order and legibility —');
  const box=await p.evaluate(()=>{

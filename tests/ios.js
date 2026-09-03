@@ -1,4 +1,4 @@
-const { chromium, devices } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium, devices } = require('/tmp/fs/node_modules/playwright-core');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log('  ✓ ' + m); } else { fail++; console.log('  ✗ ' + m); } };
 // Real iPhone metrics, incl. the notch/home-indicator insets Safari reports.

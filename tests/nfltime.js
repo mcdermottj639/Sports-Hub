@@ -1,4 +1,4 @@
-const { chromium } = require('/home/user/Sports-Hub/survivor/node_modules/playwright-core');
+const { chromium } = require('/tmp/fs/node_modules/playwright-core');
 let pass=0,fail=0; const ok=(c,m)=>{if(c){pass++;console.log('  ✓ '+m);}else{fail++;console.log('  ✗ '+m);}};
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
@@ -57,7 +57,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
  ok(g.find(x=>/8:20 PM/.test(x.when)).tv==='NBC','Sunday night is on NBC');
 
  console.log('\n— and the instants are still relative, not pinned —');
- const src=require('fs').readFileSync('/home/user/Sports-Hub/survivor/survivor.js','utf8');
+ const src=require('fs').readFileSync('/tmp/fs/survivor.js','utf8');
  ok(/const hours = \(h\) => new Date\(Date\.now\(\)/.test(src),'kickoffs are still built off Date.now()');
  ok(/whenLabel/.test(src)&&/kickWhen/.test(src),'the label is a separate field, so the deadline is untouched');
 
