@@ -168,15 +168,19 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 .cglist > .cg-lab:first-child { border-top: 0; }
 .cg {
   display: flex; align-items: center; gap: 9px; width: 100%; min-height: 56px;
-  padding: 8px 10px 8px 14px; text-align: left;
+  padding: 8px 8px 8px 12px; text-align: left;
   border: 0; border-top: 1px solid var(--tr); border-radius: 0;
   background: var(--sf); color: var(--ink); font: inherit;
 }
 .cg-lab + .cg { border-top: 0; }
 .cg:active { background: var(--sf2); }
-.cg-when { flex: 0 0 66px; font-size: .88em; font-weight: 800; color: var(--gy); line-height: 1.15; }
-.cg-body { flex: 1; display: flex; align-items: baseline; gap: 7px; min-width: 0; }
-.cg-side { flex: 1 1 auto; display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+/* A kickoff must never split across two lines ("4:05" over "PM" reads as a
+   fault). A live game's "1Q · 9:46" is two tokens and wraps cleanly, so only
+   that row is allowed to. */
+.cg-when { flex: 0 0 62px; font-size: .88em; font-weight: 800; color: var(--gy); line-height: 1.15; white-space: nowrap; }
+.cg.live .cg-when { white-space: normal; }
+.cg-body { flex: 1; display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.cg-side { flex: 1 1 auto; display: flex; align-items: baseline; gap: 4px; min-width: 0; }
 .cg-t { font-weight: 700; font-size: .95em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cg-s { font-weight: 900; font-size: .95em; font-variant-numeric: tabular-nums; }
 .cg-at { flex: 0 0 auto; color: var(--mu); font-size: .88em; font-weight: 700; }

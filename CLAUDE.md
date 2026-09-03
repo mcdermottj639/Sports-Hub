@@ -571,10 +571,35 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     - `DEMO_MISSED` gives Nana weeks 2 and 7 off, `DEMO_NO_PICK_THIS_WEEK`
       leaves two people off the current week (the chase list), `DEMO_TIE`
       forces one real tie, and `DEMO_BYES` rests teams from week 5 on.
-    - ⚠️ **Kickoff times are relative to `Date.now()`, never a fixed clock
+    - ⚠️ **Kickoff INSTANTS are relative to `Date.now()`, never a fixed clock
       time.** They were pinned to 1pm, so opening the demo after lunch made
       every upcoming game already-kicked-off and refused EVERY pick. Anything
       added here must stay relative.
+    - **But the LABEL is a real NFL slot (v27).** The owner: *"The times are
+      not realistic in the demo and it's making it hard for me to do it… nfl
+      are set times. Everybody is east coast, so order these games logically
+      like the nfl does."* Relative instants produced 5:00 AM kickoffs, which
+      is not a thing. **The two jobs are now separate fields**: `date` is the
+      deadline and stays relative; **`whenLabel`** is what the game shows, and
+      it comes from `DEMO_SLOTS` — Thu 8:15, Sun 1:00, 4:05, 4:25, 8:20, Mon
+      8:15, Eastern, because everyone in the league is. Every game the app
+      renders now formats through **`kickWhen(g)`**, which returns the label
+      when a fixture supplies one and `fmtKick(g.date)` otherwise, so real
+      ESPN games are untouched.
+      - `demoSlotFor(i, n)` keeps the SHAPE of a real week at any slate size
+        (bye weeks change the game count): one Thursday game, the bulk at
+        1:00, ~30% in the late-afternoon window, then SNF and MNF.
+      - The anchor is **20 minutes past the Sunday 1:00 kickoff**, so the demo
+        always opens on a genuine mid-week state — Thursday final, the early
+        window live, and five games still pickable — at any real hour.
+      - `demoSunday(week)` dates each week off Sunday 13 Sep 2026, so the
+        labels carry real dates (week 10 is Sun 11/15). Display only.
+      - Live scores scale at **0.2**, not 0.6: twenty minutes in is the first
+        quarter, and 22 points beside a "1Q" clock is what made the old
+        fixture read as fake. Broadcasts match their slot (Prime / NBC / ESPN).
+      - ⚠️ Ordering needed no code — the app already sorts by `date`, and the
+        slot offsets are monotonic. **If you add a slot, keep `at` in real
+        chronological order or the slate will sort against its own labels.**
     - ⚠️ **The seeder writes straight to the store and threads the admin token
       through `addPlayer`** — the first add bootstraps the commissioner and
       every later call must carry that token, or `addPlayer` correctly refuses
