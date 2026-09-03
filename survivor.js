@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v26';
+const APP_V = 'v27';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -140,8 +140,15 @@ function fmtKick(iso) {
    heading, the clock stays on the row. A locale with no comma degrades to
    the whole string on the row, which is wrong-looking but never wrong. */
 const other = (k) => (k === 'home' ? 'away' : 'home');
-const kickClock = (iso) => String(fmtKick(iso)).split(',').pop().trim();
-const kickDay   = (iso) => String(fmtKick(iso)).split(',').slice(0, 2).join(',').trim();
+/* Every kickoff a GAME shows goes through this. A real ESPN game formats its
+   own timestamp; the demo carries `whenLabel` instead, because its instants
+   have to stay relative to Date.now() (or opening it in the evening finds
+   every game already kicked off) while the CLOCK it shows has to be a real
+   NFL slot. One is the deadline, the other is the label — they are different
+   jobs and only the fixture ever needs them to disagree. */
+const kickWhen  = (g) => (g && g.whenLabel) || fmtKick(g && g.date);
+const kickClock = (g) => String(kickWhen(g)).split(',').pop().trim();
+const kickDay   = (g) => String(kickWhen(g)).split(',').slice(0, 2).join(',').trim();
 
 /* ---- app state -------------------------------------------------------- */
 const S = {
@@ -406,28 +413,81 @@ function demoRecords(beforeWeek) {
 }
 const recStr = (o) => `${o.w}-${o.l}${o.t ? `-${o.t}` : ''}`;
 
+/* The real slots an NFL week is played in, Eastern, in the order they run.
+   `at` is hours from the Sunday-1:00 kickoff, so the whole week hangs off one
+   anchor; `state` is what that slot looks like from a Sunday just after one.
+   Everyone in this league is on the east coast, so ET labels are the times
+   they will actually see on television. */
+const DEMO_SLOTS = [
+  { key: 'THU',  day: 4, at: -68.75, label: '8:15 PM', state: 'post' },  // Thursday night
+  { key: 'SUN1', day: 0, at:   0,    label: '1:00 PM', state: 'in'   },  // the early window
+  { key: 'SUN4', day: 0, at:   3.08, label: '4:05 PM', state: 'pre'  },  // late afternoon
+  { key: 'SUN425', day: 0, at: 3.42, label: '4:25 PM', state: 'pre'  },
+  { key: 'SNF',  day: 0, at:   7.33, label: '8:20 PM', state: 'pre'  },  // Sunday night
+  { key: 'MON',  day: 1, at:  31.25, label: '8:15 PM', state: 'pre'  },  // Monday night
+];
+
+/* Which slot each game of a week lands in. A real week is one Thursday game,
+   most of the slate at 1:00, a handful in the late afternoon, then the two
+   night games — and it has to keep that SHAPE at any slate size, because bye
+   weeks change how many games there are. */
+function demoSlotFor(i, n) {
+  if (i === 0) return DEMO_SLOTS[0];                    // Thursday
+  if (n >= 5 && i === n - 1) return DEMO_SLOTS[5];      // Monday night
+  if (n >= 5 && i === n - 2) return DEMO_SLOTS[4];      // Sunday night
+  const mid = n - (n >= 5 ? 3 : 1);                     // games between them
+  const late = Math.max(2, Math.round(mid * 0.3));      // the 4:05 / 4:25 window
+  const early = mid - late;
+  if (i <= early) return DEMO_SLOTS[1];                 // 1:00
+  return (i - early) % 2 ? DEMO_SLOTS[2] : DEMO_SLOTS[3];
+}
+
+/* The Sunday a demo week is played on, so its labels carry a real date.
+   Week 1 of the 2026 season opens Thursday 10 Sep, so Sunday of week N is
+   13 Sep + (N-1) weeks. Display only — never a deadline. */
+function demoSunday(week) {
+  const d = new Date(Date.UTC(SEASON, 8, 13, 17, 0, 0));   // 13 Sep, 1:00 PM ET
+  d.setUTCDate(d.getUTCDate() + (week - 1) * 7);
+  return d;
+}
+
 function demoGames(week) {
   const rnd = mulberry32(week * 7919 + 13);
   const dayMs = 86400000;
   const rec = week > 1 ? demoRecords(week) : null;
   const drop = DEMO_BYES[week] || 0;
-  return roundRobin(week - 1).slice(0, 16 - drop).map((pair, i) => {
-    // Times are relative to NOW, never a fixed clock time. Pinning the
-    // "upcoming" games to 1pm meant that opening the demo after lunch made
-    // every one of them already kicked off, and every pick was refused.
-    let state, date;
+  const n = 16 - drop;
+  return roundRobin(week - 1).slice(0, n).map((pair, i) => {
+    // ⚠️ The INSTANT stays relative to Date.now(), always. Pinning it to a
+    // clock time meant opening the demo in the evening found every upcoming
+    // game already kicked off and refused every pick. The LABEL is separate
+    // (`whenLabel`) and carries the real NFL slot, which is what makes the
+    // slate readable — a 5:00 AM kickoff is not a thing.
+    const slot = demoSlotFor(i, n);
+    let state, date, whenLabel = null;
     const hours = (h) => new Date(Date.now() + h * 3600000);
+    const sun = demoSunday(week);
+    const dayName = (off) => new Date(sun.getTime() + off * dayMs)
+      .toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
     if (week < DEMO_WEEK)      { state = 'post'; date = new Date(Date.now() + (week - DEMO_WEEK) * 7 * dayMs); }
     else if (week > DEMO_WEEK) { state = 'pre';  date = new Date(Date.now() + (week - DEMO_WEEK) * 7 * dayMs); }
-    else if (i === 0)          { state = 'post'; date = hours(-72); }   // Thursday night, done
-    else if (i <= 3)           { state = 'in';   date = hours(-1);  }   // playing right now
-    else if (i >= 12)          { state = 'pre';  date = hours(27);  }   // tomorrow night
-    else                       { state = 'pre';  date = hours(3 + i); } // later today, staggered
-    date.setMinutes(0, 0, 0);   // whole hours read like real kickoff times
+    else {
+      state = slot.state;
+      // 20 minutes past the 1:00 kickoff: the early window is under way, the
+      // afternoon and both night games are still there to be picked.
+      date = hours(slot.at - 0.34);
+    }
+    // Every demo game gets a real-looking kickoff, past weeks included.
+    const dayOff = slot.day === 4 ? -3 : slot.day === 1 ? 1 : 0;
+    whenLabel = `${dayName(dayOff)}, ${slot.label}`;
+    if (week === DEMO_WEEK) date.setSeconds(0, 0); else date.setMinutes(0, 0, 0);
     const scored = state === 'post' || state === 'in';
     let hs = scored ? 10 + Math.floor(rnd() * 29) : null;
     let as = scored ? 10 + Math.floor(rnd() * 29) : null;
-    if (state === 'in') { hs = Math.floor(hs * 0.6); as = Math.floor(as * 0.6); }  // partway through
+    // Twenty minutes in is the FIRST QUARTER, so these are first-quarter
+    // scores. The old 0.6 scaling put 20-odd points on the board next to a
+    // "1Q" clock, which is the kind of detail that makes a fixture feel fake.
+    if (state === 'in') { hs = Math.floor(hs * 0.2); as = Math.floor(as * 0.2); }
     if (state === 'post' && week === DEMO_TIE.week && i === DEMO_TIE.game) { as = hs; }
 
     // A plausible, deterministic line so the matchup card is testable offline.
@@ -449,11 +509,13 @@ function demoGames(week) {
       };
     };
     return {
-      id: `demo-${week}-${i}`, week, date: date.toISOString(), state,
+      id: `demo-${week}-${i}`, week, date: date.toISOString(), state, whenLabel,
       statusText: state === 'post' ? 'Final'
-        : state === 'in' ? `${1 + Math.floor(rnd() * 4)}Q · ${2 + Math.floor(rnd() * 12)}:0${Math.floor(rnd() * 6)}`
-        : fmtKick(date.toISOString()),
-      tv: i === 0 ? 'Prime Video' : i >= 14 ? 'ESPN' : (i % 3 === 0 ? 'CBS' : 'FOX'),
+        // 20 minutes of real time in, allowing for stoppages: mid-first-quarter.
+        : state === 'in' ? `1Q · ${5 + Math.floor(rnd() * 5)}:${10 + Math.floor(rnd() * 49)}`
+        : whenLabel,
+      tv: slot.key === 'THU' ? 'Prime Video' : slot.key === 'MON' ? 'ESPN'
+        : slot.key === 'SNF' ? 'NBC' : (i % 3 === 0 ? 'CBS' : 'FOX'),
       odds: {
         det: `${favAbbr} -${by}`, favAbbr, favBy: by,
         ou: Math.round((38 + rnd() * 14) * 2) / 2,
@@ -789,7 +851,7 @@ function matchupHTML(g) {
 
   let h = `<div class="sh-head">
       <div class="sh-title">${esc(nm('away'))} <span class="sh-at">at</span> ${esc(nm('home'))}</div>
-      <div class="sh-when">${esc(g.state === 'post' ? (g.statusText || 'Final') : fmtKick(g.date))}${g.tv ? ` · ${esc(g.tv)}` : ''}</div>
+      <div class="sh-when">${esc(g.state === 'post' ? (g.statusText || 'Final') : kickWhen(g))}${g.tv ? ` · ${esc(g.tv)}` : ''}</div>
     </div>`;
 
   if (r.fav) {
@@ -887,7 +949,7 @@ function askConfirm(team) {
       <img src="${teamLogo(team)}" alt="" onerror="this.remove()">
       <span>${esc(teamName(team))}</span>
     </div>
-    <p class="cf-game">${esc(where)} the ${esc(teamShort(opp))} · ${esc(fmtKick(g.date))}</p>
+    <p class="cf-game">${esc(where)} the ${esc(teamShort(opp))} · ${esc(kickWhen(g))}</p>
     ${replacing ? `<p class="cf-replace">This replaces your pick of the ${esc(teamShort(replacing))}.</p>` : ''}
     <button class="btn pri wide cf-yes" id="cf-yes">Yes — that's my pick</button>
     <button class="btn wide cf-no" id="cf-no">No, go back</button>
@@ -1233,7 +1295,7 @@ function renderPick() {
       : r.fav ? `${teamShort(r.fav.abbr)} favoured` : 'no line yet');
     return `<div class="game ${started ? 'started' : ''}">
       <div class="game-when">
-        <span>${esc(started ? (g.statusText || 'Final') : fmtKick(g.date))}</span>
+        <span>${esc(started ? (g.statusText || 'Final') : kickWhen(g))}</span>
         <button class="ibtn" type="button" data-info="${esc(g.id)}" aria-label="Matchup details">${
           tip ? `<span class="ibtn-l">${esc(tip)}</span>` : ''}<span class="ibtn-i">ⓘ</span></button>
       </div>
@@ -1269,10 +1331,14 @@ function renderPick() {
       // Under a FINAL heading, repeating "Final" on every row says nothing —
       // the day it was played does. A status that carries more than that
       // ("Final/OT") still wins.
+      // Under a FINAL heading, repeating "Final" on every row says nothing —
+      // the DAY it was played does, and the weekday alone says it in a third
+      // of the width, which the two long-name-plus-score rows need.
       const when = g.state === 'post'
-        ? (g.statusText && !/^final$/i.test(g.statusText.trim()) ? g.statusText : kickDay(g.date))
-        : g.state === 'in' ? (g.statusText || 'Live') : kickClock(g.date);
-      return `<button class="cg${done ? ' done' : ''}" type="button" data-info="${esc(g.id)}">
+        ? (g.statusText && !/^final$/i.test(g.statusText.trim()) ? g.statusText
+           : String(kickWhen(g)).split(',')[0].trim())
+        : g.state === 'in' ? (g.statusText || 'Live') : kickClock(g);
+      return `<button class="cg${done ? ' done' : ''}${g.state === 'in' ? ' live' : ''}" type="button" data-info="${esc(g.id)}">
         <span class="cg-when">${esc(when)}</span>
         <span class="cg-body">${side('away')}<span class="cg-at">at</span>${side('home')}</span>
         <span class="cg-go">›</span>
@@ -1282,9 +1348,9 @@ function renderPick() {
       if (!list.length) return '';
       if (!byDay) return `<div class="cg-lab">${esc(label)}</div>` + list.map(cgRow).join('');
       // A day change has to be visible, or Friday's 5:00 AM reads as today's.
-      const days = [...new Set(list.map((g) => kickDay(g.date)))];
+      const days = [...new Set(list.map(kickDay))];
       return days.map((d, i) => `<div class="cg-lab">${esc(i ? d : `${label} · ${d}`)}</div>`
-        + list.filter((g) => kickDay(g.date) === d).map(cgRow).join('')).join('');
+        + list.filter((g) => kickDay(g) === d).map(cgRow).join('')).join('');
     };
     h += `<div class="restbar">
       <div class="rb-h"><b>Rest of week ${S.week}</b><span>${rest.length} game${rest.length === 1 ? '' : 's'}</span></div>
@@ -1461,7 +1527,7 @@ function renderHistory() {
       : r.status === 'nogame' ? '⚠️'
       : r.status === 'tie' ? 'tie' : signed(r.margin);
     const line = r.status === 'pending'
-      ? (r.opp ? `vs ${teamShort(r.opp)} · ${fmtKick(r.game.date)}` : 'not played yet')
+      ? (r.opp ? `vs ${teamShort(r.opp)} · ${kickWhen(r.game)}` : 'not played yet')
       : r.status === 'nogame' ? 'they were on bye — tell the commissioner, this should not happen'
       : r.opp ? `vs ${teamShort(r.opp)} · ${r.mine}-${r.them}` : '';
     h += `<div class="hrow">
