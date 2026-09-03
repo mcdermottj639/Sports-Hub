@@ -793,6 +793,23 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
     `renderStandings`'s local `games` (THIS week's slate) where `trendMap`
     wanted `S.games` (the whole season, week -> games). It threw nothing and
     rendered nothing at all.
+- 🚨 **The sticky name column must be OPAQUE on every row (v40).** The owner
+  sent a screenshot of the week-by-week grid with earlier weeks' cells sliding
+  over his own name. Cause: `.gr tr.you .gnm` highlighted your row with
+  `--pos-bg`, which is an **rgba tint at .12 alpha** — so it replaced the
+  column's opaque `var(--sf)` and the cells scrolling underneath showed
+  straight through. It is the tint layered over an opaque surface now
+  (`linear-gradient(--pos-bg, --pos-bg), var(--sf)`): identical colour,
+  nothing visible behind it.
+  - The scrolling `td`s may stay translucent — they sit on the card and have
+    nothing passing under them.
+  - ⚠️ **The general rule: a `position: sticky` cell can never take a
+    translucent background.** Anything highlighting a row in this grid has to
+    composite over `var(--sf)`.
+  - The test asserts every name cell's computed `background-color` is alpha 1
+    in both palettes, and — the real proof — scrolls the grid to the end and
+    uses `elementFromPoint` at the name's centre to confirm the NAME is what
+    is painted on top while cells are physically underneath it.
 - **Standings has two views** (`S.stView`): the W-L-T table (default) and a
   **week-by-week grid** (`seasonGridHTML`) — player rows × week columns,
   colour-coded win/loss/tie/no-pick, modelled on the pool app the family
