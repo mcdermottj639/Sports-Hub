@@ -484,6 +484,32 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
   - ⚠️ **Any test that taps a team must now also click `#cf-yes`** — five
     suites asserted the old direct-save behaviour and failed against
     perfectly correct code.
+- **🐑 "With the crowd, or against it" REPLACED head to head (v34).** The
+  owner: *"I don't like the head to head part of stats. Anything else we could
+  use there?"* He was right to bin it — two dropdowns, two taps, and a duel at
+  n=8 that is mostly noise. Given four options he picked this one.
+  - `crowdStats()` finds, for each settled week, the single team the family
+    piled onto, and grades it. The card then states **the crowd's own record**
+    ("has won 0 of 3 weeks, and tied 2") and lists each person by **how often
+    they were on it**, with their W-L on the weeks they were not.
+  - **Sorted most-contrarian first**, because that is the interesting end.
+  - ⚠️ **A tie is a real outcome (house rule 6)**, so wins + losses does NOT
+    equal the week count and the card names the tied weeks separately. A test
+    asserting W+L === weeks fails against correct code.
+  - ⚠️ **Weeks with no single most-picked team are skipped entirely** (a tie
+    for most-picked, fewer than three graded picks, or nobody doubling up).
+    There is no crowd to be with or against, and inventing one would be worse
+    than showing less.
+  - ⚠️ **Every read goes through `pickVisible()`** — the rule for anything
+    touching more than one player's picks. Without it this card would be a
+    side channel for a hidden Thursday pick.
+  - ⚠️ **Do NOT reuse `.st-n` here.** It is 14.76px, which is fine inside the
+    matchup SHEET (the owner asked for tiny footnotes there and a test pins
+    them under 15px) but breaks the 15.5px floor that applies in a TAB. The
+    card has its own `.cw-n` at .88rem.
+  - The old `headToHead`, `paintH2H`, their change handler and their CSS were
+    all removed **by name, not by line range** — the mistake this file records
+    twice already.
 - **📊 Stats tab — the deep layer, built from the research spec.** Owner's
   rule was *visible for all but never in the way*, so it is a fifth tab and
   nothing about it touches the Pick screen. Per player: a headline **bench
