@@ -622,3 +622,11 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   background: none; border: 0; padding: 8px 4px; min-height: 44px;
   color: var(--ac6); font: inherit; font-weight: 700; text-decoration: underline;
 }
+
+/* Getting home from a week you wandered into. Only rendered when you are not
+   on the current week, so it is never noise. */
+.backnow { margin: -4px 0 16px; }
+.wknav-l i {
+  display: block; font-style: normal; font-weight: 700; font-size: .78rem;
+  color: var(--neg); letter-spacing: .02em; margin-top: 1px;
+}
