@@ -630,3 +630,16 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   display: block; font-style: normal; font-weight: 700; font-size: .78rem;
   color: var(--neg); letter-spacing: .02em; margin-top: 1px;
 }
+
+/* Impersonating somebody is a state you must never be able to forget you are
+   in, so this rides above the tabs on every screen. */
+.viewbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  flex-wrap: wrap;
+  max-width: 720px; margin: 0 auto;
+  padding: 10px calc(16px + env(safe-area-inset-right, 0px)) 10px calc(16px + env(safe-area-inset-left, 0px));
+  background: var(--neg-bg); border-bottom: 2px solid var(--neg);
+  color: var(--ink2); font-size: .95rem;
+}
+.viewbar b { color: var(--ink); }
+.viewbar .btn { flex: 0 0 auto; min-height: 44px; border-color: var(--neg); font-size: .9rem; }

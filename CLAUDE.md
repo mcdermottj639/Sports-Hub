@@ -676,7 +676,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       backfilled weeks 1-3 and the fixture silently lost them; the seeder now
       writes straight to the store, because fixture generation must not
       impersonate a commissioner.
-    - Verified: **370 checks** across fifteen suites (behaviour, matchup/grid,
+    - Verified: **389 checks** across sixteen suites (behaviour, matchup/grid,
       byes, four iPhone sizes, accessibility, audit fixes, the not-shared-yet
       guards, the deployment/stranded-link path, and the zero-touch relative
       experience).
@@ -773,6 +773,18 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     gains a red "not this week". Tapping it clears `weekPinned`, so the app
     resumes following the season on its own. Shown on both the Pick and
     Standings navs; absent entirely when you are already on the current week.
+  - 🚨 **"View as" was a ONE-WAY TRIP.** It overwrote `survivor:me` with the
+    other player's token and navigated, so the commissioner became that person
+    — losing the Admin tab and any route home short of knowing his own link.
+    Now the admin token is stashed in `survivor:viewas` first, and a red
+    `.viewbar` rides above the tabs on **every** screen: "👀 You're viewing as
+    Nana · Back to my account". Impersonation is a state you must never be
+    able to forget you are in.
+    - ⚠️ Hopping straight from one person to another keeps the ORIGINAL admin
+      token (`if (!lsGet('survivor:viewas'))`), or the way home would be lost
+      on the second hop.
+    - The bar survives a reload, and a stale stash (already back on your own
+      account) clears itself rather than nagging.
   - ⚠️ **Type floors are deliberate and must not be lowered**: 18px base, ≥56px
     tap targets, and every `input` at ≥16px (the iOS focus-zoom rule the workout
     lab documents). A "Bigger text" toggle takes the base to 22px.

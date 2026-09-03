@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v19';
+const APP_V = 'v20';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -1894,6 +1894,19 @@ function setScreen(name, scroll) {
   if (changed || scroll) window.scrollTo(0, 0);
 }
 
+function paintViewAs() {
+  const bar = $('#viewas');
+  if (!bar) return;
+  const mine = lsGet('survivor:viewas', '');
+  // Stale key (already back on our own account) — clear it rather than nag.
+  if (mine && S.me && mine === S.me.token) { lsDel('survivor:viewas'); }
+  const on = !!lsGet('survivor:viewas', '') && S.me;
+  bar.hidden = !on;
+  if (!on) return;
+  bar.innerHTML = `<span>👀 You're viewing as <b>${esc(S.me.display_name)}</b></span>
+    <button class="btn sm" id="va-back">Back to my account</button>`;
+}
+
 function render() {
   $('#boot').hidden = true;
   $('#tabs').hidden = false;
@@ -1901,6 +1914,7 @@ function render() {
   $('#whoami').hidden = false;
   $('#whoami').innerHTML = `Signed in as <b>${esc(S.me.display_name)}</b> · Week ${S.week}${S.demo ? ' · <b>DEMO</b>' : ''}`;
   $('#ft-mode').innerHTML = `<span class="pillmode">${S.store.kind === 'cloud' ? '☁️ shared league' : '📱 this device only'}${S.demo ? ' · demo season' : ''} · ${APP_V}</span>`;
+  paintViewAs();
   if (S.screen === 'pick') renderPick();
   else if (S.screen === 'standings') renderStandings();
   else if (S.screen === 'history') renderHistory();
@@ -2110,7 +2124,19 @@ document.addEventListener('click', async (e) => {
   }
   if (t.dataset.view) {
     const tok = await S.store.tokenFor(S.me.token, Number(t.dataset.view));
-    if (tok) { lsSet('survivor:me', tok); location.search = `?u=${encodeURIComponent(tok)}`; }
+    if (!tok) { say('bad', 'Could not open that account.'); render(); return; }
+    // Keep the ORIGINAL admin token if we are already viewing as somebody —
+    // hopping from one person to another must not lose the way home.
+    if (!lsGet('survivor:viewas', '')) lsSet('survivor:viewas', S.me.token);
+    lsSet('survivor:me', tok);
+    location.search = `?u=${encodeURIComponent(tok)}`;
+    return;
+  }
+  if (t.id === 'va-back') {
+    const mine = lsGet('survivor:viewas', '');
+    lsDel('survivor:viewas');
+    if (mine) { lsSet('survivor:me', mine); location.search = `?u=${encodeURIComponent(mine)}`; }
+    else location.search = '';
     return;
   }
   if (t.dataset.del) {
