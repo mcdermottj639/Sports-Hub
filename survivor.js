@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v35';
+const APP_V = 'v36';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -1597,10 +1597,13 @@ function renderStandings() {
     // Stacked under the rank rather than given a column of its own: the names
     // only just fit, and a "Teams left"-shaped column is what crowded them.
     const mv = trend ? trend.get(r.p.id) : null;
-    const arrow = mv == null ? ''
+    // ⚠️ Nothing at all when nobody moved. A dash under every rank read as a
+    // stray mark — or worse, as a minus sign attached to the number — and
+    // mid-week that is EVERY row. Absence is the cleaner way to say "no
+    // change", and the note above the table already explains the arrows.
+    const arrow = !mv ? ''
       : mv > 0 ? `<span class="tr up" title="Up ${mv} since last week">▲${mv}</span>`
-      : mv < 0 ? `<span class="tr dn" title="Down ${-mv} since last week">▼${-mv}</span>`
-      : `<span class="tr sm" title="No change since last week">–</span>`;
+      : `<span class="tr dn" title="Down ${-mv} since last week">▼${-mv}</span>`;
     h += `<tr class="${r.p.id === S.me.id ? 'you' : ''}">
       <td>${r.rank}${arrow}</td>
       <td class="nm">${esc(r.p.display_name)}</td>

@@ -300,7 +300,6 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 .tr { display: block; font-size: .78rem; font-weight: 800; line-height: 1.3; }
 .tr.up { color: var(--pos); }
 .tr.dn { color: var(--neg); }
-.tr.sm { color: var(--mu2); }
 .st .nm { font-weight: 700; }
 .st tr.you td { background: var(--pos-bg); }
 .st tr.you .nm::after { content: " (you)"; color: var(--gy); font-weight: 400; font-size: .85em; }

@@ -727,10 +727,13 @@ doesn't land 20 relatives in the betting model. See `survivor/README.md`.
   - **`tallyFor` gained an optional `uptoWeek`.** Every other caller omits it
     and is unchanged; it exists only so the league can be ranked as of a past
     week.
-  - ⚠️ **Mid-week it legitimately reads as all dashes** — only people whose
-    game has actually finished can have moved. The note under the table names
-    the baseline ("since the end of week 9"), which turns a row of dashes from
-    "broken" into "nothing has changed yet".
+  - ⚠️ **Nobody who has not moved carries a mark (v36).** v33 drew a dash on
+    every unchanged row, which mid-week is EVERY row — and under a rank number
+    a dash reads as a stray mark, or worse as a minus sign attached to the
+    rank. Absence is the cleaner way to say "no change", and the note under
+    the table already explains what ▲▼ mean and names the baseline ("since
+    the end of week 9"). Mid-week the column is simply empty, which is both
+    truthful and quiet.
   - ⚠️ **Ranks are NOT a permutation**: tied players share a rank and the next
     is skipped, so the moves do **not** have to sum to zero. A test asserting
     that fails against correct code — assert instead that the table starts at
