@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v33';
+const APP_V = 'v34';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -1227,17 +1227,50 @@ function teamPopularity() {
   return Object.entries(n).sort((a, b) => b[1] - a[1]);
 }
 
-function headToHead(aId, bId) {
-  const A = tallyFor(aId, S.games).rows, B = tallyFor(bId, S.games).rows;
-  let a = 0, b = 0, tie = 0;
-  for (let i = 0; i < A.length; i++) {
-    const x = A[i], y = B[i];
-    const ok = (r) => r.pick && ['win', 'loss', 'tie'].includes(r.status);
-    if (!ok(x) || !ok(y)) continue;
-    const mx = x.status === 'tie' ? 0 : x.margin, my = y.status === 'tie' ? 0 : y.margin;
-    if (mx > my) a++; else if (my > mx) b++; else tie++;
+/* With the crowd, or against it.
+   For every week that is settled, work out which team the family piled onto
+   and how that pick did — then, per person, how often they were on it and
+   what happened when they were not.
+   ⚠️ Everything here reads MORE THAN ONE player's picks, so every read goes
+   through `pickVisible()`. Without that this card would be a side channel for
+   seeing a hidden Thursday pick, which house rule 3 exists to prevent. */
+function crowdStats() {
+  const weeks = [];
+  for (let wk = 1; wk <= LAST_WEEK; wk++) {
+    const games = S.games[wk] || [];
+    if (!games.length) continue;
+    const picks = S.picks.filter((p) => p.week === wk && pickVisible(p.team, games)
+      && ['win', 'loss', 'tie'].includes(gradePick(p.team, games).status));
+    if (picks.length < 3) continue;              // no "crowd" to speak of
+    const n = {};
+    for (const p of picks) n[p.team] = (n[p.team] || 0) + 1;
+    const best = Math.max(...Object.values(n));
+    if (best < 2) continue;                      // everyone went their own way
+    const top = Object.keys(n).filter((t) => n[t] === best);
+    if (top.length > 1) continue;                // no single crowd pick
+    weeks.push({ wk, team: top[0], share: best / picks.length,
+      status: gradePick(top[0], games).status, picks });
   }
-  return { a, b, tie };
+
+  const crowdW = weeks.filter((w) => w.status === 'win').length;
+  const crowdL = weeks.filter((w) => w.status === 'loss').length;
+  const crowdT = weeks.filter((w) => w.status === 'tie').length;   // house rule 6
+
+  const per = S.players.map((pl) => {
+    let withN = 0, alone = 0, aw = 0, al = 0;
+    for (const w of weeks) {
+      const mine = w.picks.find((p) => p.player_id === pl.id);
+      if (!mine) continue;
+      if (mine.team === w.team) { withN++; continue; }
+      alone++;
+      const st = gradePick(mine.team, S.games[w.wk] || []).status;
+      if (st === 'win') aw++; else if (st === 'loss') al++;
+    }
+    const played = withN + alone;
+    return { pl, withN, alone, aw, al, played, rate: played ? withN / played : null };
+  }).filter((r) => r.played > 0).sort((a, b) => a.rate - b.rate || b.played - a.played);
+
+  return { weeks, crowdW, crowdL, crowdT, per };
 }
 
 /* ======================================================================
@@ -1723,15 +1756,36 @@ function renderStats() {
   h += `</div>`;
 
   // ---- head to head ----
-  h += `<h2 class="hh">Head to head</h2>
-    <p class="sub">Week by week, whose team won by more. Only weeks where both had a graded pick.</p>
-    <div class="card">
-      <label class="fld"><span>Them</span><select id="h2h-a">${
-        S.players.map((p) => `<option value="${p.id}" ${p.id === S.me.id ? 'selected' : ''}>${esc(p.display_name)}</option>`).join('')}</select></label>
-      <label class="fld"><span>Against</span><select id="h2h-b">${
-        S.players.map((p, i) => `<option value="${p.id}" ${p.id !== S.me.id && i < 2 ? 'selected' : ''}>${esc(p.display_name)}</option>`).join('')}</select></label>
-      <div id="h2h-out"></div>
-    </div>`;
+  // ---- with the crowd, or against it ----
+  const cw = crowdStats();
+  h += `<h2 class="hh">With the crowd, or against it</h2>
+    <p class="sub">Most weeks the family piles onto one team. This is who goes along with it, who doesn't, and whether the crowd is actually right.</p>
+    <div class="card">`;
+  if (!cw.weeks.length) {
+    h += `<p class="note">Nothing settled yet — this fills in once a few weeks have been played.</p>`;
+  } else {
+    const cn = cw.crowdW + cw.crowdL;
+    h += `<div class="cw-head">
+      <b>The team most of the family picked has won ${cw.crowdW} of ${cn} week${cn === 1 ? '' : 's'}${
+        cw.crowdT ? `, and tied ${cw.crowdT}` : ''}.</b>
+      <span class="cw-n">${cw.crowdW * 2 > cn ? 'Following the crowd has paid off so far.'
+        : cw.crowdW * 2 < cn ? 'Following the crowd has NOT paid off so far.'
+        : 'The crowd is exactly even so far.'}</span>
+    </div>
+    <div class="cw-list">`;
+    for (const r of cw.per) {
+      const solo = r.alone ? `${r.aw}-${r.al}` : '—';
+      h += `<div class="cw-row">
+        <span class="cw-nm">${esc(r.pl.display_name)}${r.pl.id === S.me.id ? ' (you)' : ''}</span>
+        <span class="cw-bar"><i style="width:${Math.round(r.rate * 100)}%"></i></span>
+        <span class="cw-v">${Math.round(r.rate * 100)}%</span>
+        <span class="cw-s ${r.aw > r.al ? 'p' : r.al > r.aw ? 'n' : ''}">${solo}</span>
+      </div>`;
+    }
+    h += `</div>
+      <p class="cw-n cw-key">Bar and % = how often you were on the popular team. Last column = your record on the weeks you weren't.</p>`;
+  }
+  h += `</div>`;
 
   // ---- team popularity ----
   const pop = teamPopularity();
@@ -1749,21 +1803,6 @@ function renderStats() {
   }
   h += `</div>`;
   host.innerHTML = h;
-  paintH2H();
-}
-
-function paintH2H() {
-  const out = $('#h2h-out');
-  if (!out) return;
-  const a = Number(($('#h2h-a') || {}).value), b = Number(($('#h2h-b') || {}).value);
-  const A = S.players.find((p) => p.id === a), B = S.players.find((p) => p.id === b);
-  if (!A || !B || a === b) { out.innerHTML = `<p class="note">Pick two different people.</p>`; return; }
-  const r = headToHead(a, b);
-  const total = r.a + r.b + r.tie;
-  out.innerHTML = total
-    ? `<div class="h2h"><b>${esc(A.display_name)} ${r.a}</b><span>—</span><b>${r.b} ${esc(B.display_name)}</b></div>
-       <p class="note">${total} week${total === 1 ? '' : 's'} where both had a graded pick${r.tie ? `, ${r.tie} level` : ''}.</p>`
-    : `<p class="note">No completed weeks where both of them picked yet.</p>`;
 }
 
 /* One player's full numbers. Compact rows with a SHORT footnote under each —
@@ -2452,7 +2491,6 @@ document.addEventListener('click', async (e) => {
 });
 
 document.addEventListener('change', async (e) => {
-  if (e.target.id === 'h2h-a' || e.target.id === 'h2h-b') { paintH2H(); return; }
   if (e.target.id !== 'ap-week') return;
   S.apWeek = Number(e.target.value) || 1;
   await ensureWeeks([S.apWeek]);          // we cannot know the byes until it is loaded

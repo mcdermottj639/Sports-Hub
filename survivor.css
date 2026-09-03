@@ -698,9 +698,26 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .sr-go { grid-column: 3; grid-row: 1 / span 2; align-self: center; color: var(--mu); font-size: 1.2rem; }
 .statrow:active { background: var(--sf2); }
 
-.h2h { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 0 4px; }
-.h2h b { font-size: 1.05rem; }
-.h2h span { color: var(--mu); }
+/* With the crowd, or against it. */
+.cw-head { padding: 4px 0 10px; border-bottom: 1px solid var(--tr); margin-bottom: 6px; }
+.cw-head b { display: block; font-size: 1rem; line-height: 1.35; }
+.cw-list { display: flex; flex-direction: column; }
+.cw-row {
+  display: grid; grid-template-columns: minmax(74px, 1fr) 64px 44px 46px;
+  align-items: center; gap: 8px; min-height: 40px;
+}
+.cw-nm { font-weight: 700; font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cw-bar { height: 9px; border-radius: 999px; background: var(--tr); overflow: hidden; }
+.cw-bar i { display: block; height: 100%; background: var(--ac); }
+.cw-v { text-align: right; font-weight: 800; font-size: .9rem; color: var(--gy); }
+.cw-s { text-align: right; font-weight: 800; font-size: .9rem; color: var(--gy); }
+.cw-s.p { color: var(--pos); }
+.cw-s.n { color: var(--neg); }
+/* ⚠️ NOT `.st-n` (14.76px). That class lives in the matchup sheet, where the
+   owner asked for deliberately tiny footnotes and a test pins them under
+   15px — but this card is in the TAB, where the app's 15.5px floor applies. */
+.cw-n { display: block; color: var(--gy); font-size: .88rem; line-height: 1.35; }
+.cw-key { margin-top: 8px; }
 
 .popr { display: grid; grid-template-columns: 62px 1fr 32px; gap: 10px; align-items: center; padding: 9px 0; }
 .pop-t { font-weight: 800; font-size: .95rem; }
