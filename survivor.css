@@ -222,6 +222,15 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
   color: var(--ink); text-align: center;
 }
 .pk img { width: 34px; height: 34px; object-fit: contain; }
+/* Shown only if a helmet fails twice. Same box as the image, so a failure
+   never moves anything on the page. */
+.lg-fb {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--sf2); border: 1px solid var(--tr);
+  color: var(--gy); font-size: .78rem; font-weight: 900; letter-spacing: .02em;
+}
+.cf-team .lg-fb { width: 76px; height: 76px; font-size: 1.4rem; }
 .pk-name { font-weight: 800; font-size: 1.02em; line-height: 1.2; }
 .pk-rec { color: var(--mu); font-size: .82em; }
 /* The market's chance this side wins. `rem`, per the type-floor note above. */

@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v29';
+const APP_V = 'v30';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -66,6 +66,32 @@ const ABBRS = Object.keys(TEAMS);
 const teamName  = (a) => (TEAMS[a] || [a, a])[0];
 const teamShort = (a) => (TEAMS[a] || [a, a])[1];
 const teamLogo  = (a) => `https://a.espncdn.com/i/teamlogos/nfl/500/${String(a).toLowerCase()}.png`;
+
+/* The helmets, and what happens when one does not arrive.
+   ⚠️ These used to be `onerror="this.remove()"`, which is permanent: a single
+   failed load — a tunnel, a dead spot, an ESPN hiccup — deleted that logo for
+   the life of the render, and since a whole slate loads at once a bad moment
+   could strip every helmet on the page. Now it retries once and, only if that
+   also fails, leaves the team's abbreviation in the same space. There is
+   always SOMETHING, the hole never appears, and nothing shifts. */
+function logoHTML(abbr, lazy) {
+  return `<img src="${teamLogo(abbr)}" alt="" data-abbr="${esc(String(abbr).toUpperCase())}"${
+    lazy ? ' loading="lazy"' : ''} decoding="async" onerror="logoFail(this)">`;
+}
+function logoFail(img) {
+  if (!img || !img.parentNode) return;
+  if (!img.dataset.retried) {
+    img.dataset.retried = '1';
+    const src = img.src.split('?')[0];
+    setTimeout(() => { if (img.parentNode) img.src = `${src}?r=${Date.now()}`; }, 700);
+    return;
+  }
+  const fb = document.createElement('span');
+  fb.className = 'lg-fb';
+  fb.textContent = img.dataset.abbr || '';
+  img.replaceWith(fb);
+}
+window.logoFail = logoFail;
 
 /* ESPN sometimes uses a different code than we key on. Normalize on the way in. */
 const ABBR_FIX = { WAS: 'WSH', JAC: 'JAX', LA: 'LAR', SD: 'LAC', OAK: 'LV', STL: 'LAR' };
@@ -964,7 +990,7 @@ function askConfirm(team) {
   $('#confirm-body').innerHTML = `
     <div class="cf-k">Week ${S.week} — is this right?</div>
     <div class="cf-team">
-      <img src="${teamLogo(team)}" alt="" onerror="this.remove()">
+      ${logoHTML(team, false)}
       <span>${esc(teamName(team))}</span>
     </div>
     <p class="cf-game">${esc(matchupLine(g, team))}</p>
@@ -1213,7 +1239,7 @@ function teamBtnHTML(abbr, opts) {
   // shows, so the two can never disagree. Absent when no line is posted.
   const win = o.win == null ? '' : `<span class="pk-win">${Math.round(o.win * 100)}% to win</span>`;
   return `<button class="${cls}" type="button" data-team="${abbr}" ${o.disabled ? 'disabled' : ''}>
-    <img src="${teamLogo(abbr)}" alt="" loading="lazy" onerror="this.remove()">
+    ${logoHTML(abbr, true)}
     <span class="pk-name">${esc(teamShort(abbr))}</span>
     ${score || tag}
     ${win}
