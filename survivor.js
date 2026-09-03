@@ -25,7 +25,7 @@
    ⚠️ BUMP THIS ON EVERY SHIP. It is only a diagnostic (the service worker is
    what actually delivers updates), but a version that lies is worse than no
    version — that is exactly how `?v=1` went stale for sixteen releases. */
-const APP_V = 'v20';
+const APP_V = 'v21';
 
 const SEASON = 2026;
 const LAST_WEEK = 18;                 // regular season only (house rule 4)
@@ -1624,16 +1624,29 @@ function renderAdmin() {
 
   h += `<h2 class="hh">Family (${S.players.length})</h2>
     <p class="sub">Add everyone's name in advance so they only have to tap. Anyone you miss can type their own name on the join screen.</p>
+    <details class="usedstrip">
+      <summary>What do these buttons do?</summary>
+      <div class="ub" style="display:block">
+        <p><b>Their link</b> — that one person's private link. You almost never need it: everyone uses the league link above and taps their own name. It is for when somebody gets a new phone and their name is already taken, so it is no longer on the join list.</p>
+        <p><b>Release name</b> — puts their name back on the join list, for when the wrong person tapped it.</p>
+        <p><b>View as</b> — see the app exactly as they see it. A bar at the top brings you back.</p>
+        <p><b>Remove</b> — deletes them and all their picks. There is no undo.</p>
+      </div>
+    </details>
     <div class="card">`;
   for (const p of S.players) {
-    h += `<div class="plrow">
-      <span class="pn">${esc(p.display_name)}${p.is_admin ? ' 👑' : ''}${
-        p.claimed ? '' : ' <span class="pn-wait">not joined yet</span>'}</span>
-      ${p.claimed ? `<button class="btn sm" data-unclaim="${p.id}" title="Free this name up again">Release</button>` : ''}
-      <button class="btn sm" data-copy="${p.id}">Link</button>
-      <button class="btn sm" data-view="${p.id}">View as</button>
-      <button class="btn sm" data-del="${p.id}" title="Remove" aria-label="Remove ${esc(p.display_name)}">✕</button>
-    </div>`;
+    // A <details> per person: eighteen names stay scannable, and the four
+    // actions are one tap away instead of 340px of buttons each.
+    h += `<details class="plrow">
+      <summary><span class="pn">${esc(p.display_name)}${p.is_admin ? ' 👑' : ''}</span>${
+        p.claimed ? '' : '<span class="pn-wait">not joined yet</span>'}</summary>
+      <div class="plrow-acts">
+        ${p.claimed ? `<button class="btn sm" data-unclaim="${p.id}" title="Put this name back on the join list">Release name</button>` : ''}
+        <button class="btn sm" data-copy="${p.id}" title="Copy this one person's private link">Their link</button>
+        <button class="btn sm" data-view="${p.id}">View as</button>
+        <button class="btn sm" data-del="${p.id}" title="Remove from the league" aria-label="Remove ${esc(p.display_name)}">Remove</button>
+      </div>
+    </details>`;
   }
   if (!S.players.length) h += `<p class="note">Nobody yet. Add yourself first — the first person added becomes the commissioner.</p>`;
   h += `</div>
