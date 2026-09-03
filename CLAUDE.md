@@ -1013,6 +1013,19 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     Order of preference: de-vigged moneylines → spread through `ncdf(-s/13.5)`
     → records, each labelled. With no odds AND no records it says so rather
     than guessing.
+  - **"What does LEFT mean here?" — and the answer was the fix (v31).** The
+    column is `32 - used`: how many NFL teams you still have available. But
+    "Left" alone reads as games left, weeks left, or points left, which is
+    exactly why it was asked. The header says **"Teams left"** now and the
+    note under the table spells it out and ties it to the rule it comes from
+    ("since nobody can pick the same team twice"). Same lesson as v186 in the
+    main app: when a reader has to ask, change the thing that made them ask.
+    - 🚨 **It also surfaced that the table was truncating NAMES** — "Grandpa
+      J…" is in the owner's own screenshot, before this change. That is the
+      same fault the admin roster had ("Cousin Dave" → "C... D..."), and a
+      person's name is the one thing in a table that must never be cut. The
+      name column WRAPS now instead of ellipsing: a long name costs a second
+      line on its own row, which is far cheaper than being unreadable.
   - **Standings has two views** (`S.stView`): the W-L-T table (default) and a
     **week-by-week grid** (`seasonGridHTML`) — player rows × week columns,
     colour-coded win/loss/tie/no-pick, modelled on the pool app the family

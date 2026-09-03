@@ -266,15 +266,20 @@ h2.hh { font-size: 1.35em; margin: 18px 0 4px; letter-spacing: -.01em; }
 
 /* ---- standings -------------------------------------------------------- */
 .st { width: 100%; border-collapse: collapse; table-layout: auto; }
-.st th, .st td { padding: 12px 5px; text-align: right; border-bottom: 1px solid var(--tr); }
+.st th, .st td { padding: 12px 4px; text-align: right; border-bottom: 1px solid var(--tr); }
 .st th { color: var(--mu); font-size: .74em; text-transform: uppercase; letter-spacing: .04em; font-weight: 800; }
 /* Every column except the name is nowrap and sized to content, or the name
    column's width:99% starves them and "2-1" breaks across two lines. */
 .st th, .st td { white-space: nowrap; width: 1%; }
+/* ⚠️ The name column used to ellipsis ("Grandpa J…"), which is the same fault
+   the admin roster had — a person's name is the one thing in a table that
+   must never be cut. It WRAPS now: a long name costs a second line on its own
+   row, which is a far cheaper price than being unreadable. */
 .st th:nth-child(2), .st td:nth-child(2) {
-  text-align: left; width: 99%; white-space: nowrap;
-  max-width: 0; overflow: hidden; text-overflow: ellipsis;
+  text-align: left; width: 99%; white-space: normal; overflow-wrap: break-word; line-height: 1.25;
 }
+/* The header is two words; let it stack rather than steal the name's width. */
+.st th:last-child { white-space: normal; }
 .st td:nth-child(1) { color: var(--mu); font-weight: 800; }
 .st .nm { font-weight: 700; }
 .st tr.you td { background: var(--pos-bg); }
