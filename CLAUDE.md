@@ -2,24 +2,30 @@
 
 Guidance for Claude (and humans) working on this repo. Read this first.
 
-> # ⛔ TWO SEPARATE APPS LIVE IN THIS REPO — DO NOT CONFLATE THEM
-> **This file documents SPORTS-HUB only** — everything at the repo root plus
-> `server/` and `scriptable/`. It is the owner's personal multi-sport app:
-> betting model, fantasy, scores, Labs.
+> # 📦 Family Survivor has MOVED OUT (3 Sep 2026)
+> It used to live here at `survivor/` — a completely separate app for ~20
+> relatives — and it now has its own repo and its own origin:
+> **`mcdermottj639/family-survivor`** → https://mcdermottj639.github.io/family-survivor/
 >
-> **`survivor/` is a DIFFERENT APPLICATION** with a different audience (~20
-> relatives, including a 95-year-old), its own HTML/CSS/JS, its own service
-> worker, its own version constant, its own storage prefix, its own database
-> and its own test suites. **It is documented in `survivor/CLAUDE.md`.**
+> **Nothing in this repo depends on it and nothing here should recreate it.**
+> It never shared code, CSS, a service worker, storage keys or a release
+> ritual with Sports-Hub; the only thing they ever shared was a git remote.
 >
-> - Working on Sports-Hub? Ignore `survivor/` entirely. Nothing here applies
->   to it and nothing there applies to you.
-> - Working on Survivor? **Read `survivor/CLAUDE.md` instead of this file.**
->   Its release ritual, styling, storage and deploy rules are all different,
->   and following this file's rules there will produce wrong work.
-> - **Never make one change that touches both.** They share a git remote and
->   nothing else, and even that is temporary — Survivor is meant to move to
->   its own repo before the family links go out.
+> ⚠️ **Why it left, because the reasons would come straight back if anything
+> like it were ever added under this repo again:**
+> 1. **Path deletion.** From `/Sports-Hub/survivor/` any relative could delete
+>    one path segment and land on the owner's personal betting model and
+>    fantasy team. That is the one with a deadline on it.
+> 2. **One origin, one localStorage bucket.** localStorage is per-ORIGIN, not
+>    per-path, so both apps shared one ~5 MB quota in Safari — and
+>    `sportshub:aitally` is the key here that grows without bound.
+> 3. **Service-worker scope.** This repo's `sw.js` is scoped to `/Sports-Hub/`,
+>    which contained it. Its own worker was more specific and won, but this
+>    cache is keyed to `APP_VERSION`, so every Sports-Hub release churned the
+>    cache covering a 95-year-old's page.
+>
+> ⚠️ **This file is Sports-Hub only.** Anything about Survivor lives in that
+> repo's own `CLAUDE.md`. Do not add a second application to this one.
 
 > ## ⚠️ Standing rule: keep this file current
 > Whenever you change the architecture, build/deploy pipeline, data model, or
@@ -431,23 +437,9 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     NOT part of the `APP_VERSION`/`?v=` ritual — but bump `workout.css`/`workout.js` `?v=`
     in `workout.html` on changes (currently **v4**), and its `styles.css?v=` (now 143) if
     you change shared CSS it leans on.
-- `survivor/` — **🏈 Family Survivor League. A SEPARATE APP, NOT PART OF
-  SPORTS-HUB.** Its own HTML/CSS/JS, its own service worker, its own version
-  constant (`APP_V`), its own storage prefix (`survivor:`), its own database
-  (Supabase), its own test suites. It shares **nothing** with the app in this
-  directory and **does not participate in the `APP_VERSION`/`?v=` ritual**.
-  - 📗 **Its documentation is `survivor/CLAUDE.md`. Read that, not this, when
-    working on it — and do not apply this file's rules to it.** Everything
-    that was here (the six house rules, the architecture, the traps, the
-    deployment guards, the whole changelog) lives there now.
-  - It is in this repo ONLY so the owner can test it on his phone, and **it is
-    meant to move to its own repo before the family links go out**: from
-    `/Sports-Hub/survivor/` a relative can delete a path segment and land on
-    the owner's betting model, the two apps share one localStorage bucket
-    (same origin), and this app's `sw.js` scope covers that path.
-  - ⚠️ **Never let a Sports-Hub change reach into `survivor/`, or the reverse.**
-    They are two products with two audiences; the only thing they share is a
-    git remote, and that is temporary.
+- ~~`survivor/`~~ — **GONE, moved to its own repo on 3 Sep 2026.** See the
+  banner at the top of this file for where it went and why. Nothing in
+  Sports-Hub reads it, referenced it, or breaks without it.
 
 - `scriptable/` — optional iOS Home Screen widgets ([Scriptable](https://scriptable.app), JS).
   **Companion scripts, NOT part of the web app** — they don't deploy with Pages and
@@ -472,9 +464,11 @@ Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 
 Current version as of this writing: **v198** (backend **b14-football-boxplayer**).
 
-- **🏈 Family Survivor League built (2 Sep 2026)** — a separate app under
-  `survivor/`, no `APP_VERSION` bump, nothing in Sports-Hub touched. **Its
-  history and its lessons are in `survivor/CLAUDE.md`**, not here.
+- **🏈 Family Survivor League built (2 Sep 2026)** — ⚠️ **SUPERSEDED on
+  3 Sep 2026: it MOVED to its own repo, `mcdermottj639/family-survivor`,
+  and is no longer in this one.** It was a separate app under `survivor/`,
+  no `APP_VERSION` bump, nothing in Sports-Hub touched. **Its history and its
+  lessons went with it**, into that repo's own `CLAUDE.md`.
 
 - **🚨 Fantasy opened on the DRAFT-PREP view for up to a minute, every launch
   (v198)** — the owner: *"why when I open the app and click fantasy it shows
@@ -4076,21 +4070,19 @@ the repo has grown a lot.
 |---|---|---|---|
 | Deployed site (what Pages serves) | **~1.4 MB** | 1 GB published site | 0.14 % |
 | Packed git objects | **~650 KB** | 1 GB repo (soft), 100 MB/file (hard) | 0.06 % |
-| `survivor/` on disk | **336 KB** (132 KB of it the three PNG icons) | — | — |
 | Pages bandwidth | 20 relatives × a few opens/week × ~400 KB | 100 GB/month (soft) | rounding error |
 | Supabase rows | 20 players × 18 weeks = **360 picks/season**, ~40 KB | 500 MB free tier | 0.008 % |
-| Survivor localStorage | **18 KB** for a whole seeded demo season; ~0 in production (picks live in Supabase) | ~5 MB per origin | fine |
 
 - **🚨 The real constraint is `CLAUDE.md` itself.** It is read at the start of
   every session, and at 4,700 lines / 333 KB it had become the most expensive
   thing in the repo by a wide margin — bigger than `app.js`. Splitting
   Survivor out took the root file to ~4,080 lines / 289 KB and put its 705
-  lines where only Survivor sessions pay for them. **When a section describes
+  lines where only Survivor sessions pay for them; the app itself followed
+  into its own repo the next day. **When a section describes
   something that is really its own thing, give it its own file.**
-- ⚠️ **One origin means ONE localStorage bucket.** Both apps are served from
-  `mcdermottj639.github.io`, and localStorage is per-ORIGIN, not per-path, so
-  they share ~5 MB. The `sportshub:` / `survivor:` prefixes prevent collisions,
-  not competition for space. **`sportshub:aitally` is the only key here that
+- ⚠️ **`sportshub:aitally` is the one key that grows without bound.** It used
+  to share a ~5 MB origin quota with Survivor, which has moved out — so the
+  whole bucket is Sports-Hub's now, but the growth is still worth watching. **`sportshub:aitally` is the only key here that
   grows without bound** — every graded pick, forever, and v184 made that every
   posted game rather than only the tapped ones. At ~120 bytes an entry a full
   season across four sports is single-digit MB, so it is worth watching but is
@@ -4098,8 +4090,8 @@ the repo has grown a lot.
   calibration sample silently loses its oldest era.
 - `sportshub:lines:{date}` self-purges to today only, and `sportshub:pending`
   purges at 14 days. Those two cannot grow.
-- **Moving `survivor/` to its own repo changes none of these numbers** — it is
-  worth doing for the three reasons in `survivor/CLAUDE.md`, none of which is
+- **Moving `survivor/` out changed none of these numbers** — it went for the
+  three reasons in the banner at the top of this file, none of which was
   storage.
 
 ## GitHub Pages gotcha
