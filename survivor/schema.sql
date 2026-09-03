@@ -55,6 +55,10 @@ create table if not exists picks (
   season      int         not null,
   week        int         not null check (week between 1 and 18),
   team        text        not null,
+  -- The kickoff of the game this pick is ON. Stored so the server can answer
+  -- "has this pick already been decided?" without trusting the client or
+  -- knowing the NFL schedule. See the replacement guard in submit_pick.
+  kickoff     timestamptz,
   entered_by  text        not null default 'self',   -- 'self' | 'admin'
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
@@ -67,6 +71,7 @@ create or replace view players_public as
 
 -- ---------------------------------------------------------- lock it down
 
+revoke all on picks from anon, authenticated;   -- RLS already blocks writes; this matches players
 alter table players enable row level security;
 alter table picks   enable row level security;
 
@@ -108,6 +113,7 @@ $$;
 create or replace function submit_pick(p_token text, p_week int, p_team text, p_kickoff timestamptz default null)
 returns json language plpgsql security definer set search_path = public as $$
 declare v players%rowtype; v_season int := 2026; v_dupe int;
+        v_cur_team text; v_cur_kick timestamptz;
 begin
   select * into v from players where token = p_token;
   if not found then return json_build_object('ok', false, 'error', 'Unknown link.'); end if;
@@ -119,6 +125,18 @@ begin
     return json_build_object('ok', false, 'error', 'That game has already started.');
   end if;
 
+  -- 🚨 Your own pick locks when ITS game starts, not when the new one does.
+  -- Without this you could pick a Thursday team, watch it lose, then switch to
+  -- a Sunday team: the loss disappears AND the spent team is handed back,
+  -- because the row is overwritten rather than added to. That defeats both
+  -- "never the same team twice" and the whole idea of a deadline.
+  select team, kickoff into v_cur_team, v_cur_kick from picks
+   where player_id = v.id and season = v_season and week = p_week;
+  if found and v_cur_team is distinct from p_team and v_cur_kick is not null and v_cur_kick <= now() then
+    return json_build_object('ok', false,
+      'error', 'Your ' || v_cur_team || ' game has already started, so week ' || p_week || ' is locked.');
+  end if;
+
   select week into v_dupe from picks
    where player_id = v.id and season = v_season and team = p_team and week <> p_week
    limit 1;
@@ -126,10 +144,18 @@ begin
     return json_build_object('ok', false, 'error', 'You already used that team in week ' || v_dupe || '.');
   end if;
 
-  insert into picks (player_id, season, week, team, entered_by)
-  values (v.id, v_season, p_week, p_team, 'self')
-  on conflict on constraint one_pick_per_week
-  do update set team = excluded.team, entered_by = 'self', updated_at = now();
+  -- ⚠️ The duplicate check above is a read-then-write, so two requests racing
+  -- can both pass it. `never_reuse_a_team` is the real guard — catch its
+  -- violation and answer with the SAME sentence a relative would otherwise
+  -- get, instead of letting a raw Postgres error reach the screen.
+  begin
+    insert into picks (player_id, season, week, team, kickoff, entered_by)
+    values (v.id, v_season, p_week, p_team, p_kickoff, 'self')
+    on conflict on constraint one_pick_per_week
+    do update set team = excluded.team, kickoff = excluded.kickoff, entered_by = 'self', updated_at = now();
+  exception when unique_violation then
+    return json_build_object('ok', false, 'error', 'You have already used that team this season.');
+  end;
 
   return json_build_object('ok', true);
 end $$;
@@ -183,13 +209,19 @@ create or replace function claim_player(p_player_id bigint)
 returns json language plpgsql security definer set search_path = public as $$
 declare v players%rowtype;
 begin
-  select * into v from players where id = p_player_id;
-  if not found then return json_build_object('ok', false, 'error', 'That name is not in the league.'); end if;
-  if v.claimed_at is not null then
-    return json_build_object('ok', false, 'error', 'Somebody has already taken that name. Ask the commissioner.');
+  -- ⚠️ ONE statement, so two people tapping the same name at the same moment
+  -- cannot both be handed the same identity. A read-then-write here would let
+  -- both see `claimed_at is null` and both receive the real token — two
+  -- phones signed in as one person, each able to change "their" pick.
+  update players set claimed_at = now()
+   where id = p_player_id and claimed_at is null
+   returning * into v;
+  if found then
+    return json_build_object('ok', true, 'token', v.token, 'display_name', v.display_name, 'is_admin', v.is_admin);
   end if;
-  update players set claimed_at = now() where id = p_player_id;
-  return json_build_object('ok', true, 'token', v.token, 'display_name', v.display_name, 'is_admin', v.is_admin);
+  perform 1 from players where id = p_player_id;
+  if not found then return json_build_object('ok', false, 'error', 'That name is not in the league.'); end if;
+  return json_build_object('ok', false, 'error', 'Somebody has already taken that name. Ask the commissioner.');
 end $$;
 
 -- For anyone the commissioner did not think to add in advance.
@@ -199,6 +231,11 @@ declare v_token text; v_base text;
 begin
   if p_name is null or length(trim(p_name)) = 0 then
     return json_build_object('ok', false, 'error', 'Please type your name.');
+  end if;
+  -- The input's `maxlength` is a keyboard courtesy; a paste or a stale page
+  -- walks past it, and one 500-character name breaks a layout for everybody.
+  if length(trim(p_name)) > 28 then
+    return json_build_object('ok', false, 'error', 'That name is too long — 28 letters at most.');
   end if;
   if exists (select 1 from players where lower(display_name) = lower(trim(p_name))) then
     return json_build_object('ok', false, 'error', 'That name is already in the league — tap it in the list instead.');
@@ -245,7 +282,7 @@ end $$;
 
 create or replace function admin_set_pick(p_admin_token text, p_player_id bigint, p_week int, p_team text, p_kickoff timestamptz default null)
 returns json language plpgsql security definer set search_path = public as $$
-declare v_season int := 2026; v_dupe int;
+declare v_season int := 2026; v_dupe int; v_cur_team text; v_cur_kick timestamptz;
 begin
   if not is_admin_token(p_admin_token) then return json_build_object('ok', false, 'error', 'Not an admin.'); end if;
   -- Same bye guard as submit_pick. The commissioner taking a pick over the
@@ -258,6 +295,16 @@ begin
   if p_team is not null and p_kickoff <= now() then
     return json_build_object('ok', false, 'error', 'That game has already started.');
   end if;
+  -- 🚨 A decided week is decided for the commissioner too. Otherwise "helping
+  -- Nana with her late pick" quietly erases the result she already has and
+  -- hands her spent team back — see the same guard in submit_pick.
+  select team, kickoff into v_cur_team, v_cur_kick from picks
+   where player_id = p_player_id and season = v_season and week = p_week;
+  if found and v_cur_kick is not null and v_cur_kick <= now()
+     and (p_team is null or v_cur_team is distinct from p_team) then
+    return json_build_object('ok', false,
+      'error', 'Their ' || v_cur_team || ' game has already started, so week ' || p_week || ' is locked.');
+  end if;
   if p_team is null then
     delete from picks where player_id = p_player_id and season = v_season and week = p_week;
     return json_build_object('ok', true);
@@ -267,10 +314,14 @@ begin
   if v_dupe is not null then
     return json_build_object('ok', false, 'error', 'They already used that team in week ' || v_dupe || '.');
   end if;
-  insert into picks (player_id, season, week, team, entered_by)
-  values (p_player_id, v_season, p_week, p_team, 'admin')
-  on conflict on constraint one_pick_per_week
-  do update set team = excluded.team, entered_by = 'admin', updated_at = now();
+  begin
+    insert into picks (player_id, season, week, team, kickoff, entered_by)
+    values (p_player_id, v_season, p_week, p_team, p_kickoff, 'admin')
+    on conflict on constraint one_pick_per_week
+    do update set team = excluded.team, kickoff = excluded.kickoff, entered_by = 'admin', updated_at = now();
+  exception when unique_violation then
+    return json_build_object('ok', false, 'error', 'They have already used that team this season.');
+  end;
   return json_build_object('ok', true);
 end $$;
 
