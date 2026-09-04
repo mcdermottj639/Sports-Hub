@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v198';
+const APP_VERSION = 'v199';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3281,7 +3281,13 @@ async function buildBoard(sport, games, opts = {}) {
 // set of keys, one meta shape.
 //
 // Returns {graded, hit} when it graded a final, else null.
-function commitRow(r, dateStr) {
+//
+// v199: `opts.record === false` renders the read without writing any of it.
+// That is for the look-back slate the AI tab falls to when nothing is on
+// today — those games are already final, so predicting them now is look-ahead
+// and must never reach the record.
+function commitRow(r, dateStr, opts = {}) {
+  const record = opts.record !== false;
   const { g, sport, p, info, gap, tier, tot, isEdge } = r;
   if (!p || !g?.id) return null;
   if (gameState(g) === 'final') {
@@ -3290,13 +3296,14 @@ function commitRow(r, dateStr) {
     if (actual && actual !== 'TIE') {
       const hit = actual === p.winner.name;
       const edge = info && info.favName ? (isEdge ? (hit ? 'h' : 'm') : null) : null;
-      recordResult(g.id, hit, edge,
+      if (record) recordResult(g.id, hit, edge,
         { s: sport, d: Number(dateStr), cf: p.conf, p: p.winner.name, m: matchupLabel(sport, g),
           ...(p.sharp ? { sh: p.sharp.pts } : {}),
           ...(gap != null ? { gp: gap } : {}), ...(tier ? { tr: tier } : {}) });
       r.resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
       out = { graded: true, hit };
     }
+    if (!record) return out;
     if (tot && g.home.score != null && g.away.score != null) {
       const total = g.home.score + g.away.score;
       if (total !== tot.line) {
@@ -3314,6 +3321,7 @@ function commitRow(r, dateStr) {
     }
     return out;
   }
+  if (!record) return null;
   const label = matchupLabel(sport, g);
   recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge,
     { sh: p.sharp?.pts ?? null, gp: gap, tr: tier, m: label });
@@ -3754,14 +3762,88 @@ async function renderHomeBoard() {
   box.appendChild(more);
 }
 
+// 🚦 v199 — AI Picks routes ITSELF to a league that actually has games.
+//
+// It used to open on sortedSports({teamOnly:true})[0] — the first in-season
+// sport in BASE_ORDER — and then say "No games today for this sport" whenever
+// that league wasn't playing. In early September that is EVERY visit: the NFL
+// is in season by the month table but doesn't kick off until the 10th, so the
+// tab opened empty while MLB and CFB had full slates one chip away. The model
+// had plenty to say; the tab just wasn't looking at it.
+//
+// So before the first render it sweeps today's slates and picks a league that
+// has games, preferring one with something still to play over one whose day is
+// already finished. If nothing is on anywhere it walks back day by day to the
+// most recent slate and shows THAT — read-only (see the record note below).
+//
+// It never fights the owner: tapping a sport chip pins the choice
+// (state.aiPinned), and routing sits out until the next launch. The slate
+// sweep still runs while pinned, because the empty state uses those counts to
+// offer the leagues that DO have games.
+const AI_LOOKBACK_DAYS = 7;
+const aiDayBack = (n) => { const d = sportsDate(); d.setDate(d.getDate() - n); return ymd(d); };
+const aiDateLabel = (s) => new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8))
+  .toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+
+// One day's slate size per sport. `open` = games not yet final, i.e. games the
+// model can still be judged on going forward.
+async function aiSlateCounts(sports, dateStr) {
+  const lists = await Promise.all(sports.map((s) => getGames(s, dateStr).catch(() => [])));
+  return sports.map((sport, i) => {
+    const playable = lists[i].filter((g) => g.id && g.seasonType !== 1);
+    return { sport, n: playable.length, open: playable.filter((g) => gameState(g) !== 'final').length };
+  });
+}
+
+async function aiRoute() {
+  const sports = sortedSports({ teamOnly: true });
+  const counts = await aiSlateCounts(sports, ymd(sportsDate()));
+  state.aiSlates = counts;
+  if (state.aiPinned) return;
+  // A league with games still to play beats one whose slate is already final;
+  // beyond that, season order decides (in-season first, then BASE_ORDER — so
+  // football leads once football is on).
+  const pick = counts.find((c) => c.open) || counts.find((c) => c.n);
+  if (pick) { state.aiSport = pick.sport; state.aiDate = null; return; }
+  // Nothing anywhere today: fall back to the most recent slate.
+  for (let back = 1; back <= AI_LOOKBACK_DAYS; back++) {
+    const d = aiDayBack(back);
+    const hit = (await aiSlateCounts(sports, d)).find((c) => c.n);
+    if (hit) { state.aiSport = hit.sport; state.aiDate = d; return; }
+  }
+  state.aiDate = null;
+}
+
+// The most recent day this ONE league played, for the "show the last slate"
+// button in the empty state. Run on tap rather than on render — it is up to
+// AI_LOOKBACK_DAYS scoreboard reads and most visits never need it.
+async function aiRecentFor(sport) {
+  for (let back = 1; back <= AI_LOOKBACK_DAYS; back++) {
+    const d = aiDayBack(back);
+    const games = await getGames(sport, d).catch(() => []);
+    if (games.some((g) => g.id && g.seasonType !== 1)) return d;
+  }
+  return null;
+}
+
 // ===================== AI Picks: the ladder + the history ==================
 async function renderPredictions() {
-  const sport = state.aiSport || FEATURED.sport;
-  buildChips($('#ai-sport'), sport, (s) => { state.aiSport = s; renderPredictions(); }, sortedSports({ teamOnly: true }));
   const container = $('#ai-picks');
   container.innerHTML = '<div class="empty">Crunching the numbers…</div>';
+  await aiRoute().catch(() => {});
+  const sport = state.aiSport || FEATURED.sport;
+  // A chip tap is a decision — pin it, and drop any past slate we'd routed to.
+  buildChips($('#ai-sport'), sport, (s) => {
+    state.aiSport = s; state.aiPinned = true; state.aiDate = null; renderPredictions();
+  }, sortedSports({ teamOnly: true }));
 
-  const games = await getGames(sport, ymd(sportsDate())).catch(() => []);
+  const today = ymd(sportsDate());
+  const dateStr = state.aiDate || today;
+  const isToday = dateStr === today;
+  const head = $('#ai-head');
+  if (head) head.textContent = isToday ? '🤖 AI Picks — Today' : `🤖 AI Picks — ${aiDateLabel(dateStr)}`;
+
+  const games = await getGames(sport, dateStr).catch(() => []);
   const { rows, playable, report } = await buildBoard(sport, games);
   const allPreseason = games.length > 0 && !playable.length;
   const renderTally = (todayTxt) => {
@@ -3801,7 +3883,29 @@ async function renderPredictions() {
     if (det0.total) container.appendChild(reportCard(det0));
     container.appendChild(el('div', 'empty', allPreseason
       ? 'Preseason only today — the model sits these out (backups play; results don\'t predict anything).'
-      : 'No games today for this sport.'));
+      : `No ${esc(LEAGUES[sport].label)} games ${isToday ? 'today' : `on ${esc(aiDateLabel(dateStr))}`}.`));
+    // An empty league is a dead end unless the tab says where the games ARE.
+    // These counts come from the same sweep that does the routing, so they are
+    // accurate even when the owner has pinned a league by tapping its chip.
+    const others = (state.aiSlates || []).filter((c) => c.n && c.sport !== sport);
+    const jump = el('div', 'ai-jump');
+    if (others.length) {
+      jump.innerHTML = others.map((c) =>
+        `<button type="button" class="chip" data-jump="${c.sport}">${LEAGUES[c.sport].emoji} ${esc(LEAGUES[c.sport].label)} — ${c.n} game${c.n === 1 ? '' : 's'} today</button>`).join('');
+    }
+    const backBtn = el('button', 'chip', `📅 Last ${esc(LEAGUES[sport].label)} slate`);
+    backBtn.addEventListener('click', async () => {
+      backBtn.disabled = true; backBtn.textContent = '📅 Looking back…';
+      const d = await aiRecentFor(sport).catch(() => null);
+      if (!d) { backBtn.textContent = `📅 Nothing in the last ${AI_LOOKBACK_DAYS} days`; return; }
+      state.aiDate = d; renderPredictions();
+    });
+    if (isToday) jump.appendChild(backBtn);
+    jump.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-jump]');
+      if (b) { state.aiSport = b.dataset.jump; state.aiPinned = true; state.aiDate = null; renderPredictions(); }
+    });
+    if (jump.children.length) container.appendChild(jump);
     renderTally('');
     // A sport with no slate still has to clear the previous sport's ladder off
     // the jump rail — otherwise the rail lists sections that aren't there.
@@ -3810,7 +3914,6 @@ async function renderPredictions() {
     return;
   }
 
-  const dateStr = ymd(sportsDate());
   container.innerHTML = '';
   let right = 0, graded = 0;
 
@@ -3818,8 +3921,12 @@ async function renderPredictions() {
   // is the ONLY place picks are recorded — Home renders the same rows but
   // never writes, so a pick can't be stored twice or stored with a different
   // sharp-money state than the one shown here.
+  // 🚨 A past slate is READ-ONLY. Every game on it is already final, so freshly
+  // predicting one and grading it is look-ahead (the v138 lesson): teamProfile
+  // cuts at g.date, but the season-stat feeds it leans on cannot be rewound.
+  // The read is still shown — it just never enters the record.
   rows.forEach((r) => {
-    const c = commitRow(r, dateStr);
+    const c = commitRow(r, dateStr, { record: isToday });
     if (c?.graded) { graded++; if (c.hit) right++; }
   });
 
@@ -3839,6 +3946,12 @@ async function renderPredictions() {
                     upAts ? `${upAts} ATS` : '', upTot ? `${upTot} O/U` : ''].filter(Boolean).join(' · ');
   container.appendChild(statBar(playCount,
     playCount ? playBits : anyLines ? 'model in line w/ book' : 'no lines posted yet'));
+  // Say which day this is and why, so a slate of finished games can't be
+  // mistaken for today's board.
+  if (!isToday) {
+    container.appendChild(el('div', 'ai-note',
+      `🗓️ Nothing on anywhere today — this is the most recent slate, ${esc(aiDateLabel(dateStr))}. These games are final, so it is a look-back read: nothing here is added to the model's record.`));
+  }
   // Say plainly whether the sharp-money input was live for this slate — a
   // sleeping backend silently dropping a model factor is exactly the kind of
   // thing that should be visible, not guessed at.
@@ -3850,7 +3963,7 @@ async function renderPredictions() {
     container.appendChild(el('div', 'ai-note',
       '💰 Sharp-money splits unavailable right now (betting backend asleep or down) — these picks are model-only.'));
   }
-  renderTally(graded ? `today ${right}-${graded - right}` : '');
+  renderTally(graded ? `${isToday ? 'today' : aiDateLabel(dateStr)} ${right}-${graded - right}` : '');
 
   // ---- the ladder ----
   const section = (key, list) => {
@@ -3943,6 +4056,31 @@ async function renderPredictions() {
         return `<div class="lad-row"><span class="lm">${esc(matchupLabel(r.sport, r.g))}</span>
           <span class="lp">${esc(abbr)} ${r.p.conf}%</span>
           <span class="lg">${r.gap != null ? (r.gap > 0 ? '+' : '') + r.gap : '—'}</span></div>`;
+      }).join('')}</div>`;
+    container.appendChild(d);
+  }
+
+  // 📋 Finished games. The ladder above is built from `upcoming`, so a game
+  // that has already ended fell off this tab entirely — which made the
+  // look-back slate (v199) render as a banner over nothing, and quietly hid
+  // today's finished games too. Folded on today's board, where the plays are
+  // the point; open on a look-back slate, where the results ARE the point.
+  const finals = rows.filter((r) => r.p && gameState(r.g) === 'final');
+  if (finals.length) {
+    const hit = (r) => { const w = winnerName(r.g); return w && w !== 'TIE' ? w === r.p.winner.name : null; };
+    const won = finals.filter((r) => hit(r) === true).length;
+    const lost = finals.filter((r) => hit(r) === false).length;
+    container.appendChild(el('div', 'lad-sec',
+      `📋 Finished <span class="n">model ${won}-${lost}</span> <span class="n">${finals.length}</span>`));
+    const d = el('details', 'lad-fold');
+    d.open = !isToday;
+    d.innerHTML = `<summary>How the model did on ${isToday ? "today's" : 'this'} finished games <span class="cv">${finals.length} ▸</span></summary>
+      <div class="lad-body">${finals.map((r) => {
+        const h = hit(r);
+        const abbr = (r.g.home.name === r.p.winner.name ? r.g.home.abbr : r.g.away.abbr) || r.p.winner.name.split(' ').pop();
+        return `<div class="lad-row"><span class="lm">${esc(matchupLabel(r.sport, r.g))}</span>
+          <span class="lp">${esc(abbr)} ${r.p.conf}%</span>
+          <span class="lg">${h === true ? '✅' : h === false ? '❌' : '—'}</span></div>`;
       }).join('')}</div>`;
     container.appendChild(d);
   }

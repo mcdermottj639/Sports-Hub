@@ -462,7 +462,60 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v198** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v199** (backend **b14-football-boxplayer**).
+
+- **🚦 AI Picks opens on a league that actually has games (v199)** — the owner:
+  *"When u click ai picks it should to to any league that has games that day or
+  games most recent."* The tab opened on `sortedSports({teamOnly:true})[0]` —
+  the first in-season sport in `BASE_ORDER` — and then said **"No games today
+  for this sport."** In early September that was EVERY visit: the NFL is in
+  season by `SEASON_MONTHS` from August, but the 2026 season doesn't kick off
+  until **10 Sep**, so the tab landed on an empty NFL board while MLB and CFB
+  had full slates one chip away. The model had plenty to say; the tab wasn't
+  looking at it.
+  - **`aiRoute()`** sweeps today's slates across every in-season team sport
+    before the first render and selects one that has games — preferring a
+    league with something **still to play** over one whose day is already
+    final, then season order (so football leads once football is on).
+  - **Nothing on anywhere → the most recent slate**, walked back day by day up
+    to `AI_LOOKBACK_DAYS` (7). The header stops saying "Today" and names the
+    date instead (`#ai-head`, `aiDateLabel`).
+  - **🚨 A look-back slate is READ-ONLY, and this is the part that matters.**
+    Every game on it is already final, so freshly predicting one and grading it
+    is **look-ahead** — the v138 lesson: `teamProfile` cuts at `g.date`, but
+    the season-stat feeds it leans on cannot be rewound. `commitRow` therefore
+    took an `opts.record` flag; with `record:false` it renders the read and its
+    ✅/❌ and writes **nothing** — no `recordResult`, no `recordPick`, no totals
+    or ATS row. The banner on the slate says so in the app, not just here.
+    Verified by asserting `sportshub:aitally` and `sportshub:pending` are both
+    **empty** after a look-back render. Today's finals still grade inline
+    exactly as before.
+  - **It never fights an explicit choice.** Tapping a sport chip sets
+    `state.aiPinned` and routing sits out until the next launch — so tapping
+    NFL on an empty day shows the empty state, not a redirect. The slate sweep
+    still runs while pinned, because the empty state uses those counts.
+  - **The empty state stopped being a dead end.** It names the league ("No NFL
+    games today"), then offers the leagues that DO have a slate with their game
+    counts, plus a **📅 Last {league} slate** button. That button runs its
+    lookback **on tap**, not on render — it is up to 7 scoreboard reads and
+    almost no visit needs them.
+  - **📋 Finished section (found while verifying, and it was a real hole).**
+    The ladder is built entirely from `upcoming`, so a game that had already
+    ended **fell off this tab completely** — which made the look-back slate
+    render as a banner over nothing, and had been quietly hiding today's
+    finished games all along. There is now a Finished section with the model's
+    record for that slate: folded on today's board where the plays are the
+    point, open on a look-back slate where the results ARE the point.
+  - ⚠️ **Test-harness note, the v185/v195 lesson again:** `.lad-sec` is
+    uppercased by CSS and Chromium's `innerText` reflects `text-transform`, so
+    a case-sensitive assertion on the new heading failed against perfectly
+    correct markup.
+  - Verified in headless Chromium with ESPN stubbed — **44 checks**: the
+    owner's exact case (empty NFL, MLB + CFB playing) routing off NFL; the
+    look-back path with nothing written to the record; a pinned empty league
+    keeping its chip and offering the jumps; a finals-only day still counting
+    as today and still grading; plus both palettes at 390px and 1280px with no
+    horizontal overflow, nothing spilling the AI column and no console errors.
 
 - **🏈 Family Survivor League built (2 Sep 2026)** — ⚠️ **SUPERSEDED on
   3 Sep 2026: it MOVED to its own repo, `mcdermottj639/family-survivor`,
@@ -3651,9 +3704,17 @@ rewrite.**
   section any more** — don't go looking for them.
 - **AI Picks** — a multi-factor logistic model (`predictGame`): record, scoring
   margin, recent form, home/road split, rest, plus matchup factors (MLB starter
-  ERA/WHIP, team OPS). **As of v164 it is a conviction ladder** — Best Bets
+  ERA/WHIP, team OPS). **The tab routes itself (v199)**: `aiRoute()` sweeps
+  today's slates and opens on a league that actually has games (one still to
+  play beats one already final); with nothing on anywhere it falls back to the
+  most recent slate, which is **read-only** — a fresh prediction on a finished
+  game is look-ahead, so `commitRow(r, date, {record:false})` shows the read and
+  records none of it. A sport-chip tap pins the choice (`state.aiPinned`) until
+  the next launch. **As of v164 it is a conviction ladder** — Best Bets
   (gap 10+) → Edges (5–9) → Leans (2–5, folded) → 📐 ATS → 🎯 Totals → ✅ passes
-  (folded) → 📊 backtesting → report card → trends. The top of that ladder is
+  (folded) → 📋 Finished (v199 — the slate's completed games and how the model
+  did on them; they used to fall off the tab entirely) → 📊 backtesting →
+  report card → trends. The top of that ladder is
   mirrored on Home's 🎲 Board via the shared `buildBoard`. Stat bar tracks **all-time model record** and **vs-the-line
   record**; below the edges are **Team Trends** and **Player Prop trends**.
   Records persist + auto-grade: see "AI record" below. **v83 additions:**
@@ -3975,7 +4036,10 @@ rewrite.**
   final. **v184: EVERY posted game is logged** (`recordSlate`, called from
   `enrichSlate` and `renderHomeBoard`) — no tap required, and uncapped by the
   display caps, so the record is an unselected sample. Three writers now, one
-  write path (`commitRow`), all deduping on the pick's own key.
+  write path (`commitRow`), all deduping on the pick's own key. **v199:
+  `commitRow(r, date, {record:false})` renders a read without writing any of
+  it** — that is the AI tab's look-back slate, whose games are all final, and
+  predicting a finished game to grade it is look-ahead.
 - **Auto-update** — `sw.js` is a network-first service worker that fetches app
   files with `cache:'no-store'`, so launches pull the newest deploy (with an
   offline cache fallback). Registered at the end of `app.js`. This replaced the

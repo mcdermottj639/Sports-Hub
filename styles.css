@@ -2576,3 +2576,11 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
     border-top: 1px solid var(--l3); padding: 8px 14px;
   }
 }
+
+/* ==========================================================================
+   AI Picks — the "go where the games are" row (v199).
+   Shown only in the tab's empty state: the leagues that DO have a slate
+   today, plus a look-back button for the league you're on. Children are
+   ordinary .chip buttons, so they take the palette for free.
+   ========================================================================== */
+.ai-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
