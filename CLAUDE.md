@@ -462,7 +462,78 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v199** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v200** (backend **b14-football-boxplayer**).
+
+- **🚨 The sharp-money record was never going to build — an 8-second leash
+  against a 30-60 second cold start (v200)** — the owner, on a Report Card
+  showing 6 graded sharp picks beside a 400+ pick record: *"Why is sharp money
+  not tracking results? That record should be built up for the ai model now?"*
+  It should have been, and it could not have been.
+  - **The mechanism, and it is a whole class of bug.** Every `SHARP_WAIT` value
+    is a **display budget** — something is on screen waiting for the model, so
+    v157's rule says the backend's cold start must never become the render
+    time. `recordSlate` borrowed one (`picks`, 8s). But recordSlate paints
+    nothing: it is a detached background pass with no pixel and no render
+    behind it, so it was paying a cost it did not owe — and **8s cannot beat a
+    Render free-tier wake-up of 30-60s**. The backend sleeps after 15 min idle
+    and the owner opens the app once a day, so on essentially every launch the
+    entire day's slate, across every sport, was logged within a few seconds of
+    boot with the splits feed still booting.
+  - **And `recordPick` is first-write-wins** (`if (p[id]) return`), so those
+    picks could never gain the read later no matter how warm the backend got
+    afterwards. v184 made the recorder log EVERY posted game, which multiplied
+    the problem: the dominant writer of the record was also the earliest and
+    the blindest. 6 of 400+ is what that arithmetic produces.
+  - **Fixed in two phases, because one leash cannot do both jobs.** Pass 1
+    still logs at 8s — *a pick that is never written is worse than a pick
+    written without its sharp read*, and a session can easily end before the
+    container is up. Pass 2 fires only when pass 1 went in blind: it waits the
+    full `SHARP_WAIT.record` (45s) window and, if the splits feed then answers,
+    re-runs the model and **upgrades the entry in place** (`meta.up`).
+    - ⚠️ **The upgrade is allowed ONLY while the pick is pregame/live and
+      ungraded**, and only ever upward — an entry that already carries a live
+      read is never overwritten by one that doesn't. So this is a forecast
+      being updated with information that arrived *before kickoff*, never a
+      finished game being re-predicted (the v138 look-ahead rule).
+  - **The backend now starts waking at boot** (`wakeBettingFeeds`), so the cold
+    start runs in parallel with the app's own load instead of beginning the
+    first time something needs it.
+  - **In-flight dedupe** (`reportInFlight`). `fetchJSON` caches a RESULT, not
+    an in-flight promise, so while a container was waking every caller for the
+    same sport opened its own 45s request — Home's board race, the recorder,
+    the modal, the slate strips — and the one that finally answered only filled
+    the cache for whoever asked next. Measured: 4 requests → **1 per sport**.
+  - **🚨 The card could not answer the question, which is why it had to be
+    asked.** A pick with no `sh` meant either "the money was balanced" or "the
+    feed never answered", and those are opposite facts. New **`sr`** flag =
+    the splits feed was READABLE when this pick was made, regardless of whether
+    that game cleared the 7-point deadband. The Report Card now carries a
+    **"Splits feed live at pick time — N of M"** row on both the graded record
+    and the pending queue (the queue is the fast read: it says whether the
+    factor is reaching the recorder *today*, days before anything grades), and
+    a persistent 0 now says in the card that the factor is **dead weight, not
+    unproven**.
+  - ⚠️ **`sr` is absent when the backend answered but VSiN could not be
+    scraped** — reaching the backend is not coverage; reading the splits is.
+  - ⚠️ **Read this before the next sharp-money calibration:** the sample
+    changes composition at v200, exactly like v184. Everything before it is 6
+    picks that happened to catch a warm backend; everything after is the real
+    rate. **Split by date at the v200 ship** and do not pool them.
+  - Verified in headless Chromium with ESPN and the backend stubbed — **55
+    checks**: the owner's exact case reproduced (a 20s cold start) showing the
+    slate safely logged at 8s and honestly blind, then upgraded with a real
+    `sh` once the feed woke; a game inside the 7-pt deadband correctly getting
+    `sr` but no `sh`; one request per sport instead of four; a warm backend
+    unchanged (gp/tr/ATS spread all still written); a scrape-down backend
+    setting neither flag; a dead backend still logging every pick and still
+    painting Home; `sr` surviving deferred grading into the tally; and the card
+    rows in **both palettes at 390px and 1280px** with no overflow, no clipped
+    rows, nothing spilling the card and no console errors.
+  - ⚠️ **Test-fixture note, the v170 trap again:** today is 6 Sep 2026 and NFL
+    kickoff is 10 Sep, so **any past-dated NFL fixture sits inside
+    `clearNflPreseason`'s purge window and deletes itself at boot**. Two suites
+    failed against perfectly correct code before the seeds moved to MLB. A
+    graded-NFL fixture is impossible before kickoff — use MLB.
 
 - **🚦 AI Picks opens on a league that actually has games (v199)** — the owner:
   *"When u click ai picks it should to to any league that has games that day or
@@ -1813,7 +1884,7 @@ index, not the argument.
 | 4 | **Overall calibration gap** | Report Card → By confidence | v171 | better than **−6.1** at n=109, and the buckets become *ordered* (they are not today: 50–54 wins 27.8%, 55–59 wins 75%). |
 | 5 | **Record by tier** | Backtesting → Record by tier | v164 stored `gp`/`tr` | reads a real W-L instead of "collecting". **Do not touch `EDGE_BAR` before this has ~20 graded picks.** |
 | 6 | **ATS record** | Backtesting → by sport | v171 fixed grading (`:s` was never stripped, so ATS never graded at all) | any non-zero number. `PD_SD` (13.5/16.5) and `ATS_EDGE_MIN` (2/3) are guesses and are the first things to re-fit. |
-| 7 | **Sharp money split** | Report Card → 💰 Sharp money | v160 stored `sh` | 20+ graded picks. At the v170 export there were **3**. Nothing to conclude until then. |
+| 7 | **Sharp money split** | Report Card → 💰 Sharp money | v160 stored `sh`; **v200 fixed why it never grew** | **Read the new "Splits feed live at pick time" row FIRST.** Until v200 the recorder logged the whole slate on an 8s leash against a 30-60s cold start, so ~99% of picks were made blind — 6 graded sharp picks at n=400+. It needs 20+ graded picks made with the feed live, and **only picks dated after the v200 ship count**; the 6 before it are a different population. If the coverage row is still near 0 a week after v200, the backend is not answering at all and the factor is dead weight, not unproven. |
 | 8 | **🏈 NFL calibration — the FIRST honest one** | export, filter `s: 'nfl'` + `d >= 20260910` | nothing yet — this read decides | buckets roughly ordered and a Brier that beats always-quoting the base rate. **Every NFL pick before 10 Sep 2026 predates BOTH the v83 confidence meta AND the v138 leak fix — it is history, not calibration data. Exclude it.** |
 | 9 | **🎓 CFB calibration + first ATS sample** | export, filter `s: 'cfb'` + `d >= 20260829` | nothing yet | any graded CFB W-L at all (there were **zero** through Aug). Football is a SPREAD sport, so the **ATS** row matters more than the moneyline one — see #6. |
 
@@ -4035,8 +4106,14 @@ rewrite.**
   live games only; the modal never manufactures a pick for a game that's already
   final. **v184: EVERY posted game is logged** (`recordSlate`, called from
   `enrichSlate` and `renderHomeBoard`) — no tap required, and uncapped by the
-  display caps, so the record is an unselected sample. Three writers now, one
-  write path (`commitRow`), all deduping on the pick's own key. **v199:
+  display caps, so the record is an unselected sample. **v200: `recordSlate` is
+  now the ONE recording pass** — the modal's `recordFromModal` hands its single
+  game to it rather than keeping a second copy of the rule (v177) — and it is
+  **two-phase**: log at 8s so a pick is never lost to a short session, then, if
+  that went in blind, wait out the backend's cold start (`SHARP_WAIT.record`,
+  45s) and upgrade the entry in place with the sharp read. Two writers now
+  (`recordSlate`, plus the AI tab's own inline pass), one write path
+  (`commitRow`), all deduping on the pick's own key. **v199:
   `commitRow(r, date, {record:false})` renders a read without writing any of
   it** — that is the AI tab's look-back slate, whose games are all final, and
   predicting a finished game to grade it is look-ahead.
@@ -4065,7 +4142,13 @@ rewrite.**
   entries carry `sh` (points the sharp-money factor moved the pick, signed
   toward the side taken — absent when there was no qualifying split); v164+
   entries carry `gp` (model-vs-market gap) and `tr` (ladder tier), and ATS
-  entries carry `pm` (the model's projected margin).
+  entries carry `pm` (the model's projected margin). **v200+ side entries carry
+  `sr: 1`** = the DK splits feed was READABLE when the pick was made, whether or
+  not that game cleared the 7-point deadband. ⚠️ It is what makes an absent `sh`
+  tellable from "the money was balanced" — without it the two are identical in
+  the record, which is exactly what hid the v200 bug. Entries before v200 carry
+  no `sr` at all, so a coverage figure spanning the ship reads artificially low;
+  split at the ship date.
 - `sportshub:pending` — ungraded picks awaiting results, surfaced in the Report
   Card's **📥 Logged, awaiting results** section since v185 (which also added `m`,
   the matchup label, so the queue can name its games). **v183: written by
@@ -4073,7 +4156,12 @@ rewrite.**
   every writer dedupes on the pick's own key, so the two can see the same game
   without double-counting it. (v83+ includes `conf`;
   v160+ includes `sh`; v164+ includes `gp`/`tr`, plus `:s` ATS rows carrying
-  `hsp` (the home-oriented spread) so they can be graded without re-fetching odds).
+  `hsp` (the home-oriented spread) so they can be graded without re-fetching odds;
+  v200+ includes `sr`.) **v200: first-write-wins has ONE exception** — the
+  recorder's second pass may replace an entry that was logged before the splits
+  feed woke up (`meta.up`), and only while the pick is still pregame/live and
+  ungraded, and only ever upward (a blind entry can gain a live read; a live one
+  is never overwritten by a blind one).
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
 - `sportshub:lines:{YYYYMMDD}` — device-local line tracking for today's games:
   first-seen, latest, and (v167) a bounded **`hist`** of every observed change

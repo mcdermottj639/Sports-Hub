@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v199';
+const APP_VERSION = 'v200';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2031,11 +2031,35 @@ const BETTING_SPORTS = new Set(['mlb', 'nfl', 'nba', 'cfb']);
 // an outage (or a long cold start) doesn't sit on its own 45s request — the
 // report degrades to model-only, which gameReportHTML already handles.
 let reportDownUntil = 0;
+// 🚨 v200 — in-flight dedupe. fetchJSON only caches a result once it has LANDED,
+// so while a cold Render container is waking every caller for the same sport
+// opened its OWN 45s request: Home's board race (3s), the recorder's pass, the
+// modal, the slate strips. Four requests, four cold-start clocks, and the one
+// that finally answers only fills the cache for whoever asks NEXT. Sharing the
+// promise means the first caller's wait is everybody's wait — which is what
+// makes the recorder's long leash below actually pay for the others too.
+const reportInFlight = new Map();
 async function getBettingReport(sport) {
   if (!BETTING_SPORTS.has(sport)) return null;
   if (Date.now() < reportDownUntil) return null;
-  return fetchJSON(`${FANTASY_API}/api/betting/${sport}/report`, 5 * 60000)
-    .catch(() => { reportDownUntil = Date.now() + 3 * 60000; return null; });
+  if (reportInFlight.has(sport)) return reportInFlight.get(sport);
+  const p = fetchJSON(`${FANTASY_API}/api/betting/${sport}/report`, 5 * 60000)
+    .catch(() => { reportDownUntil = Date.now() + 3 * 60000; return null; })
+    .finally(() => reportInFlight.delete(sport));
+  reportInFlight.set(sport, p);
+  return p;
+}
+// Start the backend waking the moment the app opens, for every in-season sport
+// that has a splits feed. Nothing awaits this — it exists so the ~30-60s free-
+// tier cold start overlaps with the app's own load instead of starting fresh
+// the first time something actually needs the report. Fire-and-forget: the
+// result lands in fetchJSON's cache and every later caller reads it free.
+function wakeBettingFeeds() {
+  try {
+    sortedSports({ teamOnly: true })
+      .filter((s) => BETTING_SPORTS.has(s))
+      .forEach((s) => { getBettingReport(s).catch(() => {}); });
+  } catch (_) {}
 }
 // The sharp-money factor (v160) needs the report BEFORE a pick is computed,
 // but v157's rule stands: nothing may sit on the backend's 45s cold-start
@@ -2052,7 +2076,24 @@ async function getBettingReport(sport) {
 // (Home and AI Picks can therefore disagree about the sharp-money factor in a
 // narrow window. reportDownUntil makes that rare — one attempt per 3 minutes —
 // and AI Picks, the tab that records the pick, is the one that waits longest.)
-const SHARP_WAIT = { picks: 8000, modal: 1200, board: 3000 };
+// 🚨 v200 — `record` is the leash that was missing, and its absence is why the
+// sharp-money row sat at 6 graded picks while the record passed 400.
+//
+// Every wait below is a DISPLAY budget: something is on screen waiting for the
+// model, so the backend's 30-60s cold start must not become the render time
+// (v157). recordSlate displays NOTHING. It is a detached background pass that
+// paints no pixel and blocks no render — so it was borrowing a display budget
+// it never needed, and 8s cannot beat a cold start that takes 30-60s. On any
+// launch where the backend was asleep (i.e. almost every launch — it sleeps
+// after 15 min idle and the owner opens the app once a day) the whole day's
+// slate, every sport, was logged sharp-less within the first few seconds. And
+// recordPick is first-write-wins, so those picks could never gain the read
+// later, no matter how warm the backend got afterwards.
+//
+// So the recorder gets the FULL cold-start window. It costs nothing on screen,
+// and a genuinely dead backend still short-circuits on reportDownUntil rather
+// than making each sport sit out the whole 45s.
+const SHARP_WAIT = { picks: 8000, modal: 1200, board: 3000, record: 45000 };
 const raceReport = (p, ms) => Promise.race([
   Promise.resolve(p).catch(() => null),
   new Promise((r) => setTimeout(() => r(null), ms)),
@@ -2499,7 +2540,12 @@ function tallyDetails() {
   // pick, signed toward the side taken. Positive = the big money agreed with
   // the model; negative = the model took the other side anyway. Splitting the
   // record on that sign is how we find out whether the factor earns its weight.
-  const sharp = { agree: { w: 0, n: 0 }, against: { w: 0, n: 0 } };
+  // v200: `live`/`ml` alongside them = of every graded moneyline pick, how many
+  // were made while the DK splits feed was actually readable (sr). agree+against
+  // only ever counts games that ALSO cleared the 7-point deadband, so on its own
+  // it cannot say whether a small sample means "the money is usually balanced"
+  // or "the factor never ran". This row is the difference.
+  const sharp = { agree: { w: 0, n: 0 }, against: { w: 0, n: 0 }, live: 0, ml: 0 };
   // ATS (v164): its own overall record, plus a per-sport split so NFL and CFB
   // can be read apart — and, beside it, `mlBySport` keeps the moneyline record
   // per sport. Football lives and dies on the number, so "61% straight up but
@@ -2531,6 +2577,8 @@ function tallyDetails() {
       if (r.p) recent.push(r);
       return;
     }
+    sharp.ml++;
+    if (r.sr) sharp.live++;
     if (r.sh) { const k = r.sh > 0 ? 'agree' : 'against'; sharp[k].n++; if (win) sharp[k].w++; }
     if (r.tr) bump(tiers, r.tr, win, r.cf);
     if (r.cf != null) bump(buckets, bucketOf(r.cf), win, r.cf); else legacy++;
@@ -2555,7 +2603,16 @@ function recordPick(id, sport, date, pick, fav, conf, isEdge, meta = {}) {
   if (!id || !pick) return;
   if (getTally()[id]) return; // already graded
   const p = getPending();
-  if (p[id]) return;
+  // 🚨 v200 — first-write-wins, with ONE exception. The recorder logs the slate
+  // immediately so a pick is never lost to a session that ends before the
+  // backend wakes; if the splits feed then answers, a second pass re-runs the
+  // model and upgrades the entry in place (meta.up). It is allowed only while
+  // the pick is still PREGAME/live and ungraded, so this is a forecast being
+  // updated with information that arrived before kickoff — never a result being
+  // re-predicted after the fact (the v138 look-ahead rule). And it only ever
+  // upgrades UPWARD: an entry that already carries a live-feed read is never
+  // overwritten by one that doesn't.
+  if (p[id] && !(meta.up && meta.sr != null && p[id].sr == null)) return;
   // eg carries the qualified-edge flag (gap-filtered) so deferred grading
   // counts the same picks toward the vs-line record as live grading does.
   // sh (v160) = probability points the sharp-money factor moved this pick,
@@ -2572,6 +2629,10 @@ function recordPick(id, sport, date, pick, fav, conf, isEdge, meta = {}) {
     // that says "SJSU @ USC · USC Trojans 90%".
     ...(meta.m ? { m: meta.m } : {}),
     ...(meta.sh != null ? { sh: meta.sh } : {}),
+    // sr (v200) = the DK splits feed was live when this pick was made, whether
+    // or not this particular game had a qualifying divergence. It is what makes
+    // "the money was balanced" tellable from "the feed never answered".
+    ...(meta.sr != null ? { sr: meta.sr } : {}),
     ...(meta.gp != null ? { gp: meta.gp } : {}),
     ...(meta.tr ? { tr: meta.tr } : {}) };
   setPending(p);
@@ -2623,16 +2684,21 @@ function pendingSummary() {
   const p = getPending();
   const by = {}; const list = [];
   let total = 0;
+  // v200: shLive/shMl = of the moneyline picks sitting in the queue, how many
+  // were logged while the DK splits feed was answering. This is the FASTEST
+  // read on whether the sharp factor is actually reaching the recorder — the
+  // graded record takes days to say anything, but today's slate is right here.
+  let shLive = 0, shMl = 0;
   Object.values(p).forEach((e) => {
     if (!e || !e.sport) return;
     const r = (by[e.sport] = by[e.sport] || { n: 0, ml: 0, ats: 0, tot: 0 });
-    if (e.a) r.ats++; else if (e.t) r.tot++; else r.ml++;
+    if (e.a) r.ats++; else if (e.t) r.tot++; else { r.ml++; shMl++; if (e.sr) shLive++; }
     r.n++; total++;
     list.push(e);
   });
   // Newest first: the games just logged are the ones the owner is checking on.
   list.sort((a, b) => Number(b.date || 0) - Number(a.date || 0));
-  return { by, total, list };
+  return { by, total, list, shLive, shMl };
 }
 async function gradePending() {
   const p = getPending();
@@ -2685,12 +2751,13 @@ async function gradePending() {
       }
       const actual = winnerName(g);
       if (!actual || actual === 'TIE') { delete p[id]; changed = true; return; }
-      const { pick, fav, conf, eg, sh, gp, tr } = entry;
+      const { pick, fav, conf, eg, sh, sr, gp, tr } = entry;
       const hit = actual === pick;
       const wasEdge = eg != null ? !!eg : !!(fav && pick !== fav); // old entries: fav comparison
       recordResult(id, hit, wasEdge ? (hit ? 'h' : 'm') : null,
         { s: sport, d: Number(date), cf: conf ?? null, p: pick, m: matchupLabel(sport, g),
-          ...(sh != null ? { sh } : {}), ...(gp != null ? { gp } : {}), ...(tr ? { tr } : {}) });
+          ...(sh != null ? { sh } : {}), ...(sr != null ? { sr } : {}),
+          ...(gp != null ? { gp } : {}), ...(tr ? { tr } : {}) });
       delete p[id]; changed = true;
     });
   }));
@@ -2990,12 +3057,26 @@ function reportCard(det) {
   }
   // Sharp money is brand new and unproven here, so it gets its own slice from
   // day one and says out loud when the sample is too thin to conclude anything.
-  const sh = det.sharp || { agree: { w: 0, n: 0 }, against: { w: 0, n: 0 } };
+  const sh = det.sharp || { agree: { w: 0, n: 0 }, against: { w: 0, n: 0 }, live: 0, ml: 0 };
   const shN = sh.agree.n + sh.against.n;
-  const shRow = !shN ? '' :
+  // 🚨 v200 — the coverage line. The owner asked why this record wasn't building
+  // and the card had no way to answer: a pick with no sharp read looked exactly
+  // like a pick where the money happened to be balanced. Now it says out loud
+  // how many graded picks were even MADE with the splits feed live, because
+  // that is the number that was broken (6 of 400+), not the deadband.
+  const shCov = !sh.ml ? '' :
+    `<div class="rep-row"><span class="rep-l">Splits feed live at pick time</span><span class="rep-v">${sh.live} of ${sh.ml}${sh.ml ? ` <span class="rep-cf">${Math.round((sh.live / sh.ml) * 100)}%</span>` : ''}</span></div>`;
+  const shWhy = !sh.ml ? '' : (
+    sh.live === 0
+      ? `<div class="ai-why" style="padding:2px 0">No graded pick has been made with the splits feed live. Entries logged before v200 carry no coverage flag, so this reads 0 until new picks grade — if it is still 0 in a week, the backend is not answering the recorder and the factor is dead weight, not unproven.</div>`
+      : sh.live < sh.ml * 0.5
+        ? `<div class="ai-why" style="padding:2px 0">Under half of graded picks saw the feed. The rest were logged model-only, so their absent 💰 read means "we couldn't look", not "the money was balanced".</div>`
+        : '');
+  const shRow = !shN ? (shCov + shWhy) :
     (sh.agree.n ? row('Big money on our side', sh.agree) : '') +
     (sh.against.n ? row('Big money the other way', sh.against) : '') +
-    `<div class="ai-why" style="padding:2px 0">${shN} pick${shN === 1 ? '' : 's'} where DraftKings' dollars ran ${SHARP_MIN_DIV}+ points ahead of its tickets on one side.${shN < 20 ? ' Too thin to tune on — this row exists to measure the factor, not to trust it yet.' : ''}</div>`;
+    shCov +
+    `<div class="ai-why" style="padding:2px 0">${shN} pick${shN === 1 ? '' : 's'} where DraftKings' dollars ran ${SHARP_MIN_DIV}+ points ahead of its tickets on one side.${shN < 20 ? ' Too thin to tune on — this row exists to measure the factor, not to trust it yet.' : ''}</div>` + shWhy;
   const week = det.week.n ? ` · this week ${det.week.w}-${det.week.n - det.week.w}` : '';
   // 📥 Logged, awaiting results (v185). Everything else on this card is the
   // GRADED record, which by definition can't show a pick made an hour ago —
@@ -3006,8 +3087,13 @@ function reportCard(det) {
     const bits = [r.ml ? `${r.ml} moneyline` : '', r.ats ? `${r.ats} spread` : '', r.tot ? `${r.tot} total${r.tot === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ');
     return `<div class="rep-row"><span class="rep-l">${LEAGUES[s]?.emoji || ''} ${esc(LEAGUES[s]?.label || s)}</span><span class="rep-v">${r.n} <span class="rep-cf">${esc(bits)}</span></span></div>`;
   }).join('');
+  // v200: the same coverage read as the graded card, but on the queue — this is
+  // the one that answers "is the sharp factor reaching the recorder RIGHT NOW",
+  // days before anything grades.
+  const pShRow = !pend.shMl ? '' :
+    `<div class="rep-row"><span class="rep-l">💰 Splits feed live at pick time</span><span class="rep-v">${pend.shLive} of ${pend.shMl} <span class="rep-cf">${pend.shLive ? `${Math.round((pend.shLive / pend.shMl) * 100)}%` : 'backend asleep when logged'}</span></span></div>`;
   const pendSec = pend.total
-    ? `<div class="rep-sec">📥 Logged, awaiting results</div>${pRows}
+    ? `<div class="rep-sec">📥 Logged, awaiting results</div>${pRows}${pShRow}
        <div class="ai-why" style="padding:4px 0 2px">${pend.total} pick${pend.total === 1 ? '' : 's'} stored and waiting on final scores — they're listed with a ⏳ under Recent picks below, and join the record automatically once the games finish. Grading runs every time you open the app.</div>`
     : `<div class="rep-sec">📥 Logged, awaiting results</div>
        <div class="ai-why" style="padding:4px 0 2px">Nothing waiting — every stored pick has been graded. New games are logged automatically whenever you open Home or a league tab; only games that haven't started yet can be picked, so a slate that has already finished logs nothing.</div>`;
@@ -3261,7 +3347,15 @@ async function buildBoard(sport, games, opts = {}) {
     // so nothing here can change what enters the record.
     const atsR = atsRead(sport, g, p, info);
     const totR = totalRead(sport, p, info);
+    // 🚨 v200 — shLive says the DK splits feed was READABLE for this slate,
+    // which is a different fact from `p.sharp` (this game had a qualifying
+    // 7+ point divergence). Without it the two are indistinguishable in the
+    // record: a pick with no `sh` could mean "the money was balanced" or
+    // "the backend was asleep and the factor never ran", and it was the
+    // second one ~99% of the time without anything saying so. That ambiguity
+    // is exactly what hid this bug for forty versions.
     return { g, sport, p, info, gap, tier, tot, ats, atsR, totR,
+      shLive: !!report?.splits?.ok,
       isEdge: tier === 'alert' || tier === 'best' || tier === 'edge' };
   });
   return { rows, playable, report };
@@ -3288,7 +3382,7 @@ async function buildBoard(sport, games, opts = {}) {
 // and must never reach the record.
 function commitRow(r, dateStr, opts = {}) {
   const record = opts.record !== false;
-  const { g, sport, p, info, gap, tier, tot, isEdge } = r;
+  const { g, sport, p, info, gap, tier, tot, isEdge, shLive } = r;
   if (!p || !g?.id) return null;
   if (gameState(g) === 'final') {
     let out = null;
@@ -3298,7 +3392,7 @@ function commitRow(r, dateStr, opts = {}) {
       const edge = info && info.favName ? (isEdge ? (hit ? 'h' : 'm') : null) : null;
       if (record) recordResult(g.id, hit, edge,
         { s: sport, d: Number(dateStr), cf: p.conf, p: p.winner.name, m: matchupLabel(sport, g),
-          ...(p.sharp ? { sh: p.sharp.pts } : {}),
+          ...(p.sharp ? { sh: p.sharp.pts } : {}), ...(shLive ? { sr: 1 } : {}),
           ...(gap != null ? { gp: gap } : {}), ...(tier ? { tr: tier } : {}) });
       r.resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
       out = { graded: true, hit };
@@ -3324,7 +3418,11 @@ function commitRow(r, dateStr, opts = {}) {
   if (!record) return null;
   const label = matchupLabel(sport, g);
   recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge,
-    { sh: p.sharp?.pts ?? null, gp: gap, tr: tier, m: label });
+    { sh: p.sharp?.pts ?? null, sr: shLive ? 1 : null, gp: gap, tr: tier, m: label,
+      // up (v200): this is the recorder's second pass, made after the splits
+      // feed woke up — allowed to replace a still-pregame entry that was
+      // logged blind. See recordPick for why that is not look-ahead.
+      up: opts.upgrade === true });
   if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line, tot.proj, tot.tier, label);
   if (r.ats) recordAtsPick(g.id, sport, dateStr, r.ats, label);
   return null;
@@ -3360,12 +3458,14 @@ function slateDateFor(g) {
 //
 //   • It goes through buildBoard + commitRow like every other writer, so a
 //     game logged here is identical to one logged from the tab or the modal.
-//   • It waits the FULL SHARP_WAIT.picks leash even when its caller displayed
+//   • It waits the FULL SHARP_WAIT.record leash even when its caller displayed
 //     at a shorter one (Home's board uses 3s). `sh` must mean "the sharp factor
 //     moved this pick N points", never "we didn't wait" — so the recording pass
 //     re-runs the model rather than reusing rows built on a short leash. Team
 //     schedules are already in fetchJSON's cache by then, so the cost is CPU,
-//     not another round of requests.
+//     not another round of requests. v200 raised that leash from 8s to the full
+//     45s cold-start window: 8s was a display budget on a pass that displays
+//     nothing, and it lost that race on essentially every launch.
 //   • PREGAME AND LIVE ONLY, same rule as the modal: freshly predicting a game
 //     that already ended is look-ahead (v138), and a game picked pregame is
 //     graded by gradePending on boot regardless of which tab is open.
@@ -3389,14 +3489,36 @@ function recordSlate(sport, games) {
   const todo = (games || []).filter((g) => g.id && g.seasonType !== 1
     && gameState(g) !== 'final' && !slateLogged.has(g.id));
   if (!todo.length || !LEAGUES[sport] || LEAGUES[sport].type === 'golf') return slateLogQueue;
+  const batch = todo.slice(0, SLATE_LOG_MAX);
   slateLogQueue = slateLogQueue.then(async () => {
     try {
-      const { rows } = await buildBoard(sport, todo.slice(0, SLATE_LOG_MAX), { wait: SHARP_WAIT.picks });
-      rows.forEach((r) => {
+      // PASS 1 — log promptly. A pick that never gets written is worse than a
+      // pick written without its sharp read, and a session can easily end
+      // before a sleeping Render container has finished booting.
+      const first = await buildBoard(sport, batch, { wait: SHARP_WAIT.picks });
+      first.rows.forEach((r) => {
         if (!r.p) return;
         commitRow(r, slateDateFor(r.g));
         // Only "done" once there was a line to read — otherwise come back for
         // the spread and total once the book posts them.
+        if (r.info) slateLogged.add(r.g.id);
+      });
+      // PASS 2 — if pass 1 went in blind, wait out the rest of the cold start
+      // and upgrade. This is the half that was missing: 8s never beat a 30-60s
+      // wake-up, so every pick was logged blind and, being first-write-wins,
+      // could never gain the read afterwards. That is why the sharp-money row
+      // sat at 6 graded picks while the record passed 400.
+      if (first.report?.splits?.ok) return;
+      const late = await raceReport(getBettingReport(sport).catch(() => null), SHARP_WAIT.record);
+      if (!late?.splits?.ok) return;
+      // Pregame and live only — re-predicting a game that has since ended would
+      // be look-ahead (v138). Anything already graded is skipped by recordPick.
+      const still = batch.filter((g) => gameState(g) !== 'final');
+      if (!still.length) return;
+      const second = await buildBoard(sport, still, { wait: SHARP_WAIT.record });
+      second.rows.forEach((r) => {
+        if (!r.p || gameState(r.g) === 'final') return;
+        commitRow(r, slateDateFor(r.g), { upgrade: true });
         if (r.info) slateLogged.add(r.g.id);
       });
     } catch (_) { /* logging must never break a render */ }
@@ -3415,12 +3537,14 @@ function recordSlate(sport, games) {
 //   1. It goes through buildBoard on a one-game slate, NOT its own copy of the
 //      tier/edge/totals math, so a pick recorded here is byte-for-byte the pick
 //      the tab would have recorded.
-//   2. It waits the FULL SHARP_WAIT.picks leash, not the modal's 1.2s display
-//      leash. `sh` is meant to read "the sharp factor moved this pick N points",
-//      and an absent `sh` means "no qualifying split" — writing that when the
-//      truth is "we didn't wait" would quietly corrupt the one open measurement
-//      the sharp factor is waiting on. This runs after paint, so it costs the
-//      user nothing (v157's rule is about render time, not background work).
+//   2. It hands the game to recordSlate, which is the ONE recording pass in the
+//      app (v200). `sh` is meant to read "the sharp factor moved this pick N
+//      points", and an absent `sh` means "no qualifying split" — writing that
+//      when the truth is "we didn't wait" would quietly corrupt the one open
+//      measurement the sharp factor is waiting on. So the two-phase pass there
+//      logs immediately and then upgrades the entry once the splits feed wakes.
+//      All of it runs after paint, so it costs the user nothing (v157's rule is
+//      about render time, not background work).
 //   3. It records PREGAME AND LIVE GAMES ONLY — never a final. The tab grades
 //      finals it meets on today's slate, but the modal can open a game from any
 //      date, and freshly predicting a game that already ended is look-ahead
@@ -3431,8 +3555,11 @@ async function recordFromModal(sport, g) {
   try {
     if (!g?.id || g.seasonType === 1 || gameState(g) === 'final') return;
     if (!LEAGUES[sport] || LEAGUES[sport].type === 'golf') return;
-    const { rows } = await buildBoard(sport, [g], { wait: SHARP_WAIT.picks });
-    if (rows[0]) commitRow(rows[0], slateDateFor(g));
+    // A one-game slate. recordSlate skips games it has already logged, so
+    // opening the same card twice costs nothing — and going through it means
+    // the modal gets the same two-phase sharp-money handling as everything
+    // else, from one place rather than a second copy of the rule (v177).
+    await recordSlate(sport, [g]);
   } catch (_) { /* recording is never allowed to break the modal */ }
 }
 
@@ -9196,6 +9323,15 @@ resetTabSections();
 
 // fold any finished picks from earlier days into the running model record
 gradePending();
+
+// 🚨 v200 — start the betting backend waking NOW, not when something first
+// needs it. Render's free tier sleeps after ~15 min idle and takes 30-60s to
+// come back, and the day's slate gets logged within a few seconds of launch —
+// so the recorder was always asking a container that hadn't finished booting.
+// Kicking it here means the cold start runs in parallel with the app's own
+// load and the recorder's wait (SHARP_WAIT.record) is mostly already spent by
+// the time it starts. Fire-and-forget: it blocks nothing and paints nothing.
+wakeBettingFeeds();
 
 // Auto-update: register the network-first service worker so new versions load
 // on their own (including the home-screen app) — no manual cache-busting.
