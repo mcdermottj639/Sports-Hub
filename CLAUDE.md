@@ -462,7 +462,51 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v200** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v201** (backend **b14-football-boxplayer**).
+
+- **📋 Recent picks is results only, and it follows the league you're in
+  (v201)** — the owner: *"On recent picks I don't want to see games that are
+  scheduled and not finished. Recent picks should be completed games and sorted
+  by whatever league I'm inside for ai picks."* Both halves shipped.
+  - **The ⏳ rows moved back to 📥 Logged, awaiting results.** v186 had put them
+    at the top of Recent picks; the reasoning was right (a list of only
+    finished games is days stale in football) but the placement was wrong.
+    "What has the model gone ?-?" and "did you store tonight's games" are two
+    questions, and one list answering both answered neither cleanly.
+  - ⚠️ **They were MOVED, not deleted, and that distinction matters.** v185
+    added the named ⏳ list precisely because *"22 picks"* is not the same
+    reassurance as *"SJSU @ USC · USC Trojans 90%"*. Simply dropping them from
+    Recent picks would have taken the named games out of the card entirely and
+    regressed the v185 fix, leaving the 📥 section as bare counts again. The
+    📥 section now carries the 8 newest, named, where a game that hasn't
+    finished actually belongs. Heading renamed to **Recent results** and the
+    "⏳ = not graded yet" legend dropped, since nothing there is pending.
+  - **Sorted by league, NOT filtered to it — deliberately.** `reportCard(det,
+    sport)` now takes `state.aiSport`: the current league's results lead, the
+    rest follow under an "Other leagues" divider. A hard filter would render
+    the section **empty on the NFL chip today**, because every NFL pick in the
+    record is still pending — and v186's lesson is that a missing row reads as
+    "not tracked" rather than "nothing has finished yet". So a league with
+    nothing graded says which of the two it is: *"No finished 🏈 NFL games in
+    the record yet — 5 logged and waiting on final scores (see 📥 above)."*
+  - ⚠️ **`tallyDetails` had to keep a DEEPER pool** (15 → 60). It sliced to 15
+    by date before the card ever saw it, so a league with a few older results
+    could be sorted to the front of a list it had already been cut out of. The
+    card still shows 15; the pool is what the sort runs over.
+  - Verified in headless Chromium — **33 checks**: no ⏳ row anywhere under
+    Recent results while they still render under 📥; the same seeded record
+    re-sorting when the chip changes (MLB leads on MLB, CFB leads on CFB);
+    the owner's real NFL state (5 pending, 0 graded) showing the honest
+    empty-league line while other leagues' results still render; the pending
+    games still NAMED; and both palettes at 390px and 1280px with no overflow,
+    no clipped rows, nothing spilling the card and no console errors. The v200
+    suites (31 + 24) still pass — 88 total.
+  - ⚠️ **Test-harness note:** `state` is a module-level `const`, so it is **not
+    on `window`** — a test that sets `window.state.aiSport` silently does
+    nothing and every case runs on the boot default. Drive the real sport chip
+    instead. One assertion passed for the wrong reason before this was caught.
+    (`showTab` IS global — it's a top-level `function` declaration. Same trap as
+    the v178 `projMarginFor` note.)
 
 - **🚨 The sharp-money record was never going to build — an 8-second leash
   against a 30-60 second cold start (v200)** — the owner, on a Report Card
@@ -1183,6 +1227,12 @@ Current version as of this writing: **v200** (backend **b14-football-boxplayer**
     and a list that only ever shows *finished* games is days stale in football
     by construction. v185's separate 8-game list was dropped as redundant; the
     📥 section keeps the per-sport counts and now points at the ⏳ rows.
+    - ⚠️ **SUPERSEDED in v201 — the owner reversed this half.** Recent picks is
+      GRADED GAMES ONLY now, and the named ⏳ list went back into the 📥
+      section where v185 had it. The *reasoning* above was sound and is the
+      reason the rows were not simply deleted; it just put them in the wrong
+      section. "Recent results" and "logged, awaiting results" are two
+      questions, and one list answering both answered neither cleanly.
   - **Lesson worth keeping:** v183, v184 and v185 each answered the question
     correctly and none of them *removed* it. When a user asks the same thing
     three times, the fix is almost never another explanation — it is to change
@@ -4151,7 +4201,9 @@ rewrite.**
   split at the ship date.
 - `sportshub:pending` — ungraded picks awaiting results, surfaced in the Report
   Card's **📥 Logged, awaiting results** section since v185 (which also added `m`,
-  the matchup label, so the queue can name its games). **v183: written by
+  the matchup label, so the queue can name its games — v186 moved those named
+  rows into Recent picks, **v201 moved them back here**, because Recent picks
+  is graded games only now). **v183: written by
   BOTH the AI Picks tab and the game modal**, through the shared `commitRow`;
   every writer dedupes on the pick's own key, so the two can see the same game
   without double-counting it. (v83+ includes `conf`;

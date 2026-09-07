@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v200';
+const APP_VERSION = 'v201';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2588,7 +2588,10 @@ function tallyDetails() {
   });
   recent.sort((a, b) => Number(b.d || 0) - Number(a.d || 0));
   return { total: entries.length, buckets, sports, week, totals, totalsBySport, sharp, legacy, tiers,
-    ats, atsBySport, recent: recent.slice(0, 15) };
+    // v201: the pool is deeper than the card shows because Recent picks is now
+    // sorted by the league you're looking at — slicing to 15 by date first
+    // would mean a league with a few older results could never appear at all.
+    ats, atsBySport, recent: recent.slice(0, 60) };
 }
 const matchupLabel = (sport, g) =>
   `${g.away.abbr || g.away.name} @ ${g.home.abbr || g.home.name}`;
@@ -2954,7 +2957,9 @@ function clearNflPreseason() {
 // 📜 Model Report Card — a tap-to-expand panel under the stat bar: record by
 // confidence bucket (is a "75%" pick really a 75% pick?), by sport, and the
 // most recent graded picks so the record is inspectable, not just asserted.
-function reportCard(det) {
+// `sport` = the league AI Picks is currently showing (state.aiSport). Recent
+// picks leads with that league's results; everything else follows underneath.
+function reportCard(det, sport) {
   const box = el('div', 'ai-report');
   const pct = (r) => (r.n ? ` (${Math.round((r.w / r.n) * 100)}%)` : '');
   const row = (l, r) => `<div class="rep-row"><span class="rep-l">${l}</span><span class="rep-v">${r.w}-${r.n - r.w}${pct(r)}</span></div>`;
@@ -2993,22 +2998,53 @@ function reportCard(det) {
       return `<div class="rep-row"><span class="rep-l">${nm}</span><span class="rep-v"><span class="rep-cf">${
         q ? `${q} logged · awaiting first result` : 'no finished games yet'}</span></span></div>`;
     }).join('');
-  // ⏳ rows: picks that are logged but haven't been graded yet. "Recent model
-  // results" is where the owner looks for recent model ACTIVITY, and a list
-  // that only ever shows finished games can be days stale in football.
-  const pendRows = pend.list.slice(0, 6).map((e) => {
+  // ⏳ rows for the 📥 section. v186 put these in Recent picks; v201 moved them
+  // BACK here, because the owner is right that "Recent picks" should mean
+  // results. But they must not simply be deleted: v185 added the named list
+  // precisely because a queue that says "22 picks" is not the same reassurance
+  // as one that says "SJSU @ USC · USC Trojans 90%", and the 📥 section is
+  // where a game that hasn't finished actually belongs.
+  const pendRows = pend.list.slice(0, 8).map((e) => {
     const d = String(e.date || '');
     const dd = d.length === 8 ? `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}` : '';
     const mark = e.a ? '📐' : e.t ? '🎯' : '';
     const pk = e.t ? `${e.pick} ${e.line}` : e.pick;
     return `<div class="rep-pick" style="opacity:.72"><span class="rep-i">⏳${mark}</span><span class="rep-m">${esc(e.m || '')}</span><span class="rep-p">${esc(pk || '')}${e.conf ? ` <span class="rep-cf">${e.conf}%</span>` : ''}</span><span class="rep-d">${dd}</span></div>`;
   }).join('');
-  const recent = det.recent.map((r) => {
+  // 🚨 v201 — Recent picks is GRADED GAMES ONLY, and it leads with the league
+  // you're currently inside. The owner: "I don't want to see games that are
+  // scheduled and not finished. Recent picks should be completed games and
+  // sorted by whatever league I'm inside."
+  //
+  // Sorted, not filtered — deliberately. Right now every NFL pick in the record
+  // is still pending, so a hard filter would render this section EMPTY on the
+  // NFL chip, and v186's lesson is that a missing row reads as "not tracked"
+  // rather than "nothing has finished yet". So the current league's results
+  // come first, the rest follow under a divider, and a league with none says
+  // which of the two it is.
+  const RECENT_MAX = 15;
+  const pickRow = (r) => {
     const d = String(r.d || '');
     const dd = d.length === 8 ? `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}` : '';
     const pickTxt = (r.t || r.a) ? (r.p || '') : (r.p || '').split(' ').slice(-1)[0]; // totals/ATS keep their full line
     return `<div class="rep-pick"><span class="rep-i">${r.c ? '✅' : '❌'}${r.e ? '⚡' : r.t ? '🎯' : r.a ? '📐' : ''}</span><span class="rep-m">${esc(r.m || '')}</span><span class="rep-p">${esc(pickTxt)}${r.cf ? ` <span class="rep-cf">${r.cf}%</span>` : ''}</span><span class="rep-d">${dd}</span></div>`;
-  }).join('');
+  };
+  const pool = det.recent || [];
+  const mine = sport ? pool.filter((r) => r.s === sport) : pool;
+  const others = sport ? pool.filter((r) => r.s !== sport) : [];
+  const lgName = sport ? `${LEAGUES[sport]?.emoji || ''} ${LEAGUES[sport]?.label || sport}`.trim() : '';
+  const mineRows = mine.slice(0, RECENT_MAX).map(pickRow).join('');
+  const room = Math.max(0, RECENT_MAX - Math.min(mine.length, RECENT_MAX));
+  const otherRows = room ? others.slice(0, room).map(pickRow).join('') : '';
+  // A league with nothing graded states WHICH kind of nothing it is, the same
+  // distinction the By-sport card makes: logged and waiting, or nothing yet.
+  const mineNone = (sport && !mine.length)
+    ? `<div class="ai-why" style="padding:2px 0">No finished ${esc(lgName)} games in the record yet${pend.by[sport]?.n ? ` — ${pend.by[sport].n} logged and waiting on final scores (see 📥 above)` : ''}.</div>`
+    : '';
+  const recent = !pool.length ? '' :
+    (sport && (mineRows || mineNone) ? `<div class="ai-why" style="padding:2px 0;font-weight:600">${esc(lgName)}</div>` : '') +
+    mineRows + mineNone +
+    (otherRows ? `<div class="ai-why" style="padding:6px 0 2px">Other leagues</div>${otherRows}` : '');
   // A totals record near .500 can still be a broken model: if the projection
   // runs high it will keep picking OVER, and half of those land by luck. So the
   // card shows the O/U split and — once picks carry pt — how far the model's
@@ -3093,8 +3129,8 @@ function reportCard(det) {
   const pShRow = !pend.shMl ? '' :
     `<div class="rep-row"><span class="rep-l">💰 Splits feed live at pick time</span><span class="rep-v">${pend.shLive} of ${pend.shMl} <span class="rep-cf">${pend.shLive ? `${Math.round((pend.shLive / pend.shMl) * 100)}%` : 'backend asleep when logged'}</span></span></div>`;
   const pendSec = pend.total
-    ? `<div class="rep-sec">📥 Logged, awaiting results</div>${pRows}${pShRow}
-       <div class="ai-why" style="padding:4px 0 2px">${pend.total} pick${pend.total === 1 ? '' : 's'} stored and waiting on final scores — they're listed with a ⏳ under Recent picks below, and join the record automatically once the games finish. Grading runs every time you open the app.</div>`
+    ? `<div class="rep-sec">📥 Logged, awaiting results</div>${pRows}${pShRow}${pendRows}
+       <div class="ai-why" style="padding:4px 0 2px">${pend.total} pick${pend.total === 1 ? '' : 's'} stored and waiting on final scores${pend.total > 8 ? ' (8 newest shown)' : ''} — they join the record automatically once the games finish, and appear under Recent picks below once they do. Grading runs every time you open the app.</div>`
     : `<div class="rep-sec">📥 Logged, awaiting results</div>
        <div class="ai-why" style="padding:4px 0 2px">Nothing waiting — every stored pick has been graded. New games are logged automatically whenever you open Home or a league tab; only games that haven't started yet can be picked, so a slate that has already finished logs nothing.</div>`;
   box.innerHTML = `
@@ -3108,8 +3144,8 @@ function reportCard(det) {
       ${tRow ? `<div class="rep-sec">Totals</div>${tRow}` : ''}
       ${aRow ? `<div class="rep-sec">📐 Against the spread (new in v164)</div>${aRow}` : ''}
       ${shRow ? `<div class="rep-sec">💰 Sharp money (new in v160)</div>${shRow}` : ''}
-      ${recent || pendRows ? `<div class="rep-sec">Recent picks (⏳ = not graded yet · ⚡ = against the line · 🎯 = totals · 📐 = spread)</div>${pendRows}${recent}` : ''}
-      ${!bRows && !recent && !pendRows ? '<div class="ai-why" style="padding:6px 0">Detail builds as new picks grade — earlier picks only counted toward the totals.</div>' : ''}
+      ${recent ? `<div class="rep-sec">Recent results (⚡ = against the line · 🎯 = totals · 📐 = spread)</div>${recent}` : ''}
+      ${!bRows && !recent ? '<div class="ai-why" style="padding:6px 0">Detail builds as new picks grade — earlier picks only counted toward the totals.</div>' : ''}
       <button class="rep-export" type="button" style="margin-top:12px;width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit;cursor:pointer">📋 Copy my record data</button>
       <textarea class="rep-export-ta" readonly hidden style="width:100%;height:90px;margin-top:6px;font:12px/1.4 monospace;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px;box-sizing:border-box"></textarea>
       <div class="ai-why" style="margin-top:4px">Exports your graded picks so they can be analyzed for model tuning. Nothing leaves your device on its own.</div>
@@ -4007,7 +4043,7 @@ async function renderPredictions() {
     container.innerHTML = '';
     container.appendChild(statBar(0, 'no games today'));
     const det0 = tallyDetails();
-    if (det0.total) container.appendChild(reportCard(det0));
+    if (det0.total) container.appendChild(reportCard(det0, sport));
     container.appendChild(el('div', 'empty', allPreseason
       ? 'Preseason only today — the model sits these out (backups play; results don\'t predict anything).'
       : `No ${esc(LEAGUES[sport].label)} games ${isToday ? 'today' : `on ${esc(aiDateLabel(dateStr))}`}.`));
@@ -4217,7 +4253,7 @@ async function renderPredictions() {
   if (det.total) {
     container.appendChild(el('div', 'lad-sec', `📜 Backtesting <span class="n">${det.total} graded pick${det.total === 1 ? '' : 's'}</span>`));
     container.appendChild(backtestPanel(det));
-    container.appendChild(reportCard(det));
+    container.appendChild(reportCard(det, sport));
   }
 
   await renderAiTrends(container, sport, playable, rows);
