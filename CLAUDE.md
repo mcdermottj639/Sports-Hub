@@ -669,11 +669,33 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
     - The name lives in its own **`.pr-tn`** span. Reading it off `.pr-team`'s
       first child node broke the instant a crest was prepended.
   - **✍️ Takes are PRE-WRITTEN in the owner's voice** (`writeWeek` /
-    `takeFacts` / the `T` template table), from their own documented style
-    spec: one line per team, 6-25 words with a ~15 median, five sentence
-    shapes, a tone gradient by rank, shorthand baked in, trailing dots. The
-    owner opens the lab to twelve drafts with the numbers already right and
-    edits, instead of twelve blank boxes.
+    `takeFacts` / the `OPEN`/`MID`/`CLOSE` part tables), from their own
+    documented style spec. The owner opens the lab to twelve drafts with the
+    numbers already right and edits, instead of twelve blank boxes.
+    - **The entry is ASSEMBLED from parts** — opener → evidence → optional
+      meta → closer — not written as whole templates. Four slots multiply into
+      far more variety than a flat list of finished lines, and the **25-45
+      word, 3-4 sentence** budget can then be hit by adding or dropping a
+      part.
+    - **`OWNERS` is keyed by MANAGER, not by team name**, because team names
+      change every year and the people don't. Real name when describing a
+      matchup, team name when describing the team. Each card carries the
+      running bits.
+    - **Meta-commentary is the signature move** — Jack is a character in his
+      own rankings, takes credit, cites his own past weeks. 2-3 a week, and
+      **allocated rather than left to chance**, with a guaranteed second pass:
+      as a probability it spent zero on some weeks.
+    - **Exactly ONE short entry a week** (6-12 words) for contrast, placed
+      mid-table by preference — the spec puts it at a team he has run out of
+      things to say about.
+    - **Jack's own slot has its own register and never takes a generic
+      opener.** At #1 the praise goes in the league's mouth, never his own;
+      losing, it is first-person-plural with a ring reference. Never
+      self-insult, never grovel. A suite check asserts the abuse lines can
+      never land on his own team.
+    - **The cum bowl** (consolation bracket) has its own lexicon, gated to
+      **week 8+**, 2-4 a week, concentrated in the bottom third and on the
+      cummish.
     - ⚠️ **THIS IS A TEMPLATE ENGINE, NOT A LANGUAGE MODEL.** There is no LLM
       in this app and no backend to host one, so the voice lives in the
       templates themselves — written in-voice, with real facts dropped in.
@@ -685,11 +707,19 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
       backend ever serves a roster-event feed.**
     - **🚫 The carve-out is implemented, not just documented**: no slurs, no
       racial, ethnic or religious material, nothing about rape or the
-      Holocaust. The source style sheet carried a running ethnic-nickname bit
-      and a closer in the same vein; both are ABSENT from the nickname table
-      and the closers, and nothing in the generator can assemble one. **A suite
-      check sweeps 1,400+ generated lines against a banned-term list**, so this
-      stays true rather than being a comment. Do not add them back.
+      Holocaust. **The owner's own spec is explicit that the historical
+      rankings contain these and that they must not be reproduced, while the
+      crudeness, meanness and profanity stay** — so this is a scalpel, not a
+      blanket. The ethnic nickname and the closer built on it are ABSENT from
+      the tables, Wolff's owner card carries a no-religious-material flag, and
+      nothing in the generator can assemble one. **A suite check sweeps
+      thousands of generated lines against a banned-term list.** Do not add
+      them back.
+    - ⚠️ **The profanity toggle gates on the RENDERED TEXT, not on a per-part
+      flag.** A flag has to be remembered on every new fragment and the second
+      spec's rewrite proved it: the new tables only gated the cum-bowl lines,
+      so the crude closers walked straight past a toggle that promised to turn
+      them off. A regex over the output cannot be forgotten.
     - **Week-level rules need a week-level writer.** No shape more than 3x, at
       most one emoji, ~2-3 profane lines — none of which a per-team function
       could enforce, which is why `writeWeek` takes the whole league at once.
@@ -700,9 +730,15 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
       by the teams at the top. The budget is now allocated in a **first pass,
       lowest ranks first**, before the general pass runs. Killable entirely
       with the toggle (`powerlab:spice`).
-    - **Templates carry a `when` guard** naming the facts they assume. Without
-      it a 4-0 team sat low on all-play drew *"4-0. is there a floor here???"* —
-      a line arguing with its own numbers.
+    - **Two sentences in one entry may not cite the same fact** (`dedupeFacts`,
+      tagging each sentence by the facts it mentions). The assembler could open
+      on *"10 straight Ws at 132.5 PPG"* and then evidence with *"132.5 PPG and
+      I didnt even feel like setting a lineup"*, or state the all-play record
+      twice running — which reads as a machine instantly.
+    - **Every part closes itself** (`endStop`). Several fragments carried no
+      terminal mark and ran into the next sentence — *"…I hand out weekly
+      jewels Prime time spot this week…"*. Joining is not the place to notice
+      that.
     - **Callbacks quote the ACTUAL prior take** from `powerlab:pub`, or fall
       back to the prior RANK. A generic *"Said u were a fringe team last week"*
       was cut: it claims the owner wrote something they may never have written,
@@ -712,7 +748,7 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
       **🎲 rewrites one line, ✍️ rewrites the week.** An edited take is never
       overwritten — same rule as the ranking.
   - **Standalone**, so NOT part of the `APP_VERSION`/`?v=` ritual — but bump
-    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v3**)
+    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v4**)
     and its `styles.css?v=` (now 208) if you change shared CSS it leans on.
   - Verified in headless Chromium — **86 checks** (79 + 7): the luck-detector
     ranking, preseason inventing nothing, reorder by ▲▼ and by picker with the
@@ -810,6 +846,28 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
       broke the moment the structure changed; it targets `.pr-cnum` now.
     - Take boxes **auto-grow**: at 390px a 15-word draft clipped inside a
       fixed two-row box, and you cannot edit what you cannot see.
+  - **✍️ The voice engine rebuilt to the owner's fuller spec (same version).**
+    They supplied a complete generator system prompt — owner cards with real
+    names and running bits, meta-commentary as the signature move, the cum-bowl
+    lexicon, Jack's own slot as a separate register, and a **25-45 word /
+    3-4 sentence** default in place of the earlier 6-25. That is a rewrite of
+    the engine, not a tweak. See Files for the mechanics.
+    - **Length ripples further than it looks.** `MAX_COMMENT` was 240 and a
+      45-word entry is ~260 chars, so the cap would have truncated the spec's
+      own default; the one-pager wrapped to 2 lines and clipped most entries —
+      the exact fault the 2-line wrap had been added to fix one version
+      earlier. Both raised (420 chars, 4 lines).
+    - **Reading three whole weeks caught four faults no assertion would have:**
+      fragments with no terminal punctuation running into the next sentence;
+      two sentences citing the SAME fact (*"10 straight Ws at 132.5 PPG. 132.5
+      PPG and I didnt…"*); *"Huge matchup with Gotch's next opponent"*, which
+      named the team's own owner as its opponent; and Jack's slot taking a
+      generic opener when the whole point of the card is a separate register.
+    - ⚠️ **A python edit script asserted mid-way and never wrote the file, so
+      every one-pager change silently did not happen** — and the suite stayed
+      green, because it had no assertion about wrap width. The RENDER is what
+      exposed it. **A batch edit that validates at the end is all-or-nothing;
+      check the file, not the exit code.**
   - ⚠️ **Test-harness note, the SIXTH time:** `.pr-week` is uppercased by CSS
     and `innerText` reflects `text-transform`, so two assertions on the week
     label failed against perfectly correct markup. Assert headings
