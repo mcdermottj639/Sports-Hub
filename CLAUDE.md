@@ -462,7 +462,82 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v204** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v205** (backend **b14-football-boxplayer**).
+
+- **🎓 CFB team rating, and the margin becomes primary (v205)** — the second
+  half of the approved model pass. The owner's ask was *"a conference power
+  ranking for small schools vs big schools"*; the export said why: **all 19
+  CFB spread picks were the underdog** and the model priced *Tennessee by 5
+  over Furman* (FCS). Two models reviewed the plan — Opus 5 proposed
+  ratings + fixing the 33.9-point ceiling; Fable 5.1 re-tested and changed
+  it in three places, which is what shipped:
+  - **The ceiling was NOT the cause.** Inside the ceiling the model went 3-8;
+    beyond it 3-5. On games it could price freely it under-projected the
+    favourite by **11.8 points** (`ECU @ ALA` book 28.5, model 5.0). The model
+    has no input that separates a 9-3 built against FCS opponents from an 8-4
+    built in the SEC; in week 1 the prior-season blend is all it has. So the
+    rating is the whole fix, and the ceiling is a downstream consequence.
+  - **It's a TEAM rating, not a conference one.** `MIA @ STAN` (both ACC) lost
+    too — a conference tier cannot separate Miami from Stanford. Conference is
+    the *prior* for a team with no data; the team's own scoring margin does
+    the rest.
+  - **Margin is PRIMARY for CFB, probability is derived.** `margin = R_home −
+    R_away + CFB_HFA (3) + form + sharp`, then `pHome = Φ(margin / PD_SD.cfb)`
+    (`normCdf`, the forward direction of `invNorm`). The reverse of
+    `projMarginFor` — unbounded, so the **33.9 ceiling no longer exists for
+    CFB** (`marginSat` is always false in rating mode) and `MODEL_SHRINK` never
+    touches the margin. The moneyline, spread and breakdown all come off ONE
+    number (the v164 rule, kept); the breakdown is rebuilt in **points**
+    (`Team rating · Home field · Recent form · Sharp money`) with `z` set to
+    the logit that produces `pHome` so attribution still adds up, and
+    `sharp.pts` still records. **NFL is untouched** — it stays on the log-odds
+    path (its spreads never reached the ceiling).
+  - **Rating source, in order:** (1) **ESPN FPI** via `cfbFpi()` — a probe over
+    `CFB_FPI_URLS`, parsed generically (any object with a team id and a stat
+    named FPI), accepted only when ≥50 teams parse; ⚠️ **the URLs are guesses
+    — unverified from the sandbox.** The card note says which source is live
+    (`🎓 Rating: ESPN FPI` / `conference tier + own margin`). (2) **Conference
+    tier + own margin**: `cfbConfMap()` = ONE CFB standings pull (`level=3`,
+    cached 6h; `normStandings` rows now carry the team `id`) → conference
+    name → `cfbTierFromName` regex (SEC/B1G/ACC/Big 12 + Notre Dame = P4; any
+    other FBS conference = G5; **absent from FBS standings = FCS**). `teamObj`
+    also keeps `conf` (ESPN's `conferenceId`) for later use. Rating =
+    `CFB_TIER_PTS[tier]` (P4 +12 · G5 0 · FCS −12) + `CFB_MARGIN_K` × the
+    team's `pdpg` (0.6 FBS · **0.3 FCS**, because an FCS margin was earned
+    against FCS competition).
+    - ⚠️ **"Absent = FCS" fires only when the standings map actually loaded**
+      (`cm.ok`); with the feed down every team would otherwise read as FCS.
+      Verified: feed 500 → both sides G5, still prices from own margins.
+  - **⚠️ THE CONSTANTS ARE MATCHED TO THE MARKET, NOT FITTED TO RESULTS.** Tier
+    gaps were set so the margin lands near the book on the owner's 19 games by
+    matchup type (P4–FCS 44.7 n=5 · P4–G5 33.1 n=11 · P4–P4 17.5 n=2). That
+    makes a cupcake price like a cupcake; whether the model beats the number
+    is what the ATS record will say. **Refit from `sportshub:marginbias` (the
+    v204 instrument) at the 1 Oct read. Never refit on the ATS picks this
+    produces.** `CFB_SHARP_PTS` (3/unit) and `CFB_FORM_K` (0.25) are guesses.
+  - **Measured on fixtures:** `TNST @ UGA` book 46.5 → model **42.6** (was 5);
+    `ECU @ ALA` book 28.5 → **31.2**, and the spread read takes the
+    **favourite** (was the dog, every time); `MIA @ STAN` → Miami by 14 on the
+    road; the v204 instrument's errors fell from **23–41 to 3–10 points**.
+  - **Fixed in passing:** `atsCard` printed *"model projects STAN by −14"* — a
+    negative "by". It names the side the number favours now (*"MIA by 14"*).
+    v205 produces away-favoured margins far more often, so this would have
+    been on every P4 road favourite.
+  - Verified in headless Chromium — **39 checks** across five contexts: tier
+    mode (tiers, margins, ceiling gone, pHome past the old clamp, favourite
+    side taken, NFL untouched, instrument errors small), FPI mode (source
+    swaps, values used, note), standings-down guard, sharp money moving the
+    margin by exactly `sharpPts` and clamped, and the AI tab in both palettes.
+    v204's 22 and the prior suites still pass.
+  - ⚠️ **Test-fixture note, and it cost a false diagnosis:** `teamProfile`
+    reads `score.value`/`score.displayValue` — an OBJECT, ESPN's schedule
+    shape — and silently drops a game whose score is a string. Both the v204
+    and first v205 fixtures sent strings, so every profile was **null** and
+    the tier prior alone produced the margins (27, not 42.6). A schedule
+    fixture must use `score: {value, displayValue}`. Also: with the rating
+    working the model *agrees* with the book on cupcakes, so they are folded
+    passes — assert the rating on the SPREAD card ("model +42.6"), not on a
+    moneyline card that no longer exists for that game.
 
 - **📏 Measure before fitting: the spread-side instrument, ERA shrinkage, and a
   sanity bar on totals (v204)** — the first half of the model-improvement pass
@@ -1770,6 +1845,12 @@ Current version as of this writing: **v204** (backend **b14-football-boxplayer**
       points, so it can't price a number this big."
     - **NFL is unaffected in practice** — its ceiling is 27.7 and NFL spreads
       never get there. This is a college-football-shaped bug.
+    - ⚠️ **SUPERSEDED for CFB in v205.** College football no longer derives its
+      margin from `pHome`, so there is no ceiling to guard and `marginSat` is
+      always false there. The guard and the 33.9/27.7 numbers now describe the
+      **NFL** path only. And v203/v205 measured that the ceiling was not what
+      lost the CFB spread picks — the model under-projected favourites by ~12
+      points on games *inside* it.
   - **🚨 `vsinMatches` couldn't match a third of college teams.** It assumed a
     **one-word nickname** — true of every pro team ("New York" + "Giants"),
     false all over college: Fighting Irish, Yellow Jackets, Tar Heels, Demon
@@ -2082,7 +2163,7 @@ index, not the argument.
 | 6 | **ATS record** | Backtesting → by sport | v171 fixed grading (`:s` was never stripped, so ATS never graded at all) | any non-zero number. `PD_SD` (13.5/16.5) and `ATS_EDGE_MIN` (2/3) are guesses and are the first things to re-fit. **v204: read the "margin vs the book" row (every priced game) FIRST, never the picks-only row** — CFB read −11.8 on picks, and 19 of 19 spread picks were the dog. That is what v205's rating is fitted against. |
 | 7 | **Sharp money split** | Report Card → 💰 Sharp money | v160 stored `sh`; **v200 fixed why it never grew** | **Read the new "Splits feed live at pick time" row FIRST.** Until v200 the recorder logged the whole slate on an 8s leash against a 30-60s cold start, so ~99% of picks were made blind — 6 graded sharp picks at n=400+. It needs 20+ graded picks made with the feed live, and **only picks dated after the v200 ship count**; the 6 before it are a different population. If the coverage row is still near 0 a week after v200, the backend is not answering at all and the factor is dead weight, not unproven. |
 | 8 | **🏈 NFL calibration — the FIRST honest one** | export, filter `s: 'nfl'` + `d >= 20260910` | nothing yet — this read decides | buckets roughly ordered and a Brier that beats always-quoting the base rate. **Every NFL pick before 10 Sep 2026 predates BOTH the v83 confidence meta AND the v138 leak fix — it is history, not calibration data. Exclude it.** |
-| 9 | **🎓 CFB calibration + first ATS sample** | export, filter `s: 'cfb'` + `d >= 20260829` | nothing yet | any graded CFB W-L at all (there were **zero** through Aug). Football is a SPREAD sport, so the **ATS** row matters more than the moneyline one — see #6. |
+| 9 | **🎓 CFB calibration + first ATS sample** | export, filter `s: 'cfb'` + `d >= 20260829` | **v205 rebuilt the CFB margin** (team rating, margin-primary) | **Split at the v205 ship** — the 19 picks before it were 19/19 dogs off a model that could not see the FBS/FCS gap; they are a different population. After it: read `sportshub:marginbias` (v204) FIRST — mean favourite-oriented error near 0 and dog-side well under 100% says the rating prices the market; then the ATS W-L says whether it beats it. `CFB_TIER_PTS` / `CFB_MARGIN_K` are the constants to refit, from the instrument, never from the picks. |
 
 **Known and deliberately NOT fixed:**
 - **`MIN_EDGE_GAP`** — edges are **18-21 (46.2%)** all-time, under the 52.4%
@@ -2518,7 +2599,11 @@ rewrite.**
     projected margin is derived from the model's OWN win probability rather than
     rebuilt from scoring rates — `margin = PD_SD[sport] × Φ⁻¹(pHome)` via
     `projMarginFor`/`invNorm` (Acklam) — **so the ATS call can never contradict
-    the moneyline call**. `PD_SD` (nfl **13.5** / cfb **16.5**) and
+    the moneyline call**. ⚠️ **SUPERSEDED for CFB in v205:** the direction is
+    reversed there — a team rating produces the margin and `pHome = Φ(margin /
+    PD_SD)` is derived from it. The never-contradict property is kept (both
+    still come off one number); only which number is primary changed. NFL
+    still works as described here. `PD_SD` (nfl **13.5** / cfb **16.5**) and
     `ATS_EDGE_MIN` (nfl **2** / cfb **3**) are the only new assumptions and are
     the first things to re-fit once there's a sample. Stored `:s` / `a:1`,
     graded by `atsResult` (home covers when `homeMargin + homeSpread > 0`; an
@@ -3971,7 +4056,10 @@ rewrite.**
   section any more** — don't go looking for them.
 - **AI Picks** — a multi-factor logistic model (`predictGame`): record, scoring
   margin, recent form, home/road split, rest, plus matchup factors (MLB starter
-  ERA/WHIP, team OPS). **The tab routes itself (v199)**: `aiRoute()` sweeps
+  ERA/WHIP, team OPS). **College football is the exception since v205:** a
+  team rating (ESPN FPI when readable, else conference tier + own margin)
+  produces the MARGIN first and the win probability is derived from it — see
+  the v205 entry. **The tab routes itself (v199)**: `aiRoute()` sweeps
   today's slates and opens on a league that actually has games (one still to
   play beats one already final); with nothing on anywhere it falls back to the
   most recent slate, which is **read-only** — a fresh prediction on a finished

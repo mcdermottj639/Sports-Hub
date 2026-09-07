@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v204';
+const APP_VERSION = 'v205';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -151,6 +151,10 @@ function teamObj(c) {
     // for "unranked", so that becomes null and everything downstream can just
     // test truthiness. The pro leagues never send this, so it stays null there.
     rank: (() => { const r = Number(c?.curatedRank?.current); return r >= 1 && r <= 25 ? r : null; })(),
+    // v205: ESPN's college scoreboard stamps a conferenceId on each team. It is
+    // the cheapest tier source (no extra fetch); the standings map is the
+    // fallback when it is absent. Pro feeds never send it — stays null there.
+    conf: t.conferenceId != null ? String(t.conferenceId) : null,
   };
 }
 // TV listing off the scoreboard event — geoBroadcasts (national/local networks)
@@ -193,6 +197,7 @@ function normStandings(json) {
     const t = e.team || {};
     const stats = e.stats || [];
     return {
+      id: t.id != null ? String(t.id) : null, // v205: so a standings pull can map team → conference
       league: league || '', division: division || 'Standings', group: division || league || 'Standings',
       rank: getStat(stats, ['rank', 'playoffSeed']) ?? i + 1,
       team: t.displayName || t.name,
@@ -1492,6 +1497,139 @@ const ATS_EDGE_MIN = { nfl: 2, cfb: 3 };
 // records at once makes none of them measurable.
 const ATS_SPORTS = new Set(['nfl', 'cfb']);
 
+// ======================= 🎓 CFB team rating (v205) =========================
+// WHY THIS EXISTS. Every one of the owner's 19 CFB spread picks was the
+// underdog, and the model said things like "Tennessee by 5 over Furman" — an
+// FCS team. Its inputs (win%, points-per-game margin) do not know that a 9-3
+// built against FCS opponents and an 8-4 built in the SEC are different
+// things, and in week 1 the prior-season blend is all it has. Measured on the
+// owner's export: the model under-projected the favourite by 11.8 points on
+// games it could price freely and sat on the DOG side of the number 19 of 19.
+//
+// WHAT IT IS. A per-team strength number in POINTS vs an average FBS team:
+//   1. ESPN FPI when the app can read it (cfbFpi — a probe over candidate
+//      URLs; unverified from the sandbox, self-diagnosing like the VSiN scrape),
+//   2. else CONFERENCE TIER prior + the team's own scoring margin, discounted
+//      for FCS teams whose margin was earned against FCS competition.
+// Margin = R_home − R_away + CFB_HFA, then pHome = Φ(margin / PD_SD.cfb).
+// Margin is PRIMARY and unbounded; probability is derived and saturates on
+// its own — the reverse of projMarginFor, and the reason the 33.9-pt ceiling
+// no longer exists for CFB. It also sidesteps MODEL_SHRINK on the margin side.
+//
+// ⚠️ THE CONSTANTS ARE MATCHED TO THE MARKET, NOT FITTED TO RESULTS. Tier
+// gaps were set so the model's margin lands near the book's on the owner's 19
+// week-1/2 games by matchup type (P4 vs FCS 44.7, n=5 · P4 vs G5 33.1, n=11 ·
+// P4 vs P4 17.5, n=2), with a ranked team's own margin supplying the rest.
+// That gets the model to price a cupcake like a cupcake; whether it beats the
+// number is what the ATS record will say. REFIT from `sportshub:marginbias`
+// (the v204 instrument — every priced game, not just picks) at the 1 Oct read.
+// Never refit on the ATS picks this produces.
+const CFB_TIER_PTS = { p4: 12, g5: 0, fcs: -12 };   // prior, vs a G5-average team
+const CFB_MARGIN_K = { fbs: 0.6, fcs: 0.3 };        // how much of a team's own pdpg counts
+const CFB_HFA = 3;                                   // home field, points
+const CFB_SHARP_PTS = 3;                             // per sharpSplit unit (±1.5 max → ±4.5 pts)
+const CFB_FORM_K = 0.25;                             // last-5 margin gap → points
+// Conference NAMES → tier. Regexes over ESPN's standings/group names, so a
+// realignment renames nothing here. FBS Independents are G5 except Notre Dame.
+const CFB_P4_RE = /\b(sec|southeastern|big ten|big 10|b1g|acc|atlantic coast|big 12|big xii)\b/i;
+const CFB_ND_RE = /notre dame/i;
+function cfbTierFromName(confName, teamName) {
+  if (CFB_ND_RE.test(teamName || '')) return 'p4';
+  if (!confName) return null;
+  if (CFB_P4_RE.test(confName)) return 'p4';
+  return 'g5';
+}
+// One standings pull → team id → conference name, cached 6h. Any FBS team is
+// in it; a team ABSENT from FBS standings is FCS. That absence is the signal.
+let cfbConfMapP = null;
+async function cfbConfMap() {
+  if (cfbConfMapP) return cfbConfMapP;
+  cfbConfMapP = (async () => {
+    const byId = new Map(), byName = new Map();
+    try {
+      const rows = normStandings(await fetchJSON(`${CORE}/football/college-football/standings?level=3`, 6 * 3600000));
+      rows.forEach((r) => {
+        const conf = r.league || r.group || r.division || '';
+        if (r.id) byId.set(String(r.id), conf);
+        if (r.team) byName.set(String(r.team).toLowerCase(), conf);
+      });
+    } catch (_) {}
+    return { byId, byName, ok: byId.size > 0 };
+  })();
+  return cfbConfMapP;
+}
+// ESPN FPI probe. Candidate URLs in order; the first that parses wins. Parsed
+// generically: any object carrying a team id and a numeric stat whose name
+// mentions FPI. ⚠️ UNVERIFIED — the sandbox cannot reach ESPN. The result
+// records which URL answered (`src`) so the card can say so, and an empty
+// result is an honest "no FPI", not an error.
+const CFB_FPI_URLS = [
+  (yr) => `https://site.web.api.espn.com/apis/v2/sports/football/college-football/powerindex?season=${yr}&region=us&lang=en`,
+  (yr) => `https://site.web.api.espn.com/apis/fitt/v3/sports/football/college-football/powerindex?season=${yr}`,
+  (yr) => `${SITE}/football/college-football/powerindex?season=${yr}`,
+];
+let cfbFpiP = null;
+async function cfbFpi() {
+  if (cfbFpiP) return cfbFpiP;
+  cfbFpiP = (async () => {
+    const yr = footballSeason();
+    for (const mk of CFB_FPI_URLS) {
+      const url = mk(yr);
+      let json = null;
+      try { json = await fetchJSON(url, 6 * 3600000); } catch (_) { continue; }
+      const map = new Map();
+      const walk = (o, depth) => {
+        if (!o || typeof o !== 'object' || depth > 6) return;
+        if (Array.isArray(o)) { o.forEach((x) => walk(x, depth + 1)); return; }
+        const tid = o.team?.id ?? o.teamId ?? (o.id != null && o.stats ? o.id : null);
+        if (tid != null) {
+          const stats = o.stats || o.categories || o.powerIndexes || o.values || [];
+          const list = Array.isArray(stats) ? stats : Object.entries(stats).map(([name, value]) => ({ name, value }));
+          for (const st of list) {
+            const nm = `${st.name || ''} ${st.abbreviation || ''} ${st.displayName || ''}`;
+            if (/\bfpi\b/i.test(nm) && !/rank|proj|win|loss|pct/i.test(nm)) {
+              const v = Number(st.value ?? st.displayValue);
+              if (isFinite(v)) { map.set(String(tid), v); break; }
+            }
+          }
+        }
+        Object.values(o).forEach((v) => walk(v, depth + 1));
+      };
+      walk(json, 0);
+      if (map.size >= 50) return { map, src: url, ok: true };
+    }
+    return { map: new Map(), src: null, ok: false };
+  })();
+  return cfbFpiP;
+}
+// The rating for one side of a game. Returns { r, tier, src } or null.
+//   src: 'fpi' | 'tier'.  `prof` is the teamProfile (may be null → FCS-ish).
+async function cfbRating(team, prof) {
+  const fpi = await cfbFpi();
+  if (fpi.ok && team?.id != null && fpi.map.has(String(team.id))) {
+    return { r: fpi.map.get(String(team.id)), tier: null, src: 'fpi' };
+  }
+  const cm = await cfbConfMap();
+  let confName = null;
+  if (team?.id != null && cm.byId.has(String(team.id))) confName = cm.byId.get(String(team.id));
+  else if (team?.name && cm.byName.has(team.name.toLowerCase())) confName = cm.byName.get(team.name.toLowerCase());
+  // No standings row at all → not FBS → FCS. But only trust that absence when
+  // the map actually loaded; with the feed down every team would read as FCS.
+  const tier = cfbTierFromName(confName, team?.name) || (cm.ok ? 'fcs' : 'g5');
+  const own = prof?.pdpg != null && isFinite(prof.pdpg) ? prof.pdpg : 0;
+  const k = tier === 'fcs' ? CFB_MARGIN_K.fcs : CFB_MARGIN_K.fbs;
+  return { r: CFB_TIER_PTS[tier] + k * own, tier, src: 'tier', conf: confName };
+}
+// ======================= end CFB team rating ===============================
+// Φ — standard normal CDF (Abramowitz–Stegun 7.1.26, |ε| < 1.5e-7). The
+// inverse of invNorm below; v205 needs the forward direction because CFB now
+// derives its win probability FROM a projected margin instead of the reverse.
+function normCdf(x) {
+  if (!isFinite(x)) return x > 0 ? 1 : 0;
+  const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-(x * x) / 2);
+  return x >= 0 ? 0.5 * (1 + y) : 0.5 * (1 - y);
+}
 // Inverse standard normal (Acklam's rational approximation, |ε| < 1.15e-9 —
 // far more precision than a point spread needs, and it's short).
 function invNorm(p) {
@@ -1902,11 +2040,53 @@ async function predictGame(sport, g, opts) {
     add('Sharp money', sharpC, `${row.ml_handle}% of dollars vs ${row.ml_bets}% of bets on ${sharp.abbr}`);
   }
 
-  // Calibration shrink (see MODEL_SHRINK): the raw factor sum is systematically
-  // too confident, so pull it toward even money before it becomes a probability.
-  const shrink = MODEL_SHRINK[sport] ?? MODEL_SHRINK.default;
-  const zc = z * shrink;
-  const pHome = logistic(zc);
+  // ============ 🎓 CFB is MARGIN-PRIMARY (v205) ============
+  // Everything above built a log-odds sum and would have derived the margin
+  // from it through projMarginFor — capped at 33.9 points, and blind to the
+  // FBS/FCS gap. For college football the order is reversed: a team rating
+  // produces a projected MARGIN in points (unbounded), and the win probability
+  // is derived from that margin. The side factors that still deserve a say —
+  // sharp money, recent form — are converted to points and added to the
+  // margin, so the moneyline, the spread and the breakdown all come off ONE
+  // number and can never contradict each other (the v164 rule, kept).
+  let rating = null;
+  if (sport === 'cfb') {
+    const [hR, aR] = await Promise.all([cfbRating(g.home, hf), cfbRating(g.away, af)]);
+    if (hR && aR) {
+      const formPts = (hf && af) ? clamp(hf.form - af.form, -20, 20) * CFB_FORM_K : 0;
+      const sharpPts = ss ? ss.units * CFB_SHARP_PTS : 0;
+      const gapPts = hR.r - aR.r;
+      const margin = gapPts + CFB_HFA + formPts + sharpPts;
+      const src = hR.src === 'fpi' && aR.src === 'fpi' ? 'fpi' : (hR.src === 'fpi' || aR.src === 'fpi') ? 'mixed' : 'tier';
+      rating = { hR, aR, gapPts, formPts, sharpPts, margin, src };
+    }
+  }
+  let shrink = MODEL_SHRINK[sport] ?? MODEL_SHRINK.default;
+  let pHome;
+  if (rating) {
+    pHome = clamp(normCdf(rating.margin / (PD_SD.cfb || 16.5)), 0.001, 0.999);
+    // Rebuild the factor list in POINTS so the attribution below still adds
+    // up to the pick: z becomes the logit that produces pHome, and each
+    // point-factor takes a share proportional to its points.
+    const lg = Math.log(pHome / (1 - pHome));
+    const fmtR = (r) => `${r.r >= 0 ? '+' : ''}${r.r.toFixed(1)}${r.tier ? ' ' + r.tier.toUpperCase() : ''}`;
+    const pts = [
+      ['Team rating', rating.gapPts, `${fmtR(rating.hR)} vs ${fmtR(rating.aR)} (${rating.src === 'fpi' ? 'ESPN FPI' : rating.src === 'mixed' ? 'FPI + tier' : 'conference tier + own margin'})`],
+      ['Home field', CFB_HFA, `${CFB_HFA} pts`],
+      ['Recent form', rating.formPts, hf && af ? `last 5: ${hf.form >= 0 ? '+' : ''}${hf.form.toFixed(1)} vs ${af.form >= 0 ? '+' : ''}${af.form.toFixed(1)}` : ''],
+      ['Sharp money', rating.sharpPts, sharp ? `${sharp.handle}% of dollars vs ${sharp.bets}% of bets on ${sharp.abbr}` : ''],
+    ];
+    factors.length = 0; z = 0; sharpC = 0;
+    pts.forEach(([label, v, detail]) => {
+      if (!v || !isFinite(v)) return;
+      const c = Math.abs(rating.margin) > 1e-6 ? lg * (v / rating.margin) : 0;
+      if (label === 'Sharp money') sharpC = c;
+      add(label, c, detail);
+    });
+    shrink = 1; // the shrink is a correction for the log-odds path; a margin in points is not shrunk
+  } else {
+    pHome = logistic(z * shrink);
+  }
   const homePick = pHome >= 0.5;
   const winner = homePick ? g.home : g.away;
   const conf = clamp(Math.round((homePick ? pHome : 1 - pHome) * 100), 50, CONF_CAP[sport] || CONF_CAP.default);
@@ -1949,7 +2129,13 @@ async function predictGame(sport, g, opts) {
   const notes = mu.notes.slice();
   if (sharp) notes.unshift(`Sharp money: ${sharp.handle}% of dollars vs ${sharp.bets}% of bets on ${sharp.side}${sharp.flipped ? ' — enough to flip the model onto that side' : ''}`);
   if (hf?.blended || af?.blended) notes.unshift('Early season — record/margin blended with last season (damped)');
-  return { winner, conf, homePick, probHome: pHome, projTotal, projMargin: projMarginFor(sport, pHome),
+  if (rating) {
+    const tierTxt = (r) => (r.tier ? r.tier.toUpperCase() : 'FPI');
+    notes.unshift(`🎓 Rating: ${rating.src === 'fpi' ? 'ESPN FPI' : rating.src === 'mixed' ? 'FPI + conference tier' : 'conference tier + own margin'} — ${g.home.abbr || g.home.name} ${tierTxt(rating.hR)} vs ${g.away.abbr || g.away.name} ${tierTxt(rating.aR)}; model margin ${rating.margin >= 0 ? (g.home.abbr || 'home') : (g.away.abbr || 'away')} by ${Math.abs(rating.margin).toFixed(1)}`);
+  }
+  return { winner, conf, homePick, probHome: pHome, projTotal,
+    projMargin: rating ? Math.round(rating.margin * 10) / 10 : projMarginFor(sport, pHome),
+    rating,
     // 🚨 The projected margin is derived from pHome, which projMarginFor
     // clamps to [0.02, 0.98] — so the margin itself has a HARD CEILING
     // (cfb 33.9 pts, nfl 27.7). Past that the model isn't measuring the
@@ -1957,7 +2143,9 @@ async function predictGame(sport, g, opts) {
     // above 33.9 an unguarded model would take the underdog on EVERY such
     // game, by construction rather than by reading anything. Flag it here so
     // atsCall can refuse to make a play it can't justify.
-    marginSat: pHome >= 0.98 || pHome <= 0.02,
+    // v205: in rating mode the margin is primary and unbounded, so it is
+    // never pinned — the ceiling this flag guarded no longer exists for CFB.
+    marginSat: rating ? false : (pHome >= 0.98 || pHome <= 0.02),
     breakdown, notes, sharp, thin: !(hf && af) };
 }
 
@@ -3926,7 +4114,7 @@ function atsCard(r) {
     <div class="brd-pick"><span class="p ats">${esc(ats.label)}</span>
       <span class="cf">model ${ats.proj > 0 ? '+' : ''}${ats.proj}</span>
       <span class="gp">${Math.abs(ats.edge).toFixed(1)} pts of value</span></div>
-    <div class="brd-row">Book has <b>${esc(g.home.abbr || 'Home')} ${ats.homeSpread > 0 ? '+' : ''}${ats.homeSpread}</b> · model projects ${esc(g.home.abbr || 'home')} by ${ats.proj > 0 ? '' : ''}${ats.proj}</div>
+    <div class="brd-row">Book has <b>${esc(g.home.abbr || 'Home')} ${ats.homeSpread > 0 ? '+' : ''}${ats.homeSpread}</b> · model projects ${esc((ats.proj >= 0 ? g.home.abbr : g.away.abbr) || (ats.proj >= 0 ? 'home' : 'away'))} by ${Math.abs(ats.proj)}</div>
     ${res}`;
   if (g.id) card.onclick = () => openGameDetail(sport, g.id, g);
   return card;
