@@ -398,6 +398,174 @@ async function doShare(kind) {
 }
 
 
+
+/* ============================================================================
+   ⛑️ TEAM HELMETS — generated, never fetched
+   ----------------------------------------------------------------------------
+   Every team gets a helmet with its own colours and monogram, derived
+   DETERMINISTICALLY from the team name. Same name → same helmet, forever, on
+   every device, with no state to store and no asset to ship.
+
+   ⚠️ WHY THIS IS GENERATED RATHER THAN ESPN'S REAL LOGO, and it is not
+   laziness: drawing a remote image onto a canvas TAINTS it unless the host
+   sends CORS headers, and a tainted canvas makes `toBlob`/`toDataURL` throw —
+   which would break the one-pager export entirely, at save time, on a feed we
+   cannot test from here. A generated crest always works, offline included.
+   If ESPN's `Team.logo_url` is ever wired up it belongs BESIDE this as an
+   enhancement with this as the fallback, never instead of it.
+
+   ONE implementation, used in both places: the web rows draw it to a small
+   canvas and use the data URL as an <img>, the one-pager drawImage()s the same
+   canvas. Two hand-kept copies (an SVG one and a canvas one) would drift.
+   ========================================================================== */
+
+/* FNV-1a. Stable across engines — Math.random or a Date would make a team's
+   helmet change between renders, which is the one thing it must never do. */
+function hashName(s) {
+  let h = 0x811c9dc5;
+  const t = String(s || '').toLowerCase().trim();
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  // Finalising avalanche. Without it, a dozen similar-length names land on a
+  // handful of kits — the first contact sheet had five near-identical greens.
+  h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d);
+  h ^= h >>> 12; h = Math.imul(h, 0x297a2d39);
+  h ^= h >>> 15;
+  return h >>> 0;
+}
+
+/* Mid-tone shells on purpose: the same helmet has to read on the Champagne
+   paper AND the Onyx black, so nothing here is near-white or near-black. */
+const KITS = [
+  { shell: '#1b3a6b', trim: '#c9d3e0', mask: '#c9d3e0' }, // navy / silver
+  { shell: '#0f5136', trim: '#e8c766', mask: '#e8c766' }, // forest / gold
+  { shell: '#8f1d24', trim: '#f0e6d8', mask: '#f0e6d8' }, // crimson / bone
+  { shell: '#4a2a72', trim: '#e2c14e', mask: '#e2c14e' }, // purple / gold
+  { shell: '#0d5c68', trim: '#f08a3c', mask: '#f08a3c' }, // teal / orange
+  { shell: '#2b2f33', trim: '#b9c0c7', mask: '#b9c0c7' }, // graphite / silver
+  { shell: '#a1471a', trim: '#f2ddb8', mask: '#f2ddb8' }, // rust / cream
+  { shell: '#14493f', trim: '#8fd6b0', mask: '#8fd6b0' }, // pine / mint
+  { shell: '#6b1540', trim: '#f0c9a0', mask: '#f0c9a0' }, // maroon / peach
+  { shell: '#243f7a', trim: '#f2b33c', mask: '#f2b33c' }, // royal / amber
+  { shell: '#5a5f16', trim: '#e9edc9', mask: '#e9edc9' }, // olive / chalk
+  { shell: '#7a2418', trim: '#d8b26a', mask: '#d8b26a' }, // brick / brass
+  { shell: '#1f4d4a', trim: '#e5b7c0', mask: '#e5b7c0' }, // slate teal / rose
+  { shell: '#3b2a5a', trim: '#9fd0e8', mask: '#9fd0e8' }, // indigo / sky
+];
+
+/* Filler words carry no identity, so "Slob On My Cobb" reads SC, not SO. */
+const SKIP = new Set(['on', 'my', 'the', 'of', 'a', 'and', 'in', 'to', 'for', 'is', 'it']);
+function monogram(name) {
+  const words = String(name || '').replace(/[^A-Za-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  const solid = words.filter((w) => !SKIP.has(w.toLowerCase()));
+  const use = solid.length ? solid : words;
+  if (!use.length) return '?';
+  if (use.length === 1) return use[0].slice(0, 2).toUpperCase();
+  // First and LAST significant word — the two a person actually says.
+  return (use[0][0] + use[use.length - 1][0]).toUpperCase();
+}
+
+const kitFor = (name) => KITS[hashName(name) % KITS.length];
+
+/* Draws a profile helmet inside a `size` box. Everything is expressed against
+   a 100x100 design grid and scaled, so one geometry serves every size. */
+function drawHelmet(ctx, x, y, size, name) {
+  const kit = kitFor(name);
+  const s = size / 100;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  // ---- facemask. Thin, well-separated bars: at 56px a thick curved cage
+  // merges into a single blob, which is what the first two cuts produced.
+  ctx.strokeStyle = kit.mask;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 3.6;
+  ctx.beginPath();                        // outer edge of the cage
+  ctx.moveTo(74, 44);
+  ctx.bezierCurveTo(90, 48, 94, 62, 86, 76);
+  ctx.stroke();
+  ctx.beginPath();                        // upper bar
+  ctx.moveTo(64, 54);
+  ctx.bezierCurveTo(76, 53, 85, 55, 90, 59);
+  ctx.stroke();
+  ctx.beginPath();                        // lower bar
+  ctx.moveTo(62, 68);
+  ctx.bezierCurveTo(72, 68, 81, 70, 87, 72);
+  ctx.stroke();
+
+  // ---- shell. Proportion is what makes this read as a helmet rather than as
+  // a bean: the dome must be about as WIDE as it is tall. The first cuts were
+  // 54 wide by 77 tall and looked like a shoe.
+  ctx.beginPath();
+  ctx.moveTo(12, 48);
+  ctx.bezierCurveTo(12, 24, 30, 12, 50, 12);      // up over the back and crown
+  ctx.bezierCurveTo(68, 12, 78, 26, 78, 43);      // crown down to the front
+  ctx.bezierCurveTo(78, 49, 74, 51, 68, 52);      // brow ledge
+  ctx.bezierCurveTo(62, 53, 60, 57, 60, 63);      // the face opening
+  ctx.bezierCurveTo(60, 75, 50, 83, 38, 83);      // cheek into the earflap
+  ctx.bezierCurveTo(24, 83, 12, 70, 12, 48);
+  ctx.closePath();
+  ctx.fillStyle = kit.shell;
+  ctx.fill();
+  // A thin trim outline so a dark shell still separates from the Onyx ground.
+  ctx.strokeStyle = kit.trim;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // ---- crown stripe, clipped to the shell. Inset well away from the outline:
+  // hugging the edge read as a fat coloured rim, not as a stripe.
+  ctx.save();
+  ctx.clip();
+  ctx.strokeStyle = kit.trim;
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(16, 44);
+  ctx.bezierCurveTo(16, 27, 32, 18, 50, 18);
+  ctx.bezierCurveTo(64, 18, 71, 25, 73, 34);
+  ctx.stroke();
+  ctx.restore();
+
+  // ---- ear hole + monogram
+  ctx.fillStyle = kit.trim;
+  ctx.beginPath();
+  ctx.arc(31, 60, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = kit.shell;
+  ctx.beginPath();
+  ctx.arc(31, 60, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  const mono = monogram(name);
+  ctx.fillStyle = kit.trim;
+  ctx.font = `900 ${mono.length > 1 ? 23 : 28}px Archivo, -apple-system, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(mono, 43, 46);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
+/* A standalone helmet canvas — the DOM uses its data URL as an <img>, the
+   one-pager drawImage()s it. 2x for retina. */
+function helmetCanvas(name, size) {
+  const cv = document.createElement('canvas');
+  const r = 2;
+  cv.width = size * r; cv.height = size * r;
+  const ctx = cv.getContext('2d');
+  ctx.scale(r, r);
+  drawHelmet(ctx, 0, 0, size, name);
+  return cv;
+}
+const HELM_CACHE = new Map();
+function helmetURL(name, size) {
+  const k = `${size}|${name}`;
+  if (!HELM_CACHE.has(k)) HELM_CACHE.set(k, helmetCanvas(name, size).toDataURL('image/png'));
+  return HELM_CACHE.get(k);
+}
+
 /* ============================================================================
    🖼️ THE ONE-PAGER
    ----------------------------------------------------------------------------
@@ -489,7 +657,7 @@ function onePager(p) {
   // tall as the content needs and no row is clipped.
   const meas = document.createElement('canvas').getContext('2d');
   meas.font = F(23, 400);
-  const takeW = w - OP.pad * 2 - 104 - 30;
+  const takeW = w - OP.pad * 2 - 166 - 30;
   const lines = rows.map((r) => (r[3] ? wrap(meas, r[3], takeW, 2) : []));
   const heights = lines.map((ls) => OP.row + Math.max(0, ls.length - 1) * 30);
   const h = OP.pad + OP.head + heights.reduce((a, b) => a + b + OP.gap, 0) + OP.foot + OP.pad;
@@ -542,26 +710,34 @@ function onePager(p) {
     ctx.fillStyle = i < 3 ? C.accent : C.text;
     ctx.font = F(top ? 48 : 40, 900);
     ctx.textAlign = 'center';
+    // A two-digit rank at full size ran into the crest — "10", "11" and "12"
+    // were touching it in the first pass. Narrow the numeral instead of moving
+    // the whole column, so the ranks still form a straight edge.
+    if (i + 1 >= 10) ctx.font = F(top ? 42 : 34, 900);
     const numY = y + rh / 2 + (mv ? 2 : 14);
-    ctx.fillText(String(i + 1), L + 52, numY);
+    ctx.fillText(String(i + 1), L + 44, numY);
     // Movement rides under its OWN number, not the bottom of the row — on a
     // two-line row anchoring it to the row bottom pulled it away from the
     // number it belongs to.
     if (mv) {
       ctx.fillStyle = mv > 0 ? C.pos : C.neg;
       ctx.font = F(18, 800);
-      ctx.fillText(`${mv > 0 ? '▲' : '▼'}${Math.abs(mv)}`, L + 52, numY + 26);
+      ctx.fillText(`${mv > 0 ? '▲' : '▼'}${Math.abs(mv)}`, L + 44, numY + 26);
     }
     ctx.textAlign = 'left';
 
-    const tx = L + 104;
+    // Crest between the rank and the name. Same generator the web rows use.
+    const hs = 74;
+    ctx.drawImage(helmetCanvas(name, hs), L + 80, y + (rh - hs) / 2, hs, hs);
+
+    const tx = L + 166;
     const statW = 210;
     // team + manager
     ctx.fillStyle = C.text;
     ctx.font = F(30, 800);
     const mgr = mgrLabel(name);
-    const nameW = ctx.measureText(fit(ctx, name, CW - 104 - statW - 20)).width;
-    ctx.fillText(fit(ctx, name, CW - 104 - statW - 20), tx, y + 38);
+    const nameW = ctx.measureText(fit(ctx, name, CW - 166 - statW - 20)).width;
+    ctx.fillText(fit(ctx, name, CW - 166 - statW - 20), tx, y + 38);
     if (mgr) {
       ctx.fillStyle = C.muted;
       ctx.font = F(20, 700);
@@ -714,7 +890,7 @@ function paintRank() {
           ${hasMove(mv) ? `<span class="pr-mv ${mv > 0 ? 'up' : 'down'}">${moveStr(mv)}</span>` : ''}
         </div>
         <div class="pr-body">
-          <div class="pr-team">${esc(t.team)}${mgr ? ` <span class="pr-mgr">${esc(mgr)}</span>` : ''}${t.isMe ? ' <span class="pr-you">you</span>' : ''}</div>
+          <div class="pr-team"><img class="pr-helm-sm" src="${helmetURL(t.team, 30)}" alt="" width="30" height="30" /><span class="pr-tn">${esc(t.team)}</span>${mgr ? ` <span class="pr-mgr">${esc(mgr)}</span>` : ''}${t.isMe ? ' <span class="pr-you">you</span>' : ''}</div>
           ${stats.length ? `<div class="pr-stats">${esc(stats.join(' · '))}</div>` : ''}
           ${moved ? `<div class="pr-moved">Model had them <b>${modelRank}${ord(modelRank)}</b> — you moved them ${modelRank > i + 1 ? 'up' : 'down'}.</div>` : ''}
           <textarea class="pr-take" rows="2" maxlength="${MAX_COMMENT}" placeholder="Your take on ${esc(t.team)}…"></textarea>
@@ -818,7 +994,7 @@ function paintShared(p) {
           ${hasMove(mv) ? `<span class="pr-mv ${mv > 0 ? 'up' : 'down'}">${moveStr(mv)}</span>` : ''}
         </div>
         <div class="pr-body">
-          <div class="pr-team">${esc(name)}${mgr ? ` <span class="pr-mgr">${esc(mgr)}</span>` : ''}</div>
+          <div class="pr-team"><img class="pr-helm-sm" src="${helmetURL(name, 34)}" alt="" width="34" height="34" /><span class="pr-tn">${esc(name)}</span>${mgr ? ` <span class="pr-mgr">${esc(mgr)}</span>` : ''}</div>
           ${stats.length ? `<div class="pr-stats">${esc(stats.join(' · '))}</div>` : ''}
           ${note ? `<div class="pr-take-ro">${esc(note)}</div>` : ''}
           ${moved ? `<div class="pr-moved">Numbers had them ${modelRank}${ord(modelRank)}.</div>` : ''}

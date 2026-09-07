@@ -212,3 +212,16 @@ body.pr-page {
    goes on screen instead — on iOS that is long-press → Save to Photos, which
    is still a save. */
 .pr-op-img { display: block; width: 100%; margin-top: 8px; border: 1px solid var(--line); border-radius: 10px; }
+
+/* ---- team crests ---------------------------------------------------------
+   Generated per team name (see drawHelmet in power.js), never fetched, so
+   there is no asset to ship and nothing to fail offline. In the editor the
+   crest rides INLINE before the team name — on a 390px phone the textarea and
+   the ▲▼ column need the width, and a third column would squeeze the name. */
+.pr-helm-sm {
+  width: 30px; height: 30px; vertical-align: -8px; margin-right: 6px;
+  flex: 0 0 auto;
+}
+/* The shared view uses the same inline crest, just larger — a separate column
+   cost 58px of a 334px phone row and squeezed every take to 4-5 lines. */
+.pr-row.ro .pr-helm-sm { width: 34px; height: 34px; vertical-align: -9px; margin-right: 7px; }

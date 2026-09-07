@@ -646,8 +646,30 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
       and the share sheet is also the shortest path into the league chat), then
       a real download on desktop, then the image on screen — on iOS a
       long-press → Save to Photos, which is still a save.
+  - **⛑️ Team crests are GENERATED from the team name, never fetched**
+    (`drawHelmet` / `helmetCanvas` / `helmetURL`). A profile football helmet
+    with its own colour kit, crown stripe and monogram, derived from an
+    FNV-1a hash of the name — so the same team gets the same crest forever, on
+    every device, with no asset to ship and nothing to fail offline.
+    - ⚠️ **Why generated rather than ESPN's real `Team.logo_url`, and it is not
+      laziness:** drawing a remote image onto a canvas **taints** it unless the
+      host sends CORS headers, and a tainted canvas makes `toBlob`/`toDataURL`
+      **throw** — which would break the one-pager export at save time, on a
+      feed that cannot be tested from the sandbox. If the real logo is ever
+      wired up it belongs BESIDE this as an enhancement with this as the
+      fallback, never instead of it. A suite check asserts the export still
+      works, precisely so that stays true.
+    - **ONE implementation** serves both surfaces: the web rows use the
+      canvas's data URL as an `<img>`, the one-pager `drawImage`s the same
+      canvas. A hand-kept SVG copy alongside a canvas copy would drift.
+      Memoised by name+size, because the editor repaints on every reorder.
+    - Crests ride **inline before the team name** on both web views. A separate
+      column cost 58px of a 334px phone row and squeezed every take to four or
+      five lines.
+    - The name lives in its own **`.pr-tn`** span. Reading it off `.pr-team`'s
+      first child node broke the instant a crest was prepended.
   - **Standalone**, so NOT part of the `APP_VERSION`/`?v=` ritual — but bump
-    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v1**)
+    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v2**)
     and its `styles.css?v=` (now 208) if you change shared CSS it leans on.
   - Verified in headless Chromium — **86 checks** (79 + 7): the luck-detector
     ranking, preseason inventing nothing, reorder by ▲▼ and by picker with the
@@ -702,6 +724,25 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
       with no records still draws, and the background pixel must differ between
       Champagne and Onyx — proving it reads the live palette rather than a
       hardcoded look.
+  - **⛑️ Team helmets (same version).** The owner: *"improve the visuals if
+    possible. Create a helmet and logo based on the team name."* Each team now
+    has a generated profile helmet — colour kit, crown stripe and monogram off
+    a hash of its name — on the one-pager and on both web views. See Files for
+    the mechanics and for why it is generated rather than pulled from ESPN.
+    - **It took four passes, and every fault was only visible in a render** —
+      a contact sheet of all twelve, which is the right way to check a
+      generated set. (1) The facemask was drawn under a shell reaching x=86,
+      so the whole cage was buried and read as a blob. (2) The crown stripe
+      hugged the outline at width 9 and read as a fat coloured rim. (3) The
+      plain FNV hash clustered twelve similar-length names onto a handful of
+      kits — **five near-identical greens** — fixed with a finalising
+      avalanche. (4) The shell was 54 wide by 77 tall and looked like a shoe;
+      a helmet needs to be about as wide as it is tall.
+    - Then two layout faults the row render caught: two-digit ranks **collided
+      with the crest** on the one-pager (10, 11, 12 all touching), fixed by
+      narrowing the numeral rather than moving the column so the ranks keep a
+      straight edge; and the crest as its own column squeezed the shared
+      view's takes to four or five lines, so it went inline.
   - ⚠️ **Test-harness note, the SIXTH time:** `.pr-week` is uppercased by CSS
     and `innerText` reflects `text-transform`, so two assertions on the week
     label failed against perfectly correct markup. Assert headings
