@@ -139,16 +139,24 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > the three vars in the dashboard's Environment tab. ⚠️ Both `YEAR` (fallback is
 > 2025 → last season's league, silently) and `TEAM_ID` (fallback is the league's
 > FIRST team → someone else's roster shown as yours) look optional and are not.
-> Steps: `server/RENDER.md`. The Fantasy tab calls the API
+> Steps: `server/RENDER.md`. The app calls the API
 > once per session (`syncFromLeague`), overwrites the saved roster with the real
 > one, shows a team/record/matchup header (`#fantasy-league`, `renderLeagueHeader`)
 > with a **🔄 Refresh from ESPN** button + "synced Xm ago" timestamp,
-> then runs the existing stat pipeline. **Freshness/caching:** it is NOT real-time —
+> then runs the existing stat pipeline. **⚠️ That sync starts at BOOT, not on
+> the tab tap** (`warmFantasy()`, v207 — gated on the device's remembered
+> config), so the cold start overlaps the app's own load; the tab's own call
+> shares the in-flight promise (`syncInFlight`) rather than starting a second
+> one. Inside a sync the **roster is awaited alone and the other five endpoints
+> then fan out in parallel** — one call warms `_build_league`, which is an
+> unlocked `lru_cache`, so fanning out on a cold cache would hit ESPN six times.
+> **Freshness/caching:** it is NOT real-time —
 > two cache layers sit in front of ESPN. (a) The backend caches each League object
 > for `LEAGUE_TTL_SECONDS` (default 300s, env-tunable; `_build_league` time-bucketed
 > `lru_cache`) and auto-expires after that, plus `/api/refresh` clears it on demand.
 > (b) The frontend syncs once per session; the Refresh button sets `fanState.forceSync`,
-> which calls `/api/refresh` and cache-busts `fetchJSON` to force a true re-pull.
+> which calls `/api/refresh`, bypasses the in-flight share and cache-busts
+> `fetchJSON` to force a true re-pull.
 > If the backend is unreachable it falls back
 > to the locally-saved/manual roster, so the app never looks broken. The constraints
 > below still govern the **frontend**; the backend is the deliberate, scoped
@@ -462,7 +470,67 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v206** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v207** (backend **b14-football-boxplayer**).
+
+- **🚨 The Fantasy tab started loading when you TAPPED it, not when the app
+  opened (v207)** — the owner: *"Takes a long time for the Fantasy page to
+  load — is it set up so that when I open the app it starts loading that
+  information, or doesn't start loading until I click the Fantasy button?"*
+  The second one. Nothing fantasy-side was fetched until the tab was pressed,
+  so the entire chain began at the moment the owner was already looking at it.
+  - **The chain, and why it was as slow as it felt.** `/api/health` (which the
+    football branch needs before it knows which view to render) → the roster →
+    then **matchup, standings, freeagents, opponent and season one at a time**,
+    each `await`ed before the next was even requested. Six serial round trips
+    behind a seventh, all starting from zero on the tap. On a **cold Render
+    container** (~30-60s, and it sleeps after 15 min idle, so essentially every
+    launch) the health check alone could outlast the owner's patience.
+  - **Fixed in two places, and the pair is the point** — one moves the wait
+    earlier, the other makes it shorter:
+    1. **`warmFantasy()` at boot**, beside v200's `wakeBettingFeeds()` and for
+       the same reason: overlap the cold start with the app's own load instead
+       of starting it fresh when something finally needs it. Fire-and-forget —
+       paints nothing, blocks nothing, never awaited. v198 cached the CONFIG on
+       the device so the right view paints at once; this caches nothing new, it
+       just starts the data moving ~a full app-load earlier.
+       - ⚠️ **Gated on `cachedCfg()`**, so a device that has never had a league
+         configured doesn't pull a roster it will never show. On a first-ever
+         launch the health check alone still runs, which both caches the answer
+         and means the tab's own check is already resolved when it opens.
+    2. **The five secondary calls fan out** (`Promise.all`) instead of running
+       serially. Measured on the harness at 300ms/call: **301ms instead of
+       ~1500ms.** Each still degrades on its own — a `soft()` wrapper resolves
+       to `null` rather than rejecting, so one dead endpoint can't take the
+       sync down, exactly as the per-call `try/catch` it replaces did.
+  - **🚨 The roster call is still awaited ALONE, deliberately, and this is the
+    subtle part.** Every fantasy endpoint reads the backend's cached League
+    object, and **`_build_league` is a plain `lru_cache` with no lock**
+    (`server/main.py`). FastAPI runs those sync handlers in a threadpool, so
+    six requests arriving together on a cold cache would each build their own
+    League and hit **ESPN six times** — slower than the serial version it
+    replaced, and six logins against ESPN for one page. One call warms the
+    cache; the other five then hit it warm, in parallel. **Anything new that
+    fans out over these endpoints must keep that shape.**
+  - **In-flight dedupe on `syncFromLeague`** (`syncInFlight`), the same fix
+    `reportInFlight` got in v200 and necessary for the same reason: the boot
+    warm and a tab tap can now overlap, and two concurrent syncs would be two
+    full sets of ESPN pulls with the loser's work thrown away. Sharing the
+    promise makes the boot pass's wait the tab's wait, so tapping Fantasy
+    mid-warm costs nothing extra. A **forced** refresh never joins an in-flight
+    ordinary sync — bypassing both cache layers is the entire point of the
+    button.
+  - **Nothing about what is fetched changed**, only when and in what order, so
+    no view, no stored roster and no record is affected.
+  - Verified in headless Chromium at 390px with ESPN and the backend stubbed —
+    **27 checks** across five contexts: the roster and all five secondary calls
+    firing at boot with the Fantasy tab never opened (their starts **1ms**
+    apart, all done in **301ms**, and every one of them waiting for the roster
+    to land first); tapping Fantasy mid-warm fetching the roster and matchup
+    **exactly once** each and still painting the live view; opening the tab
+    after the warm finished making **zero** further fantasy requests; the
+    🔄 Refresh button still clearing the backend cache, cache-busting and
+    genuinely re-pulling; and a device with no remembered league pulling no
+    roster at all. No console errors in any of them.
 
 - **🚨 `pred.notes` was dead output — the model wrote its own explanation and
   threw it away (v206)** — the owner asked *"how do I do the fpi check"*, and
@@ -4507,6 +4575,13 @@ rewrite.**
   to the console when a game opens (v167; the multi-book shape is unverified).
 - `sportshub:fantasy:{sport}` — the saved fantasy roster, one per sport
   (`fanKey(sport)`, e.g. `sportshub:fantasy:baseball`).
+- `sportshub:cfg` — which sports have a league configured on the backend
+  (`{at, configured}`, written by `leagueConfig`, v198). `fanState.cfg` is
+  in-memory only, so without this every launch spent up to a minute not knowing
+  which Fantasy view to render. **v207: it is also the gate on `warmFantasy()`**
+  — a device with no remembered league pulls no roster at boot. It is an
+  optimistic head start, never the source of truth: the real `/api/health`
+  check still runs and corrects it.
 - `sportshub:fparticles` — last good FantasyPros article list (`{at, items}`), so
   the 📰 Fantasy Advice section paints instantly and still shows something when
   the backend is asleep.

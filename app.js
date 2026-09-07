@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v206';
+const APP_VERSION = 'v207';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -6842,10 +6842,60 @@ async function leagueConfig() {
   return fanState.cfg;
 }
 
+// 🚨 v207 — start the fantasy league loading at BOOT, not on the tab tap.
+// Nothing fantasy-side was fetched until the Fantasy button was pressed, so
+// the whole chain — Render's 30-60s free-tier cold start, /api/health, then
+// the roster and everything hanging off it — began from zero at the moment the
+// owner was already looking at the tab. wakeBettingFeeds() has woken the same
+// container at boot since v200, but only for the betting endpoints, so the
+// fantasy pulls still started cold-ish and always started late.
+//
+// This is the v200 pattern applied to the other half of the backend: overlap
+// the wait with the app's own load. Fire-and-forget — it paints nothing, blocks
+// nothing, and is never awaited.
+//
+// ⚠️ Gated on the DEVICE's remembered answer (cachedCfg), so a device that has
+// never had a league configured doesn't pull a roster it will never show. On a
+// first-ever launch the health check alone still runs, which both caches the
+// answer for next time and means the tab's own check is already resolved.
+function warmFantasy() {
+  try {
+    const cfg = cachedCfg();
+    // Refresh the config either way — it also wakes the container.
+    leagueConfig().catch(() => {});
+    if (!cfg || !cfg.football) return;
+    syncFromLeague('football').then((ok) => {
+      // Mark it done so the tab doesn't re-sync a league it already has. The
+      // in-flight share covers the overlapping case; this covers the case where
+      // the warm finished before the tab was ever opened.
+      if (ok) { fanState.synced = fanState.synced || {}; fanState.synced.football = true; }
+    }).catch(() => {});
+  } catch (_) {}
+}
+
 // Pull the real roster (+ this week's matchup) and overwrite the saved roster.
 // Returns true if a real roster was loaded. Teams left blank fall through to
 // the existing name-based autoResolveTeams backfill.
-async function syncFromLeague(sport, force = false) {
+//
+// 🚨 v207 — in-flight dedupe, the same fix reportInFlight got in v200 and for
+// the same reason. Nothing fantasy-side was fetched until the Fantasy tab was
+// tapped, so warmFantasy() now starts this at boot — which means the tab's own
+// call can land while the boot pass is still waiting on a cold container. Two
+// concurrent syncs would be two full sets of ESPN pulls, and the loser's work
+// would be thrown away. Sharing the promise makes the boot pass's wait the
+// tab's wait, so tapping Fantasy mid-warm costs nothing extra.
+const syncInFlight = new Map();
+function syncFromLeague(sport, force = false) {
+  // A forced refresh must not be served by an in-flight ordinary sync — the
+  // whole point is to bypass both cache layers.
+  if (!force && syncInFlight.has(sport)) return syncInFlight.get(sport);
+  const p = syncLeagueOnce(sport, force).finally(() => {
+    if (syncInFlight.get(sport) === p) syncInFlight.delete(sport);
+  });
+  if (!force) syncInFlight.set(sport, p);
+  return p;
+}
+async function syncLeagueOnce(sport, force) {
   try {
     // On a forced refresh, clear the backend's in-memory league cache first,
     // then cache-bust our own fetchJSON cache so we truly re-pull from ESPN
@@ -6856,6 +6906,12 @@ async function syncFromLeague(sport, force = false) {
       bust = `_=${Date.now()}`;
     }
     const q = (extra) => { const p = [bust, extra].filter(Boolean); return p.length ? `?${p.join('&')}` : ''; };
+    // 🚨 The roster call is awaited ALONE, deliberately, and the rest fan out
+    // behind it. Every endpoint reads the backend's cached League object, and
+    // `_build_league` is a plain lru_cache with no lock — FastAPI runs these
+    // sync handlers in a threadpool, so six requests arriving together on a
+    // cold cache would each build their OWN League and hit ESPN six times.
+    // One call warms it; the other five then hit a warm cache in parallel.
     const data = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/roster${q()}`, 60000);
     const roster = (data.roster || []).map((p) => ({
       name: p.name,
@@ -6866,21 +6922,23 @@ async function syncFromLeague(sport, force = false) {
     }));
     if (!roster.length) return false;
     saveRoster(sport, roster);
-    let matchup = null, standings = null, freeAgents = null, opponent = null, catranks = null, playoffs = null;
-    try { matchup = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/matchup${q()}`, 60000); } catch (_) {}
-    try { standings = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/standings${q()}`, 60000); } catch (_) {}
-    try { freeAgents = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/freeagents${q('size=40')}`, 300000); } catch (_) {}
-    try { opponent = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/opponent${q()}`, 60000); } catch (_) {}
-    // catranks/playoffs are category-league (baseball) concepts — skip for football.
-    let season = null;
-    if (sport === 'baseball') {
-      try { catranks = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/catranks${q()}`, 60000); } catch (_) {}
-      try { playoffs = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/playoffs${q('slots=6')}`, 60000); } catch (_) {}
-    } else {
-      // Football's equivalent: per-week scores, ESPN's OWN playoff odds, and the
-      // all-play record. One call, off the already-cached League snapshot.
-      try { season = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/season${q()}`, 60000); } catch (_) {}
-    }
+    // Each one still degrades on its own — a soft fetch resolves to null rather
+    // than rejecting, so one dead endpoint can't take the whole sync down (the
+    // per-call try/catch this replaces did the same job serially).
+    const soft = (url, ttl) => fetchJSON(url, ttl).catch(() => null);
+    // catranks/playoffs are category-league (baseball) concepts — skip for
+    // football, whose equivalent is /season: per-week scores, ESPN's OWN
+    // playoff odds and the all-play record, off the cached League snapshot.
+    const isBb = sport === 'baseball';
+    const [matchup, standings, freeAgents, opponent, catranks, playoffs, season] = await Promise.all([
+      soft(`${FANTASY_API}/api/fantasy/${sport}/matchup${q()}`, 60000),
+      soft(`${FANTASY_API}/api/fantasy/${sport}/standings${q()}`, 60000),
+      soft(`${FANTASY_API}/api/fantasy/${sport}/freeagents${q('size=40')}`, 300000),
+      soft(`${FANTASY_API}/api/fantasy/${sport}/opponent${q()}`, 60000),
+      isBb ? soft(`${FANTASY_API}/api/fantasy/${sport}/catranks${q()}`, 60000) : null,
+      isBb ? soft(`${FANTASY_API}/api/fantasy/${sport}/playoffs${q('slots=6')}`, 60000) : null,
+      isBb ? null : soft(`${FANTASY_API}/api/fantasy/${sport}/season${q()}`, 60000),
+    ]);
     fanState.league = fanState.league || {};
     fanState.league[sport] = { team: data.team, record: data.record, rosterFull: data.roster || [], live: !!data.live, matchup, standings, freeAgents, opponent, catranks, playoffs, season, syncedAt: Date.now() };
     return true;
@@ -9751,6 +9809,13 @@ gradePending();
 // load and the recorder's wait (SHARP_WAIT.record) is mostly already spent by
 // the time it starts. Fire-and-forget: it blocks nothing and paints nothing.
 wakeBettingFeeds();
+
+// 🚨 v207 — and the fantasy half of the same backend, for the same reason.
+// The Fantasy tab used to start its whole load — health check, roster,
+// matchup, standings, free agents, opponent, season — only once it was
+// tapped, so every one of those waits happened while the owner was staring
+// at the tab. Now they overlap with the app's own load. Fire-and-forget.
+warmFantasy();
 
 // Auto-update: register the network-first service worker so new versions load
 // on their own (including the home-screen app) — no manual cache-busting.
