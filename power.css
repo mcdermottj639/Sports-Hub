@@ -130,7 +130,8 @@ body.pr-page {
   display: block; width: 100%; box-sizing: border-box; margin-top: 8px;
   font: inherit; font-size: 16px; line-height: 1.45;   /* 16px: iOS focus-zoom rule */
   color: var(--text); background: var(--card-2);
-  border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; resize: vertical;
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px;
+  resize: vertical; overflow: hidden; min-height: 62px;
 }
 .pr-take:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pr-count { margin-top: 3px; text-align: right; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -225,3 +226,18 @@ body.pr-page {
 /* The shared view uses the same inline crest, just larger — a separate column
    cost 58px of a 334px phone row and squeezed every take to 4-5 lines. */
 .pr-row.ro .pr-helm-sm { width: 34px; height: 34px; vertical-align: -9px; margin-right: 7px; }
+
+/* ---- take controls ------------------------------------------------------- */
+.pr-count { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pr-cn { flex: 0 0 auto; }
+.pr-re {
+  font: inherit; font-size: 11.5px; font-weight: 800; letter-spacing: .3px;
+  color: var(--muted); background: none; border: 0; padding: 4px 0; cursor: pointer;
+}
+.pr-re:hover { color: var(--accent); }
+.pr-spice {
+  display: flex; align-items: center; gap: 8px; margin: 2px 0 12px;
+  font-size: 12.5px; color: var(--muted); cursor: pointer;
+}
+.pr-spice input { width: 18px; height: 18px; accent-color: var(--accent); flex: 0 0 auto; }
+.pr-cnum { font-weight: 700; font-style: normal; }

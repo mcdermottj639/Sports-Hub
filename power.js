@@ -237,10 +237,33 @@ function restoreOrBuild() {
     S.byline = d.byline || defaultByline();
   } else {
     S.order = built.order.slice();
-    S.comments = {};
+    // Pre-write the whole week. Opening the lab to twelve blank boxes is the
+    // thing that makes a weekly column not happen; opening it to twelve drafts
+    // with the numbers already right is a ten-minute edit.
+    S.comments = S.ready ? writeWeek(takeFacts(S.season, S.order, S.key, prevOrder()), { spicy: spiceOn() }) : {};
     S.byline = S.byline || defaultByline();
     persist();
   }
+}
+
+/* The spec rations profanity to ~2-3 lines a week. This turns even that off —
+   some weeks a line lands wrong and it is easier to flip a switch than to edit
+   three takes. */
+function spiceOn() { try { return localStorage.getItem('powerlab:spice') !== '0'; } catch (_) { return true; } }
+function setSpice(v) { try { localStorage.setItem('powerlab:spice', v ? '1' : '0'); } catch (_) {} }
+
+/* Rewrite every take for this week. Discards edits, so it asks first. */
+function rewriteAll() {
+  S.comments = writeWeek(takeFacts(S.season, S.order, S.key, prevOrder()), { spicy: spiceOn(), salt: String(Date.now()) });
+  persist();
+}
+/* Reroll ONE line — the common case is that eleven are fine and one is flat. */
+function rewriteOne(id) {
+  const facts = takeFacts(S.season, S.order, S.key, prevOrder());
+  const one = facts.filter((f) => f.id === id);
+  const w = writeWeek(one, { spicy: spiceOn(), salt: String(Math.random()) });
+  S.comments[id] = w[id];
+  persist();
 }
 
 /* Default the byline to the owner's own team — it's the name the league knows
@@ -398,6 +421,247 @@ async function doShare(kind) {
 }
 
 
+
+
+/* ============================================================================
+   ✍️ THE WRITE-UP GENERATOR — "Nectars Bologna Power Rankings, Style Spec v2"
+   ----------------------------------------------------------------------------
+   Pre-writes a one-line take for every team, every week, in the owner's own
+   voice, so they open the lab to a full set of drafts and EDIT rather than
+   start from twelve blank boxes.
+
+   ⚠️ THIS IS A TEMPLATE ENGINE, NOT A LANGUAGE MODEL, and the difference
+   matters when you go to improve it. There is no LLM in this app and no
+   backend that could host one — so the voice lives in the templates
+   themselves, written in-voice, with real numbers dropped in. Rewriting a
+   template is how you change the writing. There is no prompt to tune.
+   Consequences worth knowing:
+     · It cannot be witty about something it has no input for. The spec's
+       "blame one player" shape needs a benching/injury/trade event, and
+       /season carries none — so that shape is generated only in the weak,
+       generic form and is the first thing to improve if the backend ever
+       serves a roster-event feed.
+     · Every line is meant to be EDITED. It is a first draft with the numbers
+       already right, not a finished column.
+
+   🚫 CARVE-OUT, implemented not just documented: no slurs, no racial, ethnic
+   or religious material, nothing about rape or the Holocaust. The source
+   style sheet carried a running ethnic-nickname bit and a rhetorical closer
+   in the same vein; both are deliberately ABSENT from the nickname table and
+   the closers below, and nothing here can assemble one. Do not add them back.
+   ========================================================================== */
+
+/* Seeded so a week's drafts are stable — a take that reshuffled on every
+   repaint would be unusable. Salt bumps to reroll one line on demand. */
+function rng(seed) {
+  let x = hashName(seed) || 1;
+  return () => { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; };
+}
+const pick = (r, a) => a[Math.floor(r() * a.length) % a.length];
+
+/* Persistent league nicknames. Display garnish, used sparingly — a line reads
+   as the owner's when it uses the name they'd actually say. */
+const NICKS = {
+  'current champ': 'the champ', gmdd: 'buley', 'thurgood marshall': 'gotch',
+  'morning woods': 'woods', 'slob on my cobb': 'slemp', 'cheeky clapz': 'the noob',
+  'future champ': 'king fraud', 'goff hits women': 'jam boy',
+};
+const nickFor = (name) => NICKS[String(name || '').toLowerCase().trim()] || '';
+
+const ADDRESS = ['bud', 'buddy', 'my man', 'my friend', 'kid'];
+const ABSOLUTE = ['Absolute shalacking', 'Absolute dog fight', 'Absolute clinic', 'Absolute disaster class'];
+
+/* Trailing dots, per the spec: 3-8 of them, and not on every line. */
+const trail = (r, s) => (r() < 0.42 ? s.replace(/[.!?]*$/, '') + '.'.repeat(3 + Math.floor(r() * 5)) : s);
+
+/* Build every fact a template can reach for. Anything not in here cannot be
+   written about — which is the honest limit of a template engine. */
+function takeFacts(season, order, key, prev) {
+  const teams = season.teams || [];
+  const ppgOf = (t) => { const ps = played(t.scores); return ps.length ? mean(ps) : 0; };
+  const ppgs = teams.map(ppgOf);
+  const sortedPpg = ppgs.slice().sort((a, b) => b - a);
+  const weekly = teams.map((t) => { const ps = played(t.scores); return ps.length ? ps[ps.length - 1] : null; });
+  const liveWeek = weekly.filter((x) => x != null);
+  const hi = liveWeek.length ? Math.max(...liveWeek) : null;
+  const lo = liveWeek.length ? Math.min(...liveWeek) : null;
+  const ap = season.allPlay || {};
+
+  return order.map((id, i) => {
+    const t = teams.find((x) => x.teamId === id) || {};
+    const ti = teams.indexOf(t);
+    const ps = played(t.scores);
+    const outs = (t.outcomes || []).slice(0, ps.length);
+    // Streak, most recent first.
+    let sk = 0, skc = '';
+    for (let j = outs.length - 1; j >= 0; j--) {
+      if (!skc) { skc = outs[j]; sk = 1; } else if (outs[j] === skc) sk++; else break;
+    }
+    const a = ap[id] || { w: 0, l: 0 };
+    const apGames = (a.w || 0) + (a.l || 0);
+    const w = Number(t.wins) || 0, l = Number(t.losses) || 0;
+    return {
+      id, rank: i + 1, prevRank: prev ? prev.order.indexOf(id) + 1 || null : null,
+      team: t.team || '', nick: nickFor(t.team), mgr: mgrLabel(t.team), isMe: !!t.isMe,
+      rec: `${w}-${l}`, wins: w, losses: l,
+      ppg: Math.round(ppgs[ti] * 10) / 10,
+      ppgRank: sortedPpg.indexOf(ppgs[ti]) + 1,
+      score: weekly[ti] == null ? null : Math.round(weekly[ti] * 10) / 10,
+      topScore: weekly[ti] != null && weekly[ti] === hi,
+      lowScore: weekly[ti] != null && weekly[ti] === lo,
+      hundo: weekly[ti] != null && weekly[ti] >= 100,
+      streak: sk >= 2 ? `${skc}${sk}` : '', streakN: sk, streakC: skc,
+      apW: a.w || 0, apL: a.l || 0,
+      apPct: apGames ? a.w / apGames : 0.5,
+      lucky: apGames ? (w / Math.max(1, w + l)) - (a.w / apGames) : 0, // + = record flatters them
+      priorTake: prev && prev.comments ? (prev.comments[id] || '') : '',
+      week: key, n: order.length,
+    };
+  });
+}
+
+/* ---- the templates -------------------------------------------------------
+   Grouped by the spec's tone gradient, each tagged with its sentence SHAPE so
+   no shape can run more than 3x in a week. `spicy` lines are rationed. Every
+   one is written in-voice: shorthand baked in, not applied as a transform,
+   because a find-and-replace pass over clean prose reads like a robot doing an
+   impression. Length target is 6-25 words, median ~15. */
+const T = {
+  // rank 1-2, someone else's team — grudging respect with a needle
+  kingOther: [
+    { s: 'verdict', f: (d) => `All he does is win win win. ${d.rec} and the rest of us are just filling out the schedule` },
+    { s: 'verdict', f: (d) => `${d.ppg} a week and it doesnt even look hard. nobody wants this matchup` },
+    { s: 'contra', when: (d) => d.ppgRank <= 2 && d.lucky >= -0.1, f: (d) => `Best record AND most points. no argument to make here, just annoying` },
+    { s: 'closer', when: (d) => d.streakC !== 'L', f: (d) => `${d.streak ? `${d.streakN} straight. ` : ''}Is anyone actually gonna challenge ${d.nick || 'this guy'}???` },
+    { s: 'verdict', f: (d) => `Sitting at 1 and the scary part is the roster still has room to get better` },
+    { s: 'verdict', when: (d) => d.streakC === 'W' && d.streakN >= 2, f: (d) => `THIS KID FUCKS. ${d.streakN} straight and nobody has an answer`, spicy: true },
+  ],
+  // rank 1-2, the owner's own team — FALSE MODESTY, per the spec. Not self-deprecation.
+  kingMine: [
+    { s: 'verdict', f: (d) => `Not gonna lie, i was actually nervous this week${d.score ? `. ${d.score}` : ''}. how silly of me` },
+    { s: 'verdict', f: (d) => `Ur commish at 1 again. i know, i know. ${d.rec} speaks for itself` },
+    { s: 'closer', f: (d) => `Didnt even feel like i needed to set a lineup. ${d.ppg} a week. will anyone step up???` },
+    { s: 'contra', f: (d) => `${d.rec} and ${d.ppg} a week. i'd complain about the schedule but that would be rude` },
+  ],
+  // 3-6 — analytical, forward-looking, matchup hype
+  contender: [
+    { s: 'verdict', when: (d) => d.wins >= d.losses, f: (d) => `${d.rec} with ${d.ppg} a week. this is a real team, just needs one signature win` },
+    { s: 'verdict', when: (d) => d.streakC !== 'L' || !d.streak, f: (d) => `Quietly ${d.streakN >= 3 ? `winners of ${d.streakN} straight` : d.streakN === 2 ? 'back to back' : 'hanging around'} and nobody is talking about u. probably how u like it` },
+    { s: 'closer', f: (d) => `Huge matchup this week to separate the real from the spuds. Will this be the year?` },
+    { s: 'contra', when: (d) => d.lucky < -0.05, f: (d) => `${d.ppgRank}${ord(d.ppgRank)} in pts but only ${d.rec}. the wins are coming, be patient` },
+    { s: 'verdict', f: (d) => `Top half of the league in scoring and it feels like ur still holding something back` },
+    { s: 'callback', when: (d) => !!d.prevRank, f: (d) => `Had u at ${d.prevRank} last week. ${d.rank < d.prevRank ? 'noted, u made me look dumb' : d.rank > d.prevRank ? 'and here we are' : 'no reason to move u'}` },
+  ],
+  // 7-9 — mock pity, one game out, and the SINCERE break lives here
+  bubble: [
+    { s: 'verdict', f: (d) => `You know whats crazy, ur right in the thick of the playoff hunt. go get it` },
+    { s: 'verdict', when: (d) => d.losses - d.wins <= 2, f: (d) => `One game out and playing like it. ${d.rec} is not dead yet ${pickA(d)}` },
+    { s: 'contra', when: (d) => d.lucky < -0.05, f: (d) => `${d.apW}-${d.apL} against the whole league but only ${d.rec}. thats bad luck, not a bad team` },
+    { s: 'verdict', f: (d) => `${d.ppg} a week is not gonna cut it but the schedule softens up. theres a path` },
+    { s: 'closer', f: (d) => `Every week feels like a must win now. can u actually string 3 together???` },
+    { s: 'blame', f: (d) => `The lineup decisions are the whole story here ${pickA(d)}. u have the roster` },
+  ],
+  // 10-12 — pure abuse, disbelief, or one-word resignation
+  basement: [
+    { s: 'verdict', when: (d) => d.losses > d.wins, f: (d) => `Idk what to say ${pickA(d)}. U stink. I mean u really do stink.`, spicy: true },
+    { s: 'verdict', when: (d) => d.score != null && d.score < 105, f: (d) => `${d.score} points last week. ${d.score}.` },
+    { s: 'closer', f: (d) => `So what is the punishment this year?` },
+    { s: 'closer', when: (d) => d.losses > d.wins, f: (d) => `${d.wins === 0 ? 'Can he go winless???' : `${d.rec}. is there a floor here???`}` },
+    { s: 'verdict', when: (d) => d.streakC === 'L' && d.streakN >= 2, f: (d) => `${pick(rng(d.team + d.week), ABSOLUTE)}. losers of ${d.streakN} straight and it isnt close` },
+    { s: 'contra', when: (d) => d.lucky > 0.08, f: (d) => `${d.ppgRank}${ord(d.ppgRank)} in pts but ${d.rec} is ${d.rec}. take it and run` },
+    { s: 'blame', f: (d) => `QB roulette is costing u games ${pickA(d)}. pick one and live with it` },
+    { s: 'blame', when: (d) => !d.hundo, f: (d) => `Havent broke a hundo in weeks. this gm has lost the room`, spicy: true },
+    { s: 'closer', when: (d) => d.streakC === 'L', f: (d) => `Absolute butt plundering again. at what point do we check if ur still logging in???`, spicy: true },
+    { s: 'verdict', f: (d) => `${d.score != null ? `${d.score} pts. ` : ''}this roster is a fucking crime scene ${pickA(d)}`, spicy: true },
+  ],
+};
+const pickA = (d) => pick(rng(d.team + 'addr' + d.week), ADDRESS);
+
+/* Shape-specific overrides that only fire when the data supports them — these
+   are the good lines, so they are tried FIRST and fall through when the fact
+   they need isn't there. */
+function specials(d) {
+  const out = [];
+  if (d.score != null && d.score < 80) out.push({ s: 'verdict', f: () => `${d.score} points last week. ${d.score}. I dont have a follow up.` });
+  if (d.topScore) out.push({ s: 'verdict', f: () => `High score of the week with ${d.score}. ${d.rec} overall but nobody wanted that matchup` });
+  if (d.lowScore && d.score != null) out.push({ s: 'verdict', f: () => `Low score of the week. ${d.score}. ${pickA(d)}, thats a full roster of guys not playing` });
+  if (d.lucky > 0.28) out.push({ s: 'contra', f: () => `${d.rec} but only ${d.apW}-${d.apL} against the field. the schedule is carrying u and u know it` });
+  if (d.lucky < -0.28) out.push({ s: 'contra', f: () => `${d.apW}-${d.apL} against the whole league and ur sat at ${d.rec}. absolute robbery` });
+  if (d.streakN >= 3) out.push({ s: 'verdict', f: () => `${d.streakN} straight ${d.streakC}s w/ avg of ${d.ppg}pts. ${d.streakC === 'W' ? 'this is a problem for everyone else' : 'the wheels are fully off'}` });
+  if (d.week >= 10 && d.rank >= d.n - 2) out.push({ s: 'closer', f: () => `Magic number for the punishment is shrinking ${pickA(d)}. what is it this year???` });
+  if (d.week >= 10 && d.rank <= 2) out.push({ s: 'verdict', f: () => `Basically clinched. the rest of this is seeding and vibes` });
+  if (d.prevRank && d.prevRank - d.rank >= 4) out.push({ s: 'callback', f: () => `Had u down at ${d.prevRank} last week. from garbage to glory, i said what i said and i was wrong` });
+  if (d.prevRank && d.rank - d.prevRank >= 4) out.push({ s: 'callback', f: () => `Was ${d.prevRank} last week. ${d.rec} now. thats a fall, not a dip` });
+  if (d.priorTake && d.prevRank) {
+    const frag = d.priorTake.split(/[.!?]/)[0].trim().slice(0, 52);
+    if (frag.length > 14) out.push({ s: 'callback', f: () => `Last week i said "${frag}". ${d.streakC === 'W' ? 'took that personally apparently' : 'standing by it'}` });
+  }
+  return out;
+}
+
+function bandFor(d) {
+  const top = Math.max(2, Math.round(d.n / 6));
+  const low = Math.max(2, Math.round(d.n / 4));
+  if (d.rank <= top) return d.isMe ? 'kingMine' : 'kingOther';
+  if (d.rank > d.n - low) return 'basement';
+  if (d.rank <= Math.ceil(d.n / 2)) return 'contender';
+  return 'bubble';
+}
+
+/* Writes the whole week at once — the caps in the spec (no shape more than 3x,
+   ~2-3 spicy lines, at most 1 emoji) are WEEK-level rules, so a per-team
+   function could not enforce them. */
+function writeWeek(facts, opts) {
+  const o = opts || {};
+  const shapeCap = 3;
+  const shapes = {};
+  let spice = 0;
+  const spiceMax = o.spicy === false ? 0 : 3;
+  const emojiOn = Math.floor(rng('emoji' + (facts[0] ? facts[0].week : 0))() * facts.length);
+  const out = {};
+
+  const used = new Set();
+
+  // ---- pass 1: the spice budget, lowest ranks first.
+  const pool0 = (d) => specials(d).concat(T[bandFor(d)]).filter((t) => !t.when || t.when(d));
+  facts.slice().reverse().forEach((d) => {
+    if (spice >= spiceMax || bandFor(d) !== 'basement') return;
+    const r = rng(`${d.team}|${d.week}|spice|${o.salt || ''}`);
+    if (r() > 0.7) return;                       // not EVERY bottom team, per the spec's rate
+    const hot = pool0(d).filter((t) => t.spicy && !used.has(t.f) && (shapes[t.s] || 0) < shapeCap);
+    if (!hot.length) return;
+    const c = pick(r, hot);
+    used.add(c.f); shapes[c.s] = (shapes[c.s] || 0) + 1; spice++;
+    out[d.id] = trail(r, String(c.f(d) || '').replace(/\s+/g, ' ').trim());
+  });
+
+  // ---- pass 2: everyone still unwritten.
+  facts.forEach((d, i) => {
+    if (out[d.id]) return;
+    const r = rng(`${d.team}|${d.week}|${o.salt || ''}`);
+    // `when` gates a template on the facts it assumes. Without it a 4-0 team
+    // sat low on all-play drew "4-0. is there a floor here???" — a line
+    // arguing with its own numbers.
+    const pool = specials(d).concat(T[bandFor(d)]).filter((t) => !t.when || t.when(d));
+    const ok = (t) => !used.has(t.f) && (shapes[t.s] || 0) < shapeCap && (!t.spicy || spice < spiceMax);
+    // Widen the net in steps rather than falling straight back to the whole
+    // pool: repeating a LINE is worse than repeating a shape.
+    const tiers = [pool.filter(ok),
+                   pool.filter((t) => !used.has(t.f) && (!t.spicy || spice < spiceMax)),
+                   pool.filter((t) => !t.spicy || spice < spiceMax),
+                   pool];
+    const usable = tiers.find((t) => t.length) || pool;
+    const chosen = pick(r, usable);
+    used.add(chosen.f);
+    shapes[chosen.s] = (shapes[chosen.s] || 0) + 1;
+    if (chosen.spicy) spice++;
+    let line = String(chosen.f(d) || '').replace(/\s+/g, ' ').trim();
+    line = trail(r, line);
+    if (i === emojiOn && r() < 0.5) line += ' 👍🏻';
+    out[d.id] = line;
+  });
+  return out;
+}
 
 /* ============================================================================
    ⛑️ TEAM HELMETS — generated, never fetched
@@ -893,8 +1157,8 @@ function paintRank() {
           <div class="pr-team"><img class="pr-helm-sm" src="${helmetURL(t.team, 30)}" alt="" width="30" height="30" /><span class="pr-tn">${esc(t.team)}</span>${mgr ? ` <span class="pr-mgr">${esc(mgr)}</span>` : ''}${t.isMe ? ' <span class="pr-you">you</span>' : ''}</div>
           ${stats.length ? `<div class="pr-stats">${esc(stats.join(' · '))}</div>` : ''}
           ${moved ? `<div class="pr-moved">Model had them <b>${modelRank}${ord(modelRank)}</b> — you moved them ${modelRank > i + 1 ? 'up' : 'down'}.</div>` : ''}
-          <textarea class="pr-take" rows="2" maxlength="${MAX_COMMENT}" placeholder="Your take on ${esc(t.team)}…"></textarea>
-          <div class="pr-count"><span>${c.length}</span>/${MAX_COMMENT}</div>
+          <textarea class="pr-take" rows="3" maxlength="${MAX_COMMENT}" placeholder="Your take on ${esc(t.team)}…"></textarea>
+          <div class="pr-count">${S.ready ? `<button type="button" class="pr-re" data-re aria-label="Rewrite the take for ${esc(t.team)}">🎲 rewrite</button>` : ''}<span class="pr-cn"><b class="pr-cnum">${c.length}</b>/${MAX_COMMENT}</span></div>
         </div>
         <div class="pr-arrows">
           <button type="button" class="pr-ar" data-up aria-label="Move ${esc(t.team)} up"${i === 0 ? ' disabled' : ''}>▲</button>
@@ -911,6 +1175,8 @@ function paintRank() {
       <p class="pr-note">Three ways out, because they suit different moments: the <b>link</b> is the thing you send, the <b>text</b> is what pastes into the group chat, and the <b>one-pager</b> is a single image that fits on one page — save it to Photos and post it.</p>
       <p class="pr-note">Sharing also locks this week in, so next week's ▲▼ movement is measured against what the league actually saw.</p>
       <div id="pr-share-out"></div>
+      <button type="button" class="pr-btn ghost" id="pr-rewrite">✍️ Rewrite all the takes</button>
+      <label class="pr-spice"><input type="checkbox" id="pr-spicy" /> <span>Let the takes get profane (a few a week)</span></label>
       <button type="button" class="pr-btn ghost" id="pr-rebuild">🔄 Rebuild from the model</button>
       <p class="pr-note">Rebuilding throws away your order and takes for ${esc(keyLabel(S.key))} and starts again from the model.</p>
     </div>
@@ -927,7 +1193,8 @@ function paintRank() {
             <li><b>Actual record — 10%.</b> Deliberately the lightest input: it's the most luck-contaminated number here. Not zero, because a league argues about records.</li>
           </ul>
           <p class="pr-warn">⚠️ <b>These weights are a judgment call, not a measurement.</b> A power ranking has no result to be graded against, so nothing here is fitted or validated the way the app's betting model is. It's a defensible starting point for an argument — which is why you can move anyone.</p>
-          <p>What it can't see: injuries, a bye week that flattered someone, a trade, who's starting a backup QB. That's what the takes are for.</p>`
+          <p>What it can't see: injuries, a bye week that flattered someone, a trade, who's starting a backup QB. That's what the takes are for.</p>
+          <p><b>The takes are pre-written drafts, not finished lines.</b> They come from templates with your numbers dropped in — there is no AI here — so they get the facts right and the joke only sometimes. Edit them. 🎲 rewrites one, ✍️ rewrites the lot.</p>`
           : `<p>Nothing has been played, so there is nothing to rank on. The model deliberately does not guess an order from draft grades or team names — it hands you the league and lets you make the call.</p>
              <p>From the first week of results onward it pre-builds a ranking each week from all-play record, points per game, recent form and actual record.</p>`}
         </div>
@@ -941,14 +1208,22 @@ function paintRank() {
     const id = li.dataset.id;
     const ta = li.querySelector('.pr-take');
     ta.value = S.comments[id] || '';
+    // Grow to fit. A pre-written take is ~15 words and the body column on a
+    // phone is narrow, so a fixed box clipped most drafts — and you cannot
+    // edit what you cannot see.
+    const grow = () => { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 2) + 'px'; };
+    grow();
     ta.addEventListener('input', () => {
       S.comments[id] = ta.value;
-      li.querySelector('.pr-count span').textContent = String(ta.value.length);
+      li.querySelector('.pr-cnum').textContent = String(ta.value.length);
+      grow();
       persist();
     });
     li.querySelector('[data-up]').onclick = () => move(id, S.order.indexOf(id) - 1);
     li.querySelector('[data-down]').onclick = () => move(id, S.order.indexOf(id) + 1);
     li.querySelector('.pr-jump').onchange = (e) => move(id, Number(e.target.value));
+    const re = li.querySelector('[data-re]');
+    if (re) re.onclick = () => { rewriteOne(id); paintRank(); };
   });
 
   const by = $('#pr-byline');
@@ -958,6 +1233,13 @@ function paintRank() {
   $('#pr-share').onclick = () => doShare('link');
   $('#pr-copy').onclick = () => doShare('text');
   $('#pr-image').onclick = () => { publish(); saveOnePager(payload()); };
+  const rw = $('#pr-rewrite');
+  if (rw) rw.onclick = () => {
+    if (!confirm('Rewrite all 12 takes? Anything you have written for this week will be replaced.')) return;
+    rewriteAll(); paintRank(); toast('Fresh drafts written');
+  };
+  const sp = $('#pr-spicy');
+  if (sp) { sp.checked = spiceOn(); sp.onchange = () => { setSpice(sp.checked); }; }
   $('#pr-rebuild').onclick = () => {
     if (!confirm(`Rebuild ${keyLabel(S.key)} from the model? Your order and takes for this week will be lost.`)) return;
     const built = buildModel(S.season);

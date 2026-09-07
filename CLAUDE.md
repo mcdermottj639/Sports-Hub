@@ -668,8 +668,51 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
       five lines.
     - The name lives in its own **`.pr-tn`** span. Reading it off `.pr-team`'s
       first child node broke the instant a crest was prepended.
+  - **✍️ Takes are PRE-WRITTEN in the owner's voice** (`writeWeek` /
+    `takeFacts` / the `T` template table), from their own documented style
+    spec: one line per team, 6-25 words with a ~15 median, five sentence
+    shapes, a tone gradient by rank, shorthand baked in, trailing dots. The
+    owner opens the lab to twelve drafts with the numbers already right and
+    edits, instead of twelve blank boxes.
+    - ⚠️ **THIS IS A TEMPLATE ENGINE, NOT A LANGUAGE MODEL.** There is no LLM
+      in this app and no backend to host one, so the voice lives in the
+      templates themselves — written in-voice, with real facts dropped in.
+      **Rewriting a template is how you change the writing; there is no prompt
+      to tune.** Consequence: it cannot be funny about anything it has no
+      input for. The spec's *blame one player* shape wants a
+      benching/injury/trade event and `/season` carries none, so it only
+      generates the weak generic form — **the first thing to improve if the
+      backend ever serves a roster-event feed.**
+    - **🚫 The carve-out is implemented, not just documented**: no slurs, no
+      racial, ethnic or religious material, nothing about rape or the
+      Holocaust. The source style sheet carried a running ethnic-nickname bit
+      and a closer in the same vein; both are ABSENT from the nickname table
+      and the closers, and nothing in the generator can assemble one. **A suite
+      check sweeps 1,400+ generated lines against a banned-term list**, so this
+      stays true rather than being a comment. Do not add them back.
+    - **Week-level rules need a week-level writer.** No shape more than 3x, at
+      most one emoji, ~2-3 profane lines — none of which a per-team function
+      could enforce, which is why `writeWeek` takes the whole league at once.
+    - ⚠️ **Profanity is a RATE, not a ceiling.** Treated as a pure cap it was
+      never spent: the shape cap fills from rank 1 downward, so by the time the
+      pass reached the basement every spicy template's shape was exhausted —
+      the register the spec puts at the BOTTOM of the table was being starved
+      by the teams at the top. The budget is now allocated in a **first pass,
+      lowest ranks first**, before the general pass runs. Killable entirely
+      with the toggle (`powerlab:spice`).
+    - **Templates carry a `when` guard** naming the facts they assume. Without
+      it a 4-0 team sat low on all-play drew *"4-0. is there a floor here???"* —
+      a line arguing with its own numbers.
+    - **Callbacks quote the ACTUAL prior take** from `powerlab:pub`, or fall
+      back to the prior RANK. A generic *"Said u were a fringe team last week"*
+      was cut: it claims the owner wrote something they may never have written,
+      and the spec is explicit that a callback references the real prior
+      comment.
+    - Seeded per team+week, so a repaint never reshuffles the writing;
+      **🎲 rewrites one line, ✍️ rewrites the week.** An edited take is never
+      overwritten — same rule as the ranking.
   - **Standalone**, so NOT part of the `APP_VERSION`/`?v=` ritual — but bump
-    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v2**)
+    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v3**)
     and its `styles.css?v=` (now 208) if you change shared CSS it leans on.
   - Verified in headless Chromium — **86 checks** (79 + 7): the luck-detector
     ranking, preseason inventing nothing, reorder by ▲▼ and by picker with the
@@ -743,6 +786,30 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
       narrowing the numeral rather than moving the column so the ranks keep a
       straight edge; and the crest as its own column squeezed the shared
       view's takes to four or five lines, so it went inline.
+  - **✍️ Pre-written takes in the owner's voice (same version).** The owner
+    supplied their own analysed style spec — *"pre write everything each week
+    so I can come in and edit"* — and it is now implemented as a template
+    engine. See Files for the mechanics, the carve-out and the limits.
+    - **Reading the output is the only way to test writing**, so a harness
+      prints three whole weeks. It found what assertions never would: **two
+      identical lines side by side** (the shape cap cannot catch a repeated
+      TEMPLATE, since two uses of one template are the same shape — a used-set
+      fixes it); a **fabricated callback** claiming the owner had written
+      something they hadn't; *"winners of 2"*, which is not how anyone says
+      it; and a **4-0 team drawing "is there a floor here???"**, a line
+      arguing with its own numbers.
+    - ⚠️ **And the fixture was lying.** It generated nine weeks of scores
+      against a fixed four-win record, so the generator was handed *"8 straight
+      Ls"* for a 3-1 team. Every guard looked broken when the DATA was
+      incoherent. **A fixture for a generator must be internally consistent or
+      it tests nothing** — outcomes now drive the record.
+    - **One real bug found by a failing assertion**, and it was mine: wrapping
+      the character counter to make room for the 🎲 button meant
+      `.pr-count span` matched the WRAPPER, so the first keystroke overwrote
+      "22/240" with "22" — the suffix destroyed itself. A structural selector
+      broke the moment the structure changed; it targets `.pr-cnum` now.
+    - Take boxes **auto-grow**: at 390px a 15-word draft clipped inside a
+      fixed two-row box, and you cannot edit what you cannot see.
   - ⚠️ **Test-harness note, the SIXTH time:** `.pr-week` is uppercased by CSS
     and `innerText` reflects `text-transform`, so two assertions on the week
     label failed against perfectly correct markup. Assert headings
@@ -4891,6 +4958,9 @@ rewrite.**
   movement.
 - `powerlab:season` — last good `/api/fantasy/football/season` payload, so the
   lab still ranks when the free-tier backend is asleep (with a stale banner).
+- `powerlab:spice` — `'0'` when the owner has turned off the rationed
+  profanity in the pre-written takes. Absent/`'1'` = on, which is the default
+  and matches the style spec's ~2-3 lines a week.
 - `sportshub:fparticles` — last good FantasyPros article list (`{at, items}`), so
   the 📰 Fantasy Advice section paints instantly and still shows something when
   the backend is asleep.
