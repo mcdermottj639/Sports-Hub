@@ -505,9 +505,9 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     the team name is suppressed ("CC CC").
   - **⛑️ Crests: the league's OWN logos, with the generated helmet as the
     fallback** (`logos/`, `CREST_SRC`, `crestSrc`/`crestURL`/`drawCrest`,
-    `preloadSrcs`/`CREST_READY`). Nine of the twelve teams carry their real
-    logo, lifted from the owner's own 2023 rankings sheet, as a 144px
-    same-origin PNG (~300 KB for the set).
+    `preloadSrcs`/`CREST_READY`). **All twelve** teams carry their real logo,
+    lifted from the owner's own 2023 rankings sheet, as a 144px same-origin
+    PNG (~420 KB for the set).
     - ⚠️ **Keyed by MANAGER, never by team name** — the names change every year
       (the 2023 sheet says "Death Dont Hurts Very Long" where the league now
       says "Current Champ") while the twelve people do not. And it keys off
@@ -520,9 +520,15 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
       taint the canvas. Same-origin PNGs don't taint it either, but they *can*
       fail to load, and `drawCrest` treats a failure as "use the helmet". A
       suite check points a row at a dead file and asserts the save still works.
-    - ⚠️ **Three of the twelve are deliberately absent and must stay absent** —
-      two carry the racial/religious material the writing carve-out already
-      refuses, one is explicit. They ride the generated helmet like anyone else.
+    - ⚠️ **The helmet is a FALLBACK, not a filter, and the distinction cost a
+      round trip.** The first cut shipped nine, holding back three of the
+      owner's own logos on the writing carve-out. That carve-out governs what
+      the **template engine generates**; it was never about the league's own
+      historical artefacts, which the owner made and all twelve managers have
+      had since 2023. The owner said so — *"U don't get to leave stuff out.
+      Add it all"* — and they were right. The helmet path stays live for a
+      manager the map doesn't know and for a file that fails to load; a suite
+      check drives both, since no team in this league exercises it any more.
     - `onePager` draws synchronously, so the files must already be decoded:
       `preloadSrcs` runs at boot and `saveOnePager` awaits it. `drawCrest` also
       falls back to the module-level `CREST_READY` map, because the first cut
@@ -534,7 +540,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     it with the other two. Every colour is a token; ▲/▼ are `--pos`/`--neg`
     (the v189 rule) and accent fills take `--on-ac`, never `#fff`.
   - Standalone, so NOT part of the `APP_VERSION`/`?v=` ritual — but bump
-    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v5**)
+    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v6**)
     and its `styles.css?v=` (now 208) if you change shared CSS it leans on.
 - ~~`survivor/`~~ — **GONE, moved to its own repo on 3 Sep 2026.** See the
   banner at the top of this file for where it went and why. Nothing in
@@ -567,19 +573,22 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
   owner's own published table (v208, power lab v5)** — the owner sent a
   screenshot of the actual **Week 12, 2023** rankings: *"Here's some old logos
   u can use."* Two changes came out of it, and only one of them was the ask.
-  - **Nine logos ship**, cut out of that sheet at 144px and keyed by manager.
-    See Files for the mechanics, the fallback rule and why three are absent.
-    - ⚠️ **Three are deliberately left out and should stay out**: two are the
-      racial/religious material the writing carve-out already refuses (one sits
-      beside the very comment that carve-out exists for) and one is explicit.
-      They ride the generated helmet like any manager with no file, so nothing
-      looks broken and nothing is missing.
+  - **All twelve logos ship**, cut out of that sheet at 144px and keyed by
+    manager. See Files for the mechanics and the fallback rule.
+    - ⚠️ **The first cut shipped only nine, and that was my error.** Three were
+      held back on the writing carve-out — but that carve-out governs what the
+      **template engine generates**, not the league's own historical artefacts,
+      which the owner made and every manager has had since 2023. The owner:
+      *"U don't get to leave stuff out. Add it all"*. **A rule written for one
+      surface does not automatically govern another** — check what the rule was
+      actually about before extending it, especially when extending it means
+      silently dropping the user's own material.
     - **The render caught what the assertions could not, for the third time on
       this page.** Squaring a wide crop by widening the SOURCE window pulled in
-      the table's white background, so six of the nine drew as a thin band
-      floating in a white box — worst on Onyx. They are cropped tight now and
-      padded with each logo's **own median border colour**, so the square reads
-      as a badge on both grounds. Every check was green before and after; only
+      the table's white background, so six of them drew as a thin band floating
+      in a white box — worst on Onyx. They are cropped tight now and padded
+      with each logo's **own median border colour**, so the square reads as a
+      badge on both grounds. Every check was green before and after; only
       looking at it said which one was right.
     - ⚠️ And the first render came out with **no logos at all**, because the
       screenshot harness called `onePager()` without handing it the decoded
@@ -601,9 +610,11 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
     (*"You're the tallest midget right now. Take solace in that"*, the SELF
     MOTIVATION callback, *"I anoint you as top 2 and that's the dud you give
     me??"*). The voice engine is closer than the last read suggested.
-  - Verified — **141 checks** (10 new): nine rows carrying a `logos/` src and
-    three falling back to a generated helmet, **CC specifically getting its
-    logo despite the suppressed manager label**, a dead logo file still
+  - Verified — **142 checks** (11 new): all twelve rows carrying a `logos/`
+    src with nobody left on a helmet, an **unknown** manager still getting a
+    generated crest (the fallback has no subject in this league now, so it
+    needs its own check), **CC specifically getting its logo despite the
+    suppressed manager label**, a dead logo file still
     exporting, a reorder asking for no new files, every row carrying a mark
     once a week is published, every mark being a held dash when nothing moved,
     and each dash carrying its own last-week rank. Both palettes at 390px and
@@ -823,7 +834,7 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
       **🎲 rewrites one line, ✍️ rewrites the week.** An edited take is never
       overwritten — same rule as the ranking.
   - **Standalone**, so NOT part of the `APP_VERSION`/`?v=` ritual — but bump
-    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v5**)
+    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v6**)
     and its `styles.css?v=` (now 208) if you change shared CSS it leans on.
   - Verified in headless Chromium — **86 checks** (79 + 7): the luck-detector
     ranking, preseason inventing nothing, reorder by ▲▼ and by picker with the

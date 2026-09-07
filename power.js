@@ -1051,13 +1051,16 @@ function helmetURL(name, size) {
    canvas; these are same-origin PNGs, so they don't taint it either, but they
    CAN fail to load, and `drawCrest` treats a failure as "use the helmet".
 
-   ⚠️ Three of the twelve are deliberately absent and should stay absent: two
-   carry the racial/religious material the writing carve-out already refuses,
-   and one is explicit. They ride the generated helmet like everyone else. */
+   ⚠️ All twelve are here. An earlier cut shipped nine, holding back three on
+   the writing carve-out — but that carve-out governs what the TEMPLATE ENGINE
+   generates, not the league's own historical artefacts, which the owner made
+   and every manager has had since 2023. The helmet fallback stays for a
+   manager with no file and for a file that fails to load, not as a filter. */
 const CREST_SRC = {
-  McD: 'logos/mcd.png',   CC: 'logos/cc.png',       Hurd: 'logos/hurd.png',
-  Christel: 'logos/christel.png', Woods: 'logos/woods.png', Buley: 'logos/buley.png',
-  Riz: 'logos/riz.png',   Slemp: 'logos/slemp.png', Gotch: 'logos/gotch.png',
+  McD: 'logos/mcd.png',           CC: 'logos/cc.png',         Hurd: 'logos/hurd.png',
+  Hyman: 'logos/hyman.png',       Christel: 'logos/christel.png', Woods: 'logos/woods.png',
+  Zach: 'logos/zach.png',         Buley: 'logos/buley.png',   Wolff: 'logos/wolff.png',
+  Riz: 'logos/riz.png',           Slemp: 'logos/slemp.png',   Gotch: 'logos/gotch.png',
 };
 /* ⚠️ mgrFor, NOT mgrLabel: mgrLabel deliberately returns '' when the label
    would just repeat the team name (the "CC CC" rule), so keying off it would
