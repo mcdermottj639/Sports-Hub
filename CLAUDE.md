@@ -494,18 +494,47 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     own team name, editable in the header, `b` in the payload). *"Someone
     shared their power rankings"* is useless in a twelve-person league — the
     first thing a recipient needs is whose take it is.
-  - **Only ACTUAL movement renders a marker.** A team that held its spot shows
-    nothing; a bare "—" under a rank number reads as a glitch rather than as
-    "held" (the v196 stray-dash lesson), and the header says so. Dates are
-    formatted (`niceDate`) — a raw `2026-09-07` reads like a database field.
-    A manager label that just repeats the team name is suppressed ("CC CC").
+  - **Movement follows the owner's OWN published table**: a team that held its
+    spot reads **`—`**, and every mark carries a **`LW N`** last-week rank
+    beside it. `moveStr`/`moveCls`/`lastWk`, gated on `hasMove` = *a week has
+    been published at all* (`null`), never on *the team moved* (`0`).
+    ⚠️ v208 shipped the dash's ABSENCE, on the v196 stray-dash reasoning; that
+    reasoning is about a dash ALONE, and the last-week line is the context that
+    makes it read as "held". Dates are formatted (`niceDate`) — a raw
+    `2026-09-07` reads like a database field. A manager label that just repeats
+    the team name is suppressed ("CC CC").
+  - **⛑️ Crests: the league's OWN logos, with the generated helmet as the
+    fallback** (`logos/`, `CREST_SRC`, `crestSrc`/`crestURL`/`drawCrest`,
+    `preloadSrcs`/`CREST_READY`). Nine of the twelve teams carry their real
+    logo, lifted from the owner's own 2023 rankings sheet, as a 144px
+    same-origin PNG (~300 KB for the set).
+    - ⚠️ **Keyed by MANAGER, never by team name** — the names change every year
+      (the 2023 sheet says "Death Dont Hurts Very Long" where the league now
+      says "Current Champ") while the twelve people do not. And it keys off
+      **`mgrFor`, NOT `mgrLabel`**: `mgrLabel` deliberately returns `''` when
+      the label would just repeat the team name (the "CC CC" rule), so keying
+      off it would have silently denied CC — and only CC — its own logo.
+    - ⚠️ **It is an OVERRIDE, not a replacement.** A manager with no file falls
+      back to the generated helmet, and that is what keeps the export
+      unbreakable: a generated crest needs no network, cannot 404 and cannot
+      taint the canvas. Same-origin PNGs don't taint it either, but they *can*
+      fail to load, and `drawCrest` treats a failure as "use the helmet". A
+      suite check points a row at a dead file and asserts the save still works.
+    - ⚠️ **Three of the twelve are deliberately absent and must stay absent** —
+      two carry the racial/religious material the writing carve-out already
+      refuses, one is explicit. They ride the generated helmet like anyone else.
+    - `onePager` draws synchronously, so the files must already be decoded:
+      `preloadSrcs` runs at boot and `saveOnePager` awaits it. `drawCrest` also
+      falls back to the module-level `CREST_READY` map, because the first cut
+      required the caller to hand one in and any caller that forgot silently
+      got helmets with no error.
   - Mirrors index.html's inline palette script (sets BOTH `data-palette` and
     `data-theme`), so it rides the app's token layer and looks like the app in
     both palettes. ⚠️ That makes a **third** copy of `PALETTE_MIGRATE` — change
     it with the other two. Every colour is a token; ▲/▼ are `--pos`/`--neg`
     (the v189 rule) and accent fills take `--on-ac`, never `#fff`.
   - Standalone, so NOT part of the `APP_VERSION`/`?v=` ritual — but bump
-    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v1**)
+    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v5**)
     and its `styles.css?v=` (now 208) if you change shared CSS it leans on.
 - ~~`survivor/`~~ — **GONE, moved to its own repo on 3 Sep 2026.** See the
   banner at the top of this file for where it went and why. Nothing in
@@ -533,6 +562,52 @@ Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
 Current version as of this writing: **v208** (backend **b14-football-boxplayer**).
+
+- **⛑️ The league's real logos, and the trending column corrected against the
+  owner's own published table (v208, power lab v5)** — the owner sent a
+  screenshot of the actual **Week 12, 2023** rankings: *"Here's some old logos
+  u can use."* Two changes came out of it, and only one of them was the ask.
+  - **Nine logos ship**, cut out of that sheet at 144px and keyed by manager.
+    See Files for the mechanics, the fallback rule and why three are absent.
+    - ⚠️ **Three are deliberately left out and should stay out**: two are the
+      racial/religious material the writing carve-out already refuses (one sits
+      beside the very comment that carve-out exists for) and one is explicit.
+      They ride the generated helmet like any manager with no file, so nothing
+      looks broken and nothing is missing.
+    - **The render caught what the assertions could not, for the third time on
+      this page.** Squaring a wide crop by widening the SOURCE window pulled in
+      the table's white background, so six of the nine drew as a thin band
+      floating in a white box — worst on Onyx. They are cropped tight now and
+      padded with each logo's **own median border colour**, so the square reads
+      as a badge on both grounds. Every check was green before and after; only
+      looking at it said which one was right.
+    - ⚠️ And the first render came out with **no logos at all**, because the
+      screenshot harness called `onePager()` without handing it the decoded
+      map. `drawCrest` reads `CREST_READY` as well now — a caller that forgets
+      the preload gets helmets and no error, which is exactly how this hid.
+  - **🚨 The screenshot also says v208 got the trending column wrong.** v208
+    rendered *nothing* for a team that held its spot, on the reasoning that a
+    bare "—" reads as a glitch (the v196 stray-dash lesson). The owner's own
+    published table prints the dash — **and a "Last Week: N" beside every
+    mark**. That second half is what makes the first legible, and v208 shipped
+    the dash's absence instead of its context. Both render now (`—` plus
+    `LW 7`) on the editor, the shared view and the one-pager.
+    - ⚠️ **The general lesson: when a design decision has a real precedent,
+      read the precedent.** The v196 reasoning was sound about a dash ALONE and
+      was applied to a column that was never going to be alone.
+  - **What else the screenshot confirmed, so nobody re-derives it:** the twelve
+    owner cards in `OWNERS` match the real sheet exactly, and several v208
+    templates already reproduce the owner's real Week 12 lines nearly verbatim
+    (*"You're the tallest midget right now. Take solace in that"*, the SELF
+    MOTIVATION callback, *"I anoint you as top 2 and that's the dud you give
+    me??"*). The voice engine is closer than the last read suggested.
+  - Verified — **141 checks** (10 new): nine rows carrying a `logos/` src and
+    three falling back to a generated helmet, **CC specifically getting its
+    logo despite the suppressed manager label**, a dead logo file still
+    exporting, a reorder asking for no new files, every row carrying a mark
+    once a week is published, every mark being a held dash when nothing moved,
+    and each dash carrying its own last-week rank. Both palettes at 390px and
+    1280px, no overflow, nothing spilling the viewport, no console errors.
 
 - **🏆 Power Rankings Lab — the league's weekly rankings, pre-built then argued
   with (v208)** — the owner: *"I want a weekly power rankings lab for the
@@ -748,7 +823,7 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
       **🎲 rewrites one line, ✍️ rewrites the week.** An edited take is never
       overwritten — same rule as the ranking.
   - **Standalone**, so NOT part of the `APP_VERSION`/`?v=` ritual — but bump
-    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v4**)
+    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v5**)
     and its `styles.css?v=` (now 208) if you change shared CSS it leans on.
   - Verified in headless Chromium — **86 checks** (79 + 7): the luck-detector
     ranking, preseason inventing nothing, reorder by ▲▼ and by picker with the

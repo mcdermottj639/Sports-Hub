@@ -207,11 +207,15 @@ function moveFor(prev, id, idx) {
   if (was < 0) return null;
   return was - idx; // positive = climbed
 }
-/* Only ACTUAL movement renders. A bare "—" under a rank number reads as a
-   glitch rather than as "held its spot" — the v196 stray-dash lesson — and
-   every real power-ranking column omits it too. */
-const moveStr = (m) => (!m ? '' : m > 0 ? `▲${m}` : `▼${-m}`);
-const hasMove = (m) => !!m;
+/* The owner's own published table (Week 12, 2023) prints a "—" for a team
+   that held AND a "Last week: N" beside every mark — and the second is what
+   makes the first legible. v208 shipped a bare dash with no last-week line,
+   which is the v196 stray-dash problem; the fix is the context, not the
+   silence. `null` (no published prior at all) still renders nothing. */
+const moveStr = (m) => (m == null ? '' : m === 0 ? '—' : m > 0 ? `▲${m}` : `▼${-m}`);
+const moveCls = (m) => (m == null ? '' : m === 0 ? 'flat' : m > 0 ? 'up' : 'down');
+const hasMove = (m) => m != null;
+const lastWk = (m, i) => (m == null ? '' : `LW ${i + 1 + m}`);
 
 /* ---------------------------------------------------------------- state --- */
 function restoreOrBuild() {
@@ -347,7 +351,7 @@ function shareText() {
     const [name, rec, ppg, note, , mv, own] = row;
     const bits = [rec];
     if (ppg != null) bits.push(`${ppg} PPG`);
-    const last = hasMove(mv) ? ` — Last week: ${i + 1 + mv}` : '';
+    const last = hasMove(mv) ? ` — Last week: ${i + 1 + mv}` : '';  // 0 = held, still worth printing
     L.push(`${i + 1}. ${name}${own ? ` — ${own}` : ''} (${bits.join(', ')})${last}`);
     if (note) L.push(note);
     L.push('');
@@ -1035,6 +1039,69 @@ function helmetURL(name, size) {
   return HELM_CACHE.get(k);
 }
 
+/* ---------------------------------------------------------------- crests ---
+   The league's own historical logos, keyed by MANAGER — never by team name,
+   because the names change every year (the 2023 sheet these came off says
+   "Death Dont Hurts Very Long" where the league now says "Current Champ")
+   while the twelve people do not.
+
+   ⚠️ They are an OVERRIDE, not a replacement: any manager without a file
+   falls back to the generated helmet, which is why the export can still never
+   fail. A generated crest needs no network, cannot 404 and cannot taint the
+   canvas; these are same-origin PNGs, so they don't taint it either, but they
+   CAN fail to load, and `drawCrest` treats a failure as "use the helmet".
+
+   ⚠️ Three of the twelve are deliberately absent and should stay absent: two
+   carry the racial/religious material the writing carve-out already refuses,
+   and one is explicit. They ride the generated helmet like everyone else. */
+const CREST_SRC = {
+  McD: 'logos/mcd.png',   CC: 'logos/cc.png',       Hurd: 'logos/hurd.png',
+  Christel: 'logos/christel.png', Woods: 'logos/woods.png', Buley: 'logos/buley.png',
+  Riz: 'logos/riz.png',   Slemp: 'logos/slemp.png', Gotch: 'logos/gotch.png',
+};
+/* ⚠️ mgrFor, NOT mgrLabel: mgrLabel deliberately returns '' when the label
+   would just repeat the team name (the "CC CC" rule), so keying off it would
+   have silently left CC — and only CC — on a generated helmet forever. */
+const crestSrc = (team) => CREST_SRC[mgrFor(team) || ''] || null;
+/* What a DOM row points an <img> at. */
+const crestURL = (team, size) => crestSrc(team) || helmetURL(team, size);
+
+/* The one-pager draws synchronously, so the files have to already be decoded
+   when it runs — hence a preload that resolves on error too (a missing file
+   must not hang the save). Kicked off at boot so it is normally warm. */
+const CREST_IMG = new Map();   // src -> Promise<Image|null>
+const CREST_READY = new Map();  // src -> Image, once decoded
+function preloadSrcs(srcs) {
+  return Promise.all([...new Set(srcs.filter(Boolean))].map((src) => {
+    if (CREST_IMG.has(src)) return CREST_IMG.get(src);
+    const pr = new Promise((res) => {
+      const im = new Image();
+      im.onload = () => { CREST_READY.set(src, im); res(im); };
+      im.onerror = () => res(null);
+      im.src = src;
+    });
+    CREST_IMG.set(src, pr);
+    return pr;
+  }));
+}
+const preloadCrests = (names) => preloadSrcs((names || []).map(crestSrc));
+/* Draw a crest into a square box: the real logo when it loaded, the generated
+   helmet otherwise. The logo is clipped to a rounded square so it reads as a
+   badge beside the helmets rather than as a pasted screenshot. */
+function drawCrest(ctx, name, x, y, size, loaded) {
+  const src = crestSrc(name);
+  // ⚠️ Fall back to the module-level decoded map. onePager() draws
+  // synchronously, and the first cut required the caller to hand it a map —
+  // so any caller that forgot silently got helmets and nothing errored.
+  const im = src && ((loaded && loaded.get(src)) || CREST_READY.get(src));
+  if (!im) { ctx.drawImage(helmetCanvas(name, size), x, y, size, size); return; }
+  ctx.save();
+  rr(ctx, x, y, size, size, Math.round(size * 0.18));
+  ctx.clip();
+  ctx.drawImage(im, x, y, size, size);
+  ctx.restore();
+}
+
 /* ============================================================================
    🖼️ THE ONE-PAGER
    ----------------------------------------------------------------------------
@@ -1116,7 +1183,7 @@ function rr(ctx, x, y, w, h, r) {
 
 /* Builds the image. `p` is the same payload the share link carries, so the
    one-pager and the link can never disagree about what was published. */
-function onePager(p) {
+function onePager(p, loaded) {
   const C = paletteInk();
   const rows = p.o || [];
   const w = OP.w;
@@ -1185,21 +1252,23 @@ function onePager(p) {
     // were touching it in the first pass. Narrow the numeral instead of moving
     // the whole column, so the ranks still form a straight edge.
     if (i + 1 >= 10) ctx.font = F(top ? 42 : 34, 900);
-    const numY = y + rh / 2 + (mv ? 2 : 14);
+    const numY = y + rh / 2 + (mv != null ? 2 : 14);
     ctx.fillText(String(i + 1), L + 44, numY);
     // Movement rides under its OWN number, not the bottom of the row — on a
     // two-line row anchoring it to the row bottom pulled it away from the
-    // number it belongs to.
-    if (mv) {
-      ctx.fillStyle = mv > 0 ? C.pos : C.neg;
+    // number it belongs to. A held team prints "—" in muted, as the owner's
+    // own published table does.
+    if (mv != null) {
+      ctx.fillStyle = mv === 0 ? C.muted : mv > 0 ? C.pos : C.neg;
       ctx.font = F(18, 800);
-      ctx.fillText(`${mv > 0 ? '▲' : '▼'}${Math.abs(mv)}`, L + 44, numY + 26);
+      ctx.fillText(moveStr(mv), L + 44, numY + 26);
     }
     ctx.textAlign = 'left';
 
-    // Crest between the rank and the name. Same generator the web rows use.
+    // Crest between the rank and the name — the league's own logo where one
+    // exists, the generated helmet everywhere else.
     const hs = 74;
-    ctx.drawImage(helmetCanvas(name, hs), L + 80, y + (rh - hs) / 2, hs, hs);
+    drawCrest(ctx, name, L + 80, y + (rh - hs) / 2, hs, loaded);
 
     const tx = L + 166;
     const statW = 210;
@@ -1256,7 +1325,16 @@ const canvasBlob = (cv) => new Promise((res) => cv.toBlob(res, 'image/png'));
    gets the download. If both are refused the image is shown inline, which on
    iOS is long-press → Save to Photos, i.e. still a save. */
 async function saveOnePager(p) {
-  const cv = onePager(p);
+  // The crests must be decoded before the synchronous draw. A file that never
+  // answers resolves to null and that row falls back to its helmet, so a dead
+  // logo can slow the save but can never break it.
+  const names = (p.o || []).map((r) => r[0]);
+  await preloadCrests(names);
+  const loaded = new Map();
+  for (const src of new Set(names.map(crestSrc).filter(Boolean))) {
+    loaded.set(src, await CREST_IMG.get(src));
+  }
+  const cv = onePager(p, loaded);
   const blob = await canvasBlob(cv);
   if (!blob) { toast("Couldn't build the image"); return; }
   const fname = `power-rankings-${(p.l || '').toLowerCase().replace(/\s+/g, '-') || 'week'}.png`;
@@ -1324,7 +1402,7 @@ function paintRank() {
         ? `Pre-built from ${S.key} week${S.key === 1 ? '' : 's'} of results — then it's yours. Reorder anyone, write the take, send it to the league.`
         : `No games have been played yet, so the model has nothing to rank on and has not invented an order. Drag the league into whatever order you like and write the takes — this is the preseason edition.`}</p>
       ${S.stale ? `<p class="pr-warn">⚠️ Showing the last league data this device saved — the backend didn't answer just now. Records and points may be a week behind.</p>` : ''}
-      ${prev ? `<p class="pr-note">▲▼ is movement since <b>${esc(prev.label || 'last week')}</b>, the last set you shared. A team that held its spot shows nothing.</p>`
+      ${prev ? `<p class="pr-note">▲▼ is movement since <b>${esc(prev.label || 'last week')}</b>, the last set you shared. A team that held its spot reads <b>—</b>.</p>`
              : `<p class="pr-note">No movement arrows yet — they appear once you've shared a set and a new week lands.</p>`}
       <label class="pr-by">
         <span>Published by</span>
@@ -1358,10 +1436,10 @@ function paintRank() {
             <span class="pr-n">${i + 1}</span>
             <select class="pr-jump" aria-label="Move ${esc(t.team)} to position">${opts}</select>
           </label>
-          ${hasMove(mv) ? `<span class="pr-mv ${mv > 0 ? 'up' : 'down'}">${moveStr(mv)}</span>` : ''}
+          ${hasMove(mv) ? `<span class="pr-mv ${moveCls(mv)}">${moveStr(mv)}</span><span class="pr-lw">${lastWk(mv, i)}</span>` : ''}
         </div>
         <div class="pr-body">
-          <div class="pr-team"><img class="pr-helm-sm" src="${helmetURL(t.team, 30)}" alt="" width="30" height="30" /><span class="pr-tn">${esc(t.team)}</span>${mgr ? ` <span class="pr-mgr">${esc(mgr)}</span>` : ''}${t.isMe ? ' <span class="pr-you">you</span>' : ''}</div>
+          <div class="pr-team"><img class="pr-helm-sm" src="${crestURL(t.team, 30)}" alt="" width="30" height="30" /><span class="pr-tn">${esc(t.team)}</span>${mgr ? ` <span class="pr-mgr">${esc(mgr)}</span>` : ''}${t.isMe ? ' <span class="pr-you">you</span>' : ''}</div>
           ${stats.length ? `<div class="pr-stats">${esc(stats.join(' · '))}</div>` : ''}
           ${moved ? `<div class="pr-moved">Model had them <b>${modelRank}${ord(modelRank)}</b> — you moved them ${modelRank > i + 1 ? 'up' : 'down'}.</div>` : ''}
           <textarea class="pr-take" rows="3" maxlength="${MAX_COMMENT}" placeholder="Your take on ${esc(t.team)}…"></textarea>
@@ -1480,10 +1558,10 @@ function paintShared(p) {
       <li class="pr-row ro${i < 3 ? ' podium p' + (i + 1) : ''}">
         <div class="pr-rank">
           <span class="pr-n big">${i + 1}</span>
-          ${hasMove(mv) ? `<span class="pr-mv ${mv > 0 ? 'up' : 'down'}">${moveStr(mv)}</span>` : ''}
+          ${hasMove(mv) ? `<span class="pr-mv ${moveCls(mv)}">${moveStr(mv)}</span><span class="pr-lw">${lastWk(mv, i)}</span>` : ''}
         </div>
         <div class="pr-body">
-          <div class="pr-team"><img class="pr-helm-sm" src="${helmetURL(name, 34)}" alt="" width="34" height="34" /><span class="pr-tn">${esc(name)}</span>${mgr ? ` <span class="pr-mgr">${esc(mgr)}</span>` : ''}</div>
+          <div class="pr-team"><img class="pr-helm-sm" src="${crestURL(name, 34)}" alt="" width="34" height="34" /><span class="pr-tn">${esc(name)}</span>${mgr ? ` <span class="pr-mgr">${esc(mgr)}</span>` : ''}</div>
           ${stats.length ? `<div class="pr-stats">${esc(stats.join(' · '))}</div>` : ''}
           ${note ? `<div class="pr-take-ro">${esc(note)}</div>` : ''}
           ${moved ? `<div class="pr-moved">Numbers had them ${modelRank}${ord(modelRank)}.</div>` : ''}
@@ -1554,6 +1632,11 @@ async function boot() {
   restoreOrBuild();
   paintRank();
 }
+
+/* Warm the league's own crests immediately — they are tiny, same-origin and
+   cacheable, and having them decoded before the one-pager runs turns its
+   await into a no-op. */
+preloadSrcs(Object.values(CREST_SRC));
 
 window.addEventListener('hashchange', boot);
 boot();
