@@ -397,6 +397,251 @@ async function doShare(kind) {
   paintRank();
 }
 
+
+/* ============================================================================
+   🖼️ THE ONE-PAGER
+   ----------------------------------------------------------------------------
+   The scrolling page is the artefact you LINK. This is the one you POST — a
+   single image, sized to fit on one page, that a league-mate saves to Photos
+   and drops in the group chat without opening anything.
+
+   It is drawn on a <canvas> rather than screenshotted from the DOM because a
+   real PNG is the only form of this that survives the trip: it can be saved,
+   it renders inline in every messaging app, and it needs no browser, no
+   backend and no link. Nothing is loaded to do it — hand-drawn, no library.
+
+   ⚠️ Colours are READ FROM THE LIVE PALETTE (getComputedStyle on :root), not
+   hardcoded, so the image matches the app the maker is looking at and the
+   token rules still hold — accent fills take --on-ac, movement is --pos/--neg.
+   ========================================================================== */
+
+const OP = {
+  w: 1080, pad: 56, row: 96, gap: 10,
+  head: 200, foot: 112,
+};
+
+function paletteInk() {
+  const cs = getComputedStyle(document.documentElement);
+  const g = (n, f) => (cs.getPropertyValue(n) || '').trim() || f;
+  return {
+    bg: g('--bg', '#faf7f0'), card: g('--card', '#fff'), card2: g('--card-2', '#efe9dd'),
+    text: g('--text', '#1c1a15'), muted: g('--muted', '#7a7466'), line: g('--line', '#e5dece'),
+    accent: g('--accent', '#0b7a5c'), pos: g('--pos', '#1d7a52'), neg: g('--neg', '#b0332a'),
+    gold: g('--live', '') || g('--accent', '#b8942f'), onAc: g('--on-ac', '#1a1509'),
+  };
+}
+
+/* Wrap to at most `max` lines, ellipsing only the last one. Truncating a take
+   at one line throws away the content the page exists to carry, so a row sizes
+   itself to its take rather than the other way round. */
+function wrap(ctx, s, width, maxLines) {
+  const words = String(s || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let cur = '';
+  for (const word of words) {
+    const next = cur ? cur + ' ' + word : word;
+    if (ctx.measureText(next).width <= width) { cur = next; continue; }
+    if (cur) lines.push(cur);
+    cur = word;
+    if (lines.length === maxLines - 1) break;
+  }
+  if (lines.length < maxLines && cur) lines.push(cur);
+  // Anything left over gets folded into the last line and ellipsed.
+  const used = lines.join(' ').split(/\s+/).filter(Boolean).length;
+  if (used < words.length) {
+    lines[lines.length - 1] = fit(ctx, words.slice(lines.slice(0, -1).join(' ').split(/\s+/).filter(Boolean).length).join(' '), width);
+  }
+  return lines;
+}
+
+/* Trim a string to fit a pixel width, with an ellipsis. Canvas has no
+   text-overflow, so this is the manual version of it. */
+function fit(ctx, s, max) {
+  s = String(s || '');
+  if (ctx.measureText(s).width <= max) return s;
+  let lo = 0, hi = s.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (ctx.measureText(s.slice(0, mid) + '…').width <= max) lo = mid; else hi = mid - 1;
+  }
+  return s.slice(0, lo).replace(/[\s,;:.\-]+$/, '') + '…';
+}
+
+function rr(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/* Builds the image. `p` is the same payload the share link carries, so the
+   one-pager and the link can never disagree about what was published. */
+function onePager(p) {
+  const C = paletteInk();
+  const rows = p.o || [];
+  const w = OP.w;
+  const F = (px, wt = 400) => `${wt} ${px}px Archivo, -apple-system, "Segoe UI", system-ui, sans-serif`;
+
+  // Measure pass: lay every take out first, so the canvas ends up exactly as
+  // tall as the content needs and no row is clipped.
+  const meas = document.createElement('canvas').getContext('2d');
+  meas.font = F(23, 400);
+  const takeW = w - OP.pad * 2 - 104 - 30;
+  const lines = rows.map((r) => (r[3] ? wrap(meas, r[3], takeW, 2) : []));
+  const heights = lines.map((ls) => OP.row + Math.max(0, ls.length - 1) * 30);
+  const h = OP.pad + OP.head + heights.reduce((a, b) => a + b + OP.gap, 0) + OP.foot + OP.pad;
+
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, w, h);
+
+  const L = OP.pad, R = w - OP.pad, CW = R - L;
+  let y = OP.pad;
+
+  // ---- header
+  ctx.fillStyle = C.accent;
+  ctx.font = F(22, 800);
+  ctx.fillText(String(p.l || '').toUpperCase(), L, y + 22);
+  if (p.b) {
+    ctx.fillStyle = C.muted;
+    ctx.textAlign = 'right';
+    ctx.fillText(fit(ctx, `${p.b}`.toUpperCase(), CW * 0.5), R, y + 22);
+    ctx.textAlign = 'left';
+  }
+  y += 54;
+  ctx.fillStyle = C.text;
+  ctx.font = F(64, 900);
+  ctx.fillText('Power Rankings', L, y + 50);
+  y += 78;
+  ctx.fillStyle = C.muted;
+  ctx.font = F(24, 500);
+  ctx.fillText(p.d ? niceDate(p.d) : '', L, y + 20);
+  y += 44;
+  ctx.fillStyle = C.accent;
+  ctx.fillRect(L, y, CW, 4);
+  y += 24;
+
+  // ---- rows
+  rows.forEach((row, i) => {
+    const [name, rec, ppg, , , mv] = row;
+    const top = i === 0;
+    const rh = heights[i];
+
+    ctx.fillStyle = C.card;
+    rr(ctx, L, y, CW, rh, 16); ctx.fill();
+    ctx.strokeStyle = top ? C.accent : C.line;
+    ctx.lineWidth = top ? 3 : 1.5;
+    rr(ctx, L, y, CW, rh, 16); ctx.stroke();
+
+    // rank
+    ctx.fillStyle = i < 3 ? C.accent : C.text;
+    ctx.font = F(top ? 48 : 40, 900);
+    ctx.textAlign = 'center';
+    const numY = y + rh / 2 + (mv ? 2 : 14);
+    ctx.fillText(String(i + 1), L + 52, numY);
+    // Movement rides under its OWN number, not the bottom of the row — on a
+    // two-line row anchoring it to the row bottom pulled it away from the
+    // number it belongs to.
+    if (mv) {
+      ctx.fillStyle = mv > 0 ? C.pos : C.neg;
+      ctx.font = F(18, 800);
+      ctx.fillText(`${mv > 0 ? '▲' : '▼'}${Math.abs(mv)}`, L + 52, numY + 26);
+    }
+    ctx.textAlign = 'left';
+
+    const tx = L + 104;
+    const statW = 210;
+    // team + manager
+    ctx.fillStyle = C.text;
+    ctx.font = F(30, 800);
+    const mgr = mgrLabel(name);
+    const nameW = ctx.measureText(fit(ctx, name, CW - 104 - statW - 20)).width;
+    ctx.fillText(fit(ctx, name, CW - 104 - statW - 20), tx, y + 38);
+    if (mgr) {
+      ctx.fillStyle = C.muted;
+      ctx.font = F(20, 700);
+      ctx.fillText(mgr, tx + nameW + 12, y + 37);
+    }
+    // record · ppg, right-aligned so the numbers form a column
+    const bits = [rec, ppg != null ? `${ppg} ppg` : ''].filter(Boolean).join('  ·  ');
+    ctx.fillStyle = C.muted;
+    ctx.font = F(22, 700);
+    ctx.textAlign = 'right';
+    ctx.fillText(bits, R - 22, y + 36);
+    ctx.textAlign = 'left';
+    // the take — the editorial voice is the point of the page, so it wraps
+    ctx.fillStyle = C.text;
+    ctx.font = F(23, 400);
+    lines[i].forEach((ln, k) => ctx.fillText(ln, tx, y + 74 + k * 30));
+    y += rh + OP.gap;
+  });
+
+  // ---- footer
+  y += 14;
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(R, y); ctx.stroke();
+  y += 34;
+  ctx.fillStyle = C.muted;
+  ctx.font = F(20, 500);
+  const note = p.r ? 'Ranked on all-play record, scoring and recent form — then argued with by hand.'
+                   : 'Preseason — no games played yet.';
+  const mark = 'Sports-Hub';
+  ctx.fillText(note, L, y);
+  // These two ran into each other in the first render. Measure, and drop the
+  // mark onto its own line rather than letting it overprint the sentence.
+  const fits = ctx.measureText(note).width + ctx.measureText(mark).width + 40 <= CW;
+  ctx.textAlign = 'right';
+  ctx.fillText(mark, R, fits ? y : y + 28);
+  ctx.textAlign = 'left';
+  return cv;
+}
+
+const canvasBlob = (cv) => new Promise((res) => cv.toBlob(res, 'image/png'));
+
+/* Save it the way each platform actually allows. iOS gives no reliable
+   <a download> for a blob, but it does take a File through the share sheet —
+   which is also the shortest path to "post it in the league chat". Desktop
+   gets the download. If both are refused the image is shown inline, which on
+   iOS is long-press → Save to Photos, i.e. still a save. */
+async function saveOnePager(p) {
+  const cv = onePager(p);
+  const blob = await canvasBlob(cv);
+  if (!blob) { toast("Couldn't build the image"); return; }
+  const fname = `power-rankings-${(p.l || '').toLowerCase().replace(/\s+/g, '-') || 'week'}.png`;
+  const file = new File([blob], fname, { type: 'image/png' });
+
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: `Power Rankings — ${p.l || ''}` });
+      return;
+    } catch (e) {
+      if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return;
+    }
+  }
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    toast('Image saved');
+    return;
+  } catch (_) {}
+  const host = $('#pr-share-out');
+  if (host) {
+    host.innerHTML = `<p class="pr-note">Long-press the image to save it.</p>`;
+    const img = new Image();
+    img.src = cv.toDataURL('image/png');
+    img.className = 'pr-op-img';
+    host.appendChild(img);
+  }
+}
+
 /* --------------------------------------------------------------- screens -- */
 function show(id) {
   ['#pr-load', '#pr-rank', '#pr-shared'].forEach((s) => { const n = $(s); if (n) n.hidden = s !== id; });
@@ -486,6 +731,8 @@ function paintRank() {
     <div class="pr-card pr-actions">
       <button type="button" class="pr-btn primary" id="pr-share">📤 Share to the league</button>
       <button type="button" class="pr-btn" id="pr-copy">📋 Copy as text</button>
+      <button type="button" class="pr-btn" id="pr-image">🖼️ Save the one-pager</button>
+      <p class="pr-note">Three ways out, because they suit different moments: the <b>link</b> is the thing you send, the <b>text</b> is what pastes into the group chat, and the <b>one-pager</b> is a single image that fits on one page — save it to Photos and post it.</p>
       <p class="pr-note">Sharing also locks this week in, so next week's ▲▼ movement is measured against what the league actually saw.</p>
       <div id="pr-share-out"></div>
       <button type="button" class="pr-btn ghost" id="pr-rebuild">🔄 Rebuild from the model</button>
@@ -534,6 +781,7 @@ function paintRank() {
 
   $('#pr-share').onclick = () => doShare('link');
   $('#pr-copy').onclick = () => doShare('text');
+  $('#pr-image').onclick = () => { publish(); saveOnePager(payload()); };
   $('#pr-rebuild').onclick = () => {
     if (!confirm(`Rebuild ${keyLabel(S.key)} from the model? Your order and takes for this week will be lost.`)) return;
     const built = buildModel(S.season);
@@ -587,11 +835,13 @@ function paintShared(p) {
     </div>
     <ol class="pr-list">${rows}</ol>
     <div class="pr-card pr-actions">
+      <button type="button" class="pr-btn" id="pr-ro-image">🖼️ Save as a one-page image</button>
       <button type="button" class="pr-btn" id="pr-ro-copy">📋 Copy these rankings</button>
       <div id="pr-share-out"></div>
       <p class="pr-note">Want to make your own? <a href="power.html">Open the Power Rankings Lab</a> — your rankings stay on your own device.</p>
     </div>`;
 
+  $('#pr-ro-image').onclick = () => saveOnePager(p);
   $('#pr-ro-copy').onclick = async () => {
     const L = [`🏆 POWER RANKINGS — ${p.l || ''}`, p.b ? `${p.b}'s rankings` : '', ''].filter((x, i) => i !== 1 || x);
     (p.o || []).forEach((row, i) => {

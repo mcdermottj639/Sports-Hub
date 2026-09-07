@@ -207,3 +207,8 @@ body.pr-page {
 .pr-row.p1 { border-color: var(--accent); box-shadow: var(--glow); }
 .pr-row.p1 .pr-n { font-size: 38px; }
 .pr-row.p1 .pr-team { font-size: 18px; }
+
+/* The last-resort one-pager view: no share sheet and no download, so the image
+   goes on screen instead — on iOS that is long-press → Save to Photos, which
+   is still a save. */
+.pr-op-img { display: block; width: 100%; margin-top: 8px; border: 1px solid var(--line); border-radius: 10px; }

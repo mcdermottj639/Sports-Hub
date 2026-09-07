@@ -624,6 +624,28 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
       specifically: an accent fill takes `--on-ac` (measured dark in both
       palettes by the suite, never `#fff`), and ▲/▼ are `--pos`/`--neg`, never
       the accent — the v189 rule.
+  - **🖼️ The one-pager** (`onePager` / `saveOnePager`) — a single PNG drawn on
+    a `<canvas>`, offered in BOTH the editor and the shared view. **The link is
+    what you send; the image is what you post.** A fantasy league does not
+    share a scrolling web page — it drops a picture in the group chat — and a
+    real PNG is the only form that survives that trip: saveable to Photos,
+    inline in every messaging app, needing no browser, no backend and no link.
+    - Drawn by hand, **no library**. It takes the same payload the share link
+      carries, so the image and the link can never disagree about what was
+      published.
+    - **Colours are read from the LIVE palette** (`paletteInk`, via
+      `getComputedStyle` on `:root`), so it matches the app the maker is
+      looking at and the token rules still hold. ⚠️ Never hardcode a colour in
+      here — it would be wrong in one of the two palettes, and a canvas is
+      invisible to the stylesheet that would otherwise have fixed it.
+    - **Rows size themselves to their take** (measure pass → wrap to 2 lines →
+      compute the canvas height). Truncating every take to one line threw away
+      the content the page exists to carry.
+    - **Saving, in the order each platform actually allows:** a `File` through
+      `navigator.share` first (iOS gives no reliable `<a download>` for a blob,
+      and the share sheet is also the shortest path into the league chat), then
+      a real download on desktop, then the image on screen — on iOS a
+      long-press → Save to Photos, which is still a save.
   - **Standalone**, so NOT part of the `APP_VERSION`/`?v=` ritual — but bump
     `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v1**)
     and its `styles.css?v=` (now 208) if you change shared CSS it leans on.
@@ -656,6 +678,30 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
       suite asserts what you thought to ask. Every one of these four was
       *visible* and none was *assertable* without knowing to look. Render a new
       surface and look at it before believing the checkmarks.
+  - **🖼️ And a one-pager, because a league posts a picture (same version).**
+    The owner: *"if we had one version like that and one where it fit on one
+    page to download and save, what would the one pager look like."* Built as
+    a canvas-drawn PNG rather than a print view — see Files for the mechanics
+    and the save-path order.
+    - **Two more things only the render caught**, and the first is the same
+      class of bug as the stray dash: **the footer's method note and its
+      attribution overprinted each other** — two `fillText` calls, one left,
+      one right, and no measurement between them. Canvas has no layout engine,
+      so nothing was going to catch that but looking. It measures now and drops
+      the mark to its own line when they would collide.
+    - And every take was truncated to one line, which cut the actual jokes off
+      (*"The schedule has been a…"*). Rows now measure and wrap to two lines
+      and the canvas height is computed from the result, so nothing is clipped.
+      A movement arrow was also anchored to the row's BOTTOM, so on a two-line
+      row it drifted away from the number it belongs to; it rides under its own
+      numeral now.
+    - Verified with **pixel assertions**, which is the only honest way to test
+      a canvas: the bottom and right edge strips must be untouched background
+      (nothing ran off), the height must grow when takes are added (the wrap
+      really reflows), the footer's two strings must fit, a preseason payload
+      with no records still draws, and the background pixel must differ between
+      Champagne and Onyx — proving it reads the live palette rather than a
+      hardcoded look.
   - ⚠️ **Test-harness note, the SIXTH time:** `.pr-week` is uppercased by CSS
     and `innerText` reflects `text-transform`, so two assertions on the week
     label failed against perfectly correct markup. Assert headings
