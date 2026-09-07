@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v201';
+const APP_VERSION = 'v202';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2511,7 +2511,15 @@ function tallyStats() {
 // Report-card slices of the tally: record by confidence bucket / sport / last
 // 7 days, plus the most recent graded picks (entries with v83+ meta only).
 function tallyDetails() {
-  const entries = Object.values(getTally());
+  // 🚨 v202 — the KEY matters, not just the value. Recent results is capped at
+  // 15 rows and was sorted by DATE ALONE; Array.sort is stable, so within a
+  // date the order fell back to localStorage insertion order — which is
+  // market-grouped, because commitRow writes the moneyline first and the
+  // spread/total after. On a college Saturday that meant the window filled
+  // with 13 straight moneylines and pushed every spread loss off the bottom.
+  // The keys carry the market suffix (`:t`/`:s`), so they are what lets the
+  // list group by GAME instead. Copied, never mutated in place.
+  const entries = Object.entries(getTally()).map(([k, v]) => ({ ...v, _k: k }));
   // Finer buckets than v83's three (v138): after the calibration shrink almost
   // every MLB pick lands between 50 and 72, so "50–59 / 60–69 / 70+" collapsed
   // the whole range into two rows and hid the miscalibration.
@@ -2586,7 +2594,15 @@ function tallyDetails() {
     if (r.d != null && Number(r.d) >= weekCut) { week.n++; if (win) week.w++; }
     if (r.p) recent.push(r);
   });
-  recent.sort((a, b) => Number(b.d || 0) - Number(a.d || 0));
+  // Date desc, then all three markets of the SAME GAME together, then
+  // moneyline → spread → total within that game. Grouping by game is what
+  // makes the capped window an honest sample: you see that Georgia won AND
+  // failed to cover AND went under, instead of fifteen moneylines in a row.
+  const baseId = (r) => String(r._k || '').replace(/:(t|s)$/, '');
+  const mktRank = (r) => (r.a ? 1 : r.t ? 2 : 0);
+  recent.sort((a, b) => Number(b.d || 0) - Number(a.d || 0)
+    || (baseId(a) < baseId(b) ? -1 : baseId(a) > baseId(b) ? 1 : 0)
+    || mktRank(a) - mktRank(b));
   return { total: entries.length, buckets, sports, week, totals, totalsBySport, sharp, legacy, tiers,
     // v201: the pool is deeper than the card shows because Recent picks is now
     // sorted by the league you're looking at — slicing to 15 by date first
@@ -3033,6 +3049,22 @@ function reportCard(det, sport) {
   const mine = sport ? pool.filter((r) => r.s === sport) : pool;
   const others = sport ? pool.filter((r) => r.s !== sport) : [];
   const lgName = sport ? `${LEAGUES[sport]?.emoji || ''} ${LEAGUES[sport]?.label || sport}`.trim() : '';
+  // 🚨 v202 — the league's three market records, stated right above its rows.
+  // The owner looked at 15 straight ✅ and asked "are u sure". They were all
+  // real: CFB moneyline was genuinely 21-0. But it is 21-0 because the Top-25
+  // gate means a ranked team is playing an FCS opponent in week 1, and picking
+  // Georgia over Tennessee State is not a skill — while the SAME games went
+  // 6-13 against the spread. A results list can't carry that on its own, so
+  // the split is stated. Football lives on the number, so ATS sits beside ML.
+  const mkRec = (o) => (o && o.n ? `${o.w}-${o.n - o.w}` : null);
+  const mlR = mkRec(det.sports?.[sport]), atsR2 = mkRec(det.atsBySport?.[sport]), totR2 = mkRec(det.totalsBySport?.[sport]);
+  const lgSummary = (sport && (mlR || atsR2 || totR2))
+    ? `<div class="ai-why" style="padding:2px 0">${[mlR ? `Moneyline <b>${mlR}</b>` : '', atsR2 ? `spread <b>${atsR2}</b>` : '', totR2 ? `totals <b>${totR2}</b>` : ''].filter(Boolean).join(' · ')}${
+        // A perfect moneyline record beside a losing spread record is the
+        // single most misleading thing this card can show, so it says why.
+        det.sports?.[sport]?.n >= 5 && det.sports[sport].w === det.sports[sport].n
+          ? ' — a clean moneyline sweep usually means big favourites, not a hot model; the spread row is the one that pays.' : ''}</div>`
+    : '';
   const mineRows = mine.slice(0, RECENT_MAX).map(pickRow).join('');
   const room = Math.max(0, RECENT_MAX - Math.min(mine.length, RECENT_MAX));
   const otherRows = room ? others.slice(0, room).map(pickRow).join('') : '';
@@ -3042,7 +3074,7 @@ function reportCard(det, sport) {
     ? `<div class="ai-why" style="padding:2px 0">No finished ${esc(lgName)} games in the record yet${pend.by[sport]?.n ? ` — ${pend.by[sport].n} logged and waiting on final scores (see 📥 above)` : ''}.</div>`
     : '';
   const recent = !pool.length ? '' :
-    (sport && (mineRows || mineNone) ? `<div class="ai-why" style="padding:2px 0;font-weight:600">${esc(lgName)}</div>` : '') +
+    (sport && (mineRows || mineNone) ? `<div class="ai-why" style="padding:2px 0;font-weight:600">${esc(lgName)}</div>${lgSummary}` : '') +
     mineRows + mineNone +
     (otherRows ? `<div class="ai-why" style="padding:6px 0 2px">Other leagues</div>${otherRows}` : '');
   // A totals record near .500 can still be a broken model: if the projection

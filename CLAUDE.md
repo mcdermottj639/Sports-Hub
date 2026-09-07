@@ -462,7 +462,53 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v201** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v202** (backend **b14-football-boxplayer**).
+
+- **🚨 Recent results was a highlight reel — the capped window was sorted by
+  MARKET, not by game (v202)** — the owner, on a Report Card showing fifteen
+  straight ✅: *"We've gotten every recent pick correct? Are u sure."* Every
+  row was true. The window was not.
+  - **The mechanism.** `recent.sort()` ordered by **date alone**, and
+    `Array.prototype.sort` is **stable** — so within a date the order fell back
+    to `localStorage` insertion order, which is **market-grouped**, because
+    `commitRow` writes the moneyline first and the spread/total after. With a
+    15-row cap and 21 CFB games on one Saturday, the window filled with **13
+    consecutive moneylines** and pushed every spread and total off the bottom.
+    Not one row was wrong; the *sample* was, and it was biased toward the one
+    market the model happens to sweep.
+  - **Measured against the owner's real export, which reproduces the
+    screenshot exactly:** CFB **moneyline 21-0**, **against the spread 6-13
+    (32%)**, **totals 2-5**. The old window showed **15 wins, 0 losses**. It
+    now shows **8-7** over the same record.
+  - **Fixed by sorting date → game → market**, so all three markets of one
+    game sit together (moneyline, spread, total). That is what makes a capped
+    list an honest sample: you see that Georgia *won*, *failed to cover* and
+    went *under*, instead of fifteen moneylines in a row. `tallyDetails` now
+    keeps the tally KEY (`Object.entries`, copied — never mutated) because the
+    `:t`/`:s` suffix is what identifies the game and the market.
+  - **🚨 And 21-0 is not the achievement it looks like, so the card says so.**
+    It is 21-0 *because of the Top-25 gate*: in week 1 a ranked team is playing
+    an FCS opponent, and picking Georgia over Tennessee State is not skill —
+    the same games went 6-13 against the number. Each league's rows now carry
+    its three market records above them (**"Moneyline 21-0 · spread 6-13 ·
+    totals 2-5"**), and a clean moneyline sweep of 5+ adds: *"a clean moneyline
+    sweep usually means big favourites, not a hot model; the spread row is the
+    one that pays."*
+  - ⚠️ **The general shape, and it is the most dangerous class of bug in this
+    app: every individual number was correct and the display still lied.** A
+    capped list is a SAMPLE, and a sample is only honest if what fills it is
+    independent of the outcome. Ordering by market is not — it correlates
+    directly with win rate. **Any future capped list must sort on something
+    uncorrelated with the thing being measured.**
+  - ⚠️ **A stable sort is not a neutral one.** Leaving ties to fall back on
+    insertion order means the storage layer silently decides what the user
+    sees. If a list is capped, the tiebreak has to be deliberate.
+  - Verified against the owner's actual 47-entry CFB export — **19 checks**:
+    the window no longer all-wins, each game's markets adjacent, no pending
+    rows, the three market records rendering, the sweep caveat present, and
+    both palettes at 390px and 1280px with no overflow, no clipped rows,
+    nothing spilling the card and no console errors. The v200/v201 suites
+    (31 + 24 + 33) still pass.
 
 - **📋 Recent picks is results only, and it follows the league you're in
   (v201)** — the owner: *"On recent picks I don't want to see games that are
