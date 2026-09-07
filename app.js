@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v203';
+const APP_VERSION = 'v204';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1419,6 +1419,19 @@ const MODEL_W = {
 // (p = 0.0019 against a 50/50 split), implying a +0.28 to +0.40 run bias at a
 // realistic spread — the same order this error produces.
 const MLB_SP_ERA = 4.30;
+// v204: innings of prior weight for shrinking a starter's ERA toward
+// MLB_SP_ERA. 60 IP ≈ ten starts — a starter with 60 real innings is trusted
+// about half, one with 12 is trusted about a sixth. A guard, not a fit.
+const SP_ERA_PRIOR_IP = 60;
+function shrinkERA(era, stats) {
+  if (era == null || !isFinite(era)) return era;
+  let ip = statVal(stats, ['IP', 'inningsPitched', 'innings']);
+  if (ip == null || !isFinite(ip) || ip < 0) {
+    const w = statVal(stats, ['W', 'wins']), l = statVal(stats, ['L', 'losses']);
+    ip = (w != null || l != null) ? ((w || 0) + (l || 0)) * 6 : 0;
+  }
+  return Math.round(((ip * era + SP_ERA_PRIOR_IP * MLB_SP_ERA) / (ip + SP_ERA_PRIOR_IP)) * 100) / 100;
+}
 // Log-odds shrink applied to the combined factor score before it becomes a
 // probability (v138). Fit against the owner's first graded month (119 pregame
 // MLB picks): the model's stated confidence was ~2x too wide — its 70%+ picks
@@ -1478,6 +1491,7 @@ const ATS_EDGE_MIN = { nfl: 2, cfb: 3 };
 // are different markets with different dynamics, and shipping four unproven
 // records at once makes none of them measurable.
 const ATS_SPORTS = new Set(['nfl', 'cfb']);
+
 // Inverse standard normal (Acklam's rational approximation, |ε| < 1.15e-9 —
 // far more precision than a point spread needs, and it's short).
 function invNorm(p) {
@@ -1769,12 +1783,24 @@ async function matchupFactor(sport, g) {
     const hn = hp?.athlete?.displayName || hp?.athlete?.shortName;
     const an = ap?.athlete?.displayName || ap?.athlete?.shortName;
     if (hn && an) {
-      const hERA = statVal(hp?.statistics, ['ERA', 'earnedRunAverage']);
-      const aERA = statVal(ap?.statistics, ['ERA', 'earnedRunAverage']);
+      // 🚨 v204 — shrink each starter's ERA toward the league starter anchor
+      // by how much he has actually pitched. A 13.50 ERA two starts into a
+      // season was going straight into the total as ~+5.5 runs and into the
+      // starter factor as a 2-unit edge — that is how a 17.3-run projection
+      // got tagged a best bet. Bayesian shrink: (IP·ERA + K·anchor)/(IP + K),
+      // K = SP_ERA_PRIOR_IP innings. IP comes from the probables feed when it
+      // carries it; failing that, decisions (W+L) × ~6 innings is the proxy;
+      // failing both, the prior alone — which is the honest read on a pitcher
+      // we know nothing about. Raw ERA stays in the note so the card still
+      // shows what ESPN says; only the MODEL sees the shrunk number.
+      const hERAraw = statVal(hp?.statistics, ['ERA', 'earnedRunAverage']);
+      const aERAraw = statVal(ap?.statistics, ['ERA', 'earnedRunAverage']);
+      const hERA = shrinkERA(hERAraw, hp?.statistics);
+      const aERA = shrinkERA(aERAraw, ap?.statistics);
       const hWHIP = statVal(hp?.statistics, ['WHIP', 'walksHitsPerInningPitched']);
       const aWHIP = statVal(ap?.statistics, ['WHIP', 'walksHitsPerInningPitched']);
       const fmt = (era, whip) => [era != null ? `${era} ERA` : '', whip != null ? `${whip} WHIP` : ''].filter(Boolean).join(', ');
-      notes.push(`SP: ${hn}${fmt(hERA, hWHIP) ? ` (${fmt(hERA, hWHIP)})` : ''} vs ${an}${fmt(aERA, aWHIP) ? ` (${fmt(aERA, aWHIP)})` : ''}`);
+      notes.push(`SP: ${hn}${fmt(hERAraw, hWHIP) ? ` (${fmt(hERAraw, hWHIP)})` : ''} vs ${an}${fmt(aERAraw, aWHIP) ? ` (${fmt(aERAraw, aWHIP)})` : ''}`);
       starters = { hERA, aERA }; // for the pitcher-aware projected total
       const parts = [];
       if (hERA != null && aERA != null) parts.push(clamp((aERA - hERA) / 1.5, -2, 2)); // lower ERA = home edge
@@ -2908,14 +2934,15 @@ function backtestPanel(det) {
 // That is what this records: one small number per game, keyed by game id so
 // repeated renders can't double-count, purged after 30 days.
 const TOTBIAS_KEY = 'sportshub:totbias';
-function recordTotalBias(gameId, proj, ou) {
+function recordTotalBias(gameId, proj, ou, sport = 'mlb') {
   if (!gameId || proj == null || ou == null) return;
   const x = Math.round((proj - Number(ou)) * 100) / 100;
   if (!isFinite(x)) return;
   try {
     const o = JSON.parse(localStorage.getItem(TOTBIAS_KEY) || '{}');
     if (o[gameId] != null) return;                       // one sample per game
-    o[gameId] = { d: Number(ymd(sportsDate())), x };
+    const broken = Math.abs(x) > (TOT_MAX_DIFF[sport] ?? 4);
+    o[gameId] = { d: Number(ymd(sportsDate())), x, ...(broken ? { b: 1 } : {}) };
     const cut = Number(ymd(new Date(Date.now() - 30 * 86400000)));
     Object.keys(o).forEach((k) => { if (Number(o[k].d) < cut) delete o[k]; });
     localStorage.setItem(TOTBIAS_KEY, JSON.stringify(o));
@@ -2925,10 +2952,64 @@ function recordTotalBias(gameId, proj, ou) {
 // below (-) the book's, across everything it priced.
 function totalBiasStats() {
   try {
-    const v = Object.values(JSON.parse(localStorage.getItem(TOTBIAS_KEY) || '{}'));
-    if (!v.length) return { n: 0, mean: null };
-    return { n: v.length, mean: v.reduce((a, r) => a + r.x, 0) / v.length };
-  } catch (_) { return { n: 0, mean: null }; }
+    const all = Object.values(JSON.parse(localStorage.getItem(TOTBIAS_KEY) || '{}'));
+    // v204: a projection past TOT_MAX_DIFF is a data hole (a 17.3-run total
+    // against a line of 7 was one), not model bias. It is recorded — it IS what
+    // the model said — but flagged `b`, and excluded from the mean so one
+    // blown starter ERA can't masquerade as a 2-run systematic lean.
+    const v = all.filter((r) => !r.b);
+    const broken = all.length - v.length;
+    if (!v.length) return { n: 0, mean: null, broken };
+    return { n: v.length, mean: v.reduce((a, r) => a + r.x, 0) / v.length, broken };
+  } catch (_) { return { n: 0, mean: null, broken: 0 }; }
+}
+
+// 🚨 v204 — the SPREAD-side instrument, and the reason it exists is the exact
+// bug v171 documented for totals: `pm` is stored only on graded ATS PICKS, and
+// a pick only exists once |edge| already cleared ATS_EDGE_MIN — so every
+// "average projected margin" the card has ever shown came from a sample
+// truncated by the threshold. The −11.8-point CFB under-projection measured in
+// v203 was read off 11 such picks. This samples EVERY priced football game,
+// pick or no pick, one row per game, purged at 30 days — the untruncated
+// number the CFB rating work (v205) has to be fitted against.
+//
+// x = projMargin + spread, home-oriented (identical to atsRead's `edge`). The
+// favourite-oriented version is derived at read time: −sign(spread) × x, so
+// negative always means "the model under-projects the favourite" whichever
+// side that is. sp is stored for that reason.
+const MARGINBIAS_KEY = 'sportshub:marginbias';
+function recordMarginBias(sport, gameId, projMargin, spread) {
+  if (!gameId || projMargin == null || spread == null) return;
+  const sp = Number(spread);
+  const x = Math.round((Number(projMargin) + sp) * 100) / 100;
+  if (!isFinite(x) || !isFinite(sp)) return;
+  try {
+    const o = JSON.parse(localStorage.getItem(MARGINBIAS_KEY) || '{}');
+    if (o[gameId] != null) return;                       // one sample per game
+    o[gameId] = { d: Number(ymd(sportsDate())), s: sport, x, sp };
+    const cut = Number(ymd(new Date(Date.now() - 30 * 86400000)));
+    Object.keys(o).forEach((k) => { if (Number(o[k].d) < cut) delete o[k]; });
+    localStorage.setItem(MARGINBIAS_KEY, JSON.stringify(o));
+  } catch (_) {}
+}
+// Per sport: n, mean favourite-oriented error (negative = model under-projects
+// the favourite, i.e. compresses every margin toward zero), mean absolute
+// error, and how often the model's number sat on the DOG side of the book's —
+// the 19/19 signature, as a live percentage rather than a post-mortem.
+function marginBiasStats() {
+  const out = {};
+  try {
+    const all = Object.values(JSON.parse(localStorage.getItem(MARGINBIAS_KEY) || '{}'));
+    all.forEach((r) => {
+      if (!r || r.x == null || r.sp == null) return;
+      const o = (out[r.s || 'nfl'] = out[r.s || 'nfl'] || { n: 0, sum: 0, abs: 0, dog: 0 });
+      const fav = -Math.sign(r.sp) * r.x;           // <0: under-projects the favourite
+      o.n++; o.sum += fav; o.abs += Math.abs(r.x);
+      if (fav < 0) o.dog++;
+    });
+  } catch (_) {}
+  Object.values(out).forEach((o) => { o.mean = o.n ? o.sum / o.n : null; o.mae = o.n ? o.abs / o.n : null; o.dogPct = o.n ? o.dog / o.n : null; });
+  return out;
 }
 
 // Clear NFL PRESEASON results before Week 1 (v170). Preseason predicts
@@ -3120,7 +3201,7 @@ function reportCard(det, sport) {
     const tb = totalBiasStats();
     if (tb.n) {
       tRow += `<div class="rep-row"><span class="rep-l">Model total vs the book</span><span class="rep-v">${tb.mean > 0 ? '+' : ''}${tb.mean.toFixed(2)} runs <span class="rep-cf">${tb.n} games</span></span></div>`;
-      tRow += '<div class="ai-why" style="padding:2px 0">Across every game priced in the last 30 days. The row above sees only graded picks, so it overstates the skew.</div>';
+      tRow += `<div class="ai-why" style="padding:2px 0">Across every game priced in the last 30 days. The row above sees only graded picks, so it overstates the skew.${tb.broken ? ` <b>${tb.broken} projection${tb.broken === 1 ? '' : 's'}</b> sat more than ${TOT_MAX_DIFF.mlb} runs off the book and ${tb.broken === 1 ? 'was' : 'were'} excluded as data holes, not bias.` : ''}</div>`;
     }
   }
   // ATS gets the same treatment totals do: its own record, plus the model's
@@ -3135,9 +3216,28 @@ function reportCard(det, sport) {
     });
     if (a.biasN) {
       const b = a.bias / a.biasN;
-      aRow += `<div class="rep-row"><span class="rep-l">Avg projected margin</span><span class="rep-v">${b > 0 ? '+' : ''}${b.toFixed(1)} (home)${a.biasN < 10 ? ' <span class="rep-cf">thin</span>' : ''}</span></div>`;
+      aRow += `<div class="rep-row"><span class="rep-l">…avg projected margin, graded picks only</span><span class="rep-v">${b > 0 ? '+' : ''}${b.toFixed(1)} (home)${a.biasN < 10 ? ' <span class="rep-cf">thin</span>' : ''}</span></div>`;
     }
     if (a.n < 20) aRow += '<div class="ai-why" style="padding:2px 0">Under 20 graded ATS picks — measure, don\'t tune. PD_SD and ATS_EDGE_MIN are the constants to revisit once this has a sample.</div>';
+  }
+  // 🚨 v204 — the untruncated spread instrument, per sport. The row above it
+  // sees only graded PICKS, which only exist past the threshold, so it can
+  // never say how far the model's number sits from the book's in general.
+  // This one samples every priced football game. Negative = the model
+  // under-projects the favourite (compresses toward zero); "on the dog side"
+  // is the 19-of-19 signature as a live percentage. This is what the CFB
+  // rating (v205) is fitted against — measure, then fit.
+  const mb = marginBiasStats();
+  const mbSports = Object.keys(mb).filter((k) => mb[k].n);
+  if (mbSports.length) {
+    if (!aRow) aRow = '';
+    mbSports.sort((x, y) => mb[y].n - mb[x].n).forEach((sp) => {
+      const o = mb[sp];
+      const thin = o.n < 10;
+      aRow += `<div class="rep-row"><span class="rep-l">${LEAGUES[sp]?.emoji || ''} ${esc(LEAGUES[sp]?.label || sp)} margin vs the book</span><span class="rep-v">${o.mean > 0 ? '+' : ''}${o.mean.toFixed(1)} pts <span class="rep-cf">${o.n} games${thin ? ' · thin' : ''}</span></span></div>`;
+      if (!thin) aRow += `<div class="rep-row"><span class="rep-l">&nbsp;&nbsp;model on the dog side of the number</span><span class="rep-v">${Math.round(o.dogPct * 100)}%</span></div>`;
+    });
+    aRow += '<div class="ai-why" style="padding:2px 0">Across every game the book priced in the last 30 days, pick or no pick — so it measures the model, not the threshold. Negative = the model makes favourites smaller than the book does.</div>';
   }
   // Sharp money is brand new and unproven here, so it gets its own slice from
   // day one and says out loud when the sample is too thin to conclude anything.
@@ -3242,6 +3342,13 @@ const MIN_EDGE_GAP = EDGE_BAR.edge;
 // CFB totals sit near 55 with far more spread than the NFL's ~45, so the
 // floor scales with them rather than inheriting the NFL's 4.
 const TOT_EDGE_MIN = { mlb: 1.5, nba: 6, nfl: 4, cfb: 6 };
+// 🚨 v204 — past this the projection is BROKEN, not bold. The owner's export
+// carried a 17.3-run MLB total against a line of 7 — tagged a best bet by the
+// tier ladder, which read a blown starter ERA as conviction. A sane model does
+// not disagree with the book by ten runs; when it does, the honest read is
+// "data hole", and the ladder must refuse it rather than promote it. These
+// are guards, not fitted constants: roughly 3× the recording floor.
+const TOT_MAX_DIFF = { mlb: 4, nba: 20, nfl: 14, cfb: 21 };
 // 🚨 RED ALERT (v180) — the owner's rule: "if we ever have an underdog on the
 // Vegas DK line and our model picks them to win, that's a red alert play moved
 // to the top of the board."
@@ -3370,8 +3477,11 @@ function totalRead(sport, pred, info) {
   if (!isFinite(line)) return null;
   const diff = pred.projTotal - line;
   if (!isFinite(diff) || diff === 0) return null;
-  return { side: diff > 0 ? 'OVER' : 'UNDER', line, proj: pred.projTotal, diff,
-    qualifies: Math.abs(diff) >= (TOT_EDGE_MIN[sport] ?? 1) };
+  // broken (v204): past TOT_MAX_DIFF the projection is a data hole, not a
+  // read. Shown so the card can say so; never a play.
+  const broken = Math.abs(diff) > (TOT_MAX_DIFF[sport] ?? 4);
+  return { side: diff > 0 ? 'OVER' : 'UNDER', line, proj: pred.projTotal, diff, broken,
+    qualifies: !broken && Math.abs(diff) >= (TOT_EDGE_MIN[sport] ?? 1) };
 }
 
 // Everything the model has to say about one sport's slate: the pick, the
@@ -3402,9 +3512,11 @@ async function buildBoard(sport, games, opts = {}) {
       // Sample EVERY priced game: the floor below decides what becomes a PICK,
       // so measuring bias only on picks measures the floor, not the model.
       // Scheduled games only, so re-rendering a final can't skew it.
-      if (sport === 'mlb' && gameState(g) === 'scheduled') recordTotalBias(g.id, p.projTotal, info.ou);
+      if (sport === 'mlb' && gameState(g) === 'scheduled') recordTotalBias(g.id, p.projTotal, info.ou, sport);
       const floor = TOT_EDGE_MIN[sport] ?? 1;
-      if (isFinite(diff) && Math.abs(diff) >= floor) {
+      // v204: a projection past TOT_MAX_DIFF is refused here, not promoted —
+      // the tier ladder is what turned a 17.3-run total into a "best bet".
+      if (isFinite(diff) && Math.abs(diff) >= floor && Math.abs(diff) <= (TOT_MAX_DIFF[sport] ?? 4)) {
         // Totals are tiered on the same ladder as the moneyline, in units of
         // the sport's own floor: 2× the floor is a best bet, 1× an edge. A
         // totals disagreement is an edge like any other, and without a tier it
@@ -3417,6 +3529,12 @@ async function buildBoard(sport, games, opts = {}) {
     // home margin is -spread; the model's is projMargin. The difference is
     // how many points of cover the model thinks the line is off by, and its
     // sign picks the side.
+    // v204: sample the model's margin against the book on EVERY priced
+    // football game (scheduled only, so a repaint of a final can't skew it) —
+    // the untruncated spread-side instrument. See recordMarginBias.
+    if (ATS_SPORTS.has(sport) && gameState(g) === 'scheduled' && p?.projMargin != null && info?.spread != null) {
+      recordMarginBias(sport, g.id, p.projMargin, info.spread);
+    }
     const ats = atsCall(sport, g, p, info);
     // isEdge keeps its old meaning — a QUALIFIED edge, i.e. what the vs-line
     // record counts. Leans are picks, but they are not edges.
@@ -3698,7 +3816,8 @@ function marketRowsHTML(r) {
   // dog's spread is not contradicting itself, and should say why.
   const notes = [];
   if (ar && !ar.pinned && !ar.qualifies) notes.push(`Spread read is under the ${ATS_EDGE_MIN[sport] ?? 2}-pt ${(LEAGUES[sport]?.label || sport)} bar — shown, not recorded.`);
-  if (tr && !tr.qualifies) notes.push(`Total read is under the ${TOT_EDGE_MIN[sport] ?? 1}-pt bar — shown, not recorded.`);
+  if (tr?.broken) notes.push(`Total projection is ${Math.abs(tr.diff).toFixed(1)} off the book — past the ${TOT_MAX_DIFF[sport] ?? 4}-pt sanity bar, so this is a data hole, not a play.`);
+  else if (tr && !tr.qualifies) notes.push(`Total read is under the ${TOT_EDGE_MIN[sport] ?? 1}-pt bar — shown, not recorded.`);
   if (ar?.pinned) notes.push(`The model tops out around ${Math.abs(ar.proj).toFixed(1)} points in ${LEAGUES[sport]?.label || sport}, so it cannot price a number this big.`);
   if (p && ar && !ar.pinned && ar.team !== p.winner.name) {
     notes.push(`Both come off one projection: ${esc(p.winner.name)} to win, but by less than the ${Math.abs(ar.homeSpread)} the book is asking.`);

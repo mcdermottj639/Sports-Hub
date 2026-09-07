@@ -462,7 +462,56 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v203** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v204** (backend **b14-football-boxplayer**).
+
+- **📏 Measure before fitting: the spread-side instrument, ERA shrinkage, and a
+  sanity bar on totals (v204)** — the first half of the model-improvement pass
+  the owner approved after reviewing their full export (the second half, the
+  CFB team rating, is v205). Nothing here changes which side the model picks
+  on a moneyline. **Two models reviewed the plan** — Opus 5 wrote it, then
+  Fable 5.1 was switched in for an independent read and changed three things
+  (below). Both agreed on this version's contents.
+  - **🚨 `pm` was a threshold-truncated sample, the exact bug v171 fixed for
+    totals.** The model's projected margin was stored ONLY on graded ATS picks,
+    and a pick only exists once |edge| already cleared `ATS_EDGE_MIN` — so the
+    −11.8-point CFB under-projection measured in v203 was read off 11 picks
+    the threshold had already selected. **`recordMarginBias`** now samples
+    EVERY priced NFL/CFB game (`sportshub:marginbias`, one row per game,
+    scheduled only, 30-day purge), mirroring `recordTotalBias`. Stored
+    home-oriented (`x = projMargin + spread`, identical to `atsRead.edge`) with
+    the spread beside it, so `marginBiasStats()` can orient to the FAVOURITE at
+    read time: **negative = the model makes favourites smaller than the book
+    does**, whichever side that is. It also reports how often the model's
+    number sat on the DOG side — the 19-of-19 signature as a live percentage.
+    Surfaced in the Report Card's ATS section per sport; the old picks-only
+    row is relabelled "graded picks only", as the totals row was in v171.
+    **This is the number v205 is fitted against. Do not fit the rating to the
+    picks-only figure.**
+  - **🚨 A 17.3-run MLB total against a line of 7 was tagged a best bet.** The
+    tier ladder read a blown starter ERA as conviction. Two fixes, both guards:
+    - **`shrinkERA`** — each probable's ERA is shrunk toward `MLB_SP_ERA` by
+      innings pitched (`SP_ERA_PRIOR_IP` = 60, ≈ ten starts), with W+L × 6 as
+      the proxy when the feed carries no IP and the anchor alone when it
+      carries nothing. Applied to BOTH the starter factor and the total nudge;
+      the raw ERA stays in the note so the card still shows what ESPN says.
+      Measured: 13.50 on 12 IP → **5.83**; 2.80 on 180 IP → 3.18.
+    - **`TOT_MAX_DIFF`** (mlb 4 · nfl 14 · cfb 21 · nba 20, ~3× the recording
+      floor) — past it a total is **broken, not bold**: `totalRead` carries
+      `broken`, never qualifies, `buildBoard` refuses to tier it, and the card
+      says "data hole, not a play". `recordTotalBias` still records it (it IS
+      what the model said) but flags `b:1`, and `totalBiasStats` excludes
+      flagged rows from the mean while counting them — so one blown ERA can't
+      masquerade as a 2-run systematic lean, and can't be hidden either.
+  - ⚠️ **What the on-device shape may still change:** whether ESPN's MLB
+    probables `statistics` array carries IP at all is unverified from the
+    sandbox — the W+L proxy is the fallback for exactly that case.
+  - Verified in headless Chromium — **22 checks**: the shrink unit (blown /
+    ace / proxy / no-stats), a broken total refused and a sane one played, the
+    flag surviving into storage and out of the mean, the instrument sampling
+    all three priced CFB games exactly once with a negative favourite-oriented
+    mean and 100% dog-side, an away-favourite game orienting correctly, a
+    repaint not re-sampling, and the card rows rendering with no overflow or
+    console errors. Prior suites (14 + 19 + 33 + 24 + 31) still pass.
 
 - **🔍 Audit: two more places the display was misleading the same way, and a
   percentage on a sample of two (v203)** — the owner, after v202: *"Are there
@@ -2030,7 +2079,7 @@ index, not the argument.
 | 3 | **50–54% bucket, home vs away** | export, split by side | v171 `HR_GAP` + `homeEdge` 0.12→0.24 | away picks stop going **6-14 (30%)**. This is what pointed at both v171 bugs. |
 | 4 | **Overall calibration gap** | Report Card → By confidence | v171 | better than **−6.1** at n=109, and the buckets become *ordered* (they are not today: 50–54 wins 27.8%, 55–59 wins 75%). |
 | 5 | **Record by tier** | Backtesting → Record by tier | v164 stored `gp`/`tr` | reads a real W-L instead of "collecting". **Do not touch `EDGE_BAR` before this has ~20 graded picks.** |
-| 6 | **ATS record** | Backtesting → by sport | v171 fixed grading (`:s` was never stripped, so ATS never graded at all) | any non-zero number. `PD_SD` (13.5/16.5) and `ATS_EDGE_MIN` (2/3) are guesses and are the first things to re-fit. |
+| 6 | **ATS record** | Backtesting → by sport | v171 fixed grading (`:s` was never stripped, so ATS never graded at all) | any non-zero number. `PD_SD` (13.5/16.5) and `ATS_EDGE_MIN` (2/3) are guesses and are the first things to re-fit. **v204: read the "margin vs the book" row (every priced game) FIRST, never the picks-only row** — CFB read −11.8 on picks, and 19 of 19 spread picks were the dog. That is what v205's rating is fitted against. |
 | 7 | **Sharp money split** | Report Card → 💰 Sharp money | v160 stored `sh`; **v200 fixed why it never grew** | **Read the new "Splits feed live at pick time" row FIRST.** Until v200 the recorder logged the whole slate on an 8s leash against a 30-60s cold start, so ~99% of picks were made blind — 6 graded sharp picks at n=400+. It needs 20+ graded picks made with the feed live, and **only picks dated after the v200 ship count**; the 6 before it are a different population. If the coverage row is still near 0 a week after v200, the backend is not answering at all and the factor is dead weight, not unproven. |
 | 8 | **🏈 NFL calibration — the FIRST honest one** | export, filter `s: 'nfl'` + `d >= 20260910` | nothing yet — this read decides | buckets roughly ordered and a Brier that beats always-quoting the base rate. **Every NFL pick before 10 Sep 2026 predates BOTH the v83 confidence meta AND the v138 leak fix — it is history, not calibration data. Exclude it.** |
 | 9 | **🎓 CFB calibration + first ATS sample** | export, filter `s: 'cfb'` + `d >= 20260829` | nothing yet | any graded CFB W-L at all (there were **zero** through Aug). Football is a SPREAD sport, so the **ATS** row matters more than the moneyline one — see #6. |
@@ -4311,6 +4360,11 @@ rewrite.**
   feed woke up (`meta.up`), and only while the pick is still pregame/live and
   ungraded, and only ever upward (a blind entry can gain a live read; a live one
   is never overwritten by a blind one).
+- `sportshub:marginbias` — v204: one row per priced NFL/CFB game
+  (`{d, s, x, sp}`; `x` = model margin + home spread, `sp` = the spread),
+  30-day purge. The untruncated spread-side instrument; read by
+  `marginBiasStats()`. `sportshub:totbias` rows may carry `b:1` since v204 =
+  a projection past `TOT_MAX_DIFF`, excluded from the mean as a data hole.
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
 - `sportshub:lines:{YYYYMMDD}` — device-local line tracking for today's games:
   first-seen, latest, and (v167) a bounded **`hist`** of every observed change
