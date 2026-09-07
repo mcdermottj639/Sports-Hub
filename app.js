@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v202';
+const APP_VERSION = 'v203';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2977,8 +2977,14 @@ function clearNflPreseason() {
 // picks leads with that league's results; everything else follows underneath.
 function reportCard(det, sport) {
   const box = el('div', 'ai-report');
-  const pct = (r) => (r.n ? ` (${Math.round((r.w / r.n) * 100)}%)` : '');
+  // 🚨 v203 — under ~10 graded picks a percentage is noise dressed as precision:
+  // 2-0 renders as "(100%)" and reads like a finding. The confidence buckets
+  // have said "thin" instead of a percent since v138; every other record on
+  // this card was still printing one. Same bar, everywhere now.
+  const THIN_N = 10;
+  const pct = (r) => (!r.n ? '' : r.n < THIN_N ? ' <span class="rep-cf">thin</span>' : ` (${Math.round((r.w / r.n) * 100)}%)`);
   const row = (l, r) => `<div class="rep-row"><span class="rep-l">${l}</span><span class="rep-v">${r.w}-${r.n - r.w}${pct(r)}</span></div>`;
+  const mkRec0 = (o) => (o && o.n ? `${o.w}-${o.n - o.w}` : null);
   // Each confidence row shows what the model claimed vs what actually happened.
   // A "70%" bucket that wins 55% isn't a good pick reported badly — it's the
   // model lying about how sure it is, and the gap is the thing worth watching.
@@ -3009,7 +3015,17 @@ function reportCard(det, sport) {
     .sort((a, b) => b[1].n - a[1].n)
     .map(([s, r]) => {
       const nm = `${LEAGUES[s]?.emoji || ''} ${esc(LEAGUES[s]?.label || s)}`;
-      if (r.n) return row(nm, r);
+      if (r.n) {
+        // 🚨 v203 — this row used to be the MONEYLINE record wearing the
+        // league's name, which is the same lie v202 fixed in Recent results:
+        // CFB reads "21-0 (100%)" while the identical games went 6-13 against
+        // the number. A row labelled with a league must report every market
+        // that league plays, or the best-looking one speaks for all of them.
+        const a = mkRec0(det.atsBySport?.[s]), t2 = mkRec0(det.totalsBySport?.[s]);
+        const extra = [a ? `spread ${a}` : '', t2 ? `totals ${t2}` : ''].filter(Boolean).join(' · ');
+        return `<div class="rep-row"><span class="rep-l">${nm}</span><span class="rep-v">ML ${r.w}-${r.n - r.w}${pct(r)}${
+          extra ? ` <span class="rep-cf">${esc(extra)}</span>` : ''}</span></div>`;
+      }
       const q = pend.by[s]?.n || 0;
       return `<div class="rep-row"><span class="rep-l">${nm}</span><span class="rep-v"><span class="rep-cf">${
         q ? `${q} logged · awaiting first result` : 'no finished games yet'}</span></span></div>`;
@@ -4263,19 +4279,38 @@ async function renderPredictions() {
   const finals = rows.filter((r) => r.p && gameState(r.g) === 'final');
   if (finals.length) {
     const hit = (r) => { const w = winnerName(r.g); return w && w !== 'TIE' ? w === r.p.winner.name : null; };
-    const won = finals.filter((r) => hit(r) === true).length;
-    const lost = finals.filter((r) => hit(r) === false).length;
+    // 🚨 v203 — this header said "model 21-0" on a CFB Saturday while the SAME
+    // games went 6-13 against the spread. `rows` already carries the ats and
+    // tot calls, so all three results are right here and there is no reason to
+    // report only the flattering one. Grading matches commitRow exactly:
+    // atsResult for the spread (a push returns null and is dropped), and a
+    // total landing exactly on the line is a push too.
+    const atsHit = (r) => (r.ats ? atsResult(r.g, r.ats.homeSpread, r.ats.home) : null);
+    const totHit = (r) => {
+      if (!r.tot || r.g.home.score == null || r.g.away.score == null) return null;
+      const tot = r.g.home.score + r.g.away.score;
+      return tot === r.tot.line ? null : (r.tot.side === 'OVER' ? tot > r.tot.line : tot < r.tot.line);
+    };
+    const tally3 = (f) => {
+      const v = finals.map(f);
+      return { w: v.filter((x) => x === true).length, l: v.filter((x) => x === false).length };
+    };
+    const ml = tally3(hit), at = tally3(atsHit), tt = tally3(totHit);
+    const recs = [`ML ${ml.w}-${ml.l}`,
+      at.w + at.l ? `spread ${at.w}-${at.l}` : '',
+      tt.w + tt.l ? `totals ${tt.w}-${tt.l}` : ''].filter(Boolean).join(' · ');
     container.appendChild(el('div', 'lad-sec',
-      `📋 Finished <span class="n">model ${won}-${lost}</span> <span class="n">${finals.length}</span>`));
+      `📋 Finished <span class="n">${recs}</span> <span class="n">${finals.length}</span>`));
     const d = el('details', 'lad-fold');
     d.open = !isToday;
+    const mark = (v) => (v === true ? '✅' : v === false ? '❌' : '—');
     d.innerHTML = `<summary>How the model did on ${isToday ? "today's" : 'this'} finished games <span class="cv">${finals.length} ▸</span></summary>
       <div class="lad-body">${finals.map((r) => {
-        const h = hit(r);
         const abbr = (r.g.home.name === r.p.winner.name ? r.g.home.abbr : r.g.away.abbr) || r.p.winner.name.split(' ').pop();
+        const a = atsHit(r), t2 = totHit(r);
         return `<div class="lad-row"><span class="lm">${esc(matchupLabel(r.sport, r.g))}</span>
           <span class="lp">${esc(abbr)} ${r.p.conf}%</span>
-          <span class="lg">${h === true ? '✅' : h === false ? '❌' : '—'}</span></div>`;
+          <span class="lg">${mark(hit(r))}${a != null ? ` 📐${mark(a)}` : ''}${t2 != null ? ` 🎯${mark(t2)}` : ''}</span></div>`;
       }).join('')}</div>`;
     container.appendChild(d);
   }

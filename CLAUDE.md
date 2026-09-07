@@ -462,7 +462,58 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v202** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v203** (backend **b14-football-boxplayer**).
+
+- **🔍 Audit: two more places the display was misleading the same way, and a
+  percentage on a sample of two (v203)** — the owner, after v202: *"Are there
+  other spots where the display could be misleading like that?"* Yes — the same
+  bug had two more instances, both of the *"an aggregate wearing a label bigger
+  than itself"* shape rather than v202's biased-window shape.
+  - **🚨 "By sport" was the MONEYLINE record wearing the league's name.** The
+    row was `row(nm, det.sports[s])` — moneyline only — so CFB renders **"21-0
+    (100%)"** while the identical games went 6-13 against the number. Byte for
+    byte the lie v202 fixed in Recent results, one section up the same card.
+    (The **Backtesting panel's** By-sport has shown all three markets since
+    v164 — so the card contradicted itself, and the flattering one was the one
+    without a market label.) It now reads **"ML 21-0 · spread 6-13 · totals
+    2-5"**.
+  - **🚨 The 📋 Finished section said "model 21-0"** on a CFB Saturday whose
+    spreads went 0-3. `rows` already carries the `ats` and `tot` calls, so all
+    three results were sitting right there and only the flattering one was
+    reported. Header now reads **"ML 3-0 · spread 0-3"** and each row shows its
+    spread/total mark (📐❌ / 🎯✅) beside the moneyline tick. Grading matches
+    `commitRow` exactly, pushes included.
+    - ⚠️ A market the model did NOT play is **omitted, never printed as 0-0** —
+      a phantom record is the same lie pointing the other way.
+  - **🚨 A percentage on a sample of two.** `pct()` printed `(100%)` for a 2-0
+    record. The confidence buckets have said **"thin"** below 10 graded picks
+    since v138; every other record on the card was still dressing noise as
+    precision. One `THIN_N = 10` bar now, on every row the card prints.
+  - **What was checked and is FINE, so the next audit doesn't redo it:** the
+    ladder sections and Home's Board are capped *recommendation* lists sorted
+    by conviction — the sort is the product, not a sample claim; the `Last 10`
+    hero chip is a defined chronological window that relabels itself "Last N"
+    when short; waiver/free-agent lists are rankings; the AI header line
+    (`#ai-score`) already names all four markets; and the all-time headline's
+    130 unlabelled legacy entries are already disclosed in the card.
+  - ⚠️ **The rule this audit produced, worth applying to anything new: a number
+    labelled with a NOUN must cover everything that noun covers.** "CFB" means
+    CFB's three markets, not its best one. "Finished" means all of what
+    finished. If a display can only carry one market, the label has to name
+    that market — `ML 21-0`, never `21-0`.
+  - Verified — **14 checks** against the owner's real export plus a synthetic
+    slate reproducing the exact shape (favourite covers, so the model's
+    moneyline sweeps while its spread picks lose): both headers naming every
+    market, per-row spread marks, no phantom totals row, the thin tag replacing
+    a small-n percentage, no overflow/clipping/console errors. Prior suites
+    (31 + 24 + 33 + 19) still pass — 121 total.
+  - ⚠️ **Test-harness notes, both cost a false failure:** `.lad-sec` is
+    uppercased by CSS and `innerText` reflects `text-transform` (the v185 /
+    v195 / v199 trap — **fourth** time), and `.rep-l`/`.rep-v` are separate
+    flex spans so `innerText` concatenates them with **no space** ("CFBML
+    24-0"). Also: a fixture built to make the model's spread pick lose must let
+    the FAVOURITE cover — `atsCall` takes the dog on a big number, so a
+    blowout that stays inside the spread makes the model *right*, not wrong.
 
 - **🚨 Recent results was a highlight reel — the capped window was sorted by
   MARKET, not by game (v202)** — the owner, on a Report Card showing fifteen
