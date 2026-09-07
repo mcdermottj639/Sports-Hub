@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v205';
+const APP_VERSION = 'v206';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2231,8 +2231,17 @@ function aiFactors(pred) {
   if (!pred || !pred.breakdown.length) return '';
   const rows = pred.breakdown.map((b) =>
     `<div class="fac-row"><span class="fac-l">${b.label}</span><span class="fac-d">${b.detail}</span><span class="fac-p">${b.favor.split(' ').slice(-1)[0]} +${b.pct.toFixed(1)}%</span></div>`).join('');
+  // 🚨 v206 — pred.notes was DEAD OUTPUT. predictGame has built this array for
+  // many versions (starting pitchers, SP form, team OPS, the sharp-money read,
+  // the early-season blend warning, and v205's 🎓 rating source) and NOTHING
+  // rendered it — the v179 rewrite of the pick head dropped the only consumer.
+  // So the app was computing its own explanation and throwing it away, and the
+  // v205 note that says WHICH CFB rating source is live was invisible. It
+  // belongs here, in the section that exists to explain the number.
+  const noteRows = (pred.notes || []).map((n) => `<div class="ai-why">${esc(n)}</div>`).join('');
   return `<div class="md-section-title">Why — Factor Breakdown</div>
     <div class="fac-list">${rows}</div>
+    ${noteRows}
     <div class="ai-why" style="margin-top:6px">Factors above the 50% coin-flip add up to the ${pred.conf}% pick.</div>`;
 }
 

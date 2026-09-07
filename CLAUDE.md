@@ -462,7 +462,52 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v205** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v206** (backend **b14-football-boxplayer**).
+
+- **🚨 `pred.notes` was dead output — the model wrote its own explanation and
+  threw it away (v206)** — the owner asked *"how do I do the fpi check"*, and
+  the honest answer was that they couldn't: v205's `🎓 Rating:` line, which says
+  whether ESPN FPI or the conference-tier fallback priced a college game, went
+  into `pred.notes`, and **nothing in the app rendered that array**. Verified by
+  grep — `\.notes` had exactly ONE reference in the whole file, the one that
+  builds it.
+  - **It had been dead for a long time and took real content with it.** The
+    array carries the starting-pitcher line (`SP: … 3.20 ERA, 1.10 WHIP …`), the
+    `SP form (L3)` comparison, `Team OPS`, the NFL/CFB QB leader line, v145's
+    **"Early season — blended with last season (damped)"** honesty note and
+    v160's **"Sharp money: N% of dollars vs M% of bets on X"** line. This file
+    documents several of those as user-visible; they were not. The v179 rewrite
+    of the pick head (`aiPickHead`) replaced the block that had been printing
+    them and nothing noticed, because an unrendered array throws no error.
+  - **Now rendered in `aiFactors`** — the "Why — Factor Breakdown" section of
+    the game modal, which is the section that exists to explain the number.
+    `esc()`d, one `.ai-why` line each.
+  - ⚠️ **The section is COLLAPSED by default** (`md-section-title` without
+    `acc-open`), so the note is one tap in, not on the card face. That is the
+    right home for an explanation and it is where to look for the FPI answer;
+    it also means a card-face check will never show it.
+  - ⚠️ **The general shape, and it is worth grepping for: a value that is
+    computed, returned, and never read is invisible to every test that checks
+    behaviour.** Nothing was broken, no error was thrown, and the changelog went
+    on describing a note the app had stopped printing. When a version entry
+    claims something is user-visible, the assertion should be that a user can
+    SEE it, not that the string was built.
+  - **How to read the FPI answer on device:** open any 🎓 CFB game → **Why —
+    Factor Breakdown** → the first line. `🎓 Rating: ESPN FPI` means the probe
+    over `CFB_FPI_URLS` answered and the ratings are opponent-adjusted;
+    `conference tier + own margin` means it did not and the v205 fallback is
+    live. **A second tell: tier mode prints P4 / G5 / FCS beside each team and
+    FPI mode does not.** If it reads tier through October, the raw-`pdpg`
+    limitation stands (the tier prior contributes nothing once both sides are
+    P4) and an opponent-adjusted SRS is the next real build.
+  - Verified in headless Chromium — **15 checks**: the note rendering in the
+    modal in tier mode with its P4/FCS labels, swapping to `ESPN FPI` when the
+    probe answers (and dropping the tier labels), the closing explainer
+    surviving, NFL untouched, and no console errors in either mode.
+  - ⚠️ **Test-harness note, the FIFTH time:** `.md-section-title` is uppercased
+    by CSS and `innerText` reflects `text-transform` — and because the section
+    is collapsed, `innerText` does not contain its body at all. Assert the note
+    against `innerHTML`, and any heading case-insensitively.
 
 - **🎓 CFB team rating, and the margin becomes primary (v205)** — the second
   half of the approved model pass. The owner's ask was *"a conference power
