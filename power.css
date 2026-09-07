@@ -1,0 +1,186 @@
+/* ============================================================================
+   🏆 POWER RANKINGS LAB — power.css
+   ----------------------------------------------------------------------------
+   Rides the app's own token layer. power.html sets BOTH data-palette and
+   data-theme before first paint, so every var below resolves in Champagne and
+   Onyx alike and this page looks like the app in either.
+
+   ⚠️ EVERY COLOUR HERE IS A TOKEN — no hex. A hardcoded colour is wrong in one
+   of the two palettes (CLAUDE.md, Files → styles.css). Two token rules that
+   bite specifically here:
+     · An accent fill takes `--on-ac` (dark ink). White on gold is ~1.9:1.
+     · Good/bad is `--pos`/`--neg`, never `--accent` — the accent is brand and
+       heat only, which is the whole v189 lesson.
+
+   ⚠️ Every input is 16px+ and `touch-action: manipulation` — under 16px iOS
+   Safari zooms the viewport on focus and never zooms back (the wk v3 lesson),
+   and the rank pickers get tapped in a rhythm, which reads as double-tap zoom.
+   Keep both if you add a control.
+   ========================================================================== */
+
+body.pr-page {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Archivo, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+.pr-page button, .pr-page input, .pr-page select, .pr-page textarea,
+.pr-page label, .pr-page summary, .pr-page a { touch-action: manipulation; }
+
+/* ------------------------------------------------------------------ chrome */
+.pr-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 16px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 5;
+}
+.pr-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pr-shield { font-size: 26px; }
+.pr-top h1 {
+  margin: 0; font-size: 19px; letter-spacing: 1.2px; text-transform: uppercase;
+  font-weight: 900; line-height: 1; color: var(--text);
+}
+.pr-top h1 small {
+  display: block; font-size: 10px; letter-spacing: 3px; margin-top: 3px;
+  color: var(--accent); font-weight: 700;
+}
+.pr-back {
+  color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 700;
+  border: 1px solid var(--line); padding: 8px 12px; border-radius: 999px; white-space: nowrap;
+}
+.pr-back:hover { background: var(--card-2); color: var(--text); }
+.pr-main { max-width: 760px; margin: 0 auto; padding: 16px 16px 80px; }
+
+/* ------------------------------------------------------------------- cards */
+.pr-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.pr-head h2 { margin: 2px 0 8px; font-size: 24px; font-weight: 900; letter-spacing: -.3px; }
+.pr-week {
+  display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--on-ac);
+  background: var(--grad); padding: 5px 11px; border-radius: 999px;
+}
+.pr-sub { margin: 0 0 8px; font-size: 14px; line-height: 1.55; color: var(--text); }
+.pr-note { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.pr-note a { color: var(--accent); }
+.pr-warn {
+  margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text);
+  border-left: 3px solid var(--neg2); padding: 8px 10px; background: var(--card-2);
+  border-radius: 0 8px 8px 0;
+}
+.pr-load { font-size: 15px; line-height: 1.6; }
+.pr-load p { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+.pr-shared-banner {
+  background: var(--card-2); border-color: var(--pos);
+  font-size: 14px; font-weight: 700; color: var(--text);
+}
+
+/* -------------------------------------------------------------- the rankings */
+.pr-list { list-style: none; margin: 0 0 16px; padding: 0; }
+.pr-row {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 10px;
+}
+/* The owner's own team gets the accent edge — brand, not a verdict. */
+.pr-row.me { border-left: 3px solid var(--accent); }
+
+.pr-rank { flex: 0 0 46px; text-align: center; }
+.pr-num { position: relative; display: block; }
+.pr-n {
+  display: block; font-size: 26px; font-weight: 900; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+.pr-n.big { font-size: 30px; }
+/* The picker sits invisibly over its own number: tapping the rank opens the
+   native list, so moving a team from 12th to 1st is one gesture instead of
+   eleven ▲ taps. 16px so iOS doesn't zoom when it takes focus. */
+.pr-jump {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; font-size: 16px; cursor: pointer; -webkit-appearance: none; appearance: none;
+}
+.pr-mv { display: block; margin-top: 4px; font-size: 11.5px; font-weight: 800; }
+.pr-mv.up { color: var(--pos); }
+.pr-mv.down { color: var(--neg); }
+.pr-mv.flat { color: var(--muted); }
+
+.pr-body { flex: 1 1 auto; min-width: 0; }
+.pr-team { font-size: 16px; font-weight: 800; line-height: 1.25; }
+.pr-mgr { font-size: 12px; font-weight: 700; color: var(--muted); }
+.pr-you {
+  font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--on-ac); background: var(--grad); padding: 2px 6px; border-radius: 999px;
+  vertical-align: 2px;
+}
+.pr-stats { margin-top: 3px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pr-moved { margin-top: 5px; font-size: 12px; color: var(--muted); font-style: italic; }
+.pr-take-ro { margin-top: 7px; font-size: 14px; line-height: 1.55; }
+
+.pr-take {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 8px;
+  font: inherit; font-size: 16px; line-height: 1.45;   /* 16px: iOS focus-zoom rule */
+  color: var(--text); background: var(--card-2);
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; resize: vertical;
+}
+.pr-take:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pr-count { margin-top: 3px; text-align: right; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.pr-arrows { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; }
+.pr-ar {
+  width: 44px; height: 44px;              /* the app's 44px touch-target floor */
+  font-size: 15px; font-weight: 800; cursor: pointer;
+  color: var(--text); background: var(--card-2);
+  border: 1px solid var(--line); border-radius: 10px;
+}
+.pr-ar:disabled { opacity: .3; cursor: default; }
+.pr-ar:not(:disabled):hover { background: var(--card); border-color: var(--accent); }
+
+/* --------------------------------------------------------------- actions */
+.pr-btn {
+  display: block; width: 100%; margin: 0 0 8px;
+  min-height: 46px; padding: 12px 16px;
+  font: inherit; font-size: 15px; font-weight: 800; cursor: pointer;
+  color: var(--text); background: var(--card-2);
+  border: 1px solid var(--line); border-radius: 12px;
+}
+.pr-btn:hover { border-color: var(--accent); }
+.pr-btn.primary { background: var(--grad); color: var(--on-ac); border-color: transparent; box-shadow: var(--glow); }
+.pr-btn.ghost { background: transparent; color: var(--muted); font-weight: 700; }
+.pr-actions .pr-note + .pr-btn { margin-top: 14px; }
+
+.pr-how summary { cursor: pointer; font-size: 14px; font-weight: 800; padding: 2px 0; }
+.pr-how-b { font-size: 13.5px; line-height: 1.6; color: var(--text); }
+.pr-how-b ul { margin: 8px 0; padding-left: 18px; }
+.pr-how-b li { margin-bottom: 7px; }
+
+.pr-share-out { margin: 8px 0; }
+.pr-share-out .t { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.pr-share-out textarea {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 16px;  /* 16px: iOS */
+  color: var(--text); background: var(--card-2);
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px;
+}
+
+.pr-toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(12px);
+  background: var(--text); color: var(--bg);
+  padding: 11px 18px; border-radius: 999px; font-size: 13.5px; font-weight: 700;
+  opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; z-index: 60;
+  max-width: 88vw; text-align: center;
+}
+.pr-toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (min-width: 700px) {
+  .pr-btn { display: inline-block; width: auto; margin-right: 8px; }
+  .pr-actions .pr-note + .pr-btn { margin-top: 0; }
+}

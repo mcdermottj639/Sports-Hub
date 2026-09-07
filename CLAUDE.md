@@ -254,7 +254,10 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   (~264 prospects hand-listed in `TOP_PROSPECTS`; `buildBoard` only generates
   filler if that array is ever trimmed below the needed depth) with placeholder
   names — this is the **fallback**. On load it calls the backend
-  `/api/draft/prospects` (`DRAFT_YEAR`, default **2026**) and, if reachable,
+  `/api/draft/prospects` (`DRAFT_YEAR`, default **2026**; `DRAFT_API` resolves the
+  same way `app.js` does — the `sportshub:api` override, then the Render URL. ⚠️ It
+  was hardcoded to the DEAD Railway host from v134 until v208, so the real board
+  never loaded for ~70 versions and the sample fallback silently covered it) and, if reachable,
   **replaces the board with the real draft class AND uses that year's real round-1
   order** (`REAL_ORDER`, from the endpoint's `order`) for "actual" mode. Cached to
   `localStorage` `draftsim:board` (prospects + order) for instant/offline reuse;
@@ -445,6 +448,56 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     NOT part of the `APP_VERSION`/`?v=` ritual — but bump `workout.css`/`workout.js` `?v=`
     in `workout.html` on changes (currently **v4**), and its `styles.css?v=` (now 143) if
     you change shared CSS it leans on.
+- `power.html` / `power.css` / `power.js` — **🏆 Labs: Power Rankings Lab**, a
+  standalone page (linked from the Labs tab). The owner's **weekly fantasy
+  power rankings** for their ESPN league: the model pre-builds a ranking each
+  week, the owner reorders anyone and writes a take on anyone, and the result
+  ships to the league as a link or as plain text. **The model is the starting
+  point, never the answer** — a row the owner moved says where the model had
+  it, which is the point of the whole thing.
+  - **Data: ONE call**, `/api/fantasy/football/season` (v195), which already
+    carries per-team `scores`/`outcomes`/W-L/`pointsFor` plus the derived
+    **all-play** record off the backend's cached League snapshot. No new
+    endpoint, no extra ESPN request. Last good payload cached on device
+    (`powerlab:season`).
+  - **The model** (`buildModel`): all-play win% **40%** · points per game
+    **25%** · last `RECENT_N` (3) weeks **25%** · actual record **10%**, the
+    three continuous inputs z-normalised across the league first so they are
+    commensurable. All-play is heaviest because it is the only input immune to
+    schedule luck — it is what separates a power ranking from the standings.
+    ⚠️ **The weights are a judgment call, NOT fitted** — a power ranking has no
+    graded outcome, so nothing here can be measured the way `app.js`'s betting
+    model is. Never present it as validated; never "tune" it as if a sample
+    existed. Said in the app too, in the "How the model ranks" card.
+  - **Preseason (zero weeks played) invents nothing** — no order, and **no
+    records or ppg on the rows**, because a fabricated 0-0 beside a name is a
+    lie. It hands over the twelve teams and says why.
+  - **A week is keyed by WEEKS PLAYED**, not `league.current_week` — label
+    `Preseason` / `After Week N`. The draft (`powerlab:draft`) restores only
+    for the same key, so a new week's results pre-build a fresh ranking and
+    can never eat edits belonging to a week already published.
+  - **Reordering:** ▲▼ for nudges plus an invisible `<select>` over each rank
+    number, so tapping the number opens the native iOS picker and 12th → 1st
+    is one gesture. Deliberately not HTML5 drag (dead under iOS touch).
+  - **Sharing** — `power.html#r=<base64url>`, a **self-contained** payload
+    (names, records, ppg, takes, the model's rank, movement), so a recipient
+    makes **no backend call**: it survives a sleeping backend, and a link that
+    re-derived from the live feed would show a different ranking a week later
+    than the one that was sent. `btoa` is Latin-1 only, so the payload is
+    UTF-8-encoded and chunked before encoding — takes are full of emoji. Plus
+    a plain-text copy, which is what actually gets pasted into the league chat.
+  - **🚨 Sharing PUBLISHES the week** (`powerlab:pub`), and the button says so:
+    ▲▼ movement is measured against the last set the owner actually shared,
+    never against the model's own previous guess. No published prior week → no
+    arrows and a line saying why.
+  - Mirrors index.html's inline palette script (sets BOTH `data-palette` and
+    `data-theme`), so it rides the app's token layer and looks like the app in
+    both palettes. ⚠️ That makes a **third** copy of `PALETTE_MIGRATE` — change
+    it with the other two. Every colour is a token; ▲/▼ are `--pos`/`--neg`
+    (the v189 rule) and accent fills take `--on-ac`, never `#fff`.
+  - Standalone, so NOT part of the `APP_VERSION`/`?v=` ritual — but bump
+    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v1**)
+    and its `styles.css?v=` (now 208) if you change shared CSS it leans on.
 - ~~`survivor/`~~ — **GONE, moved to its own repo on 3 Sep 2026.** See the
   banner at the top of this file for where it went and why. Nothing in
   Sports-Hub reads it, referenced it, or breaks without it.
@@ -470,7 +523,136 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v207** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v208** (backend **b14-football-boxplayer**).
+
+- **🏆 Power Rankings Lab — the league's weekly rankings, pre-built then argued
+  with (v208)** — the owner: *"I want a weekly power rankings lab for the
+  fantasy league where I can change peoples ranking and add comments. U
+  pre-build the rankings each week tho and needs to be shareable to the
+  league."* All four halves shipped as a standalone Labs page
+  (`power.html`/`power.css`/`power.js`).
+  - **The shape, because it drives every decision in the file:** the model
+    pre-builds a ranking each week → the owner overrides it (reorder anyone,
+    write a take on anyone) → it ships to the league as a link or as text. **The
+    model is the starting point, never the answer.** A power ranking is an
+    opinion column; the numbers exist so the opinion has something to argue
+    with — which is why a row the owner moved says *"Model had them 3rd — you
+    moved them down."* That line is the feature.
+  - **One endpoint, no new backend work.** `/api/fantasy/football/season`
+    (v195) already carries per-team `scores`, `outcomes`, W-L, `pointsFor` and
+    the derived **all-play** record, off the League snapshot the backend has
+    already cached — so the whole lab costs one request and zero extra ESPN
+    calls.
+  - **The model, and its weights are a JUDGMENT CALL, not a measurement:**
+    all-play win% **40%** · points per game **25%** · last 3 weeks **25%** ·
+    actual record **10%**. The three continuous inputs are z-normalised across
+    the league first so they are commensurable before weighting (the v195
+    Roster Shape lesson — an unnormalised sum measures the wrong thing).
+    - **All-play is heaviest because it is the one input immune to schedule
+      luck** — it scores every team against the WHOLE league each week, so a
+      1-3 team that outscored nine opponents reads as good. That is the entire
+      difference between a power ranking and a copy of the standings.
+      **Verified as a behaviour, not an intention:** on a fixture where the
+      league's highest scorer is 0-4 and its lowest is 4-0, the 0-4 team ranks
+      **1st** and the 4-0 team sinks.
+    - Record is lightest for the mirror reason — most luck-contaminated — but
+      not zero, because a league argues about records.
+    - ⚠️ **Nothing here is fitted and nothing can be.** A power ranking has no
+      graded outcome, so the repo's measure-then-fit rule has nothing to bite
+      on — which means this must never be presented as validated the way the
+      betting model is, and must never be "tuned" as though a sample existed.
+      The card says so in the app, not just here.
+  - **🚨 Preseason invents NOTHING, and that is the state the owner sees
+    first.** Today is 7 Sep 2026 and kickoff is the 10th, so zero games are
+    played and the model has no input at all. It does not guess an order from
+    draft grades or team names — it hands over the twelve teams, says why, and
+    lets the owner make the call. **Rows carry no records and no ppg in that
+    state**, because a fabricated 0-0 · 0.0 ppg beside a name is the v203 lie
+    in miniature. Verified: 12 teams listed, **zero** stat lines rendered.
+  - **Reordering is a rank PICKER, not just ▲▼.** Twelve teams means moving
+    someone from 12th to 1st is eleven ▲ taps. Each rank number has an
+    invisible `<select>` over it, so tapping the number opens the native iOS
+    list and the move is one gesture. ▲▼ stay for nudges. (Deliberately not
+    HTML5 drag: it does not work under iOS touch, and a pointer-events drag is
+    a lot of code to get wrong on the one device this is used on.)
+  - **Sharing: a link AND plain text**, the v-wk4 Workout Lab split, because
+    they suit different moments — the link is the artefact, the text is what
+    actually gets pasted into the league chat.
+    - **The link is SELF-CONTAINED** (`power.html#r=<base64url>`): names,
+      records, ppg, every take, the model's own rank and the ▲▼ movement all
+      travel in the payload. **A recipient makes no backend call** — verified.
+      That is deliberate twice over: it survives a sleeping free-tier backend,
+      and a link re-derived from a live feed would show a *different* ranking a
+      week after it was sent, which is not what "I shared my rankings" means.
+    - ⚠️ **`btoa` is Latin-1 only** and the takes will be full of emoji, so the
+      payload is UTF-8 encoded first, walked in 32KB chunks (`fromCharCode(...)`
+      on the whole array blows the call stack) and made base64url-safe.
+      Verified end to end with an emoji in a take.
+    - Measured: a realistic full slate of takes lands at **~750 chars** of URL.
+      Past 8,000 the page says so and points at the text copy.
+  - **🚨 Sharing is what PUBLISHES the week, and the button says so.** ▲▼
+    movement is measured against the last set the owner actually shared, never
+    against the model's own previous guess — movement the league never saw is
+    not movement. With no published prior week the card says *"no movement
+    arrows yet"* rather than showing flat dashes that look like real data.
+  - **A new week pre-builds; it does not restore.** The draft autosaves
+    continuously and is restored only for the *same* week key (= weeks played).
+    When new results land the key moves and the model builds fresh — that is
+    the "pre-built each week" behaviour, and it can't eat edits, because last
+    week's edits belong to a week that is already published. Verified both
+    ways.
+  - **Degradation, all three states:** backend down with a cached copy → ranks
+    anyway with an explicit *"last league data this device saved"* banner;
+    backend down with no cache → names the problem, explains the free-tier
+    cold start and offers a retry; a junk `#r=` hash → falls back to the
+    editor and clears the hash instead of stranding the reader on a blank page.
+  - **It rides the app's own token layer.** `power.html` mirrors index.html's
+    inline palette script (setting BOTH `data-palette` and `data-theme`), so
+    the page gets layers 3–5 for free and looks like the app in Champagne and
+    Onyx alike. ⚠️ **That script is now a THIRD copy of `PALETTE_MIGRATE`** —
+    app.js, index.html and here. Change all three together.
+    - Every colour is a token, and the two rules that bite in this file
+      specifically: an accent fill takes `--on-ac` (measured dark in both
+      palettes by the suite, never `#fff`), and ▲/▼ are `--pos`/`--neg`, never
+      the accent — the v189 rule.
+  - **Standalone**, so NOT part of the `APP_VERSION`/`?v=` ritual — but bump
+    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v1**)
+    and its `styles.css?v=` (now 208) if you change shared CSS it leans on.
+  - Verified in headless Chromium — **86 checks** (79 + 7): the luck-detector
+    ranking, preseason inventing nothing, reorder by ▲▼ and by picker with the
+    "model had them Nth" marker, takes counted/capped/persisted across a
+    reload, the share link round-tripping into a read-only view with no
+    backend call and no edit controls, movement arrows against a published
+    week, a new week rebuilding, all three degradation states, the junk hash,
+    the Labs link navigating, and **both palettes at 390px and 1280px** with no
+    overflow, nothing spilling the viewport and no console errors.
+  - ⚠️ **Test-harness note, the SIXTH time:** `.pr-week` is uppercased by CSS
+    and `innerText` reflects `text-transform`, so two assertions on the week
+    label failed against perfectly correct markup. Assert headings
+    case-insensitively. Two more failures were also the test's fault, not the
+    code's: an emoji is **2 UTF-16 units** so `'…🔥…'.length` is 22 not 21
+    (the counter and `maxlength` agree with each other, which is what matters),
+    and a suite that deliberately serves a 500 gets a browser
+    *"Failed to load resource"* console line that is the network failing on
+    purpose, not the app erroring. **All five initial failures were the test.**
+
+- **🚨 The Labs mock draft has been on a dead host since v134 (v208)** — found
+  while wiring the new lab's API resolution. `draft.js` had
+  `DRAFT_API = 'https://sports-hub-production.up.railway.app'` — the **Railway**
+  URL, whose trial expired in v134 and which this file has documented as dead
+  ever since. So `/api/draft/prospects` has failed on every single load for ~70
+  versions and the sim has quietly been running on its bundled **SAMPLE** board,
+  never the real draft class or the real round-1 order.
+  - **Nothing looked broken, which is exactly why it survived:** the fallback
+    did its job and the setup note honestly said `sample`. A silent, correct
+    degradation path hides the outage it is degrading from.
+  - Now uses the same resolution `app.js` and `power.js` do — the
+    `sportshub:api` localStorage override, then the Render URL. **On-device
+    check: open the draft sim and look at the setup note — it should now say
+    the real class is live rather than `sample`.**
+  - ⚠️ **The general shape, worth a grep when a host moves:** a hardcoded base
+    URL in a standalone page is invisible to a change made in `app.js`. All
+    three pages that call a backend now resolve it the same way.
 
 - **🚨 The Fantasy tab started loading when you TAPPED it, not when the app
   opened (v207)** — the owner: *"Takes a long time for the Fantasy page to
@@ -4026,7 +4208,7 @@ rewrite.**
   football, Top 25 only, v161), **Red Sox**, AI Picks, Fantasy, **Labs**, About. `showTab()` +
   `renderers{}` map drive rendering. (**Labs** — its own top-level tab as of
   v107, holding the Labs experiments: the standalone `draft.html`/`trivia.html`/
-  `workout.html` links plus the in-app **Fantasy Mock Draft** rendered into `#labs-mock`; its
+  `workout.html`/`power.html` links plus the in-app **Fantasy Mock Draft** rendered into `#labs-mock`; its
   renderer is a no-op since the content is static + launched on demand.) (**Scores** and **Standings** tabs were
   removed in v78 — the owner gets those better elsewhere; Home is now the daily
   full-slate overview. In v79 the Home slate was made view-only; **v89 reversed
@@ -4582,6 +4764,16 @@ rewrite.**
   — a device with no remembered league pulls no roster at boot. It is an
   optimistic head start, never the source of truth: the real `/api/health`
   check still runs and corrects it.
+- `powerlab:draft` — the Power Rankings Lab's week in progress
+  (`{key, order, comments, at}`, autosaved on every edit). `key` = weeks
+  played, so it is restored only for the week it belongs to — a new week's
+  results pre-build a fresh ranking instead.
+- `powerlab:pub` — published weeks keyed by that same key
+  (`{order, comments, at, label}`). Written when the owner SHARES, and it is
+  what ▲▼ movement is measured against — movement the league never saw is not
+  movement.
+- `powerlab:season` — last good `/api/fantasy/football/season` payload, so the
+  lab still ranks when the free-tier backend is asleep (with a stale banner).
 - `sportshub:fparticles` — last good FantasyPros article list (`{at, items}`), so
   the 📰 Fantasy Advice section paints instantly and still shows something when
   the backend is asleep.

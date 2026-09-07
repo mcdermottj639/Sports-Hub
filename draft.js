@@ -368,7 +368,14 @@ const POS_CYCLE = ['WR', 'CB', 'EDGE', 'OT', 'S', 'LB', 'IOL', 'RB', 'DT', 'TE',
 
 // The active board. Defaults to the bundled sample; replaced at runtime by the
 // real draft class when the backend (/api/draft/prospects) is reachable.
-const DRAFT_API = 'https://sports-hub-production.up.railway.app';
+// 🚨 v208 — this pointed at the RAILWAY host until now. That trial expired in
+// v134 and the URL has been dead ever since, so /api/draft/prospects has been
+// failing silently on every load and the sim has been quietly running on its
+// bundled SAMPLE board (the fallback did its job, which is exactly why nobody
+// noticed). Same resolution app.js uses, override included.
+const DRAFT_API = (() => {
+  try { return localStorage.getItem('sportshub:api'); } catch (_) { return null; }
+})() || 'https://sports-hub-fantasy-api.onrender.com';
 const DRAFT_YEAR = 2026;           // most recent completed draft (pulled live)
 const BOARD_CACHE = 'draftsim:board';
 let BOARD_DATA = TOP_PROSPECTS;
