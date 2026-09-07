@@ -490,6 +490,15 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     ▲▼ movement is measured against the last set the owner actually shared,
     never against the model's own previous guess. No published prior week → no
     arrows and a line saying why.
+  - **The shared view carries a BYLINE** (`S.byline`, defaulting to the owner's
+    own team name, editable in the header, `b` in the payload). *"Someone
+    shared their power rankings"* is useless in a twelve-person league — the
+    first thing a recipient needs is whose take it is.
+  - **Only ACTUAL movement renders a marker.** A team that held its spot shows
+    nothing; a bare "—" under a rank number reads as a glitch rather than as
+    "held" (the v196 stray-dash lesson), and the header says so. Dates are
+    formatted (`niceDate`) — a raw `2026-09-07` reads like a database field.
+    A manager label that just repeats the team name is suppressed ("CC CC").
   - Mirrors index.html's inline palette script (sets BOTH `data-palette` and
     `data-theme`), so it rides the app's token layer and looks like the app in
     both palettes. ⚠️ That makes a **third** copy of `PALETTE_MIGRATE` — change
@@ -626,6 +635,27 @@ Current version as of this writing: **v208** (backend **b14-football-boxplayer**
     week, a new week rebuilding, all three degradation states, the junk hash,
     the Labs link navigating, and **both palettes at 390px and 1280px** with no
     overflow, nothing spilling the viewport and no console errors.
+  - **🖼️ Four things only a RENDER could have caught (same version).** The
+    owner asked to see the shared view before trusting it, and screenshotting
+    it at 390px in both palettes found what 79 green assertions had not:
+    a raw ISO date (`2026-09-07`) reading like a database field; *"Someone
+    shared their power rankings"* — useless in a twelve-person league, so
+    there is now a **byline**; a bare `—` under every unmoved rank, which
+    reads as a glitch rather than as "held" (**the v196 stray-dash lesson,
+    exactly**) so only real movement renders now; and `CC CC` where the
+    manager label repeated the team name. The top three also got weight,
+    because the #1 spot is the headline of a power ranking.
+    - ⚠️ **And the screenshot itself was wrong in a way worth remembering: the
+      Onyx shot came out IDENTICAL to Champagne.** The palette was set on the
+      editor's browser context but the shared link opens in a *fresh* one, so
+      it fell through to the OS preference. The suite had only ever checked
+      palettes against `#pr-rank`, never `#pr-shared` — **so the read-only view
+      had never actually been seen in dark at all.** A passing colour assertion
+      on one screen says nothing about another.
+    - ⚠️ **The general lesson, and it is the v206 one from the other side:** a
+      suite asserts what you thought to ask. Every one of these four was
+      *visible* and none was *assertable* without knowing to look. Render a new
+      surface and look at it before believing the checkmarks.
   - ⚠️ **Test-harness note, the SIXTH time:** `.pr-week` is uppercased by CSS
     and `innerText` reflects `text-transform`, so two assertions on the week
     label failed against perfectly correct markup. Assert headings

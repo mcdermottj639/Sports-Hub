@@ -184,3 +184,26 @@ body.pr-page {
   .pr-btn { display: inline-block; width: auto; margin-right: 8px; }
   .pr-actions .pr-note + .pr-btn { margin-top: 0; }
 }
+
+/* ---- byline (editor) ----------------------------------------------------- */
+.pr-by { display: block; margin-top: 12px; }
+.pr-by span {
+  display: block; font-size: 11px; font-weight: 800; letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
+}
+.pr-by input {
+  width: 100%; box-sizing: border-box; font: inherit;
+  font-size: 16px;                       /* 16px: iOS focus-zoom rule */
+  font-weight: 700; color: var(--text); background: var(--card-2);
+  border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px;
+}
+.pr-by input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---- podium (shared view) ------------------------------------------------
+   The top of the list is the headline of a power ranking, so it gets weight.
+   The numeral takes the ACCENT, which is brand/heat — not --pos, which would
+   read as "good result" rather than "top of the list" (the v189 rule). */
+.pr-row.podium .pr-n { color: var(--accent); }
+.pr-row.p1 { border-color: var(--accent); box-shadow: var(--glow); }
+.pr-row.p1 .pr-n { font-size: 38px; }
+.pr-row.p1 .pr-team { font-size: 18px; }

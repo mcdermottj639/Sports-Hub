@@ -63,9 +63,22 @@ const MANAGERS = {
   'goff hits women': 'Zach', cc: 'CC', 'current champ': 'McD', gmdd: 'Buley', 'future champ': 'Wolff',
 };
 const mgrFor = (name) => MANAGERS[String(name || '').toLowerCase().trim()] || '';
+/* A manager label that just repeats the team name is noise ("CC CC"). */
+const mgrLabel = (name) => {
+  const m = mgrFor(name);
+  return m && m.toLowerCase() !== String(name || '').toLowerCase().trim() ? m : '';
+};
+
+/* "2026-09-07" reads like a database field. */
+function niceDate(iso) {
+  const d = iso ? new Date(iso + 'T12:00:00') : new Date();
+  if (isNaN(d)) return iso || '';
+  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+}
 
 const S = {
   season: null,      // /season payload
+  byline: '',        // whose rankings these are — carried into the share
   key: null,         // rank key = weeks played (0 = preseason)
   order: [],         // [teamId] — the owner's order
   comments: {},      // teamId -> take
@@ -194,7 +207,11 @@ function moveFor(prev, id, idx) {
   if (was < 0) return null;
   return was - idx; // positive = climbed
 }
-const moveStr = (m) => (m == null ? '' : m > 0 ? `▲${m}` : m < 0 ? `▼${-m}` : '—');
+/* Only ACTUAL movement renders. A bare "—" under a rank number reads as a
+   glitch rather than as "held its spot" — the v196 stray-dash lesson — and
+   every real power-ranking column omits it too. */
+const moveStr = (m) => (!m ? '' : m > 0 ? `▲${m}` : `▼${-m}`);
+const hasMove = (m) => !!m;
 
 /* ---------------------------------------------------------------- state --- */
 function restoreOrBuild() {
@@ -217,15 +234,24 @@ function restoreOrBuild() {
     S.order = d.order.filter((id) => live.has(id));
     S.season.teams.forEach((t) => { if (!S.order.includes(t.teamId)) S.order.push(t.teamId); });
     S.comments = d.comments || {};
+    S.byline = d.byline || defaultByline();
   } else {
     S.order = built.order.slice();
     S.comments = {};
+    S.byline = S.byline || defaultByline();
     persist();
   }
 }
 
+/* Default the byline to the owner's own team — it's the name the league knows
+   them by, and it means sharing works without filling anything in first. */
+function defaultByline() {
+  const me = (S.season.teams || []).find((t) => t.isMe);
+  return me ? me.team : '';
+}
+
 function persist() {
-  save(K_DRAFT, { key: S.key, order: S.order, comments: S.comments, at: Date.now() });
+  save(K_DRAFT, { key: S.key, order: S.order, comments: S.comments, byline: S.byline, at: Date.now() });
 }
 
 function move(id, to) {
@@ -268,6 +294,7 @@ function payload() {
     v: 1,
     k: S.key,
     l: keyLabel(S.key),
+    b: (S.byline || '').slice(0, 40),
     d: new Date().toISOString().slice(0, 10),
     r: S.ready ? 1 : 0,
     o: S.order.map((id, i) => {
@@ -288,13 +315,13 @@ const shareURL = () => location.href.split('#')[0] + '#r=' + b64u(JSON.stringify
 
 function shareText() {
   const p = payload();
-  const L = [`🏆 POWER RANKINGS — ${p.l}`, ''];
+  const L = [`🏆 POWER RANKINGS — ${p.l}`, p.b ? `${p.b}'s rankings` : '', ''].filter((x, i) => i !== 1 || x);
   p.o.forEach((row, i) => {
     const [name, rec, ppg, note, , mv] = row;
-    const mgr = mgrFor(name);
+    const mgr = mgrLabel(name);
     const bits = [rec];
     if (ppg != null) bits.push(`${ppg} ppg`);
-    L.push(`${i + 1}. ${mv != null ? moveStr(mv) + ' ' : ''}${name}${mgr ? ` (${mgr})` : ''} — ${bits.join(' · ')}`);
+    L.push(`${i + 1}. ${hasMove(mv) ? moveStr(mv) + ' ' : ''}${name}${mgr ? ` (${mgr})` : ''} — ${bits.join(' · ')}`);
     if (note) L.push(`   ${note}`);
   });
   L.push('', 'Full rankings:', shareURL());
@@ -405,14 +432,19 @@ function paintRank() {
         ? `Pre-built from ${S.key} week${S.key === 1 ? '' : 's'} of results — then it's yours. Reorder anyone, write the take, send it to the league.`
         : `No games have been played yet, so the model has nothing to rank on and has not invented an order. Drag the league into whatever order you like and write the takes — this is the preseason edition.`}</p>
       ${S.stale ? `<p class="pr-warn">⚠️ Showing the last league data this device saved — the backend didn't answer just now. Records and points may be a week behind.</p>` : ''}
-      ${prev ? `<p class="pr-note">▲▼ is movement since <b>${esc(prev.label || 'last week')}</b>, the last set you shared.</p>`
+      ${prev ? `<p class="pr-note">▲▼ is movement since <b>${esc(prev.label || 'last week')}</b>, the last set you shared. A team that held its spot shows nothing.</p>`
              : `<p class="pr-note">No movement arrows yet — they appear once you've shared a set and a new week lands.</p>`}
+      <label class="pr-by">
+        <span>Published by</span>
+        <input id="pr-byline" type="text" maxlength="40" placeholder="Your name or team" />
+      </label>
+      <p class="pr-note">The league sees this on the rankings you send, so they know whose take it is.</p>
     </div>`;
 
   const rows = S.order.map((id, i) => {
     const t = teamById(id);
     const row = (S.rows || {})[id];
-    const mgr = mgrFor(t.team);
+    const mgr = mgrLabel(t.team);
     const mv = moveFor(prev, id, i);
     const modelRank = S.model[id];
     const moved = modelRank && modelRank !== i + 1;
@@ -434,7 +466,7 @@ function paintRank() {
             <span class="pr-n">${i + 1}</span>
             <select class="pr-jump" aria-label="Move ${esc(t.team)} to position">${opts}</select>
           </label>
-          ${mv != null ? `<span class="pr-mv ${mv > 0 ? 'up' : mv < 0 ? 'down' : 'flat'}">${moveStr(mv)}</span>` : ''}
+          ${hasMove(mv) ? `<span class="pr-mv ${mv > 0 ? 'up' : 'down'}">${moveStr(mv)}</span>` : ''}
         </div>
         <div class="pr-body">
           <div class="pr-team">${esc(t.team)}${mgr ? ` <span class="pr-mgr">${esc(mgr)}</span>` : ''}${t.isMe ? ' <span class="pr-you">you</span>' : ''}</div>
@@ -496,6 +528,10 @@ function paintRank() {
     li.querySelector('.pr-jump').onchange = (e) => move(id, Number(e.target.value));
   });
 
+  const by = $('#pr-byline');
+  by.value = S.byline || '';   // assigned, never interpolated into markup
+  by.addEventListener('input', () => { S.byline = by.value; persist(); });
+
   $('#pr-share').onclick = () => doShare('link');
   $('#pr-copy').onclick = () => doShare('text');
   $('#pr-rebuild').onclick = () => {
@@ -522,16 +558,16 @@ function paintShared(p) {
   show('#pr-shared');
   const rows = (p.o || []).map((row, i) => {
     const [name, rec, ppg, note, modelRank, mv] = row;
-    const mgr = mgrFor(name);
+    const mgr = mgrLabel(name);
     const stats = [];
     if (rec) stats.push(rec);
     if (ppg != null) stats.push(`${ppg} ppg`);
     const moved = modelRank && modelRank !== i + 1;
     return `
-      <li class="pr-row ro">
+      <li class="pr-row ro${i < 3 ? ' podium p' + (i + 1) : ''}">
         <div class="pr-rank">
           <span class="pr-n big">${i + 1}</span>
-          ${mv != null ? `<span class="pr-mv ${mv > 0 ? 'up' : mv < 0 ? 'down' : 'flat'}">${moveStr(mv)}</span>` : ''}
+          ${hasMove(mv) ? `<span class="pr-mv ${mv > 0 ? 'up' : 'down'}">${moveStr(mv)}</span>` : ''}
         </div>
         <div class="pr-body">
           <div class="pr-team">${esc(name)}${mgr ? ` <span class="pr-mgr">${esc(mgr)}</span>` : ''}</div>
@@ -543,11 +579,11 @@ function paintShared(p) {
   }).join('');
 
   $('#pr-shared').innerHTML = `
-    <div class="pr-card pr-shared-banner">📬 Someone shared their power rankings with you</div>
+    <div class="pr-card pr-shared-banner">📬 <b>${esc(p.b || 'Someone')}</b> shared their power rankings with you</div>
     <div class="pr-card pr-head">
-      <div class="pr-week">${esc(p.l || '')}${p.d ? ` · ${esc(p.d)}` : ''}</div>
+      <div class="pr-week">${esc(p.l || '')}${p.d ? ` · ${esc(niceDate(p.d))}` : ''}</div>
       <h2>Power Rankings</h2>
-      <p class="pr-sub">One person's rankings for the league. ${p.r ? 'Built from all-play record, scoring and form, then argued with by hand.' : 'Preseason — pure opinion, no games played yet.'}</p>
+      <p class="pr-sub">${p.b ? `${esc(p.b)}'s` : "One person's"} rankings for the league. ${p.r ? 'Built from all-play record, scoring and form, then argued with by hand.' : 'Preseason — pure opinion, no games played yet.'}</p>
     </div>
     <ol class="pr-list">${rows}</ol>
     <div class="pr-card pr-actions">
@@ -557,11 +593,11 @@ function paintShared(p) {
     </div>`;
 
   $('#pr-ro-copy').onclick = async () => {
-    const L = [`🏆 POWER RANKINGS — ${p.l || ''}`, ''];
+    const L = [`🏆 POWER RANKINGS — ${p.l || ''}`, p.b ? `${p.b}'s rankings` : '', ''].filter((x, i) => i !== 1 || x);
     (p.o || []).forEach((row, i) => {
       const [name, rec, ppg, note, , mv] = row;
       const bits = [rec]; if (ppg != null) bits.push(`${ppg} ppg`);
-      L.push(`${i + 1}. ${mv != null ? moveStr(mv) + ' ' : ''}${name} — ${bits.filter(Boolean).join(' · ')}`);
+      L.push(`${i + 1}. ${hasMove(mv) ? moveStr(mv) + ' ' : ''}${name} — ${bits.filter(Boolean).join(' · ')}`);
       if (note) L.push(`   ${note}`);
     });
     const txt = L.join('\n');
