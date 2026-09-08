@@ -574,7 +574,78 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v213** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v214** (backend **b14-football-boxplayer**).
+
+- **🗓️ AI Picks shows the WEEK for NFL and CFB (v214)** — the owner: *"Inside ai
+  picks for cfb and nfl make it show that weeks games. Since those aren't daily
+  like mlb or nba."* Right, and the board was asking ESPN the wrong question.
+  - **The mechanism.** `getGames(sport, date)` asks for one DATE, which on a
+    Tuesday or a Wednesday returns nothing at all — so the board sat empty for
+    most of the week on the two leagues the owner most wants to read *ahead*
+    of. The **bare scoreboard call (no `dates=`) returns the current week's full
+    slate**, which is what the NFL and CFB tabs have used since v145/v161. New
+    `WEEK_SPORTS` + **`weekSlate(sport)`** is that same read, and it keeps the
+    two things `getGames` does that a raw `scoreboard()` call would have
+    silently dropped: **the Top-25 gate** (or CFB shows all ~70 games) and
+    **`trackLines`** for the games in the week that are actually today's (or the
+    device line-movement history stops building on exactly the two sports whose
+    lines move most).
+  - **🚨 The display widened; the RECORD did not, and that is the whole
+    correctness of the change.** Two rules, both already in force, and the code
+    now says why:
+    - **Each game commits under ITS OWN slate date** (`slateDateFor(g)`), never
+      the week's. `gradePending` re-fetches `getGames(sport, date)` to find a
+      game again, so a Thursday game filed under Sunday would never grade and
+      would be purged in silence at the 14-day cutoff — the exact v183 shape.
+    - **Only TODAY's games are recorded.** A pick logged Wednesday for Sunday is
+      made without the injury news, line movement and DK splits that will exist
+      on Sunday — and `recordPick` is first-write-wins, so the week board would
+      permanently freeze a *staler* read than the app already gets. And a game
+      earlier in the week that is already final had its pick recorded on its own
+      day and graded by `gradePending`; committing it again would be freshly
+      predicting a finished game (v138 look-ahead). It still **grades for
+      display** — `commitRow` returns the ✅/❌ under `record:false` — it just
+      writes nothing. Verified by assertion: today's games recorded, a game
+      three days out shown and not recorded, Thursday's final shown and not
+      written, and every recorded pick carrying today's date.
+  - **Routing had to move with it, or the change would fight itself.**
+    `aiSlateCounts` counts the WEEK for football on the today sweep — otherwise
+    `aiRoute` would see an empty Tuesday and route the tab *away* from the NFL,
+    which is the opposite of showing the week. A look-back date still uses the
+    day query: a look-back is about one slate.
+  - **The Overview board stays DAILY**, deliberately: it is the cross-sport read
+    for today, and pricing a whole football week there would flood it and cost
+    ~40 model runs on a view that records nothing. But its **per-league strip is
+    week-aware** — a league is listed if it has games in *either* window, and
+    football rows read "16 games this week" — so a Tuesday no longer shows
+    "nothing on anywhere" while the NFL has a full slate one tap away. That is
+    the v199 dead-end rule applied to the new axis.
+  - **A finished game is a result, not a play.** In week mode the 📐 spread and
+    🎯 totals lists are built from `upcoming` rather than every row, because
+    across a week the Thursday game would otherwise sit in those lists AND in
+    📋 Finished with its grade — the two-near-identical-lists problem this app
+    has now fixed four times (v176, v187, v213, here). **Day mode is unchanged.**
+    📋 Finished also opens itself once nothing is left to play, which covers both
+    a look-back slate and the end of a football week.
+  - Wording follows the period everywhere it used to hardcode a day: the header
+    names the real week off the payload (`weekLabelOf` → "Week 2" / "Preseason ·
+    Week 3" / "Playoffs"), the plays line says "plays this week", the empty
+    state says "on this week's slate", and the empty-league jump chips say which
+    window they mean. **MLB and NBA are untouched and still daily** — asserted.
+  - Verified in headless Chromium — **33 checks** in six contexts: a week whose
+    Thursday is final, two games today and two on Sunday, all rendering on one
+    board; the record containing only today's, with each pick carrying its own
+    slate date; routing staying on football on a day it has no games; CFB
+    getting the week with the Top-25 gate intact; MLB still fetched by date and
+    still saying "today"; and both palettes at 390px and 1280px. The v213 suite
+    (61) still passes.
+  - ⚠️ **Test-harness note, the EIGHTH time, and this one had two heads:**
+    `#ai-head` and `.lad-sec` are uppercased by CSS so `innerText` returns
+    "WEEK 2", **and `innerText` omits the contents of a closed `<details>`** —
+    so three assertions about games that were rendering perfectly failed
+    because those games sat in the collapsed "model agrees with the book" fold.
+    Read `innerHTML` (or `textContent`) for anything inside a fold, and compare
+    headings case-insensitively. All four initial failures were the test.
 
 - **🗂️ AI Picks split into two levels — a league, then a question (v213)** — the
   owner: *"Too hard to see the records and analysis and back testing. I want it
@@ -4931,6 +5002,16 @@ rewrite.**
   - ⚠️ A payload served from disk is marked **`__stale`/`__at`**, defined
     **non-enumerable** so it can never survive a JSON round-trip, appear in an
     `Object.keys` walk over a payload, or be mistaken for an ESPN field.
+- **`weekSlate(sport)` / `WEEK_SPORTS`** (v214) — NFL and CFB are **weekly**, so
+  asking for a single date returns nothing Monday–Wednesday. The bare
+  `scoreboard()` call (no `dates=`) returns the current week's whole slate;
+  `weekSlate` wraps it and re-applies the two things `getGames` does that a raw
+  call would drop — the **Top-25 gate** and **`trackLines`** for the games in
+  the week that are today's. It also returns a `label` (`weekLabelOf` → "Week
+  2" / "Preseason · Week 3" / "Playoffs"). Used by the AI Picks board and by
+  `aiSlateCounts`. ⚠️ **Anything that RECORDS off a week slate must commit each
+  game under its own `slateDateFor(g)`**, or `gradePending` can never find it
+  again — and must not record games that are not today's; see the v214 entry.
 - `LEAGUES` — per-sport config (label, emoji, espnPath, `fav` favorite teams, type).
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
 - Tabs: Home, Eagles, **🏈 NFL** (league-wide lens, v145), **🎓 CFB** (college
@@ -5099,8 +5180,15 @@ rewrite.**
   choice has the same four sub-tabs, built by `paintAiView()`.
   - **📋 Board** — the conviction ladder, unchanged: Best Bets (gap 10+) →
     Edges (5–9) → Leans (2–5, folded) → 📐 ATS → 🎯 Totals → ✅ passes (folded)
-    → 📋 Finished (v199) → 📈 Team Trends → 🎯 Player Props, with a plays-today
-    line on top and three pointers into the history at the bottom.
+    → 📋 Finished (v199) → 📈 Team Trends → 🎯 Player Props, with a plays line
+    on top and three pointers into the history at the bottom.
+    **🗓️ For NFL and CFB it is the WEEK's slate, not the day's** (v214,
+    `WEEK_SPORTS` + `weekSlate`) — football is weekly, so a day query showed an
+    empty board Monday through Wednesday. ⚠️ **Only today's games are RECORDED**
+    and each commits under its own `slateDateFor(g)`; see the v214 entry for
+    both reasons. In week mode the 📐/🎯 lists carry only games still to play,
+    because a finished one is already in 📋 Finished with its grade. An explicit
+    look-back (`state.aiDate`) is still one day.
     **`paintSportBoard` is the ONLY view that records** (see below).
     On 🌐 Overview it is `paintOverviewBoard` — every in-season league priced at
     once, one card per game (deduped by game id, the v187 rule), plus a

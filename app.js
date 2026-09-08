@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v213';
+const APP_VERSION = 'v214';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -493,6 +493,37 @@ async function scoreboard(sport, dateStr) {
   const parts = [cfg.sbQuery, dateStr ? `dates=${dateStr}` : ''].filter(Boolean);
   const json = await fetchJSON(`${SITE}/${cfg.espnPath}/scoreboard${parts.length ? `?${parts.join('&')}` : ''}`);
   return { json, games: (json.events || []).map(normEvent) };
+}
+
+// 🗓️ NFL and CFB are WEEKLY sports (v214). Asking ESPN for a single DATE
+// returns that date's games — which on a Tuesday or a Wednesday is nothing at
+// all, so the AI Picks board sat empty for most of the week on the two leagues
+// whose slate the owner most wants to read ahead of. The bare scoreboard call
+// (no `dates=`) returns the CURRENT WEEK's full slate; that is what the NFL and
+// CFB tabs have used since v145/v161, and this is the same read.
+const WEEK_SPORTS = new Set(['nfl', 'cfb']);
+// The phase/week label off the scoreboard payload, in the same shape the NFL
+// tab derives it. Returned beside the games because getGames drops the json.
+function weekLabelOf(json, games) {
+  const stype = Number(json?.season?.type ?? json?.leagues?.[0]?.season?.type)
+    || (games || []).find((g) => g.seasonType)?.seasonType || null;
+  const wk = json?.week?.number ?? null;
+  if (stype === 3) return 'Playoffs';
+  if (stype === 1) return `Preseason${wk ? ` · Week ${wk}` : ''}`;
+  return wk ? `Week ${wk}` : 'This week';
+}
+async function weekSlate(sport) {
+  const { json, games: raw } = await scoreboard(sport);
+  // Same Top-25 gate getGames applies — it must not be skipped just because
+  // the slate arrived by a different door, or CFB would show all 70 games.
+  const games = LEAGUES[sport]?.top25 ? await onlyRanked(sport, raw) : raw;
+  // getGames tracks lines only when it was asked for TODAY; a week fetch is
+  // dateless, so do it here for the games in the week that are actually
+  // today's — otherwise the device line-movement history stops building on
+  // exactly the two sports whose lines move most.
+  const today = ymd(sportsDate());
+  trackLines(sport, games.filter((g) => slateDateFor(g) === today));
+  return { games, label: weekLabelOf(json, games) };
 }
 
 // --- college football: the Top 25 gate ------------------------------------
@@ -4721,7 +4752,13 @@ const aiDateLabel = (s) => new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice
 // One day's slate size per sport. `open` = games not yet final, i.e. games the
 // model can still be judged on going forward.
 async function aiSlateCounts(sports, dateStr) {
-  const lists = await Promise.all(sports.map((s) => getGames(s, dateStr).catch(() => [])));
+  // 🗓️ v214 — for NFL and CFB, "does this league have games" is a WEEK
+  // question. Counting a Tuesday would route the tab away from the NFL for
+  // most of the week, which is the opposite of what showing the week is for.
+  // Past dates still use the day query: a look-back is about one slate.
+  const isToday = dateStr === ymd(sportsDate());
+  const lists = await Promise.all(sports.map((s) =>
+    (isToday && WEEK_SPORTS.has(s) ? weekSlate(s).then((w) => w.games) : getGames(s, dateStr)).catch(() => [])));
   return sports.map((sport, i) => {
     const playable = lists[i].filter((g) => g.id && g.seasonType !== 1);
     return { sport, n: playable.length, open: playable.filter((g) => gameState(g) !== 'final').length };
@@ -4773,7 +4810,7 @@ async function aiRecentFor(sport) {
 // of the four sub-tabs, and the Board sub-tab is the old ladder untouched.
 const AI_SUBS = [['board', '📋 Board'], ['record', '📈 Record'], ['backtest', '🧪 Backtest'], ['model', '🧠 Model']];
 const AI_BLURB = {
-  board: 'The model\'s plays for the day, ranked by conviction. This is the only view that adds picks to the record.',
+  board: 'The model\'s plays on this slate, ranked by conviction. This is the only view that adds picks to the record.',
   record: 'How the model has actually done — every graded pick, split by market.',
   backtest: 'The charts and the instruments: is its confidence honest, and does its number beat the book\'s?',
   model: 'What the model is computing, read live from the code — weights, thresholds, and what is fitted vs still a guess.',
@@ -4848,7 +4885,12 @@ async function paintAiView() {
   const head = $('#ai-head');
   if (head) {
     const scope = all ? '🌐 Everything' : `${LEAGUES[sport]?.emoji || ''} ${LEAGUES[sport]?.label || sport}`;
-    const when = sub === 'board' ? (state.aiDate && state.aiDate !== ymd(sportsDate()) ? ` — ${aiDateLabel(state.aiDate)}` : ' — Today') : '';
+    // 🗓️ v214 — football is weekly, so its board says so. paintSportBoard
+    // replaces "This week" with the real week number once the payload lands.
+    const when = sub !== 'board' ? ''
+      : state.aiDate && state.aiDate !== ymd(sportsDate()) ? ` — ${aiDateLabel(state.aiDate)}`
+      : (!all && WEEK_SPORTS.has(sport)) ? ' — This week'
+      : ' — Today';
     head.textContent = `🤖 ${scope}${when}`;
   }
   if (sub === 'board') {
@@ -4915,11 +4957,23 @@ async function paintOverviewBoard(tok) {
   const passes = live.filter((r) => r.p && r.info?.favName && !r.tier).length;
 
   container.innerHTML = '';
+  // 🗓️ v214 — the Overview board itself stays DAILY: it is the cross-sport
+  // read for today, and pricing a whole football week here would flood it and
+  // cost 40 model runs on a view that records nothing. But a league with no
+  // game today can still have a week's slate one tap away, so the per-league
+  // strip counts the WEEK for NFL and CFB (state.aiSlates already does), and
+  // a league is listed if it has games in EITHER window. Otherwise a Tuesday
+  // shows "no games anywhere" while the NFL has sixteen — the v199 dead end.
+  const slateN = (sp) => (state.aiSlates || []).find((c) => c.sport === sp)?.n || 0;
+  const listed = cached.filter((c) => c.n || slateN(c.sport));
   const played = cached.filter((c) => c.n);
-  if (!played.length) {
+  if (!listed.length) {
     container.appendChild(el('div', 'ai-note', '📭 No games on anywhere today. Tap a league above to read its record, or 🧠 Model to see what each one is computing.'));
     applySections('predictions'); injectJumpNav('predictions');
     return;
+  }
+  if (!played.length) {
+    container.appendChild(el('div', 'ai-note', `📭 Nothing on today. ${listed.filter((c) => WEEK_SPORTS.has(c.sport) && slateN(c.sport)).map((c) => `${lgLabel(c.sport)} has ${slateN(c.sport)} game${slateN(c.sport) === 1 ? '' : 's'} on this week's slate`).join(' · ') || 'Open a league below for its board.'} — tap it below.`));
   }
   container.appendChild(el('div', 'brd-note', boardNote()));
   // 🚨 ONE card per game, exactly as Home's board does it (v187). Every card
@@ -4958,14 +5012,14 @@ async function paintOverviewBoard(tok) {
     drawn(totNew);
   }
   // Per-league strip: the counts, and one tap into that league's own board.
-  container.appendChild(el('div', 'lad-sec', `🏟️ By league <span class="n">today</span> <span class="n">${played.length}</span>`));
+  container.appendChild(el('div', 'lad-sec', `🏟️ By league <span class="n">today</span> <span class="n">${listed.length}</span>`));
   const strip = el('div', 'ai-lgstrip');
-  strip.innerHTML = played.map((c) => {
+  strip.innerHTML = listed.map((c) => {
     const plays = c.rows.filter((r) => gameState(r.g) !== 'final' && (r.tier === 'alert' || r.tier === 'best' || r.tier === 'edge')).length;
     const mkts = c.rows.filter((r) => gameState(r.g) !== 'final' && (r.ats || r.tot)).length;
     return `<button type="button" class="ai-lgrow" data-league="${c.sport}">
       <span class="lgn">${lgLabel(c.sport)}</span>
-      <span class="lgd">${c.n} game${c.n === 1 ? '' : 's'}${plays ? ` · ${plays} play${plays === 1 ? '' : 's'}` : ''}${mkts ? ` · ${mkts} number market${mkts === 1 ? '' : 's'}` : ''}</span>
+      <span class="lgd">${WEEK_SPORTS.has(c.sport) ? `${slateN(c.sport)} game${slateN(c.sport) === 1 ? '' : 's'} this week` : `${c.n} game${c.n === 1 ? '' : 's'} today`}${plays ? ` · ${plays} play${plays === 1 ? '' : 's'}` : ''}${mkts ? ` · ${mkts} number market${mkts === 1 ? '' : 's'}` : ''}</span>
       <span class="lgc">›</span></button>`;
   }).join('');
   strip.addEventListener('click', (e) => {
@@ -4990,19 +5044,31 @@ async function paintSportBoard(tok) {
   const today = ymd(sportsDate());
   const dateStr = state.aiDate || today;
   const isToday = dateStr === today;
+  // 🗓️ v214 — football is weekly. The board shows the whole week for NFL and
+  // CFB; an explicit look-back (state.aiDate) is still ONE day, because that
+  // is what "show me the last slate" means.
+  const weekMode = WEEK_SPORTS.has(sport) && isToday;
 
   // Cached per sport+date so flipping to 📈 Record and back costs no fetch and
   // no second model run. renderPredictions clears it, so ENTERING the tab is
   // always fresh; only sub-tab switching reuses it.
-  const key = `${sport}|${dateStr}`;
+  const key = `${sport}|${weekMode ? 'week' : dateStr}`;
   let built = state.aiBoard?.key === key ? state.aiBoard.data : null;
   if (!built) {
-    const games = await getGames(sport, dateStr).catch(() => []);
-    built = { games, ...(await buildBoard(sport, games)) };
+    const w = weekMode ? await weekSlate(sport).catch(() => null) : null;
+    const games = w ? w.games : await getGames(sport, dateStr).catch(() => []);
+    built = { games, label: w?.label || null, ...(await buildBoard(sport, games)) };
     state.aiBoard = { key, data: built };
   }
   if (tok != null && tok !== aiViewToken) return;        // view changed under us
-  const { games, rows, playable, report } = built;
+  const { games, rows, playable, report, label: weekLabel } = built;
+  // The head is set by paintAiView before the fetch, so it can only say
+  // "this week"; now that the payload is here, name the week.
+  if (weekMode && weekLabel) {
+    const h = $('#ai-head');
+    if (h) h.textContent = `🤖 ${LEAGUES[sport].emoji} ${LEAGUES[sport].label} — ${weekLabel}`;
+  }
+  const period = weekMode ? 'this week' : isToday ? 'today' : 'that day';
   const allPreseason = games.length > 0 && !playable.length;
   const renderTally = (todayTxt) => renderAiTally(sport, todayTxt);
   // 🚨 v213 — the five stat tiles moved to the 📈 Record sub-tab. They are
@@ -5010,14 +5076,14 @@ async function paintSportBoard(tok) {
   // ladder down; the board keeps only what is a board fact, the play count.
   const playsLine = (playCount, playSub) => {
     const d = el('div', `ai-plays${playCount ? ' on' : ''}`);
-    d.innerHTML = `<b>${playCount}</b> <span>play${playCount === 1 ? '' : 's'} today</span> <i>${esc(playSub || '')}</i>`;
+    d.innerHTML = `<b>${playCount}</b> <span>play${playCount === 1 ? '' : 's'} ${period}</span> <i>${esc(playSub || '')}</i>`;
     return d;
   };
   if (!playable.length) {
     container.innerHTML = '';
     container.appendChild(el('div', 'empty', allPreseason
       ? 'Preseason only today — the model sits these out (backups play; results don\'t predict anything).'
-      : `No ${esc(LEAGUES[sport].label)} games ${isToday ? 'today' : `on ${esc(aiDateLabel(dateStr))}`}.`));
+      : `No ${esc(LEAGUES[sport].label)} games ${weekMode ? 'on this week\'s slate' : isToday ? 'today' : `on ${esc(aiDateLabel(dateStr))}`}.`));
     // An empty league is a dead end unless the tab says where the games ARE.
     // These counts come from the same sweep that does the routing, so they are
     // accurate even when the owner has pinned a league by tapping its chip.
@@ -5025,7 +5091,7 @@ async function paintSportBoard(tok) {
     const jump = el('div', 'ai-jump');
     if (others.length) {
       jump.innerHTML = others.map((c) =>
-        `<button type="button" class="chip" data-jump="${c.sport}">${LEAGUES[c.sport].emoji} ${esc(LEAGUES[c.sport].label)} — ${c.n} game${c.n === 1 ? '' : 's'} today</button>`).join('');
+        `<button type="button" class="chip" data-jump="${c.sport}">${LEAGUES[c.sport].emoji} ${esc(LEAGUES[c.sport].label)} — ${c.n} game${c.n === 1 ? '' : 's'} ${WEEK_SPORTS.has(c.sport) ? 'this week' : 'today'}</button>`).join('');
     }
     const backBtn = el('button', 'chip', `📅 Last ${esc(LEAGUES[sport].label)} slate`);
     backBtn.addEventListener('click', async () => {
@@ -5060,7 +5126,24 @@ async function paintSportBoard(tok) {
   // cuts at g.date, but the season-stat feeds it leans on cannot be rewound.
   // The read is still shown — it just never enters the record.
   rows.forEach((r) => {
-    const c = commitRow(r, dateStr, { record: isToday });
+    // 🚨 In week mode each game commits under ITS OWN slate date, never the
+    // week's. gradePending re-fetches getGames(sport, date) to find a game
+    // again, so a Thursday game filed under Sunday would never grade and would
+    // be purged in silence at the 14-day cutoff — the exact v183 `:s` shape.
+    const d = weekMode ? slateDateFor(r.g) : dateStr;
+    // 🚨 And only TODAY's games are RECORDED, so widening the display to a
+    // week leaves the record byte-for-byte what it was. Two reasons, both
+    // existing rules rather than new policy:
+    //   • A pick logged Wednesday for Sunday is made without the injury news,
+    //     line movement and DK splits that will exist on Sunday — and
+    //     recordPick is first-write-wins, so the week board would permanently
+    //     freeze a staler read than the app already gets today.
+    //   • A game earlier in the week that is already final had its pick
+    //     recorded on its own day and graded by gradePending; committing it
+    //     again here would be freshly predicting a finished game, which is
+    //     look-ahead (v138). It still GRADES for display — commitRow returns
+    //     the ✅/❌ under record:false — it just writes nothing.
+    const c = commitRow(r, d, { record: isToday && (!weekMode || d === today) });
     if (c?.graded) { graded++; if (c.hit) right++; }
   });
 
@@ -5097,7 +5180,7 @@ async function paintSportBoard(tok) {
     container.appendChild(el('div', 'ai-note',
       '💰 Sharp-money splits unavailable right now (betting backend asleep or down) — these picks are model-only.'));
   }
-  renderTally(graded ? `${isToday ? 'today' : aiDateLabel(dateStr)} ${right}-${graded - right}` : '');
+  renderTally(graded ? `${weekMode ? 'this week' : isToday ? 'today' : aiDateLabel(dateStr)} ${right}-${graded - right}` : '');
 
   // ---- the ladder ----
   const section = (key, list) => {
@@ -5146,7 +5229,13 @@ async function paintSportBoard(tok) {
   // 📐 Against the spread (football). Its own section and its own record —
   // the model can be good at picking winners and bad at beating the number,
   // and one blended figure would hide exactly that.
-  const atsRows = rows.filter((r) => r.ats).sort((a, b) => Math.abs(b.ats.edge) - Math.abs(a.ats.edge));
+  // 🗓️ In week mode a finished game is NOT a play — it is a result, and it
+  // already has its own row (with the graded 📐 mark) in 📋 Finished below. On
+  // a one-day board the two lists barely overlap; across a football week the
+  // Thursday game would sit in both, which is the two-near-identical-lists
+  // problem this app has fixed three times. Day mode is unchanged.
+  const marketPool = weekMode ? upcoming : rows;
+  const atsRows = marketPool.filter((r) => r.ats).sort((a, b) => Math.abs(b.ats.edge) - Math.abs(a.ats.edge));
   if (atsRows.length) {
     const at = tallyStats();
     container.appendChild(el('div', 'lad-sec',
@@ -5163,7 +5252,7 @@ async function paintSportBoard(tok) {
   // 🎯 Totals. Rendered as full cards like the other two markets — they used
   // to be one-line text rows, which quietly said "this one matters less". It
   // is the same kind of call: the model's number against the book's.
-  const totRows = rows.filter((r) => r.tot).sort((a, b) =>
+  const totRows = marketPool.filter((r) => r.tot).sort((a, b) =>
     (b.tot.tier === 'best' ? 1 : 0) - (a.tot.tier === 'best' ? 1 : 0)
     || Math.abs(b.tot.diff) - Math.abs(a.tot.diff));
   if (totRows.length) {
@@ -5225,9 +5314,11 @@ async function paintSportBoard(tok) {
     container.appendChild(el('div', 'lad-sec',
       `📋 Finished <span class="n">${recs}</span> <span class="n">${finals.length}</span>`));
     const d = el('details', 'lad-fold');
-    d.open = !isToday;
+    // Open once there is nothing left to play — on a look-back slate (every
+    // game final) and at the end of a football week, the results ARE the page.
+    d.open = !upcoming.length;
     const mark = (v) => (v === true ? '✅' : v === false ? '❌' : '—');
-    d.innerHTML = `<summary>How the model did on ${isToday ? "today's" : 'this'} finished games <span class="cv">${finals.length} ▸</span></summary>
+    d.innerHTML = `<summary>How the model did on ${weekMode ? "this week's" : isToday ? "today's" : 'this'} finished games <span class="cv">${finals.length} ▸</span></summary>
       <div class="lad-body">${finals.map((r) => {
         const abbr = (r.g.home.name === r.p.winner.name ? r.g.home.abbr : r.g.away.abbr) || r.p.winner.name.split(' ').pop();
         const a = atsHit(r), t2 = totHit(r);
