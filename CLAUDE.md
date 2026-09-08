@@ -193,14 +193,17 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   masthead), the nine-tab grid, `#home-board` (🎲 The Board, between My Teams
   and ⛳ Golf) and `#botbar` (the persistent model-read bar).
 - `app.js` (~10,750 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
-- `styles.css` — all styling, in five layers, and **order matters**: (1) the
+- `styles.css` — all styling, in EIGHT layers, and **order matters**: (1) the
   original dark `:root` vars and components; (2) the `:root[data-theme="light"]`
   "Editorial / Premium" block, which un-hardcodes the dark-only values (white
   hairline borders, dark gradients, chips, tracks); (3) the **token layer**
   (v187), (4) the **spacing & alignment layer** (v188) and (5) the **FLOW
   layer** (v191) and (6) the **`.ffp-` fantasy layer** (v195) and (7) the
   **AI Picks two-level layer** (v213 — `.ai-sub`, `.ai-plays`, `.ai-histlink`,
-  `.ai-lgstrip`, `.mc-*`), all keyed on `:root[data-palette]`.
+  `.ai-lgstrip`, `.mc-*`) and (8) the **chrome-bar ground layer** (v217 — the
+  masthead, `nav.tabs` and `#botbar` take an opaque `--barRGB` ground and
+  declare `backdrop-filter: none`; **do not put the filter back**, see the
+  v217 entry), all keyed on `:root[data-palette]`.
   ⚠️ **`font: <weight> <size>/<lh> inherit` is INVALID and is dropped silently**
   — the shorthand needs a real family, and `inherit` is legal only as the whole
   value (`font: inherit` alone is fine). v213 shipped four of these and the
@@ -574,7 +577,59 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v216** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v217** (backend **b14-football-boxplayer**).
+
+- **👻 The white shape under the ⌃ RAIL button — the chrome bars were 96%
+  transparent (v217)** — the owner, twice: a screenshot of a white rounded
+  shape hanging below the masthead's ⌃ RAIL button, then *"Nvm it's still
+  there u need to fix it… only stays for like 10 seconds but it's annoying."*
+  - **What was wrong.** `.topbar`, `nav.tabs` and `#botbar` were each
+    `rgba(var(--base), .04)` — 4% ink and nothing else — plus
+    `backdrop-filter: saturate(180%) blur(14px)`. **The filter was doing 100%
+    of the work of making them look like bars.** A bar that is only legible
+    while its filter is working is a bar that will occasionally not be legible,
+    and iOS Safari is where that bites: a `backdrop-filter` layer sampled from
+    a stale or offset rect while the compositor is still settling paints the
+    thing behind it in the wrong place.
+  - **Which is exactly the shape the owner photographed.** `.tabs` is
+    `position: sticky` and sits **directly under** `.topbar`, so what its
+    filter samples is the masthead — and the only white rounded shapes
+    anywhere near there are the `LIGHT` / `⌃ RAIL` pills. A misaligned sample
+    repeats one of those pills just below where it really is, and it clears on
+    the next real composite: a scroll, or the end of load. That is the ghost,
+    its position, and both of the owner's observations (*"cleared on scroll"*,
+    *"only stays for like 10 seconds"*) in one mechanism.
+  - **`.topbar`'s filter was pure cost** — the bar is **static**, so nothing
+    ever passes behind it. It bought no frost at all and only forced a
+    compositing layer for the ghost to hang off.
+  - **The fix is one rule and one token.** New **`--barRGB`** per palette (the
+    ground with that 4% ink baked flat: champagne `234, 232, 227`, onyx
+    `29, 28, 24`), and a **layer 8** at the end of `styles.css` giving all
+    three bars `background-color: rgba(var(--barRGB), 1)`,
+    `background-image: none` and `backdrop-filter: none`. One token, not three,
+    so the whole chrome reads as one ground.
+  - **At the top of the page this is pixel-identical to v216** — 4% ink over
+    the ground *is* that colour when the ground is what's behind it, which for
+    a static masthead it always is. The only real change is **mid-scroll**,
+    where content no longer shows faintly through the sticky nav. That is what
+    a sticky nav should do anyway, and it is why the bottom bar was included:
+    same construction, same fixed-over-content job, same risk.
+  - ⚠️ **The general rule, and it is what the v192/v209 audits kept missing
+    because it is not a layout fault at all: give a bar a real ground FIRST and
+    treat the blur as an enhancement.** An element whose only opacity comes
+    from a compositing effect has no defined appearance when that effect is
+    degraded — and the browser degrades it under memory pressure, in low-power
+    mode, and during load.
+  - Verified in headless Chromium at 390px in **both palettes** — **36
+    checks**: each of the three bars fully opaque, painting no gradient and
+    declaring no filter; all three sharing one ground; the sticky rail still
+    the element hit at its own midpoint with 527px of content scrolled behind
+    it; nine tabs; no horizontal overflow; no console errors. Screenshotted at
+    the masthead in both palettes and compared against v216.
+  - ⚠️ **Test-harness note:** a suite that deliberately serves the backend a
+    503 gets a browser *"Failed to load resource"* console line — that is the
+    fixture working, not the app erroring. The power-lab entry already says
+    this; filter it, don't chase it.
 
 - **🚨 Tapping a league kicked you back to Overview a few seconds later (v216)**
   — the owner, the same day v215 shipped: *"I'm clicking nfl or another league
@@ -5152,20 +5207,18 @@ rewrite.**
      re-asserts after every repaint so the 30s refresh can't re-open it.
   2. **The masthead** — brand · version · palette cycler · rail fold · the
      LIVE/OFFLINE badge.
-     - ⚠️ **It is 96% TRANSPARENT and leans entirely on the blur to look
-       solid**: `:root[data-palette] .topbar` is `rgba(var(--base), .04)` plus
-       `-webkit-backdrop-filter: saturate(180%) blur(14px)`. Worth knowing
-       because that is the standard setup for transient compositing ghosts on
-       iOS Safari — 8 Sep 2026 the owner sent a screenshot of a white rounded
-       shape hanging below the ⌃ RAIL button, which **cleared on scroll** and
-       has not come back. **The layout is not the cause**: a sweep measured the
-       bar in 48 states (2 palettes × 6 widths from 320px × rail shown/hidden ×
-       stale note on/off) and again across all nine tabs — no element crossing
-       the bar's edges, no sibling collision, no spill, no overflow, anywhere.
-       So **do not re-run that sweep** if the same screenshot appears. If it
-       ever becomes persistent or frequent, the fix is to give the bar a real
-       opaque ground and keep the blur as an enhancement, so a dropped or
-       glitched backdrop-filter can't show anything through it.
+     - ⚠️ **It stands on its OWN opaque ground and declares no filter** (v217,
+       layer 8): all three chrome bars — masthead, `nav.tabs` and `#botbar` —
+       paint `rgba(var(--barRGB), 1)`, a per-palette token that is the page
+       ground with the 4% ink they used to get from `rgba(var(--base), .04)`
+       baked flat. **Do not put `backdrop-filter` back on them.** Until v217
+       they were ~96% transparent and legible only while the filter was
+       working, which is what produced the white rounded ghost under the ⌃ RAIL
+       button at launch — see the v217 entry. **The layout was never the
+       cause**: a sweep measured the bar in 48 states (2 palettes × 6 widths
+       from 320px × rail shown/hidden × stale note on/off) and again across all
+       nine tabs, and found nothing crossing its edges. Don't re-run that
+       sweep.
   3. **`nav.tabs`** — a GRID of all nine tabs (5×2 on a phone, 9 across above
      700px), text labels, no icons, live pip on `.lb`. It cannot cut off.
   Then, inside each tab panel, **one `.ctl-row`** built by `buildControlRow()`:

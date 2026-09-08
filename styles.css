@@ -1457,6 +1457,10 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   --ac: #b8942f; --ac6: #a07f24; --ac7: #86691a; --wm: #8a7a58;
   --pos: #1d7a52; --pos2: #6b8f2e; --neg2: #c0651c; --neg: #b0332a;
   --base: 23, 21, 15;
+  /* The chrome bars' own ground (v217). It is the ground with the same 4%
+     ink the bars used to get from `rgba(var(--base), .04)`, baked flat — so
+     they look identical and no longer need a backdrop-filter to be opaque. */
+  --barRGB: 234, 232, 227;
   --acRGB: 184, 148, 47;
   --on-ac: #1a1509;
   --grad: linear-gradient(135deg, #f0dc9e 0%, #d7b34a 26%, #b8942f 52%, #e6d290 74%, #bf9c33 100%);
@@ -1469,6 +1473,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   --ac: #d9b445; --ac6: #e8d089; --ac7: #f2e3ad; --wm: #a89263;
   --pos: #4fb383; --pos2: #9ec14e; --neg2: #e08a3c; --neg: #e8635a;
   --base: 246, 242, 231;
+  --barRGB: 29, 28, 24;
   --acRGB: 217, 180, 69;
   --on-ac: #17140b;
   --grad: linear-gradient(135deg, #f6e7b4 0%, #dcb84c 28%, #c9a234 54%, #f0dda0 76%, #d3ac3e 100%);
@@ -2742,4 +2747,41 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 @media (min-width: 700px) {
   :root[data-palette] .ai-sub button { font-size: 12.5px; padding: 9px 10px; }
   :root[data-palette] .mc-row { grid-template-columns: 128px 1fr; font-size: 12.5px; }
+}
+
+/* ==========================================================================
+   LAYER 8 — the chrome bars stand on their own ground (v217)
+   The owner, twice, on a white rounded shape hanging under the ⌃ RAIL button
+   at launch: it cleared on scroll, then "it's still there… only stays for
+   like 10 seconds but it's annoying."
+
+   The masthead, the tab rail and the bottom bar were all ~96% TRANSPARENT and
+   leaned entirely on `backdrop-filter` to look solid. Two consequences:
+
+   1. `.tabs` is `position: sticky` directly under `.topbar`, so its filter
+      samples the region behind it — and the only white rounded shapes on that
+      whole screen are the LIGHT / ⌃ RAIL pills sitting immediately above it.
+      A backdrop sampled from a stale or offset rect while the compositor is
+      still settling paints exactly that: a white pill repeated just below
+      where it really is, clearing on the next real composite (a scroll, or
+      the end of load).
+   2. `.topbar` is NOT sticky — nothing ever passes behind it — so its filter
+      bought no frost at all and only forced a compositing layer.
+
+   So all three bars now paint a real opaque ground (`--barRGB` = the page
+   ground with the same 4% ink baked flat) and no longer declare a filter.
+   At the top of the page this is pixel-identical to what shipped; the only
+   real change is mid-scroll, where content no longer shows faintly through a
+   sticky nav — which is what a sticky nav should do anyway.
+
+   ⚠️ If a future bar wants frost, give it a real ground FIRST and treat the
+   blur as an enhancement. A bar that is only legible while its filter is
+   working is a bar that will occasionally not be legible.
+   ========================================================================== */
+:root[data-palette] .topbar,
+:root[data-palette] .tabs,
+:root[data-palette] .botbar {
+  background-color: rgba(var(--barRGB), 1);
+  background-image: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
 }
