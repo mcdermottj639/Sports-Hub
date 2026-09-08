@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v214';
+const APP_VERSION = 'v215';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3641,6 +3641,28 @@ function clearNflPreseason() {
   return dropped;
 }
 
+// The three pointers at the foot of a board. v213 put them on the league
+// boards; v215 made 🌐 Overview the tab's landing, so it gets them too —
+// the whole point of the v213 split was that the record should not be hard to
+// reach, and the front door is where that matters most. `sport` null = the
+// cumulative view.
+function historyLinks(sport) {
+  const det = tallyDetails(sport);
+  const rec = sport ? det.sports?.[sport] : null;
+  const mlLine = sport
+    ? (rec?.n ? `${wlOf(rec)} on the moneyline${det.atsBySport?.[sport]?.n ? ` · ${wlOf(det.atsBySport[sport])} ATS` : ''}` : 'nothing graded yet')
+    : (det.total ? 'every league, every market' : 'nothing graded yet');
+  const jump = el('div', 'ai-histlink');
+  jump.innerHTML = `<button type="button" data-sub="record"><b>📈 Record</b><span>${mlLine}</span></button>
+    <button type="button" data-sub="backtest"><b>🧪 Backtest</b><span>${det.total ? `${det.total} graded pick${det.total === 1 ? '' : 's'}` : 'no sample yet'}</span></button>
+    <button type="button" data-sub="model"><b>🧠 Model</b><span>what it computes</span></button>`;
+  jump.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-sub]');
+    if (b) setAiSub(b.dataset.sub);
+  });
+  return jump;
+}
+
 // 📈 Record — how the model has actually done. `sport` narrows every number on
 // the panel to one league; null is the cumulative view.
 function recordPanel(det, pend, sport) {
@@ -4720,30 +4742,21 @@ async function renderHomeBoard() {
   more.onclick = () => {
     // The Board spans every league, so it hands over to the Overview board —
     // landing on one league's ladder would hide most of what was just shown.
-    state.aiSport = 'all'; state.aiPinned = true; state.aiSub = 'board'; state.aiDate = null;
+    state.aiSub = 'board';           // Overview is renderPredictions' own landing
     showTab('predictions');
   };
   box.appendChild(more);
 }
 
-// 🚦 v199 — AI Picks routes ITSELF to a league that actually has games.
+// 🚦 v199 built self-routing here: the tab used to open on the first in-season
+// sport in BASE_ORDER and then say "No games today for this sport", so it swept
+// the slates and picked a league that actually had games.
 //
-// It used to open on sortedSports({teamOnly:true})[0] — the first in-season
-// sport in BASE_ORDER — and then say "No games today for this sport" whenever
-// that league wasn't playing. In early September that is EVERY visit: the NFL
-// is in season by the month table but doesn't kick off until the 10th, so the
-// tab opened empty while MLB and CFB had full slates one chip away. The model
-// had plenty to say; the tab just wasn't looking at it.
-//
-// So before the first render it sweeps today's slates and picks a league that
-// has games, preferring one with something still to play over one whose day is
-// already finished. If nothing is on anywhere it walks back day by day to the
-// most recent slate and shows THAT — read-only (see the record note below).
-//
-// It never fights the owner: tapping a sport chip pins the choice
-// (state.aiPinned), and routing sits out until the next launch. The slate
-// sweep still runs while pinned, because the empty state uses those counts to
-// offer the leagues that DO have games.
+// ⚠️ SUPERSEDED in v215 — the tab opens on 🌐 Overview instead, which answers
+// the same problem better: it prices every in-season league at once rather than
+// guessing which one the owner meant. `aiSweep` below is what survives (the
+// counts still have two readers), and the constants here still serve the
+// on-tap 📅 "Last {league} slate" button in a league's empty state.
 const AI_LOOKBACK_DAYS = 7;
 const aiDayBack = (n) => { const d = sportsDate(); d.setDate(d.getDate() - n); return ymd(d); };
 const aiDateLabel = (s) => new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8))
@@ -4753,9 +4766,9 @@ const aiDateLabel = (s) => new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice
 // model can still be judged on going forward.
 async function aiSlateCounts(sports, dateStr) {
   // 🗓️ v214 — for NFL and CFB, "does this league have games" is a WEEK
-  // question. Counting a Tuesday would route the tab away from the NFL for
-  // most of the week, which is the opposite of what showing the week is for.
-  // Past dates still use the day query: a look-back is about one slate.
+  // question: counting a Tuesday would report the NFL as empty for most of the
+  // week, and the Overview strip reads these counts. Past dates still use the
+  // day query — a look-back is about one slate.
   const isToday = dateStr === ymd(sportsDate());
   const lists = await Promise.all(sports.map((s) =>
     (isToday && WEEK_SPORTS.has(s) ? weekSlate(s).then((w) => w.games) : getGames(s, dateStr)).catch(() => [])));
@@ -4765,23 +4778,24 @@ async function aiSlateCounts(sports, dateStr) {
   });
 }
 
-async function aiRoute() {
+// 🌐 v215 — the tab OPENS ON OVERVIEW, every time. The owner: "Have ai picks
+// open to overview everytime from now on not the live games like before."
+//
+// So this no longer PICKS a league — it only sweeps the slates, because the
+// counts still have two readers: the Overview per-league strip, and the
+// empty-state jump chips inside a league. The v199 routing it replaces existed
+// to stop the tab landing on "No games today for this sport"; 🌐 Overview
+// answers that better, because it prices every in-season league at once
+// instead of guessing which one the owner wanted.
+//
+// ⚠️ The day-by-day LOOKBACK went with it, deliberately. It only ever ran when
+// nothing was on anywhere, and it cost up to 7 scoreboard reads per league on
+// exactly the days the app has least to say. The 📅 "Last {league} slate"
+// button in a league's empty state still does it, on tap — which is where
+// v199 already put the expensive version.
+async function aiSweep() {
   const sports = sortedSports({ teamOnly: true });
-  const counts = await aiSlateCounts(sports, ymd(sportsDate()));
-  state.aiSlates = counts;
-  if (state.aiPinned) return;
-  // A league with games still to play beats one whose slate is already final;
-  // beyond that, season order decides (in-season first, then BASE_ORDER — so
-  // football leads once football is on).
-  const pick = counts.find((c) => c.open) || counts.find((c) => c.n);
-  if (pick) { state.aiSport = pick.sport; state.aiDate = null; return; }
-  // Nothing anywhere today: fall back to the most recent slate.
-  for (let back = 1; back <= AI_LOOKBACK_DAYS; back++) {
-    const d = aiDayBack(back);
-    const hit = (await aiSlateCounts(sports, d)).find((c) => c.n);
-    if (hit) { state.aiSport = hit.sport; state.aiDate = d; return; }
-  }
-  state.aiDate = null;
+  state.aiSlates = await aiSlateCounts(sports, ymd(sportsDate()));
 }
 
 // The most recent day this ONE league played, for the "show the last slate"
@@ -4820,8 +4834,9 @@ const AI_BLURB = {
 let aiViewToken = 0;
 
 function setAiSport(s) {
-  // A chip tap is a decision — pin it, and drop any past slate we'd routed to.
-  state.aiSport = s; state.aiPinned = true; state.aiDate = null;
+  // A chip tap is a decision, and nothing overrides it while you are on the
+  // tab — the Overview reset happens on ENTRY (renderPredictions), not here.
+  state.aiSport = s; state.aiDate = null;
   buildAiChips(); paintAiView();
 }
 function setAiSub(t) { state.aiSub = t; buildAiSubs(); paintAiView(); }
@@ -4915,8 +4930,14 @@ async function renderPredictions() {
   // Entering the tab is what makes the board fresh; switching sub-tabs reuses
   // it, so flipping to the record and back costs no fetch and no model run.
   state.aiBoard = null;
-  await aiRoute().catch(() => {});
-  if (state.aiSport !== 'all' && !LEAGUES[state.aiSport]) state.aiSport = FEATURED.sport;
+  // 🌐 v215 — ENTERING the tab always lands on Overview. A chip tap goes
+  // through setAiSport → paintAiView and never re-enters here, so a league
+  // chosen mid-visit sticks for as long as you stay on the tab; coming back to
+  // the tab is what returns you home. `aiSub` deliberately does NOT reset —
+  // which LEAGUE resets, which QUESTION you were asking persists.
+  state.aiSport = 'all';
+  state.aiDate = null;
+  await aiSweep().catch(() => {});
   buildAiChips();
   buildAiSubs();
   await paintAiView();
@@ -4969,6 +4990,7 @@ async function paintOverviewBoard(tok) {
   const played = cached.filter((c) => c.n);
   if (!listed.length) {
     container.appendChild(el('div', 'ai-note', '📭 No games on anywhere today. Tap a league above to read its record, or 🧠 Model to see what each one is computing.'));
+    container.appendChild(historyLinks(null));
     applySections('predictions'); injectJumpNav('predictions');
     return;
   }
@@ -5031,6 +5053,7 @@ async function paintOverviewBoard(tok) {
     container.appendChild(el('div', 'ai-why', `Also today: ${[leans.length ? `👀 ${leans.length} lean${leans.length === 1 ? '' : 's'} under the ${EDGE_BAR.edge}-point bar` : '', passes ? `✅ ${passes} game${passes === 1 ? '' : 's'} the model agrees with the book on` : ''].filter(Boolean).join(' · ')}. Open a league for its full ladder.`));
   }
   container.appendChild(el('div', 'ai-why', '🌐 This view prices every league but records nothing — the day\'s picks are logged from Home and from each league\'s own board, at the full sharp-money wait.'));
+  container.appendChild(historyLinks(null));
   applySections('predictions');
   injectJumpNav('predictions');
 }
@@ -5333,18 +5356,7 @@ async function paintSportBoard(tok) {
   // It used to sit HERE, at the bottom of the ladder, behind a collapsed
   // button — twenty cards down on a college Saturday. The pointer is what
   // replaces it; the content itself moved, none of it was dropped.
-  const det = tallyDetails(sport);
-  const jump = el('div', 'ai-histlink');
-  const rec = det.sports?.[sport];
-  jump.innerHTML = `<button type="button" data-sub="record"><b>📈 Record</b><span>${
-    rec?.n ? `${wlOf(rec)} on the moneyline${det.atsBySport?.[sport]?.n ? ` · ${wlOf(det.atsBySport[sport])} ATS` : ''}` : 'nothing graded yet'}</span></button>
-    <button type="button" data-sub="backtest"><b>🧪 Backtest</b><span>${det.total ? `${det.total} graded pick${det.total === 1 ? '' : 's'}` : 'no sample yet'}</span></button>
-    <button type="button" data-sub="model"><b>🧠 Model</b><span>what it computes</span></button>`;
-  jump.addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-sub]');
-    if (b) setAiSub(b.dataset.sub);
-  });
-  container.appendChild(jump);
+  container.appendChild(historyLinks(sport));
 
   await renderAiTrends(container, sport, playable, rows);
   applySections('predictions');
@@ -10527,7 +10539,9 @@ $('#tabs').addEventListener('click', (e) => {
 });
 
 // default the sport selectors to whatever's in season right now
-state.aiSport = sortedSports({ teamOnly: true })[0];
+// 🌐 The tab's home is the cumulative Overview (v215); renderPredictions
+// re-asserts it on every entry.
+state.aiSport = 'all';
 // v213: which sub-tab AI Picks opens on. Board, always — the tab is opened to
 // see today's plays; the record is one tap away, not the landing.
 state.aiSub = 'board';
@@ -10646,7 +10660,7 @@ try {
 } catch (e) {}
 
 $('#bb-go')?.addEventListener('click', () => {
-  state.aiSport = 'all'; state.aiPinned = true; state.aiSub = 'board'; state.aiDate = null;
+  state.aiSub = 'board';             // Overview is renderPredictions' own landing
   showTab('predictions');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });

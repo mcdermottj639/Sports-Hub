@@ -574,7 +574,53 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v214** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v215** (backend **b14-football-boxplayer**).
+
+- **🌐 AI Picks opens on Overview, every time (v215)** — the owner: *"Have ai
+  picks open to overview everytime from now on not the live games like before."*
+  - **What it replaces.** v199's `aiRoute` swept today's slates and PICKED a
+    league that had games, because the tab used to land on the first in-season
+    sport in `BASE_ORDER` and then say *"No games today for this sport"*. 🌐
+    Overview answers that problem better than routing does: it prices every
+    in-season league at once instead of guessing which one the owner meant. So
+    the routing is gone and `aiSweep` is what survives — it fills
+    `state.aiSlates` and picks nothing, because those counts still have two
+    readers (the Overview per-league strip and the empty-state jump chips).
+  - **`state.aiPinned` is gone with it.** It existed so routing could not fight
+    an explicit chip tap; with nothing routing there is nothing to fight.
+  - **The reset is on ENTRY, not on render**, and that distinction is the whole
+    behaviour: `renderPredictions` runs when you open the tab and sets
+    `aiSport = 'all'`, while a chip tap goes through `setAiSport` → `paintAiView`
+    and never re-enters it. So a league you pick sticks for as long as you stay
+    on the tab — through sub-tab switches and repaints — and coming back to the
+    tab is what returns you home.
+  - **`aiSub` deliberately does NOT reset.** Which LEAGUE resets; which QUESTION
+    you were asking persists. Leaving on 🧪 Backtest and coming back gives you
+    the cumulative Backtest, which is a coherent answer; forcing Board would
+    throw away a choice the owner just made for no stated reason.
+  - **The day-by-day LOOKBACK went with the routing, and that is a small win.**
+    It only ever ran when nothing was on anywhere, and it cost up to 7 scoreboard
+    reads *per league* on exactly the days the app has least to say. The 📅
+    "Last {league} slate" button in a league's empty state still does it, on tap
+    — which is where v199 already put the expensive version. Verified: zero
+    past-dated reads on entry with every feed empty.
+  - **The Overview board gained the three history pointers** (`historyLinks`,
+    extracted so both boards share one implementation). They were a league-board
+    thing in v213; now that Overview is the front door, that is where "the record
+    should not be hard to reach" — the whole v213 ask — actually matters.
+  - Verified — **14 new checks**: the first open landing on Overview, a chip tap
+    sticking through a sub-tab switch, leaving and re-entering returning to
+    Overview *with the sub-tab preserved*, an all-empty day still landing on
+    Overview and saying so, no lookback sweep on entry, and the bottom bar still
+    landing on Overview → Board. The v213 (62) and v214 (34) suites pass.
+  - ⚠️ **Four assertions in the older suites asserted the OLD routing** — "routes
+    to a league with games, not Overview", the plays line and the history
+    pointers on the landing board, and "routes to a football league on a day it
+    has no games". They were re-pointed at the new intended behaviour rather
+    than deleted: the landing is Overview, a *league* board still has the plays
+    line, and the Overview strip must still offer the football week on a day
+    that league is idle. **When a suite fails right after a deliberate behaviour
+    change, check whether it was asserting the behaviour you just replaced.**
 
 - **🗓️ AI Picks shows the WEEK for NFL and CFB (v214)** — the owner: *"Inside ai
   picks for cfb and nfl make it show that weeks games. Since those aren't daily
@@ -5164,13 +5210,18 @@ rewrite.**
   ERA/WHIP, team OPS). **College football is the exception since v205:** a
   team rating (ESPN FPI when readable, else conference tier + own margin)
   produces the MARGIN first and the win probability is derived from it — see
-  the v205 entry. **The tab routes itself (v199)**: `aiRoute()` sweeps
-  today's slates and opens on a league that actually has games (one still to
-  play beats one already final); with nothing on anywhere it falls back to the
-  most recent slate, which is **read-only** — a fresh prediction on a finished
-  game is look-ahead, so `commitRow(r, date, {record:false})` shows the read and
-  records none of it. A sport-chip tap pins the choice (`state.aiPinned`) until
-  the next launch.
+  the v205 entry. **The tab opens on 🌐 Overview, every time (v215)** —
+  `renderPredictions` sets `aiSport = 'all'` on every ENTRY; a chip tap goes
+  through `setAiSport` → `paintAiView` and never re-enters it, so a league you
+  pick sticks while you stay on the tab and leaving is what returns you home.
+  `aiSub` does not reset (which league resets, which question persists).
+  `aiSweep()` still sweeps the slates — the Overview strip and the empty-state
+  jump chips read those counts — but picks nothing; v199's routing and its
+  day-by-day lookback are gone, and the 📅 "Last {league} slate" button in a
+  league's empty state is where the lookback now lives, on tap. A look-back
+  slate is still **read-only** — a fresh prediction on a finished game is
+  look-ahead, so `commitRow(r, date, {record:false})` shows the read and records
+  none of it.
 
   **🗂️ The tab has TWO LEVELS as of v213.** Level 1 = the league
   (`#ai-sport`, `state.aiSport`) with a **🌐 Overview** chip whose value is the
