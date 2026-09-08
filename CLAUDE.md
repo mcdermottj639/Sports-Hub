@@ -567,7 +567,44 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v210** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v211** (backend **b14-football-boxplayer**).
+
+- **🗂️ Every card on every page starts expanded (v211)** — the owner:
+  *"Start with every card on every page expanded instead of collapsed."* This
+  reverses v166's collapse-by-default; both entries above now carry markers.
+  - **Two lines of behaviour, and the second is the one that makes it real.**
+    `SEC_OPEN_DEFAULT` becomes `{}` with an `Infinity` fallback, which reads
+    straight through `idx < openCount` in `makeAccordion`. But **a saved state
+    beats the default by design** — that is what makes a collapse survive a
+    repaint — so on the owner's own device every section they had ever
+    collapsed would have stayed collapsed and the change would have looked like
+    it hadn't taken. `SEC_RESET_ALL` widens v177's nfl/cfb launch reset to
+    every tab.
+  - **Why a launch reset rather than a one-time migration of the saved keys:**
+    "start expanded" then means it on EVERY launch, not just the next one, and
+    there is no stale state left to migrate — the v166-era keys simply stop
+    mattering. The v177 reasoning carries over untouched: the reset is at
+    launch and not per-render because these tabs repaint constantly (async
+    news, power board, playoff picture) and a section that re-opened itself
+    mid-scroll would be worse than the drift v177 was fixing. **A tap still
+    sticks while the app is open.**
+  - **The game modal was included too** — its `makeAccordion` calls passed
+    `0`, so only `acc-open` sections opened. That is what made v206's
+    *"Why — Factor Breakdown"* (where the 🎓 FPI answer lives) one tap in;
+    it is open on arrival now.
+  - `acc-open` and the sections carrying it (My Teams, 🎲 The Board, 🔥 Best
+    Bets, Red Alert) are now redundant rather than wrong — left in place so
+    a future opt-out has something to key on.
+  - Verified — **20 checks**: all six tabs that have sections opening every
+    one of them (home 2, eagles 10, nfl 4, cfb 4, redsox 10, fantasy 11); a tap
+    still collapsing and **surviving a tab switch** (the repaint-safety v177
+    protects); the next launch starting it expanded again; and a device seeded
+    with nine v166-era collapsed keys ignoring all of them. The v210 suites
+    (23 + 27 + 14 + 7 + 142) still pass.
+  - ⚠️ **Test-fixture note:** the first cut asserted on the AI Picks ladder,
+    which is built from live games — with ESPN stubbed empty that tab has no
+    sections at all, so the check failed against perfectly correct code.
+    **A fixture with no data cannot test a view that is made of data.**
 
 - **💾 The last load is still there when you reopen (v210)** — the owner:
   *"when it loads once, can the app capture that so when I reopen it has the
@@ -2675,6 +2712,11 @@ Current version as of this writing: **v210** (backend **b14-football-boxplayer**
       taps stick while the app is open and the next launch starts clean.
       **Fantasy, AI Picks and the team tabs keep their choices across
       restarts** — only these two reset.
+    - ⚠️ **SUPERSEDED in v211: the reset now applies to EVERY tab**
+      (`SEC_RESET_ALL`), because the owner asked the whole app to start
+      expanded. The within-a-visit reasoning above is exactly why it is still a
+      launch-time reset and not a per-render one, so it carried over intact —
+      only its scope widened.
   - Verified — **127 checks** (14 new): jumbled feeds (Sunday listed first,
     Saturday's late game before its early one) coming out Fri → Sat → Sun with
     the noon game ahead of the 7pm one on BOTH tabs, and the reset seeded with
@@ -3282,7 +3324,11 @@ rewrite.**
     make a live game invisible everywhere.
   - **Collapse-by-default** — `SEC_OPEN_DEFAULT` is now **1** for every tab (was
     2 for the team tabs, Infinity elsewhere): each tab opens its top section as
-    the quick view and folds the rest. Sections that ARE the summary carry
+    the quick view and folds the rest.
+    - ⚠️ **SUPERSEDED in v211 — the owner reversed this.** Every section on
+      every tab starts EXPANDED again (`SEC_OPEN_DEFAULT` is `{}` with an
+      `Infinity` fallback). The `acc-open` class and the sections that carry it
+      still exist but no longer distinguish anything. Sections that ARE the summary carry
     `acc-open` and stay open wherever they sit: **My Teams**, **🎲 The Board**,
     **🔥 Best Bets**.
   - **🚨 Section state now stores BOTH open and closed** (`setSecState`, 1/0).
@@ -5266,11 +5312,13 @@ rewrite.**
   the 📰 Fantasy Advice section paints instantly and still shows something when
   the backend is asleep.
 - `sportshub:secs` — per-section collapse state (`{"<tab>|<heading>": 1|0}`,
-  1 = open). Both states are stored since v166, because most sections now
-  default closed; an absent key means "use the tab's default". **v177: the
-  `nfl|…` and `cfb|…` entries are wiped at every launch** (`SEC_RESET_ON_LOAD`)
-  so those two tabs always start with just the week's slate open — taps still
-  stick within a visit. Every other tab persists across restarts.
+  1 = open); an absent key means "use the tab's default", which since **v211 is
+  EXPANDED on every tab**. **The whole key is now cleared at every launch**
+  (`SEC_RESET_ALL`, widening v177's nfl/cfb-only reset), so the app always
+  starts fully expanded and a stale collapse can never survive an upgrade.
+  ⚠️ It is still written and read **within** a visit — that is what keeps a
+  collapse from popping back open through the constant repaints on Fantasy and
+  the team tabs — so the key is not dead, just short-lived.
 - `sportshub:railoff` — leagues the user has filtered OUT of the top rail
   (array of sport keys). Only the hidden ones are stored, so a league you've
   never touched — including one whose season starts next week — shows by default.

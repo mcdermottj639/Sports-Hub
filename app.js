@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v210';
+const APP_VERSION = 'v211';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -842,7 +842,7 @@ async function openGameDetail(sport, id, g) {
     }
     const slot = reportP ? '<div id="md-report"><div class="empty">📊 Loading betting report…</div></div>' : '';
     $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, slot);
-    makeAccordion($('#modal-body'), '.md-section-title', 0);
+    makeAccordion($('#modal-body'), '.md-section-title', SEC_OPEN_ALL);
     // v183: the game is on screen — now hold the model to what it just said.
     // Deliberately NOT awaited and deliberately not token-guarded: the pick was
     // computed and shown, so it counts whether or not the modal is still open
@@ -859,7 +859,7 @@ async function openGameDetail(sport, id, g) {
         const host = document.getElementById('md-report');
         if (!host) return;
         host.innerHTML = gameReportHTML(sport, g, pred, normOdds(rawO, g.home.name, g.away.name, g.home.abbr, g.away.abbr), report, data);
-        makeAccordion(host, '.md-section-title', 0);
+        makeAccordion(host, '.md-section-title', SEC_OPEN_ALL);
       }).catch(() => {
         const host = token === detailToken ? document.getElementById('md-report') : null;
         if (host) host.innerHTML = '';
@@ -8473,29 +8473,39 @@ function secKey(scope, h) {
   return `${scope}|${(c.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60)}`;
 }
 // How many sections a tab leaves open when the user has expressed no
-// preference. v166: the owner asked for everything collapsed by default except
-// the quick-view summary at the top — so every tab opens its FIRST section and
-// folds the rest. Sections that are themselves a summary (My Teams, 🎲 The
-// Board, 🔥 Best Bets) carry `acc-open` and stay open wherever they sit.
-const SEC_OPEN_DEFAULT = { eagles: 1, redsox: 1, nfl: 1, cfb: 1 };
-
-// Tabs that go BACK to that default on every app launch (v177). The owner
-// asked the NFL and CFB tabs to "start with the week's slate open and
-// everything else collapsed" — but a saved open state wins over the default
-// (by design: that's what makes a collapse survive a repaint), so a section
-// expanded once stayed expanded on every future visit and the tab drifted
-// back to fully open.
+// preference. v210: the owner asked for "every card on every page expanded
+// instead of collapsed", so the default is now EVERYTHING — `Infinity` reads
+// straight through `idx < openCount` in makeAccordion.
 //
-// The fix is scoped rather than a change to how persistence works, because
-// persistence is still doing a real job WITHIN a visit: these tabs repaint
-// constantly (async news, power board, playoff picture landing at different
-// times) and a section that folded itself mid-scroll would be worse than the
-// drift. So taps still stick while the app is open; the next launch starts
-// clean. Nothing outside these two tabs is touched — Fantasy, AI Picks and the
-// team tabs keep their choices across restarts.
-const SEC_RESET_ON_LOAD = ['nfl', 'cfb'];
+// ⚠️ This reverses v166, which opened only each tab's first section. The map
+// is kept (rather than deleted) so a future tab can opt back out with a number
+// without reintroducing the concept; today nothing does.
+const SEC_OPEN_DEFAULT = {};
+const SEC_OPEN_ALL = Infinity;
+
+// Tabs that go BACK to that default on every app launch. v177 did this for the
+// NFL and CFB tabs only; v210 extends it to EVERY tab, because the owner asked
+// the app to START expanded and a saved state beats the default by design —
+// that's what makes a collapse survive a repaint. Without the reset, every
+// section they had ever collapsed would stay collapsed forever and the new
+// default would look like it hadn't taken.
+//
+// ⚠️ Doing it this way rather than migrating `sportshub:secs` once is what
+// makes "start expanded" mean it EVERY launch instead of just the next one.
+// It also means there is no stale state to migrate — the old v166-era keys
+// simply stop mattering.
+//
+// Persistence still does a real job WITHIN a visit, which is why the reset is
+// at launch and not on every render: these tabs repaint constantly (async
+// news, the power board, the playoff picture landing at different times) and a
+// section that re-opened itself mid-scroll would be worse than the drift v177
+// was fixing. So a tap sticks while the app is open; the next launch starts
+// expanded again.
+const SEC_RESET_ALL = true;
+const SEC_RESET_ON_LOAD = ['nfl', 'cfb'];   // kept for reference; SEC_RESET_ALL supersedes it
 function resetTabSections() {
   try {
+    if (SEC_RESET_ALL) { localStorage.removeItem(SECS_KEY); return; }
     const m = getSecs();
     let changed = false;
     Object.keys(m).forEach((k) => {
@@ -8557,7 +8567,7 @@ function applySections(name) {
   const panel = document.getElementById(name);
   if (!panel) return;
   makeAccordion(panel, '.section-title, .lad-sec, .ai-section-head',
-    SEC_OPEN_DEFAULT[name] ?? 1, name);
+    SEC_OPEN_DEFAULT[name] ?? SEC_OPEN_ALL, name);
   wireSectionToggle(panel);
 }
 
