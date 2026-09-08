@@ -192,7 +192,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   Holds `#rail-wrap` (v187 — the rail plus the league-filter column, above the
   masthead), the nine-tab grid, `#home-board` (🎲 The Board, between My Teams
   and ⛳ Golf) and `#botbar` (the persistent model-read bar).
-- `app.js` (~10,400 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
+- `app.js` (~10,750 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
 - `styles.css` — all styling, in five layers, and **order matters**: (1) the
   original dark `:root` vars and components; (2) the `:root[data-theme="light"]`
   "Editorial / Premium" block, which un-hardcodes the dark-only values (white
@@ -694,6 +694,10 @@ Current version as of this writing: **v216** (backend **b14-football-boxplayer**
     `aiRoute` would see an empty Tuesday and route the tab *away* from the NFL,
     which is the opposite of showing the week. A look-back date still uses the
     day query: a look-back is about one slate.
+    (⚠️ v215 removed that routing, so the *reason* this matters changed one
+    version later: the counts now feed the Overview per-league strip and the
+    empty-state jump chips. Counting the week is still required, or a Tuesday
+    reports the NFL as having no games at all.)
   - **The Overview board stays DAILY**, deliberately: it is the cross-sport read
     for today, and pricing a whole football week there would flood it and cost
     ~40 model runs on a view that records nothing. But its **per-league strip is
@@ -742,6 +746,10 @@ Current version as of this writing: **v216** (backend **b14-football-boxplayer**
     conviction ladder, untouched. `aiRoute()` still picks the landing league
     (v199), so the tab still opens on a league that has games — Overview is one
     tap away and is never the forced landing.
+    - ⚠️ **SUPERSEDED in v215: Overview IS the landing now**, on every entry,
+      and the v199 routing that this sentence describes is gone. Everything
+      else in this entry — the four sub-tabs, the per-league filtering, the
+      Model card, the Overview board recording nothing — is unchanged.
   - **🚨 The sport chip only ever changed the LADDER, and that was the real
     complaint.** `tallyStats`/`tallyDetails`/`pendingSummary` took no sport
     argument, so every record, chart, bucket and instrument on the tab was
@@ -1932,6 +1940,14 @@ Current version as of this writing: **v216** (backend **b14-football-boxplayer**
   until **10 Sep**, so the tab landed on an empty NFL board while MLB and CFB
   had full slates one chip away. The model had plenty to say; the tab wasn't
   looking at it.
+  - ⚠️ **SUPERSEDED in v215 — the routing described in this entry is GONE.**
+    The tab opens on 🌐 **Overview** instead, which answers the same problem
+    better: it prices every in-season league at once rather than guessing which
+    one the owner meant. `aiRoute` is now `aiSweep` — it fills `state.aiSlates`
+    (the Overview strip and the empty-state chips still read those counts) and
+    selects nothing, and the day-by-day lookback below runs only from the
+    on-tap 📅 button. The **read-only look-back rule** and the **empty-state
+    dead-end rule** in this entry are both still live and still correct.
   - **`aiRoute()`** sweeps today's slates across every in-season team sport
     before the first render and selects one that has games — preferring a
     league with something **still to play** over one whose day is already
@@ -1953,6 +1969,9 @@ Current version as of this writing: **v216** (backend **b14-football-boxplayer**
     `state.aiPinned` and routing sits out until the next launch — so tapping
     NFL on an empty day shows the empty state, not a redirect. The slate sweep
     still runs while pinned, because the empty state uses those counts.
+    (⚠️ `state.aiPinned` was **removed in v215** along with the routing: with
+    nothing choosing a league there is nothing for a tap to fight. A chip tap
+    now holds until you leave the tab — see v215/v216.)
   - **The empty state stopped being a dead end.** It names the league ("No NFL
     games today"), then offers the leagues that DO have a slate with their game
     counts, plus a **📅 Last {league} slate** button. That button runs its
@@ -5097,7 +5116,16 @@ rewrite.**
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
 - Tabs: Home, Eagles, **🏈 NFL** (league-wide lens, v145), **🎓 CFB** (college
   football, Top 25 only, v161), **Red Sox**, AI Picks, Fantasy, **Labs**, About. `showTab()` +
-  `renderers{}` map drive rendering. (**Labs** — its own top-level tab as of
+  `renderers{}` map drive rendering.
+  - **`TAB_ENTER` (v216) — anything that must happen once per tab OPENING goes
+    here, never in a renderer.** 🚨 `renderers[currentTab]()` has TWO callers:
+    `showTab`, which is a real entry, and v210's stale-while-revalidate repaint,
+    which re-runs the current tab's renderer ~400ms after fresh data lands
+    behind a saved copy. v215 put AI Picks' "open on Overview" reset inside
+    `renderPredictions` on the assumption that it meant "entry", and the repaint
+    threw the owner out of whatever league they had just tapped, a few seconds
+    in. `showTab` calls `TAB_ENTER[name]?.()` before the renderer; a renderer
+    should hold only work that is safe to repeat on any repaint. (**Labs** — its own top-level tab as of
   v107, holding the Labs experiments: the standalone `draft.html`/`trivia.html`/
   `workout.html`/`power.html` links plus the in-app **Fantasy Mock Draft** rendered into `#labs-mock`; its
   renderer is a no-op since the content is static + launched on demand.) (**Scores** and **Standings** tabs were
