@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v215';
+const APP_VERSION = 'v216';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -4927,19 +4927,22 @@ async function paintAiView() {
 async function renderPredictions() {
   const container = $('#ai-picks');
   container.innerHTML = '<div class="empty">Crunching the numbers…</div>';
-  // Entering the tab is what makes the board fresh; switching sub-tabs reuses
-  // it, so flipping to the record and back costs no fetch and no model run.
+  // Clearing the board cache is safe on ANY run of this function: entering the
+  // tab should be fresh, and a stale-cache repaint should pick up the new data.
+  // Switching sub-tabs does not come through here, so it still costs no fetch
+  // and no model run. ⚠️ The Overview reset is NOT here — it hangs off
+  // TAB_ENTER, by showTab, because this function also runs on that repaint.
   state.aiBoard = null;
-  // 🌐 v215 — ENTERING the tab always lands on Overview. A chip tap goes
-  // through setAiSport → paintAiView and never re-enters here, so a league
-  // chosen mid-visit sticks for as long as you stay on the tab; coming back to
-  // the tab is what returns you home. `aiSub` deliberately does NOT reset —
-  // which LEAGUE resets, which QUESTION you were asking persists.
-  state.aiSport = 'all';
-  state.aiDate = null;
-  await aiSweep().catch(() => {});
+  if (state.aiSport !== 'all' && !LEAGUES[state.aiSport]) state.aiSport = FEATURED.sport;
+  // Chips BEFORE the sweep. Until v215 the sweep chose the landing league, so
+  // the chips could not be drawn until it resolved; it chooses nothing now, and
+  // on a slow network that await left the tab with no controls at all for over
+  // a second. Drawing them first makes the tab interactive immediately — and a
+  // tap during the wait is safe, because paintAiView reads the CURRENT state
+  // and its aiViewToken retires whichever paint is no longer wanted.
   buildAiChips();
   buildAiSubs();
+  await aiSweep().catch(() => {});
   await paintAiView();
 }
 
@@ -10439,9 +10442,28 @@ function renderAbout() {
   }
 }
 const renderers = { home: renderHome, eagles: renderEagles, nfl: renderNFL, cfb: renderCFB, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, labs: () => {}, about: renderAbout };
+
+/* Per-tab ENTRY hooks (v216).
+   🚨 A RENDERER IS NOT AN ENTRY SIGNAL, and assuming it was is what broke the
+   v215 landing. `renderers[currentTab]()` is called from two places: showTab,
+   which really is an entry, and the v210 stale-while-revalidate repaint, which
+   fires a few SECONDS after a saved copy is shown. So AI Picks' "open on
+   Overview" reset — which v215 put inside renderPredictions — ran again on
+   that repaint and yanked the owner out of whatever league they had just
+   tapped. Anything that must happen only when the user OPENS a tab goes here
+   instead. */
+const TAB_ENTER = {
+  // 🌐 The tab's home is the cumulative Overview. A chip tap goes through
+  // setAiSport → paintAiView and never comes through here, so a league chosen
+  // mid-visit sticks for as long as you stay on the tab; leaving and coming
+  // back is what returns you home. `aiSub` deliberately does NOT reset —
+  // which LEAGUE resets, which QUESTION you were asking persists.
+  predictions() { state.aiSport = 'all'; state.aiDate = null; },
+};
 let currentTab = 'home';
 function showTab(name) {
   currentTab = name;
+  if (TAB_ENTER[name]) TAB_ENTER[name]();
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => {
     const on = b.dataset.tab === name;

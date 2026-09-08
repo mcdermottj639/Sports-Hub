@@ -574,7 +574,42 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v215** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v216** (backend **b14-football-boxplayer**).
+
+- **🚨 Tapping a league kicked you back to Overview a few seconds later (v216)**
+  — the owner, the same day v215 shipped: *"I'm clicking nfl or another league
+  and it kicks me back to overview after a few seconds."* Mine, and the cause is
+  a rule worth writing down.
+  - **A RENDERER IS NOT AN ENTRY SIGNAL.** v215 put the "open on Overview" reset
+    inside `renderPredictions`, on the assumption that it runs when you open the
+    tab. It does — but `renderers[currentTab]()` has a **second** caller: v210's
+    stale-while-revalidate repaint, which fires ~400ms after the fresh payload
+    lands behind a saved copy. So a few seconds after tapping NFL the repaint
+    re-ran `renderPredictions`, which re-asserted `aiSport = 'all'` and threw the
+    owner out of the league they had just chosen. Every v215 assertion was green,
+    because they all switched tabs by hand with an empty cache and no repaint
+    ever fired.
+  - **Fixed with a `TAB_ENTER` map called from `showTab`**, which is the real
+    entry. `renderPredictions` keeps only what is safe on *any* run (clearing
+    the board cache — a repaint SHOULD pick up new data). **Anything that must
+    happen once per tab opening goes in `TAB_ENTER`, never in a renderer.**
+  - **The repro is the point.** The test needed a **persistent browser context**
+    so localStorage — and therefore the v210 disk cache — survives a reload,
+    plus a deliberately **slow network**, so the second load serves a saved copy
+    and then fires `sportshub:fresh` while the owner sits on NFL. It asserts the
+    repaint actually fired (25 events) *before* asserting the league held, so a
+    future regression can't pass by simply not triggering the bug. ⚠️ **A suite
+    that starts from empty storage exercises only the cold path** — the v210
+    entry says this about its own suite, and v215 walked straight into it.
+  - **Found while writing that test: the chips waited on the slate sweep.**
+    `renderPredictions` awaited `aiSweep()` before `buildAiChips()` — necessary
+    until v215, when the sweep still *chose* the landing league, and pointless
+    after. On a slow network it left the tab with no controls at all for over a
+    second. Chips are built first now; a tap during the wait is safe because
+    `paintAiView` reads the CURRENT state and `aiViewToken` retires whichever
+    paint is no longer wanted.
+  - Verified — **10 checks** in the repro above plus the v213 (62), v214 (34) and
+    v215 (14) suites.
 
 - **🌐 AI Picks opens on Overview, every time (v215)** — the owner: *"Have ai
   picks open to overview everytime from now on not the live games like before."*
@@ -5211,7 +5246,10 @@ rewrite.**
   team rating (ESPN FPI when readable, else conference tier + own margin)
   produces the MARGIN first and the win probability is derived from it — see
   the v205 entry. **The tab opens on 🌐 Overview, every time (v215)** —
-  `renderPredictions` sets `aiSport = 'all'` on every ENTRY; a chip tap goes
+  **`TAB_ENTER.predictions`, called from `showTab`**, sets `aiSport = 'all'`;
+  ⚠️ it is deliberately NOT in `renderPredictions`, because that also runs on
+  the v210 stale-cache repaint and would kick you out of a league mid-visit
+  (v216). A chip tap goes
   through `setAiSport` → `paintAiView` and never re-enters it, so a league you
   pick sticks while you stay on the tab and leaving is what returns you home.
   `aiSub` does not reset (which league resets, which question persists).
