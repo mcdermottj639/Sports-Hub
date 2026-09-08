@@ -192,13 +192,20 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   Holds `#rail-wrap` (v187 — the rail plus the league-filter column, above the
   masthead), the nine-tab grid, `#home-board` (🎲 The Board, between My Teams
   and ⛳ Golf) and `#botbar` (the persistent model-read bar).
-- `app.js` (~8,700 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
+- `app.js` (~10,400 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
 - `styles.css` — all styling, in five layers, and **order matters**: (1) the
   original dark `:root` vars and components; (2) the `:root[data-theme="light"]`
   "Editorial / Premium" block, which un-hardcodes the dark-only values (white
   hairline borders, dark gradients, chips, tracks); (3) the **token layer**
   (v187), (4) the **spacing & alignment layer** (v188) and (5) the **FLOW
-  layer** (v191), all keyed on `:root[data-palette]`. `[data-palette]` and
+  layer** (v191) and (6) the **`.ffp-` fantasy layer** (v195) and (7) the
+  **AI Picks two-level layer** (v213 — `.ai-sub`, `.ai-plays`, `.ai-histlink`,
+  `.ai-lgstrip`, `.mc-*`), all keyed on `:root[data-palette]`.
+  ⚠️ **`font: <weight> <size>/<lh> inherit` is INVALID and is dropped silently**
+  — the shorthand needs a real family, and `inherit` is legal only as the whole
+  value (`font: inherit` alone is fine). v213 shipped four of these and the
+  affected elements fell back to the browser default; nothing errored and every
+  assertion stayed green. Use longhand when you want to inherit the family. `[data-palette]` and
   `[data-theme]` are the SAME specificity, so layers 3–5 win only because they
   come last — append to the end, never insert above them.
   - ⚠️ **Layer 5 supersedes the FORM half of layer 3.** v187 was Modernist —
@@ -567,7 +574,107 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v212** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v213** (backend **b14-football-boxplayer**).
+
+- **🗂️ AI Picks split into two levels — a league, then a question (v213)** — the
+  owner: *"Too hard to see the records and analysis and back testing. I want it
+  sorted by sport — when you click each sport it goes to only the stats for that
+  sport… one AI Picks overview like the homepage that's cumulative, and then each
+  tab inside really explains what the model is for that sport, then records,
+  research and back testing. I like all the stuff we have so don't lose
+  anything."* All of it shipped, and nothing was deleted — every element of the
+  old tab is on one of four sub-tabs.
+  - **The shape.** Level 1 is the league (`#ai-sport`, now carrying a **🌐
+    Overview** chip for the cumulative view); level 2 is **📋 Board · 📈 Record ·
+    🧪 Backtest · 🧠 Model** (`#ai-sub`, `state.aiSub`). Board is the old
+    conviction ladder, untouched. `aiRoute()` still picks the landing league
+    (v199), so the tab still opens on a league that has games — Overview is one
+    tap away and is never the forced landing.
+  - **🚨 The sport chip only ever changed the LADDER, and that was the real
+    complaint.** `tallyStats`/`tallyDetails`/`pendingSummary` took no sport
+    argument, so every record, chart, bucket and instrument on the tab was
+    all-sport. Only two things were per-league: the "By sport" rows and the
+    *sort* of Recent results. **So "how is the MLB model calibrated" had no
+    answer anywhere in the app** — the MLB chart did not exist. All three
+    functions now take an optional sport, and the panels read them.
+    - ⚠️ **Pre-v83 entries carry no `s` and are dropped from every filtered
+      view.** That is correct — they cannot be attributed — but a panel that
+      silently shrinks is the v203 class of bug, so `det.unlabelled` counts them
+      and the Backtest panel says how many were left out.
+  - **🚨 The history was buried twice over.** It sat at the BOTTOM of the ladder
+    (twenty-plus cards down on a college Saturday) and then behind a collapsed
+    "Model Report Card" button holding nine stacked sub-sections. `reportCard`
+    is gone; its contents are split across `recordPanel` and a widened
+    `backtestPanel`, and **not one string was rewritten** — the thin-sample bar,
+    the moneyline-sweep caveat, the v186 "every in-season league gets a row"
+    rule, the v200 splits-coverage rows, the v204 instruments and the export all
+    moved as they were.
+  - **🧠 The Model card is the genuinely new screen, and it is GENERATED from
+    the constants.** Weights, shrink, cap, thresholds, the tier ladder, the CFB
+    rating path — all read live from `MODEL_W`, `MODEL_SHRINK`, `CONF_CAP`,
+    `EDGE_BAR`, `PD_SD`, `CFB_TIER_PTS` and friends, because a hand-written
+    description of a model is wrong the first time somebody tunes it. Only the
+    prose — what was fitted, when, and the open measurement — is kept by hand,
+    in `MODEL_NOTES`, mirroring this file's "⏳ Open measurements" table.
+    - **`MLB_MATCH_W` was hoisted out of `matchupFactor`** for the same reason:
+      a weight living as a literal inside a function is invisible to the screen
+      that exists to explain the model, and the two would drift.
+    - It answers the v206 question directly — the CFB card probes `cfbFpi()` and
+      says **which rating source is live right now**, instead of making the
+      owner open a game modal and expand a factor breakdown.
+    - **It states what is NOT fitted**, per league. The NFL card says plainly
+      that nothing is fitted and it is the only sport with no calibration
+      shrink.
+  - **🚨 The Overview board prices every league and records NOTHING**, and that
+    is deliberate: Home's `renderHomeBoard` already logs the full slate through
+    `recordSlate` at the **full** sharp-money leash, and a second writer at the
+    board's short leash would re-create the exact v200 bug — picks written blind
+    and then frozen by first-write-wins. A suite check asserts the tally and the
+    queue are byte-identical after rendering it.
+  - **Sub-tab switching costs nothing.** Record / Backtest / Model read only
+    localStorage — measured at **zero network requests** — and the board is
+    cached per `sport|date` in `state.aiBoard`, cleared on tab entry, so
+    flipping to the record and back re-fetches nothing and re-runs no model.
+  - **Six stat tiles, not five.** Five wrap **3 + 2** on a 390px phone and the
+    orphan row reads as broken — the v196 fantasy-strip lesson. The sixth is
+    "This week"; "Plays today" left the strip because it is a Board fact, not a
+    record fact, and it is a line on the Board now.
+  - **🚨 Three things only the RENDER caught**, which is this file's oldest
+    lesson pointed at its own new code:
+    - **Every `font:` shorthand I wrote with `inherit` as the family was
+      silently dropped by the parser.** `font: 800 10.5px/1 inherit` is invalid
+      — the shorthand needs a real family, and `inherit` is legal only as the
+      entire value. So the Model headings rendered at **16px/400** instead of
+      10.5px/800 and the sub-tab buttons fell all the way back to **13.3px
+      Arial**. Every assertion was green. ⚠️ **`font: inherit` alone is fine;
+      `font: <weight> <size> inherit` is not — use longhand.**
+    - **The Overview board drew one game twice**, under Red Alert and again
+      under Against the Spread. Every card names all three markets, so this is
+      the two-near-identical-lists problem this app has now fixed three times
+      (v176 on the slates, v187 on Home, here). Home's `seen`-set pattern was
+      the fix and I simply hadn't carried it over.
+    - **A percentage on a sample of one.** The header line and the tile
+      subtitles printed "1-0 (100%)". They were all-sport before v213 and
+      therefore rarely thin; **scoped to one league they are thin constantly.**
+      Same `THIN_N` bar as everything else now. ⚠️ The general shape: *narrowing
+      a display's scope multiplies how often its small-sample paths run.*
+  - Verified in headless Chromium — **61 checks** in five contexts: the shell
+    and a full inventory sweep of the old tab's elements; per-league filtering
+    cross-checked against `tallyStats(sport)` (CFB 22-0 beside MLB 23-17, the
+    cumulative view equal to their sum plus the 8 unattributable legacy picks,
+    each league's instruments present and the other league's absent, a by-league
+    row jumping into that league); the Overview board writing nothing and
+    drawing each game once; the sport board still logging pregame picks; and
+    both palettes at 390px and 1280px with no overflow, no clipping, no sub-tab
+    label wrapping and no console errors.
+  - ⚠️ **Test-harness note, the SEVENTH time:** `.chip` is uppercased by CSS and
+    `innerText` reflects `text-transform`, so matching a chip by `'Overview'`
+    silently never clicked and four assertions failed against perfectly correct
+    code. Match case-insensitively. Two more failures were also the test's:
+    a fixture whose final the model got *wrong* turned a seeded 21-0 sweep into
+    21-1 and stopped the caveat it existed to exercise (**the model picks the
+    HOME side when it has no profile data — put the winner at home**), and a
+    wrap check that flagged the buttons' own `min-height` as wrapped text.
 
 - **🚨 The disk cache was throwing away the one thing it was built for (v212)**
   — the owner, on a screenshot of the Fantasy tab sitting on *"Loading your
@@ -1568,6 +1675,12 @@ Current version as of this writing: **v212** (backend **b14-football-boxplayer**
     "not tracked" rather than "nothing has finished yet". So a league with
     nothing graded says which of the two it is: *"No finished 🏈 NFL games in
     the record yet — 5 logged and waiting on final scores (see 📥 above)."*
+  - ⚠️ **SUPERSEDED in v213 for the SPORT view only.** `tallyDetails(sport)`
+    now really does filter, because a league has its own Record sub-tab where
+    an all-league list would be wrong. The reasoning above still governs the
+    🌐 **Overview** Record, which shows every league — and the empty-league
+    sentence it introduced is still what a filtered view prints when that
+    league has nothing graded.
   - ⚠️ **`tallyDetails` had to keep a DEEPER pool** (15 → 60). It sliced to 15
     by date before the card ever saw it, so a league with a few older results
     could be sorted to the front of a list it had already been cut out of. The
@@ -3520,6 +3633,10 @@ rewrite.**
   - **AI Picks** is now a ladder: Best Bets → Edges → 👀 Leans (folded) → 📐 ATS
     → 🎯 Totals → ✅ Passes (folded, count only) → 📊 Backtesting → report card
     → trends.
+    - ⚠️ **SUPERSEDED in v213 — the ladder is now the 📋 Board SUB-TAB**, and
+      the backtesting and report card that used to sit under it are their own
+      sub-tabs (📈 Record, 🧪 Backtest), reachable in one tap instead of after
+      twenty cards. The ladder's own contents and order are unchanged.
   - **`backtestPanel(det)`** — the visual history: a **calibration chart**
     (claimed vs actual per bucket, the overconfident bar turning red with a
     "discount anything above N%" line), **record by tier**, and **by sport ×
@@ -4972,13 +5089,53 @@ rewrite.**
   most recent slate, which is **read-only** — a fresh prediction on a finished
   game is look-ahead, so `commitRow(r, date, {record:false})` shows the read and
   records none of it. A sport-chip tap pins the choice (`state.aiPinned`) until
-  the next launch. **As of v164 it is a conviction ladder** — Best Bets
-  (gap 10+) → Edges (5–9) → Leans (2–5, folded) → 📐 ATS → 🎯 Totals → ✅ passes
-  (folded) → 📋 Finished (v199 — the slate's completed games and how the model
-  did on them; they used to fall off the tab entirely) → 📊 backtesting →
-  report card → trends. The top of that ladder is
-  mirrored on Home's 🎲 Board via the shared `buildBoard`. Stat bar tracks **all-time model record** and **vs-the-line
-  record**; below the edges are **Team Trends** and **Player Prop trends**.
+  the next launch.
+
+  **🗂️ The tab has TWO LEVELS as of v213.** Level 1 = the league
+  (`#ai-sport`, `state.aiSport`) with a **🌐 Overview** chip whose value is the
+  string `'all'` — ⚠️ `LEAGUES['all']` does not exist, so anything reading
+  `LEAGUES[state.aiSport]` must handle it. Level 2 = the question
+  (`#ai-sub`, `state.aiSub`, default `board`, **not persisted**): each level-1
+  choice has the same four sub-tabs, built by `paintAiView()`.
+  - **📋 Board** — the conviction ladder, unchanged: Best Bets (gap 10+) →
+    Edges (5–9) → Leans (2–5, folded) → 📐 ATS → 🎯 Totals → ✅ passes (folded)
+    → 📋 Finished (v199) → 📈 Team Trends → 🎯 Player Props, with a plays-today
+    line on top and three pointers into the history at the bottom.
+    **`paintSportBoard` is the ONLY view that records** (see below).
+    On 🌐 Overview it is `paintOverviewBoard` — every in-season league priced at
+    once, one card per game (deduped by game id, the v187 rule), plus a
+    per-league strip that jumps into each league.
+  - **📈 Record** (`recordPanel`) — six stat tiles (Moneyline · vs the line ·
+    Spread · Totals · This week · Awaiting), the confidence buckets, 📥 Logged
+    awaiting results, and Recent results. On Overview it also carries the
+    **By league — three separate markets** card, whose rows tap into a league.
+  - **🧪 Backtest** (`backtestPanel`) — the calibration chart, record by tier,
+    🎯 Totals (with the MLB projected-total instrument), 📐 ATS (with the
+    v204 margin-vs-the-book instrument), 💰 Sharp money with its coverage rows,
+    and **📋 Copy my record data**.
+  - **🧠 Model** (`modelPanel`) — what the model computes, **generated from the
+    constants** so it cannot drift; `MODEL_NOTES` holds only the prose (what is
+    fitted, when, the open measurement). See the v213 entry.
+
+  **Everything is per-league.** `tallyStats(sport)`, `tallyDetails(sport)` and
+  `pendingSummary(sport)` all take an optional sport; `null` is the cumulative
+  view. ⚠️ Pre-v83 entries carry no `s` and are excluded from every filtered
+  view — `det.unlabelled` counts them so a panel never silently shrinks.
+
+  **🚨 Only the SPORT Board records.** The Overview board prices every league
+  and writes nothing: Home's `renderHomeBoard` already logs the day's full slate
+  via `recordSlate` at the full `SHARP_WAIT.record` leash, and a second writer
+  at the board's 3s leash would re-create the v200 blind-write bug. Anything
+  new that renders `buildBoard` output across leagues must keep that rule.
+
+  **Sub-tab switching does no work.** Record / Backtest / Model read only
+  localStorage (measured: zero network requests), and the board is cached per
+  `sport|date` in `state.aiBoard`, which `renderPredictions` clears — so
+  entering the tab is fresh and flipping between sub-tabs is free.
+
+  The top of the ladder is mirrored on Home's 🎲 Board via the shared
+  `buildBoard`; Home's "See all" footer and the bottom bar both land on
+  🌐 Overview → Board, because both speak for the whole day.
   Records persist + auto-grade: see "AI record" below. **v83 additions:**
   - **Calibration meta** — every pick now stores its confidence, and graded
     tally entries carry `{s: sport, d: date, cf: conf, p: pick, m: matchup}`
@@ -4986,7 +5143,9 @@ rewrite.**
     toward totals; `recordResult` is write-once per game id so re-renders of a
     final can't wipe the meta.
   - **📜 Model Report Card** (`reportCard`/`tallyDetails`, `.ai-report`/`.rep-*`
-    CSS) — a tap-to-expand panel under the stat bar: record by confidence
+    CSS) — ⚠️ **SUPERSEDED in v213: `reportCard` no longer exists.** Its
+    contents were split, unchanged, across `recordPanel` and `backtestPanel`
+    on the 📈 Record and 🧪 Backtest sub-tabs; the `.rep-*` CSS is still live — a tap-to-expand panel under the stat bar: record by confidence
     bucket (50–59/60–69/70+ — shows whether a "75%" pick really wins ~75%),
     record by sport, a this-week line in the header, and the last 15 graded
     picks (✅/❌, ⚡ = against-the-line, matchup, pick + conf, date). Renders

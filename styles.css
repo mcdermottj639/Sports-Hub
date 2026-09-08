@@ -2614,3 +2614,132 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   color: var(--wm, var(--muted)); background: var(--sf, var(--card));
   box-shadow: inset 0 -1px 0 var(--l07, var(--line));
 }
+
+/* ==========================================================================
+   LAYER 7 — AI Picks, two levels (v213)
+   Appended LAST on purpose: layers 3–5 win only because they come last, so
+   anything added above this would be out-specified. Every value is a token —
+   a hardcoded hex here would be wrong in one of the two palettes.
+   ========================================================================== */
+
+/* Level 2. Deliberately NOT pills: two identical chip rows stacked would read
+   as one confusing eight-item control. Flush, equal-width and underlined is
+   what makes the hierarchy legible without a label saying so. */
+:root[data-palette] .ai-sub {
+  display: flex; gap: 4px; margin: 10px 0 2px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--l12);
+}
+:root[data-palette] .ai-sub button {
+  flex: 1; min-height: 38px; padding: 8px 2px; cursor: pointer;
+  /* Equal-width quarters of a 390px phone leave ~86px each, and "🧪 Backtest"
+     wrapped to two lines at 11.5px — a tab label that wraps reads as broken. */
+  white-space: nowrap; overflow: hidden;
+  font-family: inherit; font-size: 11px; font-weight: 800; line-height: 1; letter-spacing: 0;
+  border: 1px solid transparent; border-radius: 9px;
+  background: transparent; color: var(--mu);
+}
+:root[data-palette] .ai-sub button.on {
+  background: var(--card); border-color: var(--l2); color: var(--text);
+  box-shadow: var(--e1);
+}
+:root[data-palette] #ai-blurb { margin: 8px 0 2px; font-size: 12px; line-height: 1.5; }
+
+/* The board's play count. It replaced five record tiles that were sitting on
+   top of the day's plays; this is the one fact on them that was a BOARD fact. */
+:root[data-palette] .ai-plays {
+  display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+  margin: 0 0 10px; padding: 9px 12px; border-radius: 10px;
+  background: var(--card); border: 1px solid var(--l2); box-shadow: var(--e1);
+}
+:root[data-palette] .ai-plays b { font-size: 18px; font-weight: 800; color: var(--mu); }
+:root[data-palette] .ai-plays.on b { color: var(--ac); }
+:root[data-palette] .ai-plays span { font-size: 11.5px; font-weight: 700; }
+:root[data-palette] .ai-plays i { font-style: normal; font-size: 11px; color: var(--mu); margin-left: auto; }
+
+/* Board → history pointers, in place of the panel that used to sit here. */
+:root[data-palette] .ai-histlink {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 16px 0 4px;
+}
+:root[data-palette] .ai-histlink button {
+  display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+  padding: 10px 11px; min-height: 56px; cursor: pointer; text-align: left;
+  border: 1px solid var(--l2); border-radius: 11px; background: var(--card);
+  box-shadow: var(--e1); font: inherit; color: var(--text);
+}
+:root[data-palette] .ai-histlink b { font-size: 12px; font-weight: 800; }
+:root[data-palette] .ai-histlink span { font-size: 10px; color: var(--mu); line-height: 1.35; }
+
+/* Overview → one league, and the by-league rows on the Record panel. */
+:root[data-palette] .ai-lgstrip { display: flex; flex-direction: column; gap: 6px; }
+:root[data-palette] .ai-lgrow {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px;
+  padding: 10px 12px; cursor: pointer; text-align: left; font: inherit; color: var(--text);
+  border: 1px solid var(--l2); border-radius: 11px; background: var(--card); box-shadow: var(--e1);
+}
+:root[data-palette] .ai-lgrow .lgn { font-size: 13px; font-weight: 800; white-space: nowrap; }
+:root[data-palette] .ai-lgrow .lgd { font-size: 10.5px; color: var(--mu); flex: 1; min-width: 0; }
+:root[data-palette] .ai-lgrow .lgc { color: var(--mu); font-weight: 800; }
+:root[data-palette] .bt-row.bt-lg { cursor: pointer; }
+:root[data-palette] .bt-row .bt-sub {
+  font-size: 9px; font-weight: 700; color: var(--mu); opacity: .8; margin-left: 4px;
+}
+/* A league emoji in front of a cumulative Recent-results row, so an all-league
+   list doesn't need the reader to recognise the matchup to know the sport. */
+:root[data-palette] .rep-lg { flex: none; font-size: 11px; opacity: .9; }
+
+/* ---- 🧠 The Model card ---- */
+:root[data-palette] .mc-sec {
+  font-family: inherit; font-size: 10.5px; font-weight: 800; line-height: 1;
+  text-transform: uppercase; letter-spacing: .08em;
+  color: var(--mu); margin: 16px 0 6px;
+}
+:root[data-palette] .mc-wrap > .mc-sec:first-child { margin-top: 12px; }
+:root[data-palette] .mc-row {
+  display: grid; grid-template-columns: 92px 1fr; gap: 10px;
+  font-size: 12px; line-height: 1.5; padding: 6px 0; border-top: 1px solid var(--l12);
+}
+:root[data-palette] .mc-row .k { color: var(--mu); font-weight: 700; }
+:root[data-palette] .mc-row .v b { font-weight: 800; }
+:root[data-palette] .mc-row .v s { opacity: .55; }
+:root[data-palette] .mc-pill {
+  display: inline-block; font-family: inherit; font-size: 10px; font-weight: 800; line-height: 1.35;
+  padding: 3px 7px; border-radius: 6px; background: var(--card-2); color: var(--mu); margin: 2px 4px 2px 0;
+}
+/* Fitted vs guessed is the single most important distinction on this screen,
+   so it is carried by the semantic ramp, never by the brand accent. */
+:root[data-palette] .mc-pill.fit { color: var(--pos); background: rgba(var(--acRGB), .08); }
+:root[data-palette] .mc-pill.guess { color: var(--wm); }
+:root[data-palette] .mc-why { display: block; font-size: 11px; color: var(--mu); line-height: 1.45; margin: 0 0 7px; }
+:root[data-palette] .mc-none { color: var(--wm); font-weight: 700; }
+:root[data-palette] .mc-src {
+  display: inline-block; font-family: inherit; font-size: 10px; font-weight: 800; line-height: 1.35;
+  padding: 3px 7px; border-radius: 6px; background: var(--card-2); color: var(--mu); white-space: nowrap;
+}
+:root[data-palette] .mc-src.ok { color: var(--pos); }
+:root[data-palette] .mc-src.fb { color: var(--wm); }
+:root[data-palette] .mc-fac { display: flex; flex-direction: column; gap: 0; margin: 4px 0 2px; }
+:root[data-palette] .mc-f {
+  display: grid; grid-template-columns: 38px 1fr; gap: 8px; align-items: baseline;
+  padding: 6px 0; border-top: 1px solid var(--l12); font-size: 12px;
+}
+:root[data-palette] .mc-fw {
+  font-variant-numeric: tabular-nums; font-weight: 800; color: var(--ac); font-size: 12.5px;
+}
+:root[data-palette] .mc-fl { font-weight: 700; }
+:root[data-palette] .mc-fd { grid-column: 2; font-size: 10.5px; color: var(--mu); line-height: 1.4; }
+:root[data-palette] .mc-list { display: flex; flex-direction: column; gap: 7px; margin-top: 2px; }
+:root[data-palette] .mc-lg {
+  display: flex; flex-direction: column; gap: 3px; align-items: flex-start; width: 100%;
+  padding: 11px 12px; min-height: 60px; cursor: pointer; text-align: left; font: inherit;
+  color: var(--text); border: 1px solid var(--l2); border-radius: 11px;
+  background: var(--card); box-shadow: var(--e1);
+}
+:root[data-palette] .mc-lg-n { font-size: 13px; font-weight: 800; }
+:root[data-palette] .mc-lg-d { font-size: 10.5px; color: var(--mu); }
+:root[data-palette] .mc-lg-f { font-size: 10.5px; font-weight: 700; color: var(--wm); }
+
+/* Desktop: the sub-tabs and the model grid both get room. */
+@media (min-width: 700px) {
+  :root[data-palette] .ai-sub button { font-size: 12.5px; padding: 9px 10px; }
+  :root[data-palette] .mc-row { grid-template-columns: 128px 1fr; font-size: 12.5px; }
+}
