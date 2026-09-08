@@ -2600,3 +2600,17 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
    before and after; only hero→strip (top margin 0) changes, 0px → 12px.
    ========================================================================== */
 :root[data-palette] .pp-hero { margin-bottom: 12px; }
+
+/* ==========================================================================
+   💾 The saved-copy line (v210). Shown only while a view is painted from the
+   on-device cache with the fresh copy still in flight. Deliberately quiet —
+   it is a status, not a warning — but it must never be invisible, because a
+   view that reads as current while offline is the thing this cache could
+   otherwise cause. Uses --wm (the muted bronze-taupe), never --neg: a saved
+   copy is not an error.
+   ========================================================================== */
+.stale-note {
+  padding: 7px 16px; font-size: 11.5px; font-weight: 700; letter-spacing: .01em;
+  color: var(--wm, var(--muted)); background: var(--sf, var(--card));
+  box-shadow: inset 0 -1px 0 var(--l07, var(--line));
+}

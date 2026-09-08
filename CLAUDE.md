@@ -567,7 +567,89 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v209** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v210** (backend **b14-football-boxplayer**).
+
+- **💾 The last load is still there when you reopen (v210)** — the owner:
+  *"when it loads once, can the app capture that so when I reopen it has the
+  previous load in there and then once the new refresh hits it updates but then
+  the info is still there for me to look at so I don't have to wait for it to
+  load every time."* Stale-while-revalidate, put under the one door every
+  request already goes through.
+  - **Why this was the missing half.** `fetchJSON`'s cache is a `Map`, so it
+    died with the page: every launch re-fetched everything from zero. v198 and
+    v207 both attacked the same complaint and both moved the **wait** earlier
+    without ever keeping the **answer** — the Render backend still cold-starts
+    30-60s after 15 min idle, and the owner opens the app once a day, so that
+    was essentially every launch. Three features already did this by hand for
+    one payload each (`sportshub:fparticles`, `powerlab:season`,
+    `draftsim:board`); this generalises it, and all **36** request sites got it
+    at once.
+  - **Measured:** a reload with the network **completely dead** now paints the
+    full Fantasy page — team, record, tiles, sections — from disk. That is the
+    assertion the suite leads with, because it is the actual ask.
+  - **🚨 It is an ALLOW-LIST, and that is a storage decision, not caution.**
+    localStorage is ~5 MB for the whole origin and `sportshub:aitally` — the
+    graded record every model constant is fitted against — grows without bound
+    in the same bucket. Blanket-caching would eventually evict the record to
+    store a scoreboard. So: `DISK_RULES` by URL pattern, 320 KB per entry,
+    1.6 MB total, oldest-first eviction, and **a quota failure drops the whole
+    cache rather than half-writing it**. A suite check hammers the cache with
+    80 MB of writes and asserts `sportshub:aitally` is still there afterwards.
+  - **🚨 The honesty problem this creates, and it is the real design work.**
+    A cache whose whole purpose is surviving a dead network will, by
+    construction, show you old data while the network is gone — which is the
+    v202/v203 class of bug (a display that reads as current when it isn't).
+    Three guards:
+    - Payloads served from disk are marked `__stale`/`__at`, **non-enumerable**
+      so the flag cannot survive a JSON round-trip or be counted as an ESPN
+      field.
+    - A `#stale-note` line under the masthead says *"Showing your last saved
+      copy (Xm ago) — refreshing…"*, and it is removed the moment fresh data
+      lands.
+    - ⚠️ **That line becomes a lie the instant the refresh fails**, so a failed
+      revalidate is recorded (`staleFailed`) and the note switches to
+      *"Offline — showing your last saved copy."* A view promising an update
+      that already died is worse than one admitting the network is gone.
+  - **🚨 The mode badge contradicted the note, and only the render showed it.**
+    `setMode(true)` fires when "a feed loads" — but a feed loading is no longer
+    proof we reached the network, so the badge read **LIVE** directly above a
+    line reading *"Offline — showing your last saved copy"*. Two pieces of
+    chrome disagreeing on one screen. **SAVED** is now its own badge state: we
+    have data, it is honest data, we just did not get it from ESPN just now.
+  - **🚨 A repaint is NOT enough for a view that copies the payload into its
+    own state — the subtle one.** Fantasy derives `fanState.league[sport]` from
+    the roster call and then guards on `fanState.synced[sport]`, so re-running
+    the renderer re-drew the *stale-derived* state while the fresh payload sat
+    unused in the cache. The test caught it: the view repainted and still
+    showed the old team name. The fresh handler clears that guard, so the next
+    render re-syncs off the memory cache at no network cost. **Anything else
+    caching derived state needs the same treatment — a raw-payload cache
+    cannot see it.**
+  - **In-flight dedupe, for free and everywhere.** `cache` stores a RESULT, not
+    a promise, so every concurrent caller for one URL opened its own fetch —
+    exactly the bug v200 fixed by hand for the betting report. Now one request
+    per URL, app-wide. Measured: 4 concurrent callers → **1** request.
+  - The About tab reports what the cache holds and offers **🗑️ Clear saved
+    data** — a cache you cannot see the size of, or empty, is one that gets
+    blamed for every stale-looking number.
+  - ⚠️ **A behaviour change worth knowing:** paths that detected failure by
+    `fetchJSON` **throwing** may now resolve from disk instead. The v133
+    "League sync offline" notice is the main one — with a cached `/api/health`
+    the app shows your league plus the saved-copy line rather than the offline
+    card. That is the trade the feature exists to make, and the note is what
+    keeps it honest.
+  - Verified — **23 checks**, and note what the *existing* 190 do and don't
+    prove: every prior suite starts with empty localStorage, so they exercise
+    the COLD path and confirm it is unchanged; only this suite drives the warm
+    one. It covers the dead-network reload, fresh data replacing the saved copy
+    and clearing the note, the note refusing to promise a dead refresh, the
+    badge not contradicting it, the allow-list, cache-busted URLs never being
+    stored, oversized payloads skipped, eviction holding the budget, the record
+    surviving, `__stale` staying non-enumerable, and one request per URL.
+  - ⚠️ **Test-label note, and it is this repo's own lesson pointed inward:** my
+    eviction check printed *"1601KB ≤ 1600KB"* and PASSED — it compared bytes
+    correctly but rendered the budget in the wrong unit, so a true assertion
+    read like a contradiction. **A number in a test label is a display too.**
 
 - **📐 The Fantasy hero sat FLUSH on the stat strip — a 0px seam (v209)** —
   the owner, circling the top of the live football page: *"Don't like how these
@@ -4575,7 +4657,29 @@ rewrite.**
   see `LEAGUES.cfb.sbQuery`; the bare call returns a small curated subset.
   (Soccer / FIFA World Cup was removed in v125 once the 2026 Cup ended — the app
   no longer tracks any soccer competition.)
-- `fetchJSON(url, ttl)` — in-memory cache by URL with TTL; 9s abort. All data goes through it.
+- `fetchJSON(url, ttl)` — **two cache layers plus stale-while-revalidate**
+  (v210). In-memory `Map` by URL with TTL, then an on-device **disk cache**
+  (`sportshub:dc1:*`) that survives a reload: on a memory miss a saved copy is
+  returned INSTANTLY and the network runs behind it, and the fresh payload
+  fires `sportshub:fresh`. 9s abort (45s for `FANTASY_API`). **One in-flight
+  request per URL** — `cache` stores a result, not a promise, so before v210
+  every concurrent caller for the same URL opened its own fetch (the bug v200
+  had to fix by hand for the betting report). All 36 request sites go through
+  it, so all of them got this at once.
+  - ⚠️ The disk layer is an **allow-list** (`DISK_RULES`), not a blanket, and
+    that is a storage decision: localStorage is ~5 MB for the whole origin and
+    `sportshub:aitally` grows without bound in there, so caching everything
+    would eventually evict the graded record to store a scoreboard. Entry cap
+    `DC_MAX_ENTRY` 320 KB, total `DC_BUDGET` 1.6 MB, oldest-first eviction, and
+    a quota failure drops the whole cache rather than half-writing it — every
+    byte in there is re-fetchable and the record is not.
+  - ⚠️ **A cache-busted URL (`_=<now>`) is never stored.** The 🔄 Refresh button
+    adds it precisely to bypass both layers, so such an entry could never be
+    read back — but it would still be written, and each forced refresh would
+    deposit six permanent entries under keys nothing asks for again.
+  - ⚠️ A payload served from disk is marked **`__stale`/`__at`**, defined
+    **non-enumerable** so it can never survive a JSON round-trip, appear in an
+    `Object.keys` walk over a payload, or be mistaken for an ESPN field.
 - `LEAGUES` — per-sport config (label, emoji, espnPath, `fav` favorite teams, type).
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
 - Tabs: Home, Eagles, **🏈 NFL** (league-wide lens, v145), **🎓 CFB** (college
@@ -5122,6 +5226,13 @@ rewrite.**
   30-day purge. The untruncated spread-side instrument; read by
   `marginBiasStats()`. `sportshub:totbias` rows may carry `b:1` since v204 =
   a projection past `TOT_MAX_DIFF`, excluded from the mean as a data hole.
+- `sportshub:dc1:{url}` / `sportshub:dc1idx` — **the disk cache** (v210): the
+  last good payload per allow-listed URL (`{at, d}`) plus an index of
+  `{at, n}` used for oldest-first eviction. **Bump the digit in `DC_NS`/`DC_IDX`
+  to invalidate every entry at once** — that is the migration path if a payload
+  shape ever changes. `dcClear()` empties it (also wired to a button on the
+  About tab, which reports the size); it is pure cache, so losing it costs one
+  reload and nothing else.
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
 - `sportshub:lines:{YYYYMMDD}` — device-local line tracking for today's games:
   first-seen, latest, and (v167) a bounded **`hist`** of every observed change

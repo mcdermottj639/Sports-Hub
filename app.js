@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v209';
+const APP_VERSION = 'v210';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -81,23 +81,207 @@ const el = (tag, cls, html) => {
 const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC_MAP[c]);
 const cache = new Map();
+
+/* ==========================================================================
+   💾 DISK CACHE — the last load is still there when you reopen (v210)
+   --------------------------------------------------------------------------
+   `cache` above is a Map, so it died with the page: every launch re-fetched
+   everything and every view opened on a spinner. The worst of it is the
+   Render backend, which cold-starts 30-60s after ~15 min idle — v198 and
+   v207 both moved that WAIT earlier without ever keeping the ANSWER, so the
+   owner still watched it load from zero every single time.
+
+   This keeps the last good payload on the device, serves it INSTANTLY on the
+   next launch, then revalidates behind it and swaps the fresh copy in. Three
+   features already did exactly this by hand for one payload each
+   (`sportshub:fparticles`, `powerlab:season`, `draftsim:board`); this
+   generalises it to the one door all 36 request sites already go through.
+
+   ⚠️ It is an ALLOW-LIST, not a blanket, and that is a storage decision, not
+   caution for its own sake. localStorage is ~5 MB for the WHOLE origin and
+   `sportshub:aitally` — the graded pick record every model constant is fitted
+   against — grows without bound in there. Caching every ESPN payload would
+   eventually evict the record to make room for a scoreboard. So only the
+   patterns below are written, under a hard budget, and the record is never
+   what gets dropped.
+
+   ⚠️ A stale payload is MARKED (`__stale` / `__at`). Anything that paints off
+   one has to be able to say so: a slate that silently reads as current while
+   the network is down is the v202/v203 class of bug, and surviving a dead
+   network is precisely what this cache is for.
+   ========================================================================== */
+const DC_NS = 'sportshub:dc1:';     // bump the digit to invalidate every entry
+const DC_IDX = 'sportshub:dc1idx';
+const DC_MAX_ENTRY = 320 * 1024;    // one payload's ceiling
+const DC_BUDGET = 1.6 * 1024 * 1024; // everything this cache may ever hold
+const HR = 3600e3;
+
+// URL pattern → how long a saved copy may be SHOWN while the fresh one is on
+// its way. This is a DISPLAY budget, not a freshness claim: the refresh always
+// fires, so the number is "how stale may this look for one paint".
+const DISK_RULES = [
+  // The backend. The 30-60s cold start is the whole reason this exists.
+  [(u) => u.includes('/api/fantasy/'), 7 * 24 * HR],
+  [(u) => u.includes('/api/health'), 7 * 24 * HR],
+  [(u) => u.includes('/api/draft/'), 7 * 24 * HR],
+  [(u) => u.includes('/api/articles/'), 24 * HR],
+  [(u) => u.includes('/api/betting/'), 6 * HR],
+  // Reference data: changes slowly, costs a round trip, safe to look at.
+  [(u) => /\/(teams|roster|depthcharts|rankings|statistics|leaders)/.test(u), 3 * 24 * HR],
+  [(u) => u.includes('/standings'), 24 * HR],
+  [(u) => u.includes('/schedule') || u.includes('/gamelog'), 24 * HR],
+  [(u) => u.includes('/news'), 12 * HR],
+  // Scores. Short, because a scoreboard is stale within minutes — but long
+  // enough that reopening shows the games you were just looking at instead of
+  // an empty column while ESPN answers.
+  [(u) => u.includes('/scoreboard') || u.includes('/summary?event='), 8 * HR],
+];
+const diskMaxAge = (url) => {
+  /* 🚨 A cache-busted URL is never cached, in either direction. The 🔄 Refresh
+     button appends `_=<now>` precisely to bypass both cache layers, so a disk
+     entry could never be READ back under that key anyway — but it would still
+     be WRITTEN, and every forced refresh would deposit six permanent entries
+     under keys nothing will ever ask for again. Left alone that churn evicts
+     the entries that actually get used. */
+  if (/[?&]_=\d/.test(url)) return 0;
+  for (const [t, ms] of DISK_RULES) if (t(url)) return ms;
+  return 0;
+};
+
+const dcIdx = () => { try { return JSON.parse(localStorage.getItem(DC_IDX)) || {}; } catch (_) { return {}; } };
+function dcClear() {
+  try {
+    Object.keys(dcIdx()).forEach((u) => localStorage.removeItem(DC_NS + u));
+    localStorage.removeItem(DC_IDX);
+    // Belt and braces: an entry whose index row was lost is otherwise immortal.
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(DC_NS)) localStorage.removeItem(k);
+    }
+  } catch (_) {}
+}
+function dcRead(url) {
+  const ms = diskMaxAge(url);
+  if (!ms) return null;
+  try {
+    const raw = localStorage.getItem(DC_NS + url);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    if (!o || typeof o.at !== 'number') return null;
+    if (Date.now() - o.at > ms) { localStorage.removeItem(DC_NS + url); return null; }
+    return o;
+  } catch (_) { return null; }
+}
+function dcWrite(url, data) {
+  if (!diskMaxAge(url)) return;
+  let body;
+  try { body = JSON.stringify({ at: Date.now(), d: data }); } catch (_) { return; }
+  if (body.length > DC_MAX_ENTRY) return;   // too big to be worth a slot
+  const idx = dcIdx();
+  idx[url] = { at: Date.now(), n: body.length };
+  let total = 0;
+  for (const k in idx) total += idx[k].n || 0;
+  if (total > DC_BUDGET) {                  // evict oldest-first, never this one
+    const oldest = Object.keys(idx).sort((a, b) => idx[a].at - idx[b].at);
+    for (const k of oldest) {
+      if (total <= DC_BUDGET) break;
+      if (k === url) continue;
+      total -= idx[k].n || 0;
+      delete idx[k];
+      try { localStorage.removeItem(DC_NS + k); } catch (_) {}
+    }
+  }
+  try {
+    localStorage.setItem(DC_NS + url, body);
+    localStorage.setItem(DC_IDX, JSON.stringify(idx));
+  } catch (_) {
+    // Out of quota. Drop the whole cache rather than leave it half-written —
+    // every byte in here is re-fetchable and the pick record is not.
+    dcClear();
+  }
+}
+// Non-enumerable, so the flag can never survive a JSON round-trip, show up in
+// an Object.keys walk over a payload, or be counted as a real ESPN field.
+function markStale(data, at) {
+  if (!data || typeof data !== 'object') return data;
+  try {
+    Object.defineProperty(data, '__stale', { value: true, enumerable: false, configurable: true });
+    Object.defineProperty(data, '__at', { value: at, enumerable: false, configurable: true });
+  } catch (_) {}
+  return data;
+}
+const isStale = (d) => !!(d && d.__stale);
+
+// Every URL served from disk this session, and the oldest timestamp among
+// them — what a "showing your last saved copy" line reads off.
+const staleServed = new Map();
+const staleFailed = new Map();   // url -> when its refresh gave up
+function staleSince() {
+  let oldest = 0;
+  staleServed.forEach((at) => { if (at && (!oldest || at < oldest)) oldest = at; });
+  return oldest || 0;
+}
+
+/* One in-flight request per URL. `cache` stores a RESULT, not a promise, so
+   before this every concurrent caller for the same URL opened its own fetch —
+   the exact bug v200 had to fix by hand for the betting report. Doing it here
+   fixes it for all 36 call sites at once. */
+const inFlight = new Map();
+function fetchLive(url, ttl, timeoutMs) {
+  if (inFlight.has(url)) return inFlight.get(url);
+  const p = (async () => {
+    const ctrl = new AbortController();
+    // Backend (Render free tier) can cold-start ~30-60s after idle, so give it
+    // a long leash; ESPN's direct feeds stay snappy at 9s.
+    const ms = timeoutMs || (url.startsWith(FANTASY_API) ? 45000 : 9000);
+    const t = setTimeout(() => ctrl.abort(), ms);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      cache.set(url, { data, exp: Date.now() + ttl });
+      dcWrite(url, data);
+      return data;
+    } finally {
+      clearTimeout(t);
+      inFlight.delete(url);
+    }
+  })();
+  inFlight.set(url, p);
+  return p;
+}
+
+/* Refresh behind a stale paint. A failure is swallowed on purpose: the saved
+   copy is already on screen and is the best answer available offline. */
+function revalidate(url, ttl, timeoutMs) {
+  fetchLive(url, ttl, timeoutMs).then((data) => {
+    staleServed.delete(url);
+    staleFailed.delete(url);
+    try { window.dispatchEvent(new CustomEvent('sportshub:fresh', { detail: { url, data } })); } catch (_) {}
+  }).catch(() => {
+    /* ⚠️ The failure is swallowed — the saved copy is already on screen and is
+       the best answer available offline — but it is RECORDED, because the note
+       says "refreshing…" and that becomes a lie the moment the refresh dies.
+       A view left claiming it is about to update, forever, is worse than one
+       that admits the network is gone. */
+    staleFailed.set(url, Date.now());
+    try { window.dispatchEvent(new CustomEvent('sportshub:stalefail', { detail: { url } })); } catch (_) {}
+  });
+}
+
 async function fetchJSON(url, ttl = 60000, timeoutMs) {
   const hit = cache.get(url);
   if (hit && Date.now() < hit.exp) return hit.data;
-  const ctrl = new AbortController();
-  // Backend (Render free tier) can cold-start ~30-60s after idle, so give it a
-  // long leash; ESPN's direct feeds stay snappy at 9s.
-  const ms = timeoutMs || (url.startsWith(FANTASY_API) ? 45000 : 9000);
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
+  // A saved copy goes back immediately and the network runs behind it.
+  const disk = dcRead(url);
+  if (disk) {
+    const data = markStale(disk.d, disk.at);
     cache.set(url, { data, exp: Date.now() + ttl });
+    staleServed.set(url, disk.at);
+    revalidate(url, ttl, timeoutMs);
     return data;
-  } finally {
-    clearTimeout(t);
   }
+  return fetchLive(url, ttl, timeoutMs);
 }
 const ymd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 const ymdDash = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -9111,10 +9295,26 @@ async function renderRedSoxNextGame(team) {
 
 // --- mode badge + tabs + boot --------------------------------------------
 function setMode(live) {
-  state.liveOK = live;
+  /* 🚨 v210: a feed "loading" is no longer proof we reached the network — it
+     may have come off the disk cache. Without this the badge read LIVE while
+     the line directly beneath it said "Offline — showing your last saved
+     copy", which is two pieces of chrome contradicting each other on the same
+     screen. SAVED is its own state: we have data and it is honest data, we
+     just did not get it from ESPN just now. */
+  if (live && staleFailed.size && staleFailed.size >= staleServed.size) live = 'saved';
+  state.liveOK = live === true;
   const b = $('#mode-badge');
-  if (live) { b.textContent = 'LIVE'; b.className = 'badge live'; $('#about-status').textContent = ''; }
-  else { b.textContent = 'OFFLINE'; b.className = 'badge demo'; $('#about-status').textContent = 'Status: could not reach ESPN — showing sample data.'; }
+  const st = $('#about-status');
+  if (live === 'saved') {
+    b.textContent = 'SAVED'; b.className = 'badge demo';
+    if (st) st.textContent = 'Status: could not reach ESPN — showing your last saved data.';
+  } else if (live) {
+    b.textContent = 'LIVE'; b.className = 'badge live';
+    if (st) st.textContent = '';
+  } else {
+    b.textContent = 'OFFLINE'; b.className = 'badge demo';
+    if (st) st.textContent = 'Status: could not reach ESPN — showing sample data.';
+  }
 }
 
 // Build a "jump to section" widget bar at the top of a tab from its headings.
@@ -9610,8 +9810,29 @@ async function renderNFLPower() {
     }).join('');
 }
 
-const renderers = { home: renderHome, eagles: renderEagles, nfl: renderNFL, cfb: renderCFB, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, labs: () => {}, about: () => {} };
+/* The About tab reports what the disk cache is actually holding and offers the
+   one control it needs. A cache you cannot see the size of, or empty, is a
+   cache that gets blamed for every stale-looking number. */
+function renderAbout() {
+  const s = $('#dc-status');
+  if (s) {
+    const idx = dcIdx();
+    const keys = Object.keys(idx);
+    let bytes = 0; for (const k of keys) bytes += idx[k].n || 0;
+    s.textContent = keys.length
+      ? `${keys.length} saved ${keys.length === 1 ? 'response' : 'responses'} · ${(bytes / 1024).toFixed(0)} KB of a ${Math.round(DC_BUDGET / 1024)} KB budget.`
+      : 'Nothing saved yet — it fills as you use the app.';
+  }
+  const b = $('#dc-clear');
+  if (b && !b.dataset.wired) {
+    b.dataset.wired = '1';
+    b.onclick = () => { dcClear(); cache.clear(); b.textContent = '✅ Cleared'; renderAbout(); setTimeout(() => { b.textContent = '🗑️ Clear saved data'; }, 2000); };
+  }
+}
+const renderers = { home: renderHome, eagles: renderEagles, nfl: renderNFL, cfb: renderCFB, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, labs: () => {}, about: renderAbout };
+let currentTab = 'home';
 function showTab(name) {
+  currentTab = name;
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => {
     const on = b.dataset.tab === name;
@@ -9619,9 +9840,64 @@ function showTab(name) {
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
   Promise.resolve(renderers[name]())
-    .then(() => { injectJumpNav(name); applySections(name); })
+    .then(() => { injectJumpNav(name); applySections(name); paintStaleNote(); })
     .catch((e) => console.error(e));
 }
+
+/* ---------------------------------------------------------------- v210 ----
+   The saved copy paints first; this is what replaces it. A tab that showed
+   stale data repaints ONCE when the real payload lands, debounced so a burst
+   of endpoints answering together costs one render rather than six.
+
+   ⚠️ Gated on `staleServed` having actually been used, so an ordinary cold
+   load — where nothing was served from disk — never triggers a second render
+   of a view the user is already reading. */
+let freshTimer = null, sawStale = false;
+window.addEventListener('sportshub:fresh', (e) => {
+  if (!sawStale) return;
+  /* 🚨 A repaint alone is NOT enough for a view that copies the payload into
+     its own state. Fantasy derives `fanState.league[sport]` from the roster
+     call and then guards on `fanState.synced[sport]`, so re-running the
+     renderer just re-drew the stale-derived state and the fresh data sat
+     unused in the cache. Clearing the guard makes the next render re-sync —
+     off the MEMORY cache, which now holds the fresh copy, so it costs no
+     network. Anything else that caches derived state needs the same
+     treatment; the raw-payload cache cannot see it. */
+  const u = (e && e.detail && e.detail.url) || '';
+  if (u.includes('/api/fantasy/')) { try { fanState.synced = {}; } catch (_) {} }
+  clearTimeout(freshTimer);
+  freshTimer = setTimeout(() => {
+    sawStale = staleServed.size > 0;
+    const t = currentTab;
+    Promise.resolve(renderers[t] && renderers[t]())
+      .then(() => { injectJumpNav(t); applySections(t); paintStaleNote(); })
+      .catch(() => {});
+  }, 400);
+});
+
+/* A view built on a saved copy has to SAY so — the whole point of this cache
+   is that it survives a dead network, and a slate that reads as current while
+   offline is the v202/v203 lie in a new place. One line under the masthead,
+   removed the moment the fresh data lands. */
+function paintStaleNote() {
+  const host = $('#stale-note');
+  if (!host) return;
+  const at = staleSince();
+  if (!at) { host.hidden = true; host.textContent = ''; return; }
+  sawStale = true;
+  host.hidden = false;
+  // Only claim a refresh is running while one actually is.
+  const dead = staleFailed.size > 0 && staleFailed.size >= staleServed.size;
+  host.textContent = dead
+    ? `💾 Offline — showing your last saved copy (${timeAgo(at)}).`
+    : `💾 Showing your last saved copy (${timeAgo(at)}) — refreshing…`;
+}
+window.addEventListener('sportshub:stalefail', () => {
+  paintStaleNote();
+  // Re-evaluate the badge: setMode ran once at first paint, before we knew a
+  // refresh was going to fail, so it may still be claiming LIVE.
+  if (state.liveOK) setMode(true);
+});
 // Horizontal rails (tabs, the live slate, the league filters) scroll sideways.
 // A phone swipes them; a mouse has no sideways gesture and the scrollbars are
 // hidden, so on a desktop a plain wheel over one of these does nothing and the
