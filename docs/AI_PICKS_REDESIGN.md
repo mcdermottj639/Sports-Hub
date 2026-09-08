@@ -270,3 +270,27 @@ ladder, or the read-only look-back rule. This is a re-homing, not a remodel.
   the export. Cheap: one `sinceDate` filter in `tallyDetails`.
 - A cumulative record sparkline per market on the Record tab.
 - A "🎓 rating source" live chip on the CFB Board header (FPI vs tier).
+
+---
+
+## 8. Mockup (8 Sep 2026) and the two things it changed
+
+A static mockup was built against the real `styles.css` and screenshotted at
+390px in both palettes (Champagne + Onyx), covering CFB Board / Record /
+Backtesting / Model and Overview Record. It is **not** in the repo — it was a
+throwaway in the session scratchpad. Two things it settled:
+
+1. **The stat strip must be SIX tiles, not five.** Five tiles wrap **3 + 2** at
+   390px and the orphan row reads as broken — the exact v196 fantasy-strip
+   lesson. Add **This week** (`det.week`) as the sixth so it is a clean 3×2,
+   and 6-across above 700px. Order: Moneyline · vs the line · Spread · Totals ·
+   This week · Plays today.
+2. **Level-1 chips are pills, level-2 sub-tabs are a segmented row** with a
+   bottom rule under it. Two chip rows that look identical would read as one
+   confusing eight-item control; the sub-tabs being flush, equal-width and
+   underlined is what makes the hierarchy legible without a label.
+
+Also confirmed by rendering: the Model card fits comfortably in a
+96px-label / value two-column grid at 390px, the tier/heat pills and the
+calibration chart need no new colours (every value is an existing token), and
+nothing overflows horizontally in either palette.
