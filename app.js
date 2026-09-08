@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v208';
+const APP_VERSION = 'v209';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -7447,8 +7447,8 @@ async function renderFootballLive() {
 
   box.innerHTML = `
     <div class="setup-card pp-hero">
-      <div class="pp-kicker">🏈 ${esc(L.team || 'My Team')}${rec ? ' · ' + rec : ''}</div>
-      <div class="muted" style="margin-top:4px">Live ESPN league — points scoring (${esc(NFL_SCORING)}).</div>
+      <div class="pp-kicker">🏈 ${esc(L.team || 'My Team')}</div>
+      <div class="muted" style="margin-top:4px">Live ESPN league — points scoring, ${esc(NFL_SCORING)}.</div>
     </div>
     ${stripHTML}
     <h2 class="section-title">This Week</h2>

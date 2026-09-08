@@ -567,7 +567,53 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v208** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v209** (backend **b14-football-boxplayer**).
+
+- **📐 The Fantasy hero sat FLUSH on the stat strip — a 0px seam (v209)** —
+  the owner, circling the top of the live football page: *"Don't like how these
+  overlap here clean it up."* Measured: the gap between the hero card's bottom
+  edge and the first tile row was **exactly 0px**, in both palettes.
+  - **Why it looked broken rather than merely tight.** Both surfaces are the
+    same white and take the same `--e1` elevation (measured), so with no gap
+    they stop reading as *two* cards and start reading as *one* card with a
+    seam cut through it — and the radius change at the join (16px hero → 10px
+    tile) is exactly where a broken card would show. `.setup-card` carries
+    `margin: 0` and `.ffp-strip` opens with `margin-top: 0`; **every other
+    block in that view (`.ffp-card`, `.ffp-strip`) already had `0 0 12px`, so
+    the hero was the only surface in the view with no bottom margin at all.**
+  - **The fix is one rule, and margin COLLAPSING is what makes it safe to
+    write generally** rather than scoping it to the live view: `.pp-hero` is
+    also the prep-view and draft-recap hero, and both of those are followed by
+    an `h2.section-title` whose larger top margin already wins. Measured both
+    ways: hero→heading **24px before and 24px after** (unchanged), hero→strip
+    **0px → 12px**. One rule, one place it bites.
+  - **Two content faults inside the same circled card, both only visible in the
+    render:**
+    - **The record was printed twice, one line apart** — `🏈 DEATH DONT HURTS
+      VERY LONG · 0-0` in the kicker with a `0-0 / RECORD` tile directly
+      beneath it. The tile is the *labelled* one, so the kicker dropped its
+      copy. That duplication is a real part of why the block read as things
+      piled on each other.
+    - **Nested parentheses**: `points scoring (${NFL_SCORING})` where
+      `NFL_SCORING` is itself `'Half-PPR (0.5 per reception)'`, so the line
+      closed on `))`. It reads `points scoring, Half-PPR (0.5 per reception).`
+      now.
+  - ⚠️ **The general shape, worth checking on any new section:** a container
+    with `margin: 0` is invisible until something else with `margin-top: 0`
+    lands underneath it. Neither element is wrong on its own; the bug only
+    exists at the join. **Assert the GAP between adjacent blocks, not the
+    properties of either one** — the new suite measures the seam and also
+    sweeps every pair of blocks in the view for real geometric overlap.
+  - Verified in headless Chromium at 390px in **both palettes** — **14 checks**:
+    the seam at 12px (it asserts ≥10, so a regression to flush fails), hero and
+    strip left/right edges aligned, no pair of blocks in the view overlapping,
+    no horizontal overflow, no console errors. The v207 fantasy-load suite (27),
+    the power lab (142) and the Labs wiring (7) still pass.
+  - ⚠️ **Test-harness note:** the Labs suite pinned the version badge to a
+    string literal (`v208`), so it failed on the bump against perfectly correct
+    code. It reads `APP_VERSION` out of `app.js` now — **a literal that has to
+    be edited on every release teaches you to ignore the suite that carries
+    it.**
 
 - **⛑️ The league's real logos, and the trending column corrected against the
   owner's own published table (v208, power lab v5)** — the owner sent a

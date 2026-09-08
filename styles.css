@@ -2584,3 +2584,19 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
    ordinary .chip buttons, so they take the palette for free.
    ========================================================================== */
 .ai-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+
+/* ==========================================================================
+   Fantasy → Football: the hero card sat FLUSH on the stat strip (v209).
+   .setup-card carries `margin: 0`, and .ffp-strip opens with `margin-top: 0`,
+   so the live view's hero and the first tile row shared an edge — measured at
+   exactly 0px. Both are white, both take --e1, so two separate surfaces read
+   as one card with a seam cut through it. Every other block in that view
+   (.ffp-card, .ffp-strip) already carries `0 0 12px`; the hero was the only
+   one that didn't.
+   ⚠️ Adjacent margins COLLAPSE, which is why this is safe to put on .pp-hero
+   generally rather than scoping it to the live view: the prep and draft-recap
+   heroes are followed by an h2.section-title whose larger top margin already
+   wins, so they don't move at all. Measured both ways — hero→heading is 24px
+   before and after; only hero→strip (top margin 0) changes, 0px → 12px.
+   ========================================================================== */
+:root[data-palette] .pp-hero { margin-bottom: 12px; }
