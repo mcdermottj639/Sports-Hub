@@ -567,7 +567,72 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v211** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v212** (backend **b14-football-boxplayer**).
+
+- **🚨 The disk cache was throwing away the one thing it was built for (v212)**
+  — the owner, on a screenshot of the Fantasy tab sitting on *"Loading your
+  league…"* one version after v210 shipped: *"Why's it seem like we're
+  reloading everything again each time"*. Because it was. Three faults, and
+  the first is a whole class of bug.
+  - **🚨 Eviction was oldest-WRITTEN first, and that is backwards.** The
+    payloads worth caching — the backend's, behind a 30-60s Render cold start
+    — are written **once per session**. The ones that evicted them —
+    scoreboards — are rewritten by the rail **every 60 seconds**. So the
+    scoreboards were permanently the youngest entries and the fantasy roster
+    was permanently the oldest, and the moment the budget bit, the cache threw
+    away the expensive answer to keep the cheap one. Replayed against a
+    realistic session: v210 kept **0 of 6** fantasy payloads and all three
+    scoreboards. The rail therefore painted instantly and Fantasy cold-started
+    every launch, which is exactly the screenshot.
+    - Each `DISK_RULES` row now carries a **keep class** (3 backend · 2
+      reference · 1 scoreboard/summary/news) and `dcFit` sorts by class first,
+      age second. Same replay: **6 of 6** survive.
+    - ⚠️ **The general shape, worth applying anywhere something is cached: a
+      least-recently-WRITTEN policy measures how often a thing is re-fetched,
+      which is the inverse of how much it is worth keeping.** LRU is about
+      reads for a reason; I wrote it against writes.
+  - **🚨 The budget was counted in characters and charged in bytes.**
+    localStorage stores UTF-16, so v210's "1.6 MB" ceiling was really ~3.2 MB
+    of a ~5 MB origin quota that `sportshub:aitally` — the graded record,
+    which grows without bound — also lives in. Now measured in real bytes
+    (`dcBytes`), 2 MB total / 500 KB an entry. And a quota failure **sheds the
+    cheapest half and retries** instead of `dcClear()`ing everything: v210
+    handed the user a fully cold launch to make room for one scoreboard.
+  - **🚨 And even with the data on disk, the tab still WAITED for the network.**
+    `renderFantasy`'s football branch `await`ed `syncFromLeague` before
+    rendering anything, so a device with a perfectly good saved copy sat on
+    *"Loading your league…"* for the whole cold start regardless. **A cache
+    that is not allowed to answer is not a cache.** The view now paints from a
+    saved copy immediately and the sync repaints behind it. Measured: **84 ms
+    to a full page with a 20-second cold start still running.** A forced 🔄
+    refresh is the one path that still waits — bypassing the saved copy is the
+    entire point of that button.
+  - **`sportshub:league:{sport}`** — the ASSEMBLED league object, saved on its
+    own. The generic cache stores raw responses on a shared evictable budget,
+    and this view does not read raw responses; it reads what `syncLeagueOnce`
+    builds out of six of them. Same pattern `powerlab:season` and
+    `sportshub:fparticles` already use for their own payloads.
+  - **🚨 `synced` was computed and never rendered — the v206 dead-output bug,
+    again**, dropped by the v195 rebuild. `grep` confirms it: the string was
+    built and had no reader. That was survivable while the page was always
+    live; it is not now, because the page routinely paints a saved copy and
+    the age line is the one place the owner would find that out.
+    - ⚠️ **And the first fix was itself a lie, caught only by looking at the
+      render.** `syncedAt` was `Date.now()` — the age of the ASSEMBLY. Since
+      v210 any of the six responses can come back off disk, so a league built
+      entirely from saved copies announced itself as *"synced just now"*. It
+      is now the oldest `__at` among the payloads it was built from. A copy
+      deliberately aged nine hours read as fresh with every assertion green.
+  - **A bumped namespace has to take its predecessor with it** —
+    `dcPurgeLegacy()` at boot, or v210's `dc1` entries stay unreachable and
+    keep charging the quota forever.
+  - Verified — **18 new checks**: the reopen painting in 84 ms against a 20 s
+    cold start with no loading card, a dead backend still rendering the
+    league, the fresh sync repainting behind the saved copy, the 9-hour copy
+    saying so, the backend payloads surviving a scoreboard flood that v210
+    dropped them in, the budget held in real bytes, the rewrite throttle, and
+    the legacy namespace reclaimed. The v210 suite (23), v211 (20), v209 (14),
+    v207 (27), Labs (7) and the power lab (142) all still pass — 250 total.
 
 - **🗂️ Every card on every page starts expanded (v211)** — the owner:
   *"Start with every card on every page expanded instead of collapsed."* This
@@ -632,6 +697,11 @@ Current version as of this writing: **v211** (backend **b14-football-boxplayer**
     1.6 MB total, oldest-first eviction, and **a quota failure drops the whole
     cache rather than half-writing it**. A suite check hammers the cache with
     80 MB of writes and asserts `sportshub:aitally` is still there afterwards.
+    ⚠️ **SUPERSEDED in v212 — three of those four numbers were wrong and the
+    eviction order was backwards**, which is why the Fantasy tab still cold-
+    started every launch. Eviction is by keep-CLASS first, the sizes are real
+    UTF-16 bytes, and a quota failure sheds the cheapest half instead of
+    wiping the cache. The allow-list reasoning above is unchanged and correct.
   - **🚨 The honesty problem this creates, and it is the real design work.**
     A cache whose whole purpose is surviving a dead network will, by
     construction, show you old data while the network is gone — which is the
@@ -4704,8 +4774,8 @@ rewrite.**
   (Soccer / FIFA World Cup was removed in v125 once the 2026 Cup ended — the app
   no longer tracks any soccer competition.)
 - `fetchJSON(url, ttl)` — **two cache layers plus stale-while-revalidate**
-  (v210). In-memory `Map` by URL with TTL, then an on-device **disk cache**
-  (`sportshub:dc1:*`) that survives a reload: on a memory miss a saved copy is
+  (v210, fixed in v212). In-memory `Map` by URL with TTL, then an on-device
+  **disk cache** (`sportshub:dc2:*`) that survives a reload: on a memory miss a saved copy is
   returned INSTANTLY and the network runs behind it, and the fresh payload
   fires `sportshub:fresh`. 9s abort (45s for `FANTASY_API`). **One in-flight
   request per URL** — `cache` stores a result, not a promise, so before v210
@@ -4716,9 +4786,27 @@ rewrite.**
     that is a storage decision: localStorage is ~5 MB for the whole origin and
     `sportshub:aitally` grows without bound in there, so caching everything
     would eventually evict the graded record to store a scoreboard. Entry cap
-    `DC_MAX_ENTRY` 320 KB, total `DC_BUDGET` 1.6 MB, oldest-first eviction, and
-    a quota failure drops the whole cache rather than half-writing it — every
-    byte in there is re-fetchable and the record is not.
+    `DC_MAX_ENTRY` 500 KB, total `DC_BUDGET` 2 MB, **in real UTF-16 bytes** —
+    localStorage charges 2 bytes a character, so v210's "1.6 MB" was really
+    ~3.2 MB of a ~5 MB origin quota. A quota failure sheds the cheapest half
+    and retries before it ever clears the whole cache.
+  - ⚠️ **Eviction is by keep-CLASS first, age second** (`dcFit`), and having it
+    the other way round is what made v210's cache useless for the thing it was
+    built for. Each `DISK_RULES` row carries a class: **3** = expensive (the
+    backend, behind a 30-60s cold start), **2** = reference, **1** = cheap and
+    constantly re-fetched (scoreboards, summaries, news). A backend payload is
+    written ONCE a session; the rail rewrites each scoreboard every 60s — so
+    under oldest-first the scoreboards were permanently the youngest and the
+    fantasy roster permanently the oldest, and every session threw away the
+    expensive answer to keep the cheap one. **A least-recently-WRITTEN policy
+    measures how often a thing is re-fetched, which is the opposite of how
+    much it is worth caching.**
+  - ⚠️ `DC_MIN_REWRITE` (2 min) stops the 60s rail refresh re-serialising a
+    ~200 KB scoreboard all day — a real main-thread cost on a phone, and it
+    was also half of what defeated the eviction order.
+  - ⚠️ **A bumped namespace must take its predecessor with it** —
+    `dcPurgeLegacy()` at boot, or the old entries are unreachable and still
+    charged against the quota forever.
   - ⚠️ **A cache-busted URL (`_=<now>`) is never stored.** The 🔄 Refresh button
     adds it precisely to bypass both layers, so such an entry could never be
     read back — but it would still be written, and each forced refresh would
@@ -5272,13 +5360,22 @@ rewrite.**
   30-day purge. The untruncated spread-side instrument; read by
   `marginBiasStats()`. `sportshub:totbias` rows may carry `b:1` since v204 =
   a projection past `TOT_MAX_DIFF`, excluded from the mean as a data hole.
-- `sportshub:dc1:{url}` / `sportshub:dc1idx` — **the disk cache** (v210): the
-  last good payload per allow-listed URL (`{at, d}`) plus an index of
-  `{at, n}` used for oldest-first eviction. **Bump the digit in `DC_NS`/`DC_IDX`
-  to invalidate every entry at once** — that is the migration path if a payload
-  shape ever changes. `dcClear()` empties it (also wired to a button on the
-  About tab, which reports the size); it is pure cache, so losing it costs one
-  reload and nothing else.
+- `sportshub:dc2:{url}` / `sportshub:dc2idx` — **the disk cache** (v210, v212):
+  the last good payload per allow-listed URL (`{at, d}`) plus an index of
+  `{at, n, k}` — bytes and keep-class — driving eviction. **Bump the digit in
+  `DC_NS`/`DC_IDX` to invalidate every entry at once**; that is the migration
+  path if a payload shape ever changes, and `dcPurgeLegacy()` at boot reclaims
+  the abandoned namespace. `dcClear()` empties it (also wired to a button on
+  the About tab, which reports the size); it is pure cache, so losing it costs
+  one reload and nothing else.
+- `sportshub:league:{sport}` — **the ASSEMBLED fantasy league** (v212), the
+  object `syncLeagueOnce` builds out of six responses, so the Fantasy tab can
+  paint the last load with no network and nothing to reassemble. Same pattern
+  as `powerlab:season` / `sportshub:fparticles`. ⚠️ It is deliberately NOT the
+  same thing as the generic disk cache: that caches raw responses on a shared
+  evictable budget, and this view does not read raw responses. Carries
+  `syncedAt`, which is the age of the DATA (the oldest `__at` among the
+  payloads it was built from), never the age of the assembly.
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
 - `sportshub:lines:{YYYYMMDD}` — device-local line tracking for today's games:
   first-seen, latest, and (v167) a bounded **`hist`** of every observed change

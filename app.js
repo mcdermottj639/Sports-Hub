@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v211';
+const APP_VERSION = 'v212';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -110,43 +110,55 @@ const cache = new Map();
    the network is down is the v202/v203 class of bug, and surviving a dead
    network is precisely what this cache is for.
    ========================================================================== */
-const DC_NS = 'sportshub:dc1:';     // bump the digit to invalidate every entry
-const DC_IDX = 'sportshub:dc1idx';
-const DC_MAX_ENTRY = 320 * 1024;    // one payload's ceiling
-const DC_BUDGET = 1.6 * 1024 * 1024; // everything this cache may ever hold
+const DC_NS = 'sportshub:dc2:';     // bump the digit to invalidate every entry
+const DC_IDX = 'sportshub:dc2idx';
+/* ⚠️ v212: these are REAL BYTES, not string length. localStorage stores UTF-16,
+   so v210's "1.6 MB" budget actually charged ~3.2 MB against a ~5 MB origin
+   quota that `sportshub:aitally` — the graded record, which grows without
+   bound — has to live in too. Measure what the browser charges, not what the
+   string counts. */
+const DC_MAX_ENTRY = 500 * 1024;      // one payload's ceiling
+const DC_BUDGET = 2 * 1024 * 1024;    // everything this cache may ever hold
+const DC_MIN_REWRITE = 120000;        // how often one URL may be re-written
+const dcBytes = (s) => s.length * 2;  // UTF-16
 const HR = 3600e3;
 
 // URL pattern → how long a saved copy may be SHOWN while the fresh one is on
 // its way. This is a DISPLAY budget, not a freshness claim: the refresh always
 // fires, so the number is "how stale may this look for one paint".
+/* The third column is the KEEP CLASS, and it is the whole point of v212 —
+   see dcFit. 3 = expensive (a 30-60s cold start behind it), 1 = cheap and
+   constantly re-fetched. */
 const DISK_RULES = [
   // The backend. The 30-60s cold start is the whole reason this exists.
-  [(u) => u.includes('/api/fantasy/'), 7 * 24 * HR],
-  [(u) => u.includes('/api/health'), 7 * 24 * HR],
-  [(u) => u.includes('/api/draft/'), 7 * 24 * HR],
-  [(u) => u.includes('/api/articles/'), 24 * HR],
-  [(u) => u.includes('/api/betting/'), 6 * HR],
+  [(u) => u.includes('/api/fantasy/'), 7 * 24 * HR, 3],
+  [(u) => u.includes('/api/health'), 7 * 24 * HR, 3],
+  [(u) => u.includes('/api/draft/'), 7 * 24 * HR, 3],
+  [(u) => u.includes('/api/articles/'), 24 * HR, 3],
+  [(u) => u.includes('/api/betting/'), 6 * HR, 3],
   // Reference data: changes slowly, costs a round trip, safe to look at.
-  [(u) => /\/(teams|roster|depthcharts|rankings|statistics|leaders)/.test(u), 3 * 24 * HR],
-  [(u) => u.includes('/standings'), 24 * HR],
-  [(u) => u.includes('/schedule') || u.includes('/gamelog'), 24 * HR],
-  [(u) => u.includes('/news'), 12 * HR],
+  [(u) => /\/(teams|roster|depthcharts|rankings|statistics|leaders)/.test(u), 3 * 24 * HR, 2],
+  [(u) => u.includes('/standings'), 24 * HR, 2],
+  [(u) => u.includes('/schedule') || u.includes('/gamelog'), 24 * HR, 2],
+  [(u) => u.includes('/news'), 12 * HR, 1],
   // Scores. Short, because a scoreboard is stale within minutes — but long
   // enough that reopening shows the games you were just looking at instead of
-  // an empty column while ESPN answers.
-  [(u) => u.includes('/scoreboard') || u.includes('/summary?event='), 8 * HR],
+  // an empty column while ESPN answers. Cheapest to re-fetch, so first out.
+  [(u) => u.includes('/scoreboard') || u.includes('/summary?event='), 8 * HR, 1],
 ];
-const diskMaxAge = (url) => {
+const diskRule = (url) => {
   /* 🚨 A cache-busted URL is never cached, in either direction. The 🔄 Refresh
      button appends `_=<now>` precisely to bypass both cache layers, so a disk
      entry could never be READ back under that key anyway — but it would still
      be WRITTEN, and every forced refresh would deposit six permanent entries
      under keys nothing will ever ask for again. Left alone that churn evicts
      the entries that actually get used. */
-  if (/[?&]_=\d/.test(url)) return 0;
-  for (const [t, ms] of DISK_RULES) if (t(url)) return ms;
-  return 0;
+  if (/[?&]_=\d/.test(url)) return null;
+  for (const r of DISK_RULES) if (r[0](url)) return r;
+  return null;
 };
+const diskMaxAge = (url) => { const r = diskRule(url); return r ? r[1] : 0; };
+const diskKeep = (url) => { const r = diskRule(url); return r ? r[2] : 0; };
 
 const dcIdx = () => { try { return JSON.parse(localStorage.getItem(DC_IDX)) || {}; } catch (_) { return {}; } };
 function dcClear() {
@@ -172,33 +184,74 @@ function dcRead(url) {
     return o;
   } catch (_) { return null; }
 }
-function dcWrite(url, data) {
-  if (!diskMaxAge(url)) return;
-  let body;
-  try { body = JSON.stringify({ at: Date.now(), d: data }); } catch (_) { return; }
-  if (body.length > DC_MAX_ENTRY) return;   // too big to be worth a slot
-  const idx = dcIdx();
-  idx[url] = { at: Date.now(), n: body.length };
+/* 🚨 v212: eviction is by VALUE first, age second — and having it the other
+   way round is what made v210's cache useless for the one thing it was built
+   for. The payloads worth keeping (the backend's, behind a 30-60s cold start)
+   are written ONCE per session. The ones that evicted them — scoreboards —
+   are re-written by the rail every 60 seconds, so they were permanently the
+   YOUNGEST and the fantasy roster was permanently the OLDEST. Oldest-first
+   therefore threw away the expensive answer to make room for the cheap one,
+   every session, which is why the Fantasy tab still cold-started every launch
+   while the rail painted instantly. Replayed against a realistic session, v210
+   kept 0 of 6 fantasy payloads; by value it keeps 6 of 6.
+
+   ⚠️ The general shape: a least-recently-WRITTEN policy measures how often a
+   thing is re-fetched, which is the opposite of how much it is worth caching. */
+function dcFit(idx, keepUrl, shed) {
   let total = 0;
   for (const k in idx) total += idx[k].n || 0;
-  if (total > DC_BUDGET) {                  // evict oldest-first, never this one
-    const oldest = Object.keys(idx).sort((a, b) => idx[a].at - idx[b].at);
-    for (const k of oldest) {
-      if (total <= DC_BUDGET) break;
-      if (k === url) continue;
-      total -= idx[k].n || 0;
-      delete idx[k];
-      try { localStorage.removeItem(DC_NS + k); } catch (_) {}
-    }
+  const target = shed ? DC_BUDGET * (1 - shed) : DC_BUDGET;
+  if (total <= target) return;
+  const order = Object.keys(idx).sort(
+    (a, b) => (idx[a].k || 1) - (idx[b].k || 1) || idx[a].at - idx[b].at);
+  for (const k of order) {
+    if (total <= target) break;
+    if (k === keepUrl) continue;
+    total -= idx[k].n || 0;
+    delete idx[k];
+    try { localStorage.removeItem(DC_NS + k); } catch (_) {}
   }
-  try {
+}
+function dcWrite(url, data) {
+  const keep = diskKeep(url);
+  if (!keep) return;
+  const idx = dcIdx();
+  /* Don't re-write the same URL every minute. The rail re-fetches each
+     scoreboard on a 60s timer, and re-serialising ~200 KB of JSON that often
+     is a main-thread cost on a phone for no gain — the memory cache already
+     covers the session, and disk only has to be good enough for the next
+     launch. It also stopped the churn from re-stamping those entries as the
+     newest, which is half of what defeated the eviction order above. */
+  const prev = idx[url];
+  if (prev && Date.now() - prev.at < DC_MIN_REWRITE) return;
+  let body;
+  try { body = JSON.stringify({ at: Date.now(), d: data }); } catch (_) { return; }
+  const n = dcBytes(body);
+  if (n > DC_MAX_ENTRY) return;             // too big to be worth a slot
+  idx[url] = { at: Date.now(), n, k: keep };
+  dcFit(idx, url);
+  const put = () => {
     localStorage.setItem(DC_NS + url, body);
     localStorage.setItem(DC_IDX, JSON.stringify(idx));
-  } catch (_) {
-    // Out of quota. Drop the whole cache rather than leave it half-written —
-    // every byte in here is re-fetchable and the pick record is not.
-    dcClear();
+  };
+  try { put(); } catch (_) {
+    /* Out of quota — something ELSE in this origin grew (the graded record
+       does, without bound). Shed the cheapest half and try once more. v210
+       cleared the WHOLE cache here, which handed the user a fully cold launch
+       to make room for a single scoreboard. */
+    dcFit(idx, url, 0.5);
+    try { put(); } catch (_) { dcClear(); }
   }
+}
+/* Entries from an older namespace are unreachable but still charged against
+   the origin quota, so a bumped namespace has to take its predecessor with it. */
+function dcPurgeLegacy() {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && /^sportshub:dc\d/.test(k) && !k.startsWith(DC_NS) && k !== DC_IDX) localStorage.removeItem(k);
+    }
+  } catch (_) {}
 }
 // Non-enumerable, so the flag can never survive a JSON round-trip, show up in
 // an Object.keys walk over a payload, or be counted as a real ESPN field.
@@ -6803,12 +6856,34 @@ async function renderFantasy() {
     if (cfg && cfg.football && fanState.footballView !== 'prep') {
       fanState.synced = fanState.synced || {};
       if (!fanState.synced.football || fanState.forceSync) {
-        // The roster fetch waits out the same cold start, so say what is
-        // happening instead of leaving the tab blank for up to 45 seconds.
-        if (fbBox && !fbBox.innerHTML.trim()) fbBox.innerHTML = '<div class="ffp-card"><div class="ffp-empty"><b>Loading your league…</b>Waking the ESPN sync — the free-tier backend takes ~30s after it has been idle.</div></div>';
-        await syncFromLeague('football', !!fanState.forceSync);
-        fanState.synced.football = true;
-        fanState.forceSync = false;
+        /* 🚨 v212: paint the last load NOW and sync behind it. v210 saved the
+           data but this line still AWAITED the sync, so a device with a
+           perfectly good saved copy sat on "Loading your league…" for the
+           full cold start anyway. A cache that is not allowed to answer is
+           not a cache. A forced refresh is the one case that still waits,
+           because bypassing the saved copy is the entire point of the button. */
+        const snap = fanState.forceSync ? null : leagueSnap('football');
+        if (snap) {
+          fanState.league = fanState.league || {};
+          if (!fanState.league.football) fanState.league.football = snap;
+        }
+        const done = syncFromLeague('football', !!fanState.forceSync).then((ok) => {
+          fanState.synced.football = true;
+          fanState.forceSync = false;
+          return ok;
+        });
+        if ((fanState.league || {}).football) {
+          // Something real is on screen, so nothing waits on the backend.
+          done.then((ok) => {
+            if (!ok || fanState.sport !== 'football' || fanState.footballView === 'prep') return;
+            renderFootballLive().then(() => { applySections('fantasy'); paintStaleNote(); });
+          }).catch(() => {});
+        } else {
+          // Nothing saved yet (first launch) — say what is happening instead
+          // of leaving the tab blank for up to 45 seconds.
+          if (fbBox && !fbBox.innerHTML.trim()) fbBox.innerHTML = '<div class="ffp-card"><div class="ffp-empty"><b>Loading your league…</b>Waking the ESPN sync — the free-tier backend takes ~30s after it has been idle. It is saved once it lands, so the next launch is instant.</div></div>';
+          await done;
+        }
       }
       await renderFootballLive();
       // Verify the remembered answer; drop back to prep if the league is gone.
@@ -7068,6 +7143,29 @@ function warmFantasy() {
 // concurrent syncs would be two full sets of ESPN pulls, and the loser's work
 // would be thrown away. Sharing the promise makes the boot pass's wait the
 // tab's wait, so tapping Fantasy mid-warm costs nothing extra.
+/* 🚨 v212: the assembled league, kept on the device in its own key.
+   The generic disk cache (v210) already saves each raw response, but it is a
+   shared, evictable budget — and the Fantasy view does not read raw responses,
+   it reads the object syncLeagueOnce assembles OUT of six of them. Storing the
+   assembled result means the tab can paint the last load with no network at
+   all and nothing to reassemble, exactly like powerlab:season and
+   sportshub:fparticles already do for their own payloads.
+   ⚠️ It carries syncedAt, so the header keeps saying how old it is — a saved
+   copy that reads as current is the v202/v203 lie. */
+const LEAGUE_SNAP = 'sportshub:league:';
+function saveLeagueSnap(sport, obj) {
+  try { localStorage.setItem(LEAGUE_SNAP + sport, JSON.stringify(obj)); } catch (_) {}
+}
+function leagueSnap(sport) {
+  try {
+    const o = JSON.parse(localStorage.getItem(LEAGUE_SNAP + sport) || 'null');
+    if (!o || !o.rosterFull) return null;
+    // A month-old league is not worth painting; it would be last season's.
+    if (o.syncedAt && Date.now() - o.syncedAt > 30 * 24 * HR) return null;
+    return o;
+  } catch (_) { return null; }
+}
+
 const syncInFlight = new Map();
 function syncFromLeague(sport, force = false) {
   // A forced refresh must not be served by an in-flight ordinary sync — the
@@ -7124,7 +7222,19 @@ async function syncLeagueOnce(sport, force) {
       isBb ? null : soft(`${FANTASY_API}/api/fantasy/${sport}/season${q()}`, 60000),
     ]);
     fanState.league = fanState.league || {};
-    fanState.league[sport] = { team: data.team, record: data.record, rosterFull: data.roster || [], live: !!data.live, matchup, standings, freeAgents, opponent, catranks, playoffs, season, syncedAt: Date.now() };
+    /* 🚨 syncedAt is the age of the DATA, not of the assembly. Since v210 any
+       of these six can come back off the disk cache, so stamping Date.now()
+       would have a league assembled entirely from saved copies announce itself
+       as "synced just now" — the v202/v203 lie, in the one place the user
+       looks to find out whether to trust the numbers. Caught by looking at the
+       render: a copy deliberately aged 9 hours still read as fresh. */
+    let at = 0;
+    [data, matchup, standings, freeAgents, opponent, catranks, playoffs, season].forEach((d) => {
+      if (isStale(d) && d.__at && (!at || d.__at < at)) at = d.__at;
+    });
+    const built = { team: data.team, record: data.record, rosterFull: data.roster || [], live: !!data.live, matchup, standings, freeAgents, opponent, catranks, playoffs, season, syncedAt: at || Date.now() };
+    fanState.league[sport] = built;
+    saveLeagueSnap(sport, built);
     return true;
   } catch (_) { return false; }
 }
@@ -7633,6 +7743,7 @@ async function renderFootballLive() {
     <div class="setup-card pp-hero">
       <div class="pp-kicker">🏈 ${esc(L.team || 'My Team')}</div>
       <div class="muted" style="margin-top:4px">Live ESPN league — points scoring, ${esc(NFL_SCORING)}.</div>
+      <div class="muted" style="margin-top:4px;font-size:11px">${esc(synced)}${synced ? ' · ' : ''}<span id="fbl-top-resync" role="button" tabindex="0" style="text-decoration:underline;cursor:pointer">🔄 Refresh from ESPN</span></div>
     </div>
     ${stripHTML}
     <h2 class="section-title">This Week</h2>
@@ -7656,6 +7767,12 @@ async function renderFootballLive() {
 
   const rs = box.querySelector('#fbl-resync');
   if (rs) rs.onclick = async () => { rs.textContent = '🔄 Refreshing…'; rs.disabled = true; fanState.synced = fanState.synced || {}; fanState.synced.football = false; fanState.forceSync = true; await renderFantasy(); };
+  /* ⚠️ v212: `synced` was COMPUTED and never rendered — the v206 dead-output
+     bug again, dropped by the v195 rebuild. It has to be on the page now: this
+     view routinely paints a saved copy, and a copy that reads as current is
+     exactly the lie the whole cache design is trying not to tell. */
+  const rt = $('#fbl-top-resync');
+  if (rt) rt.onclick = async () => { rt.textContent = '🔄 Refreshing…'; fanState.synced = fanState.synced || {}; fanState.synced.football = false; fanState.forceSync = true; await renderFantasy(); };
   const pp = box.querySelector('#fbl-prep');
   if (pp) pp.onclick = () => { fanState.footballView = 'prep'; renderFantasy(); };
   injectJumpNav('fantasy');
@@ -10079,6 +10196,10 @@ startLiveRail();
 // grading so a stale preseason pending pick can't be graded into the record on
 // the way past. Last season's NFL games are kept.
 clearNflPreseason();
+
+// A bumped disk-cache namespace leaves its predecessor's entries stranded but
+// still charged against the origin quota.
+dcPurgeLegacy();
 
 // NFL + CFB start each launch with just the week's slate open (see
 // SEC_RESET_ON_LOAD). Must run before any tab renders.
