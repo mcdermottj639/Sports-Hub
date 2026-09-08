@@ -5150,8 +5150,22 @@ rewrite.**
      Board fills, so the rail costs no extra model run and no extra ESPN call.
      Folds via the ⌃ RAIL header button (`sportshub:railhidden`), which
      re-asserts after every repaint so the 30s refresh can't re-open it.
-  2. **The masthead** — brand · version · palette cycler · rail fold · the 💰
-     sharp toggle · the LIVE/OFFLINE badge.
+  2. **The masthead** — brand · version · palette cycler · rail fold · the
+     LIVE/OFFLINE badge.
+     - ⚠️ **It is 96% TRANSPARENT and leans entirely on the blur to look
+       solid**: `:root[data-palette] .topbar` is `rgba(var(--base), .04)` plus
+       `-webkit-backdrop-filter: saturate(180%) blur(14px)`. Worth knowing
+       because that is the standard setup for transient compositing ghosts on
+       iOS Safari — 8 Sep 2026 the owner sent a screenshot of a white rounded
+       shape hanging below the ⌃ RAIL button, which **cleared on scroll** and
+       has not come back. **The layout is not the cause**: a sweep measured the
+       bar in 48 states (2 palettes × 6 widths from 320px × rail shown/hidden ×
+       stale note on/off) and again across all nine tabs — no element crossing
+       the bar's edges, no sibling collision, no spill, no overflow, anywhere.
+       So **do not re-run that sweep** if the same screenshot appears. If it
+       ever becomes persistent or frequent, the fix is to give the bar a real
+       opaque ground and keep the blur as an enhancement, so a dropped or
+       glitched backdrop-filter can't show anything through it.
   3. **`nav.tabs`** — a GRID of all nine tabs (5×2 on a phone, 9 across above
      700px), text labels, no icons, live pip on `.lb`. It cannot cut off.
   Then, inside each tab panel, **one `.ctl-row`** built by `buildControlRow()`:
