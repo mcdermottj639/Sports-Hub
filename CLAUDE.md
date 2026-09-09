@@ -599,7 +599,72 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v219** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v220** (backend **b14-football-boxplayer**).
+
+- **🚨 The app said OFFLINE with today's live scores on screen — one sleeping
+  backend call was speaking for the whole app (v220)** — the owner, with a
+  screenshot of `💾 Offline — showing your last saved copy (20h ago).` above a
+  rail full of tonight's real MLB slate: *"Why's it saying I'm offline when I'm
+  not"*. Two faults, and the first is a counting bug worth remembering.
+  - **🚨 The denominator shrank on success, so "everything failed" degenerated
+    into "anything failed".** The verdict was
+    `staleFailed.size >= staleServed.size` — but a SUCCESSFUL revalidate does
+    `staleServed.delete(url)`, so each good refresh removed itself from the
+    comparison while a failed one stayed in **both** maps. Nine ESPN feeds
+    refreshing perfectly and one dead endpoint left `1 >= 1`, and the app
+    declared a total outage. The intent ("every URL we are showing stale failed
+    to refresh") was reasonable; the instrument could not express it, because
+    the successes were gone from the sample by the time it was read.
+    - Fixed by asking the network directly instead of counting cache entries:
+      **`netOKAt` / `netFailAt`**, stamped in `fetchLive` on each outcome, with
+      `netDead()` = the most recent outcome was a failure. ⚠️ **A count of
+      what is still in a cache cannot tell you whether a network is up — only
+      the network can.**
+  - **🚨 And the endpoint doing it is the one that is SUPPOSED to be
+    unreachable.** The Render backend sleeps after 15 min idle, `warmFantasy()`
+    pokes it at every boot, and `DISK_RULES` caches its payloads for **7 days
+    at the highest keep class** — so a device that opened the app yesterday
+    reliably carries a day-old backend copy that fails to refresh today. That
+    is the "20h ago" in the screenshot, exactly. New **`globalFeed(url)`**:
+    the page-wide banner and the mode badge are scoped to **ESPN**, the app's
+    actual data source, and backend URLs no longer enter `staleServed` /
+    `staleFailed` at all.
+    - **It is not silenced, it is reported in the right place.** Every feature
+      that reads the backend already says so where it lives — "League sync
+      offline", "splits feed asleep or unreachable", the Fantasy tab's saved-copy
+      age line. The payload is still marked `__stale`/`__at`, so a view that
+      wants to speak for its own data still can. What changed is that an
+      optional, expected-to-be-asleep service stopped speaking for the whole app.
+  - ⚠️ **The general shape: a page-wide honesty banner must be scoped to the
+    source that page is actually made of.** Anything else and the most flaky
+    dependency in the app becomes the one that describes it.
+  - Verified in headless Chromium at 390px — **9 checks** in two contexts, and
+    the first one reproduces the owner's screenshot **verbatim** against v219
+    (`💾 Offline — showing your last saved copy (20h ago).`, badge SAVED) while
+    ESPN answers and the rail paints three live cards: after the fix the banner
+    is gone entirely, the badge reads LIVE and the rail is unchanged. The
+    second context is a **persistent** browser context with a warm first load
+    and then a dead network — the real outage still reads
+    `💾 Offline — showing your last saved copy`, badge SAVED, and does not
+    promise a refresh that already died. ⚠️ **A suite that starts from empty
+    storage exercises only the cold path** (the v210/v216 lesson) — the stale
+    banner exists only on the warm one, which is why that half needs a
+    persistent profile. Plus a 24-check sweep: all ten tabs at 390px and
+    1280px, no horizontal overflow, no console errors.
+  - ⚠️ **Test-harness note:** a suite that deliberately aborts the backend gets
+    a browser *"Failed to load resource"* console line — the fixture working,
+    not the app erroring. Filter it (this file already says so twice).
+
+- **🎯 Pick'em picks are on the DEVICE and nowhere else — there is no import
+  (v220 note, no code change)** — the owner asked whether the picks they had
+  sent in chat were reflected on the tab. They were not, and could not be.
+  `sportshub:pickem` is written only by tapping the buttons on 📋 This Week or
+  the 🤖 Fill from the model button; the Setup tab has **📋 Copy my pick data**
+  (export) and no matching import, and nothing in this repo or any session can
+  write to the owner's localStorage. **A session that is handed a week of picks
+  cannot put them in the app** — say so rather than implying they landed.
+  Building a paste-in importer beside the existing export is the obvious fix
+  and is NOT built; it was offered, not assumed.
 
 - **🌞 Dark mode REMOVED — one ground, and nothing can change it (v219)** — the
   owner: *"Remove dark mode completely it's a waste of time I never use it."*
@@ -1218,11 +1283,21 @@ Current version as of this writing: **v219** (backend **b14-football-boxplayer**
       field.
     - A `#stale-note` line under the masthead says *"Showing your last saved
       copy (Xm ago) — refreshing…"*, and it is removed the moment fresh data
-      lands.
+      lands. ⚠️ **SUPERSEDED in v220 for WHICH FEEDS IT SPEAKS FOR** — the
+      banner and the badge are scoped to ESPN now (`globalFeed`), because the
+      sleeping Render backend was pinning a page-wide "Offline" over a screen
+      full of live scores. The honesty reasoning here is unchanged, and is
+      exactly why the backend's own staleness is still reported by the views
+      that read it.
     - ⚠️ **That line becomes a lie the instant the refresh fails**, so a failed
       revalidate is recorded (`staleFailed`) and the note switches to
       *"Offline — showing your last saved copy."* A view promising an update
       that already died is worse than one admitting the network is gone.
+      ⚠️ **SUPERSEDED in v220:** the test for "the refresh failed" was
+      `staleFailed.size >= staleServed.size`, and a SUCCESSFUL revalidate
+      deletes itself from `staleServed` — so the denominator shrank and one
+      dead endpoint read as a total outage. It is `netDead()` now, off real
+      network outcomes.
   - **🚨 The mode badge contradicted the note, and only the render showed it.**
     `setMode(true)` fires when "a feed loads" — but a feed loading is no longer
     proof we reached the network, so the badge read **LIVE** directly above a
@@ -5347,6 +5422,15 @@ rewrite.**
   - ⚠️ A payload served from disk is marked **`__stale`/`__at`**, defined
     **non-enumerable** so it can never survive a JSON round-trip, appear in an
     `Object.keys` walk over a payload, or be mistaken for an ESPN field.
+  - ⚠️ **The page-wide saved-copy banner and the mode badge speak for ESPN
+    only** (`globalFeed`, v220). Backend URLs are still cached and still marked
+    `__stale`, but they never enter `staleServed`/`staleFailed` — the Render
+    free tier is EXPECTED to be asleep, and every feature that reads it already
+    reports that in place. Whether the app is offline is answered by
+    `netDead()` (`netOKAt` vs `netFailAt`, stamped on real fetch outcomes),
+    never by counting cache entries: a successful revalidate removes itself
+    from `staleServed`, so any count-based test degenerates into "at least one
+    failed". See v220.
 - **`weekSlate(sport)` / `WEEK_SPORTS`** (v214) — NFL and CFB are **weekly**, so
   asking for a single date returns nothing Monday–Wednesday. The bare
   `scoreboard()` call (no `dates=`) returns the current week's whole slate;
@@ -6023,6 +6107,10 @@ rewrite.**
   scored as wins. **`md` is the model's side at pick time**, which is what
   makes the you-vs-model split honest. Nothing here ever reaches
   `sportshub:aitally`.
+  ⚠️ **It is written ONLY by tapping the tab** (or 🤖 Fill from the model).
+  Setup has an export (**📋 Copy my pick data**) and **no import**, and no
+  session can write to the owner's device — so picks sent to Claude in a chat
+  are not in the app and cannot be put there. See the v220 note.
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
 - `sportshub:lines:{YYYYMMDD}` — device-local line tracking for today's games:
   first-seen, latest, and (v167) a bounded **`hist`** of every observed change

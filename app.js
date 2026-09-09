@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v219';
+const APP_VERSION = 'v220';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -269,6 +269,29 @@ const isStale = (d) => !!(d && d.__stale);
 // them — what a "showing your last saved copy" line reads off.
 const staleServed = new Map();
 const staleFailed = new Map();   // url -> when its refresh gave up
+
+/* 🚨 The page-wide saved-copy banner and the mode badge speak for ESPN — the
+   app's actual data source — and deliberately NOT for the optional Render
+   backend. That backend is EXPECTED to be unreachable: it sleeps after 15 min
+   idle, `warmFantasy()` pokes it at every boot, and its payloads are cached
+   for 7 days at the highest keep class, so a device that opened the app
+   yesterday reliably has a day-old backend copy that fails to refresh today.
+   Every feature that uses it already reports that in place ("League sync
+   offline", "splits feed asleep"), so letting one sleeping call pin a
+   full-width "Offline" banner over a masthead full of today's live scores is
+   the app lying about itself. */
+const globalFeed = (url) => !String(url).startsWith(FANTASY_API);
+
+/* Whether we are online is a question for the NETWORK, not for a count of
+   cache entries. ⚠️ The first cut asked `staleFailed.size >= staleServed.size`
+   — but a SUCCESSFUL refresh deletes itself from `staleServed`, so the
+   denominator shrinks while the numerator does not, and "every stale URL
+   failed" degenerated into "at least one failed". Nine good refreshes plus one
+   dead endpoint read as a total outage. These two timestamps answer it
+   directly: the most recent outcome wins. */
+let netOKAt = 0, netFailAt = 0;
+const netDead = () => netFailAt > netOKAt;
+
 function staleSince() {
   let oldest = 0;
   staleServed.forEach((at) => { if (at && (!oldest || at < oldest)) oldest = at; });
@@ -292,9 +315,14 @@ function fetchLive(url, ttl, timeoutMs) {
       const res = await fetch(url, { signal: ctrl.signal });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
+      // We really did reach the network. Only ESPN counts — see `globalFeed`.
+      if (globalFeed(url)) netOKAt = Date.now();
       cache.set(url, { data, exp: Date.now() + ttl });
       dcWrite(url, data);
       return data;
+    } catch (err) {
+      if (globalFeed(url)) netFailAt = Date.now();
+      throw err;
     } finally {
       clearTimeout(t);
       inFlight.delete(url);
@@ -317,6 +345,7 @@ function revalidate(url, ttl, timeoutMs) {
        says "refreshing…" and that becomes a lie the moment the refresh dies.
        A view left claiming it is about to update, forever, is worse than one
        that admits the network is gone. */
+    if (!globalFeed(url)) return;   // the backend has its own in-place notices
     staleFailed.set(url, Date.now());
     try { window.dispatchEvent(new CustomEvent('sportshub:stalefail', { detail: { url } })); } catch (_) {}
   });
@@ -330,7 +359,10 @@ async function fetchJSON(url, ttl = 60000, timeoutMs) {
   if (disk) {
     const data = markStale(disk.d, disk.at);
     cache.set(url, { data, exp: Date.now() + ttl });
-    staleServed.set(url, disk.at);
+    // The payload is still marked `__stale` either way — a view that wants to
+    // say "your last saved league" can still ask. Only the PAGE-WIDE banner is
+    // scoped to ESPN.
+    if (globalFeed(url)) staleServed.set(url, disk.at);
     revalidate(url, ttl, timeoutMs);
     return data;
   }
@@ -9916,7 +9948,7 @@ function setMode(live) {
      copy", which is two pieces of chrome contradicting each other on the same
      screen. SAVED is its own state: we have data and it is honest data, we
      just did not get it from ESPN just now. */
-  if (live && staleFailed.size && staleFailed.size >= staleServed.size) live = 'saved';
+  if (live && staleFailed.size && netDead()) live = 'saved';
   state.liveOK = live === true;
   const b = $('#mode-badge');
   const st = $('#about-status');
@@ -11220,8 +11252,9 @@ function paintStaleNote() {
   if (!at) { host.hidden = true; host.textContent = ''; return; }
   sawStale = true;
   host.hidden = false;
-  // Only claim a refresh is running while one actually is.
-  const dead = staleFailed.size > 0 && staleFailed.size >= staleServed.size;
+  // Only claim a refresh is running while one actually is — and only call it
+  // offline when the network itself says so (see `netDead`).
+  const dead = staleFailed.size > 0 && netDead();
   host.textContent = dead
     ? `💾 Offline — showing your last saved copy (${timeAgo(at)}).`
     : `💾 Showing your last saved copy (${timeAgo(at)}) — refreshing…`;
