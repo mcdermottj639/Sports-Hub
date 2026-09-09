@@ -3052,3 +3052,47 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
    selection and scrollbars dark, which on this ground reads as a bug. It is
    the one place the OS could still reach the page. */
 :root { color-scheme: light; }
+
+/* 📥 Pick'em import (v221) — the paste panel on This Week and the restore box
+   in Setup. Namespaced under `.pk-imp`, appended last, so nothing above can
+   reach it (the v187/v189 specificity trap).
+   ⚠️ Both textareas are 16px and must STAY 16px: iOS Safari zooms the viewport
+   on focusing any field under that and never zooms back out — the wk-v3 rule,
+   and this tab already depends on it for every spread input. */
+:root[data-palette] .pk-imp {
+  margin: 10px 0 0; padding: 12px; border-radius: 12px;
+  background: var(--card-2); box-shadow: var(--e1);
+}
+:root[data-palette] .pk-imp-head {
+  font-weight: 800; font-size: 13px; letter-spacing: .02em; margin-bottom: 6px;
+}
+:root[data-palette] .pk-imp-txt {
+  width: 100%; box-sizing: border-box; margin: 8px 0 0; padding: 10px;
+  font: 400 16px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text); background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; resize: vertical; -webkit-text-size-adjust: 100%;
+}
+:root[data-palette] .pk-imp-txt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+:root[data-palette] .pk-imp-pv { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+:root[data-palette] .pk-imp-rows { margin: 8px 0 0; }
+:root[data-palette] .pk-imp-row {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+  padding: 6px 0; border-bottom: 1px solid var(--l07);
+}
+:root[data-palette] .pk-imp-row:last-child { border-bottom: 0; }
+:root[data-palette] .pk-imp-pick { font-weight: 800; font-size: 13px; color: var(--text); }
+:root[data-palette] .pk-imp-gm { font-size: 12px; color: var(--muted); }
+/* ⚠️ `--wm` (bronze), never amber: gold is the brand accent here, so an amber
+   caution tag would read as a brand element — the v191 rule. */
+:root[data-palette] .pk-imp-warn { font-size: 11.5px; color: var(--wm); flex-basis: 100%; }
+:root[data-palette] .pk-imp-row.bad .pk-imp-pick { color: var(--muted); font-weight: 600; }
+:root[data-palette] .pk-imp-bad { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+:root[data-palette] .pk-imp code {
+  font: 600 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--l07); border-radius: 4px; padding: 1px 4px;
+}
+/* ⚠️ `.pk-warn` is `--neg` and means a HAZARD. A note about the app correctly
+   declining part of an import is not one, so it takes the bronze caution tone
+   instead — red on "the pool allows 2, so the first 2 are taken" reads as a
+   failure. The v189 rule: the colour has to mean what it says. */
+:root[data-palette] .pk-mini.pk-caut { color: var(--wm); font-weight: 700; }

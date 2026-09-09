@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v220';
+const APP_VERSION = 'v221';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -10565,7 +10565,11 @@ function pkWeek(st, w) {
 /* The tab's own state. `week` is the week being READ, which is not always the
    current one — the owner will want to look back at a graded week — so it is
    held here rather than derived on every paint. */
-const pkState = { week: null, curWeek: null, sub: 'week', slate: null, board: null, busy: false, tok: 0 };
+const pkState = { week: null, curWeek: null, sub: 'week', slate: null, board: null, busy: false, tok: 0,
+  // The import panel. Held here rather than in the DOM because pkPaint is a
+  // full re-render and a tap anywhere on the tab would otherwise wipe a
+  // half-typed paste.
+  pasteOpen: false, pasteText: '', preview: null };
 
 /* ---------------------------------------------------------------- slate ---
    ESPN's NFL scoreboard takes `week` + `seasontype` + `dates` (the SEASON
@@ -10640,6 +10644,163 @@ function pkGrade(wk, g) {
   return r === null ? 'push' : r ? 'win' : 'loss';
 }
 function pkIsKey(wk, id) { return (wk.keys || []).includes(id); }
+
+/* ---------------------------------------------------------------- import ---
+   Paste a whole week of picks in as text.
+
+   🚨 Why this had to exist. `sportshub:pickem` was written ONLY by tapping
+   this tab, and localStorage is per browser AND per device — so picks that
+   are actually MADE in the league's own app had to be re-tapped here one
+   game at a time, and picks sent to Claude in a chat could never reach the
+   app at all (no session can write to the owner's device). One paste is the
+   whole week.
+
+   🚨 THE PASTED NUMBER IS THE LEAGUE'S NUMBER, and that is the point of the
+   feature, not a detail of it. A line carrying a spread stores it as `sp`,
+   which is what grading reads — so a paste taken off the pool's own locked
+   sheet is MORE correct than tapping the buttons here, which snapshot
+   whatever ESPN happens to be quoting at the moment of the tap. A line with
+   no number falls back to the feed exactly as a tap does, and the preview
+   says which rows did which.
+
+   ⚠️ ORIENTATION, and it is the one line that would silently corrupt a
+   season: `sp` is HOME-oriented (negative = home favoured) while a pasted
+   number is written from the PICKED team's side. An away pick is therefore
+   stored NEGATED. Get it backwards and roughly half of every imported week
+   grades inverted while every count on the page still looks right. */
+
+// Abbreviations pools and sportsbooks write that ESPN does not. Everything
+// else is derived from the slate itself, so this stays short and cannot drift
+// out of date with the league.
+const PK_ABBR_ALIAS = {
+  was: 'WSH', wsh: 'WSH', wft: 'WSH', jac: 'JAX', lvr: 'LV', oak: 'LV', rai: 'LV',
+  tam: 'TB', sfo: 'SF', gnb: 'GB', kan: 'KC', nor: 'NO', nwe: 'NE', ne: 'NE',
+  sd: 'LAC', sdg: 'LAC', stl: 'LAR', bly: 'BAL', clv: 'CLE', hst: 'HOU', arz: 'ARI',
+  crd: 'ARI', rav: 'BAL', htx: 'HOU', oti: 'TEN', clt: 'IND',
+};
+const pkNorm = (s) => String(s == null ? '' : s)
+  .replace(/[‐-―−]/g, '-')      // en/em dashes a copy-paste brings
+  .toLowerCase().replace(/[^a-z0-9+\-. ]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/* Every string that identifies one team: its abbreviation, its full name, its
+   nickname and its city — plus any alias pointing at that abbreviation. */
+function pkTeamKeys(t) {
+  const keys = new Set();
+  const ab = String(t?.abbr || '').toUpperCase();
+  const nm = pkNorm(t?.name);
+  if (ab) keys.add(pkNorm(ab));
+  if (nm) {
+    keys.add(nm);
+    const parts = nm.split(' ');
+    if (parts.length > 1) { keys.add(parts[parts.length - 1]); keys.add(parts.slice(0, -1).join(' ')); }
+  }
+  for (const [k, v] of Object.entries(PK_ABBR_ALIAS)) if (v === ab) keys.add(k);
+  keys.delete('');
+  return keys;
+}
+const pkEscRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// A key counts only as a WHOLE phrase, so "new england" cannot match inside
+// another word — and its LENGTH is returned, because specificity is what
+// resolves the shared-city collisions below.
+function pkKeyHit(text, key) {
+  if (!key) return 0;
+  return new RegExp(`(^|[^a-z0-9])${pkEscRe(key)}([^a-z0-9]|$)`).test(text) ? key.length : 0;
+}
+
+/* 🚨 The MOST SPECIFIC match wins, and without that rule this is wrong on the
+   two shared cities. "new york giants" hits the Giants' full name (15) and
+   ALSO the Jets' city (8), so a plain candidate-count would call it ambiguous
+   and refuse a line that is perfectly clear. Only a genuine TIE — "New York"
+   or "LA" alone — is ambiguous, and that is reported rather than guessed.
+   This is the v178 vsinMatches lesson pointed at the other direction. */
+function pkMatchTeam(text, games) {
+  let best = 0, hits = [];
+  for (const g of games) {
+    for (const which of ['home', 'away']) {
+      let len = 0;
+      for (const k of pkTeamKeys(g[which])) len = Math.max(len, pkKeyHit(text, k));
+      if (!len) continue;
+      if (len > best) { best = len; hits = [{ g, side: which }]; }
+      else if (len === best) hits.push({ g, side: which });
+    }
+  }
+  if (!best) return { ok: false, why: 'no team on this week\'s slate matched' };
+  if (hits.length > 1) {
+    const names = hits.map((h) => h.g[h.side].abbr || h.g[h.side].name).join(' / ');
+    return { ok: false, why: `could be ${names} — write the nickname or the abbreviation` };
+  }
+  return { ok: true, ...hits[0] };
+}
+
+/* One line → the pick it describes. Pure and total: it never throws and never
+   guesses a team, so `pkParsePicks` can report exactly why a line was skipped. */
+function pkParseLine(raw, games) {
+  const norm = pkNorm(raw);
+  if (!norm) return null;
+  if (/^(#|\/\/)/.test(String(raw).trim())) return null;   // a comment
+
+  // A week header, so a paste can say which week it belongs to.
+  const wk = norm.match(/^week\s*(\d{1,2})\b/);
+  if (wk && !/[+-]\d/.test(norm.replace(/^week\s*\d{1,2}/, ''))) return { kind: 'week', week: Number(wk[1]) };
+
+  /* ⚠️ The tiebreaker needs an explicit KEYWORD, because "TB" is Tampa Bay.
+     A bare `TB 45` is deliberately read as a team line (and then reported as
+     an implausible spread) rather than silently eaten as the tiebreaker. */
+  const tb = norm.match(/\b(?:tiebreak(?:er)?|tie ?break|combined|total)\b\D{0,12}(\d{1,3})\b/);
+  if (tb) return { kind: 'tb', tb: Number(tb[1]) };
+
+  let s = norm;
+  const star = /(⭐|★|🔒|\*|!!)/.test(String(raw)) || /\b(keys?|double|dbl)\b/.test(s);
+  s = s.replace(/\b(keys?|double|dbl)\b/g, ' ');
+  // "NE @ SEA: SEA -3" — the pick is what follows the colon.
+  if (String(raw).includes(':')) {
+    const tail = pkNorm(String(raw).split(':').pop());
+    if (tail.replace(/[+\-.\d ]/g, '').length >= 2) s = tail.replace(/\b(keys?|double|dbl)\b/g, ' ');
+  }
+
+  let sp = null, signed = false;
+  if (/\b(pk|pick ?em|even|nl)\b/.test(s)) { sp = 0; signed = true; s = s.replace(/\b(pk|pick ?em|even|nl)\b/g, ' '); }
+  const toks = s.split(/\s+/).filter(Boolean);
+  const num = (t) => t.replace(/[(),]/g, '');
+  if (sp == null) {
+    // A SIGNED token wins wherever it sits; an unsigned one is the fallback.
+    for (let i = toks.length - 1; i >= 0; i--) {
+      if (/^[+-]\d+(\.\d+)?$/.test(num(toks[i]))) { sp = Number(num(toks[i])); signed = true; toks.splice(i, 1); break; }
+    }
+    if (sp == null) for (let i = toks.length - 1; i >= 0; i--) {
+      if (/^\d+(\.\d+)?$/.test(num(toks[i]))) { sp = Number(num(toks[i])); toks.splice(i, 1); break; }
+    }
+  }
+  const text = toks.join(' ').replace(/\b(at|vs|v|@)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  const m = pkMatchTeam(text || s, games);
+  if (!m.ok) return { kind: 'bad', raw: String(raw).trim(), why: m.why };
+
+  /* ⚠️ HOME-ORIENTED. The pasted number is from the picked team's side, so an
+     away pick is negated. See the header note. */
+  const home = m.side === 'home';
+  const spHome = sp == null ? null : (home ? sp : -sp);
+  return { kind: 'pick', g: m.g, side: m.side, sp: spHome, given: sp, signed, star, raw: String(raw).trim() };
+}
+
+/* A whole paste → what it would do, WITHOUT doing any of it. The preview this
+   returns is the point: a paste that silently replaced a week of picks would
+   be the worst kind of button on this tab. */
+function pkParsePicks(text, games) {
+  const out = { rows: [], bad: [], tb: null, week: null, dupes: 0 };
+  const seen = new Map();
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const r = pkParseLine(line, games);
+    if (!r) continue;
+    if (r.kind === 'week') { out.week = r.week; continue; }
+    if (r.kind === 'tb') { out.tb = r.tb; continue; }
+    if (r.kind === 'bad') { out.bad.push(r); continue; }
+    // Two lines for one game: the later one wins, which is what a correction
+    // pasted underneath an earlier line means.
+    if (seen.has(r.g.id)) { out.rows[seen.get(r.g.id)] = r; out.dupes++; }
+    else { seen.set(r.g.id, out.rows.length); out.rows.push(r); }
+  }
+  return out;
+}
 
 /* One week's scoring, from the picks and the finals. Pure — it takes the
    games so a look-back week and the live week score identically. */
@@ -10783,6 +10944,7 @@ function pkWeekHeadHTML(st, wk, sc, games, modelReads) {
       <button type="button" class="pk-btn" id="pk-fill">🤖 Fill from the model</button>
       ${sc.made ? '<button type="button" class="pk-btn ghost" id="pk-clear">Clear week</button>' : ''}
     </div>`}
+    ${pkImportHTML(st, wk, games)}
     ${modelReads < games.length ? `<div class="pk-mini">The model has a spread read on ${modelReads} of ${games.length} games — the rest have no number posted yet.</div>` : ''}
     ${tbg && !tbSet ? `<div class="pk-mini">Tiebreaker game: ${esc(tbg.away.abbr || tbg.away.name)} @ ${esc(tbg.home.abbr || tbg.home.name)} — its card has the box.</div>` : ''}
   </div>`;
@@ -10878,6 +11040,128 @@ function pkTbHTML(wk, g, row) {
 function pkFootHTML(board) {
   const live = board?.report?.splits?.ok;
   return `<div class="pk-mini pk-foot">The model read and the 💰 money split are the same ones the AI Picks tab uses — nothing here is written to the model's own record.${live ? '' : ' DraftKings splits were not reachable for this slate.'}</div>`;
+}
+
+/* --- the import panel ---------------------------------------------------- */
+const PK_PASTE_HELP = 'One pick a line — the team you took and the number you took it at: '
+  + '<code>NE +3</code>, <code>Seahawks -3.5 ⭐</code>, <code>KC PK</code>. '
+  + 'A <code>⭐</code> or <code>*</code> marks a key game, and <code>Tiebreaker 45</code> sets the Monday total. '
+  + 'Leave the number off and it uses the book\'s current one instead.';
+
+function pkImportHTML(st, wk, games) {
+  if (!pkState.pasteOpen) {
+    return `<div class="pk-acts"><button type="button" class="pk-btn ghost" id="pk-paste">📥 Paste my picks</button></div>`;
+  }
+  const pv = pkState.preview;
+  return `<div class="pk-imp">
+    <div class="pk-imp-head">📥 Paste this week's picks</div>
+    <div class="pk-mini">${PK_PASTE_HELP}</div>
+    <textarea id="pk-paste-txt" class="pk-imp-txt" rows="6" spellcheck="false"
+      placeholder="NE +3&#10;SEA -3 ⭐&#10;Tiebreaker 45">${esc(pkState.pasteText || '')}</textarea>
+    <div class="pk-acts">
+      <button type="button" class="pk-btn" id="pk-paste-read">Read it</button>
+      <button type="button" class="pk-btn ghost" id="pk-paste-cancel">Cancel</button>
+    </div>
+    ${pv ? pkPreviewHTML(st, wk, pv, games) : ''}
+  </div>`;
+}
+
+/* What the paste WOULD do. Every count here is a thing that could surprise
+   the owner afterwards, so each one is stated before the button that does it:
+   what is being overwritten, which number each row lands on, whose stars win,
+   and every line that could not be read. */
+function pkPreviewHTML(st, wk, pv, games) {
+  if (!pv.rows.length && !pv.bad.length && pv.tb == null) {
+    return `<div class="pk-mini pk-warn">Nothing in there looked like a pick. ${PK_PASTE_HELP}</div>`;
+  }
+  const over = pv.rows.filter((r) => wk.picks[r.g.id]?.side).length;
+  const finals = pv.rows.filter((r) => gameState(r.g) === 'final').length;
+  const stars = pv.rows.filter((r) => r.star);
+  const capped = Math.max(0, stars.length - PK_MAX_KEYS);
+  const nowKeys = (wk.keys || []).length;
+  const bits = [];
+  bits.push(`<span class="pk-cnt ok">${pv.rows.length} pick${pv.rows.length === 1 ? '' : 's'}</span>`);
+  if (stars.length) bits.push(`<span class="pk-cnt ok">⭐ ${Math.min(stars.length, PK_MAX_KEYS)} key</span>`);
+  if (pv.tb != null) bits.push(`<span class="pk-cnt ok">🌙 TB ${pv.tb}</span>`);
+  if (pv.bad.length) bits.push(`<span class="pk-cnt">${pv.bad.length} unread</span>`);
+
+  /* 🚨 THREE TONES, and the first render got this wrong: every note came out
+     RED, so "the pool allows 2, so the first 2 are taken" — the app doing
+     exactly its job — read as an error. Red is `--neg` and means a hazard
+     (the v189 semantic-colour rule), so it is kept for the two notes that
+     describe something the owner could lose: the wrong week, and picks being
+     overwritten. `--wm` bronze is the app declining part of the input, and
+     plain muted is information. Nothing here was assertable; only the render
+     said which was which. */
+  const notes = [];
+  const warn = (t) => notes.push(['pk-warn', t]);
+  const caut = (t) => notes.push(['pk-caut', t]);
+  const info = (t) => notes.push(['', t]);
+  if (pv.week != null && pv.week !== pkState.week) {
+    warn(`This paste says <b>Week ${pv.week}</b> but you are looking at <b>Week ${pkState.week}</b> — it will import into Week ${pkState.week}. Switch weeks first if that is wrong.`);
+  }
+  if (over) warn(`<b>${over}</b> of these replace a pick you already made.`);
+  if (stars.length && nowKeys) warn(`Your current ${nowKeys} key game${nowKeys === 1 ? '' : 's'} will be replaced by the ones in this paste.`);
+  if (capped) caut(`The paste stars ${stars.length} games and the pool allows ${PK_MAX_KEYS}, so the first ${PK_MAX_KEYS} are taken — the ${capped === 1 ? 'other one is' : `other ${capped} are`} shown below without a ⭐.`);
+  if (pv.dupes) caut(`${pv.dupes} game${pv.dupes === 1 ? ' was' : 's were'} listed twice — the last line for each wins.`);
+  if (finals) info(`${finals} of these games ${finals === 1 ? 'has' : 'have'} already finished, so ${finals === 1 ? 'it grades' : 'they grade'} as soon as you import.`);
+
+  const row = (r, i) => {
+    const t = r.g[r.side];
+    const abbr = esc(t.abbr || t.name);
+    const own = r.sp == null ? null : (r.side === 'home' ? r.sp : -r.sp);
+    const warn = [];
+    if (r.sp != null && !r.signed) warn.push(`no + or − — read as ${own > 0 ? '+' : ''}${own}`);
+    if (r.sp != null && Math.abs(r.sp) > 30) warn.push('that is not a football spread — check the line');
+    /* 🚨 A row with NO pasted number must not render through `pkSpTxt`, which
+       returns 'PK' for null — so "Patriots" with no number came out as
+       "NE PK", i.e. a definite ZERO spread, when what will actually be stored
+       is whatever the book is quoting. Show the book's own number instead,
+       oriented to the side being picked, and say where it came from. Every
+       assertion was green; only the render said this. */
+    let shown;
+    if (r.sp == null) {
+      const info = normOdds(r.g.odds, r.g.home.name, r.g.away.name, r.g.home.abbr, r.g.away.abbr);
+      const live = info?.spread != null && isFinite(Number(info.spread)) ? Number(info.spread) : null;
+      const liveOwn = live == null ? null : (r.side === 'home' ? live : -live);
+      shown = liveOwn == null ? '—' : pkSpTxt(liveOwn);
+      warn.push(liveOwn == null
+        ? 'no number given and the book has not posted one — you can type it on the card after'
+        : 'no number given, so the book\'s current one is used');
+    } else shown = pkSpTxt(own);
+    const starOn = r.star && stars.indexOf(r) < PK_MAX_KEYS;
+    return `<div class="pk-imp-row">
+      <span class="pk-imp-pick">${starOn ? '⭐ ' : ''}${abbr} ${esc(shown)}</span>
+      <span class="pk-imp-gm">${esc(r.g.away.abbr || r.g.away.name)} @ ${esc(r.g.home.abbr || r.g.home.name)}</span>
+      ${warn.length ? `<span class="pk-imp-warn">${esc(warn.join(' · '))}</span>` : ''}
+    </div>`;
+  };
+  return `<div class="pk-imp-pv">
+    <div class="pk-cnts">${bits.join('')}</div>
+    ${notes.map(([cls, n]) => `<div class="pk-mini ${cls}">${n}</div>`).join('')}
+    <div class="pk-imp-rows">${pv.rows.map(row).join('')}</div>
+    ${pv.bad.length ? `<div class="pk-imp-bad"><div class="pk-mini"><b>Couldn't read these lines</b> — they are left out, nothing else is affected:</div>
+      ${pv.bad.map((b) => `<div class="pk-imp-row bad"><span class="pk-imp-pick">${esc(b.raw)}</span><span class="pk-imp-warn">${esc(b.why)}</span></div>`).join('')}</div>` : ''}
+    ${pv.rows.length || pv.tb != null ? `<div class="pk-acts"><button type="button" class="pk-btn" id="pk-paste-go">✅ Import into Week ${pkState.week}</button></div>` : ''}
+  </div>`;
+}
+
+/* Apply a parsed paste. It goes through `pkSetPick` — the one write path — so
+   an imported pick carries the same `md`, `at` and `m` a tapped one does, and
+   only the NUMBER is overridden afterwards, when the paste actually gave one. */
+function pkApplyImport(week, wk, pv, byId) {
+  let n = 0;
+  for (const r of pv.rows) {
+    pkSetPick(week, r.g, r.side, byId.get(r.g.id), wk);
+    if (r.sp != null) wk.picks[r.g.id].sp = r.sp;   // ⚠️ already home-oriented
+    n++;
+  }
+  const stars = pv.rows.filter((r) => r.star).slice(0, PK_MAX_KEYS).map((r) => r.g.id);
+  // Stars are replaced only when the paste names any — a paste that mentions
+  // no key game is not a claim that there are none.
+  if (stars.length) wk.keys = stars;
+  if (pv.tb != null) wk.tb = pv.tb;
+  return n;
 }
 
 function pkWireWeekNav() {
@@ -10981,6 +11265,30 @@ function pkWireWeek(st, week, games, byId, tbg) {
       st.weeks[String(week)] = { picks: {}, keys: [], tb: null };
       return repaint();
     }
+    if (e.target.id === 'pk-paste') { pkState.pasteOpen = true; pkState.preview = null; return pkPaint(); }
+    if (e.target.id === 'pk-paste-cancel') {
+      pkState.pasteOpen = false; pkState.pasteText = ''; pkState.preview = null; return pkPaint();
+    }
+    if (e.target.id === 'pk-paste-read') {
+      // Read whatever is in the box right now — the `input` handler keeps
+      // pkState in step, but a paste that never fired one (autofill, a native
+      // paste on some builds) would otherwise preview as empty.
+      const ta = $('#pk-paste-txt');
+      if (ta) pkState.pasteText = ta.value;
+      pkState.preview = pkParsePicks(pkState.pasteText, games);
+      return pkPaint();
+    }
+    if (e.target.id === 'pk-paste-go') {
+      if (!pkState.preview) return;
+      pkApplyImport(week, wk, pkState.preview, byId);
+      pkState.pasteOpen = false; pkState.pasteText = ''; pkState.preview = null;
+      return repaint();
+    }
+  });
+
+  // Keep the typed text in state so a repaint can never eat it.
+  host.addEventListener('input', (e) => {
+    if (e.target.id === 'pk-paste-txt') pkState.pasteText = e.target.value;
   });
 
   host.addEventListener('change', (e) => {
@@ -11127,6 +11435,11 @@ function pkSetupHTML(st) {
     <p><button type="button" class="pk-btn" id="pk-export">📋 Copy my pick data</button>
       <button type="button" class="pk-btn ghost" id="pk-wipe">🗑️ Delete this season</button></p>
     <div id="pk-exp"></div>
+    <h3 class="pk-h3">Restore</h3>
+    <p class="pk-mini">Paste a copy made with the button above. That is how a season moves between Safari and the home-screen app, which keep <b>separate</b> storage — it is the same data, not a merge, so what you paste replaces this device's season outright.</p>
+    <textarea id="pk-imp-json" class="pk-imp-txt" rows="3" spellcheck="false" placeholder='{"season":"2026","cfg":{…},"weeks":{…}}'></textarea>
+    <p><button type="button" class="pk-btn ghost" id="pk-restore">♻️ Restore from that</button></p>
+    <div id="pk-rest-note"></div>
   </div>`;
 }
 function pkWireSetup() {
@@ -11147,6 +11460,33 @@ function pkWireSetup() {
       const done = () => { e.target.textContent = '✅ Copied'; setTimeout(() => { e.target.textContent = '📋 Copy my pick data'; }, 2000); };
       if (navigator.clipboard?.writeText) navigator.clipboard.writeText(txt).then(done).catch(() => pkExpFallback(txt));
       else pkExpFallback(txt);
+    }
+    /* ♻️ Restore. It replaces the season rather than merging: two devices
+       that have both been picked on have no reconcilable truth, and a silent
+       merge would invent one. The count is reported BEFORE it is written, and
+       a payload that does not parse changes nothing at all. */
+    if (e.target.id === 'pk-restore') {
+      const ta = $('#pk-imp-json'), note = $('#pk-rest-note');
+      const say = (cls, msg) => { if (note) note.innerHTML = `<div class="pk-mini ${cls}">${msg}</div>`; };
+      let inc = null;
+      try { inc = JSON.parse((ta?.value || '').trim()); } catch { inc = null; }
+      if (!inc || typeof inc !== 'object' || !inc.weeks || typeof inc.weeks !== 'object') {
+        return say('pk-warn', 'That is not a pick-data copy — use 📋 Copy my pick data on the other device and paste the whole thing.');
+      }
+      const wkCount = Object.keys(inc.weeks).filter((w) => Object.keys(inc.weeks[w]?.picks || {}).length).length;
+      const picks = Object.values(inc.weeks).reduce((n, w) => n + Object.keys(w?.picks || {}).length, 0);
+      if (e.target.dataset.armed !== '1') {
+        e.target.dataset.armed = '1';
+        e.target.textContent = '♻️ Tap again to replace this season';
+        const season = inc.season ? esc(String(inc.season)) : 'unknown season';
+        return say('pk-warn', `That copy holds <b>${picks}</b> pick${picks === 1 ? '' : 's'} across <b>${wkCount}</b> week${wkCount === 1 ? '' : 's'} (${season}). Importing replaces every pick saved on this device for ${esc(pkLoad().season)}.`);
+      }
+      const st = pkLoad();
+      st.weeks = inc.weeks;
+      if (inc.cfg && typeof inc.cfg === 'object') st.cfg = { ...PK_CFG_DEFAULT, ...inc.cfg };
+      pkSave(st);
+      pkState.week = null;                 // re-enter on the current week
+      return pkPaint();
     }
     if (e.target.id === 'pk-wipe') {
       if (e.target.dataset.armed) {

@@ -205,8 +205,9 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   masthead, `nav.tabs` and `#botbar` take an opaque `--barRGB` ground and
   declare `backdrop-filter: none`; **do not put the filter back**, see the
   v217 entry) and (9) the **`.pk-` Pick'em layer** (v218 — the ATS pool tab,
-  plus the one rule that makes `hidden` work on a `.ctl-row`), all keyed on
-  `:root[data-palette]`.
+  plus the one rule that makes `hidden` work on a `.ctl-row`; extended in v221
+  by the `.pk-imp-` import panel and the `.pk-caut` bronze note tone), all
+  keyed on `:root[data-palette]`.
   ⚠️ **`el.hidden = true` does NOT hide an element the palette layer gives a
   `display` to.** `[hidden] { display: none }` is the UA sheet at (0,1,0) and
   `:root[data-palette] .ctl-row { display: flex }` is (0,2,0), so the layer
@@ -599,7 +600,92 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v220** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v221** (backend **b14-football-boxplayer**).
+
+- **📥 Pick'em picks can be PASTED in — the tab stopped being tap-only (v221)**
+  — the owner had sent a week of picks in chat and asked whether they were on
+  the tab. They were not and could not be: `sportshub:pickem` was written only
+  by tapping, no session can write to the owner's device, and Setup had an
+  export with no matching import. Two ways in now.
+  - **📋 This Week → 📥 Paste my picks.** One pick a line —
+    `NE +3` · `Seahawks -3.5 ⭐` · `KC PK` · `Tiebreaker 45`. Parsed by
+    **`pkParsePicks`**, previewed, and only then written.
+  - **🚨 THE PASTED NUMBER IS THE LEAGUE'S NUMBER, and that is the point of
+    the feature rather than a detail of it.** A line carrying a spread stores
+    it as `sp`, which is what grading reads — so a paste taken off the pool's
+    own locked sheet is **more correct than tapping the buttons here**, which
+    snapshot whatever ESPN happens to be quoting at the moment of the tap
+    (the v218 rule, finally usable). A line with no number falls back to the
+    feed exactly as a tap does.
+  - **🚨 ORIENTATION is the one line that could silently wreck a season.**
+    `sp` is HOME-oriented (negative = home favoured) while a pasted number is
+    written from the PICKED team's side, so **an away pick is stored
+    NEGATED**. Get it backwards and roughly half of every imported week grades
+    inverted while every count on the page still looks right. Asserted in both
+    directions: `NE +3` (away) → `sp −3`, `SEA −3.5` (home) → `sp −3.5`.
+  - **The write goes through `pkSetPick`** — the one write path — so an
+    imported pick carries the same `md` (the model's side at pick time), `at`
+    and `m` a tapped one does, and only the NUMBER is overridden afterwards,
+    and only when the paste actually gave one. **Nothing reaches
+    `sportshub:aitally`**; the suite asserts that key AND `sportshub:pending`
+    are byte-identical across an import.
+  - **Team matching: the MOST SPECIFIC match wins, and a genuine tie is
+    refused rather than guessed.** `New York Giants` hits the Giants' full
+    name (15 chars) and also the Jets' city (8), so a plain candidate-count
+    would call it ambiguous and reject a perfectly clear line; only a real tie
+    — bare `New York`, bare `LA` — is ambiguous, and it is reported **naming
+    both candidates**. This is the v178 `vsinMatches` lesson pointed the other
+    way. Abbreviation, full name, nickname and city all come off the slate
+    itself; `PK_ABBR_ALIAS` adds only what pools write and ESPN does not
+    (`WAS`, `JAC`, `NWE`, `LVR`…).
+  - ⚠️ **The tiebreaker needs a KEYWORD, because `TB` is Tampa Bay.**
+    `TB -1` is a pick; `Tiebreaker 45` / `Tiebreak: 45` is the total. A bare
+    `TB 45` is deliberately read as a team line and then flagged as an
+    implausible spread rather than silently eaten.
+  - **Nothing is written until a preview has been read.** The preview states
+    every consequence before the button that causes it: how many picks matched,
+    how many **replace a pick you already have**, that the stars replace the
+    week's current ones, that a 3rd ⭐ is dropped for the pool's cap, which
+    games have already finished (so they grade on import), and every line it
+    could not read **with the reason**. A paste that silently replaced a week
+    would be the worst button on this tab.
+  - **⚙️ Setup also gained ♻️ Restore**, beside the existing export — which is
+    how a season moves between Safari and the home-screen app, since
+    localStorage is per browser AND per device. It **replaces** rather than
+    merges (two devices both picked on have no reconcilable truth and a silent
+    merge would invent one), it reports the pick and week count and arms on
+    the first tap, and junk changes nothing.
+  - **🚨 Two faults only the RENDER caught, which is this file's oldest lesson
+    landing yet again:**
+    - **Every preview note came out RED.** They all used `.pk-warn`, which is
+      `--neg` — so *"the pool allows 2, so the first 2 are taken"*, the app
+      doing exactly its job, read as an error. Three tones now: red for a
+      hazard (wrong week, picks being overwritten), the new **`.pk-caut`**
+      bronze `--wm` for the app declining part of the input, plain muted for
+      information. The v189 semantic-colour rule.
+    - **A row with no number rendered as `NE PK`** — because `pkSpTxt(null)`
+      returns `'PK'`, i.e. a definite ZERO spread, when what would actually be
+      stored is the book's current number. It shows the book's own number
+      oriented to the picked side now, and says where it came from.
+  - Verified in headless Chromium at 390px — **56 checks**: the orientation
+    both ways, every name form (abbr / alias / nickname / city / full name),
+    the shared-city rules in both directions, `PK`, an unsigned number flagged,
+    an en-dash minus, `Week N` headers, `AWAY @ HOME: PICK` lines, comments,
+    the three star forms, duplicate and opposite-side lines collapsing to the
+    later one, the whole paste end to end into storage with each `sp` checked,
+    the star cap, the tiebreaker, a finished game grading off the STORED number,
+    the model's record untouched, no overflow, no field under 16px (the iOS
+    zoom rule), and the restore's arm / replace / junk paths. The v220 suite (9)
+    and the ten-tab sweep (24) pass.
+  - ⚠️ **Test-fixture note, and it produced SIX false failures:** the first cut
+    pasted `NE +3` and `SEA -3.5` — **two sides of ONE game** — then asserted
+    two picks. The parser was right to collapse them (a correction, not two
+    picks) and every dependent assertion fell over behind it. **A fixture for a
+    slate-matching parser must name one team per game.** A seventh failure was
+    also the test: it asserted `sportshub:pending` was *empty*, but v184's
+    recorder logs every posted game at boot — the right question is whether the
+    import changed it, so it snapshots before and compares after.
+
 
 - **🚨 The app said OFFLINE with today's live scores on screen — one sleeping
   backend call was speaking for the whole app (v220)** — the owner, with a
@@ -665,6 +751,10 @@ Current version as of this writing: **v220** (backend **b14-football-boxplayer**
   cannot put them in the app** — say so rather than implying they landed.
   Building a paste-in importer beside the existing export is the obvious fix
   and is NOT built; it was offered, not assumed.
+  ⚠️ **SUPERSEDED in v221 — the owner said ship it, and both halves exist
+  now**: a text paste on 📋 This Week and a JSON restore in ⚙️ Setup. The
+  reasoning above is still why they had to be built, and the "no session can
+  write to the owner's device" half is still true — the owner does the paste.
 
 - **🌞 Dark mode REMOVED — one ground, and nothing can change it (v219)** — the
   owner: *"Remove dark mode completely it's a waste of time I never use it."*
@@ -6007,7 +6097,11 @@ rewrite.**
   back into any week. **⚙️ Setup** holds the scoring, which is configurable.
   🚨 Two rules it cannot break: grading reads **the spread stored on the pick**,
   never the live feed, and **nothing here is written to the model's own
-  record**. See the v218 entry and `sportshub:pickem`.
+  record**. **📥 Paste my picks** (v221) takes a whole week as text — one pick
+  a line, `NE +3` / `Seahawks -3.5 ⭐` / `Tiebreaker 45` — behind a preview
+  that states every consequence first; ⚙️ Setup's **♻️ Restore** takes a whole
+  season back from the export. See the v218 and v221 entries and
+  `sportshub:pickem`.
 
 - **AI record persistence** — every pick is stashed in `localStorage`
   (`sportshub:pending`) and **auto-graded** against final results on app load
@@ -6107,10 +6201,13 @@ rewrite.**
   scored as wins. **`md` is the model's side at pick time**, which is what
   makes the you-vs-model split honest. Nothing here ever reaches
   `sportshub:aitally`.
-  ⚠️ **It is written ONLY by tapping the tab** (or 🤖 Fill from the model).
-  Setup has an export (**📋 Copy my pick data**) and **no import**, and no
-  session can write to the owner's device — so picks sent to Claude in a chat
-  are not in the app and cannot be put there. See the v220 note.
+  ⚠️ Written by tapping the tab, by 🤖 Fill from the model, by the v221
+  **📥 paste importer** on 📋 This Week, and by ⚙️ Setup's **♻️ Restore**
+  (which replaces the whole season — that is how it crosses the Safari / PWA
+  storage split). No session can write to the device, so a week of picks sent
+  to Claude in a chat still has to be pasted in by the owner — but that is now
+  one paste rather than sixteen taps. ⚠️ An imported `sp` is **home-oriented**,
+  so an away pick is stored negated; see v221.
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
 - `sportshub:lines:{YYYYMMDD}` — device-local line tracking for today's games:
   first-seen, latest, and (v167) a bounded **`hist`** of every observed change
