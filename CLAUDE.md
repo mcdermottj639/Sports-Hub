@@ -228,13 +228,21 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     token mapping, alpha ramp, semantic ramp, heat classes and spacing scale
     are all still live. Its radius-0 list, card borders and flat fills are
     DEAD — editing them does nothing. Change form in the flow layer.
-  - **Two palettes**, chosen with `<html data-palette="champagne|onyx">`:
-    Champagne (light, default) and Onyx (dark) — the same design on two grounds.
-    Each block is 14 colours plus a `--base` ink triple that generates the alpha
-    ramp `--l07 … --l4`, plus four the flow layer needs: **`--acRGB`** (accent as
-    an rgb triple, so every tint derives from one place), **`--grad`** (the plated
-    fill — the metal is the DOUBLE highlight; one flat stop reads as mustard),
-    **`--on-ac`** (type ON an accent fill) and **`--glow`**.
+  - **ONE palette — Champagne. There is no dark mode (v219).** `<html>` carries
+    `data-palette="champagne" data-theme="light"` **statically in the markup**;
+    nothing at runtime can change either, the Onyx token block is deleted, the
+    masthead toggle is gone and no code reads the OS `prefers-color-scheme`.
+    The one block is 14 colours plus a `--base` ink triple that generates the
+    alpha ramp `--l07 … --l4`, plus four the flow layer needs: **`--acRGB`**
+    (accent as an rgb triple, so every tint derives from one place),
+    **`--grad`** (the plated fill — the metal is the DOUBLE highlight; one flat
+    stop reads as mustard), **`--on-ac`** (type ON an accent fill) and
+    **`--glow`**.
+  - ⚠️ **`:root { color-scheme: light }` is load-bearing and easy to miss.** It
+    is the last place the OS could still reach the page: without it a phone set
+    to dark renders form controls, text selection and scrollbars dark on a
+    cream ground, which reads as a bug. Every `<input>` on the Pick'em tab
+    depends on it.
   - ⚠️ **Accent fills take DARK type.** White on gold is ~1.9:1 and unreadable;
     `--on-ac` is dark ink and measures **7.8:1** on both grounds. Never write
     `color:#fff` on an accent fill.
@@ -246,17 +254,21 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     `--eagles-green`, `--radius`) at the tokens, which is why components written
     against the vars recolour for free. **Keep doing that** — a new component
     that hardcodes a hex will be wrong in one of the two palettes.
-  - **`data-theme` still rides alongside** `data-palette` (light for Champagne,
-    dark for Onyx) so layer 2 keeps doing its job underneath. **Onyx IS dark
-    mode.** An inline `<head>` script sets both before first paint (saved pref in
-    `sportshub:palette`, else the OS `prefers-color-scheme`); `applyPalette()` in
-    `app.js` wires the header cycler and syncs the `theme-color` meta.
-    `applyTheme('light'|'dark')` survives as an alias.
-  - ⚠️ **`PALETTE_MIGRATE` is duplicated on purpose** — once in `app.js` and once
-    in the `<head>` script. The inline script runs BEFORE `app.js`, so a saved
-    v187–v190 preference (sand/paper/terracotta → champagne, dusk → onyx) has to
-    resolve there too, or first paint lands on a palette with no tokens. **Change
-    both together.**
+  - ⚠️ **`data-theme="light"` is still REQUIRED, and deleting it would turn the
+    app dark.** Layer 1 is the original DARK theme and layer 2
+    (`:root[data-theme="light"]`) is what un-hardcodes it — so light mode is
+    made OF that attribute. It is a constant now, not a switch, but it is not
+    decoration.
+  - ⚠️ **The ~660 rules that select on `[data-palette]` / `[data-theme]` were
+    deliberately LEFT ALONE.** They are constants that are always true;
+    stripping the prefixes would be a mechanical rewrite of a stylesheet whose
+    layer order and specificity this file documents as load-bearing (layers 3-9
+    win only because they come last), for zero visible change.
+  - ⚠️ **`PALETTE_MIGRATE` is GONE from all three copies** (v219) — `app.js`,
+    the `index.html` `<head>` script and `power.html`'s. Both inline scripts are
+    deleted outright: with the attributes in the markup there is nothing to
+    resolve before first paint. `applyPalette`, `applyTheme`, `PALETTES`,
+    `PALETTE_DARK` and `PALETTE_META` are all deleted too.
   - ⚠️ **Specificity trap** (cost a real bug in v187): layer 2 rules like
     `:root[data-theme="light"] .brd-card.t0` are (0,3,1) and OUT-SPECIFY a plain
     `:root[data-palette] .brd-card` (0,2,1). If a palette override looks ignored,
@@ -587,7 +599,70 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v218** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v219** (backend **b14-football-boxplayer**).
+
+- **🌞 Dark mode REMOVED — one ground, and nothing can change it (v219)** — the
+  owner: *"Remove dark mode completely it's a waste of time I never use it."*
+  Gone, not merely defaulted off.
+  - **What was deleted:** the Onyx token block, the masthead LIGHT/DARK toggle,
+    `PALETTES` / `PALETTE_DARK` / `PALETTE_META` / `PALETTE_MIGRATE` /
+    `effectivePalette` / `effectiveTheme` / `applyPalette` / `applyTheme`, the
+    `prefers-color-scheme` listener in `app.js`, and **all three inline
+    `<head>` palette scripts** — `index.html`, `power.html` and `workout.html`.
+    `<html>` carries `data-palette="champagne" data-theme="light"` in the
+    markup instead: with nothing decided at runtime there is nothing to decide
+    before first paint, so the anti-flash script had no job left.
+  - **🚨 Three things that would have silently regressed, none of them obvious
+    from the ask:**
+    - **`theme-color` had to move to the markup.** `applyPalette` used to
+      OVERWRITE that meta with the palette's own ground, so deleting the
+      function while leaving the tag at its authored `#004c54` would have
+      changed the iOS status bar from cream to Eagles green. It carries
+      `#f3f1ec` now — asserted.
+    - **`color-scheme: light` is the last door the OS could come through.**
+      Attribute-pinning fixes what the stylesheet paints, but native form
+      controls, text selection and scrollbars still follow the OS — so a phone
+      set to dark would render every Pick'em `<input>` dark on a cream card.
+      One rule on `:root`, and the suite checks the computed value rather than
+      trusting the declaration.
+    - **`workout.html` was pinned too.** It read `sportshub:theme` and the OS
+      independently of the palette system, so it would have gone on flipping to
+      dark by itself after every other surface stopped.
+  - **⚠️ What was deliberately NOT done, and why it is the right call.**
+    `styles.css` still SELECTS on `:root[data-palette]` and
+    `:root[data-theme="light"]` in ~660 rules. Those are now constants that are
+    always true. Stripping them would be a mechanical rewrite of a stylesheet
+    whose layer order and specificity this file documents as load-bearing —
+    layers 3-9 win *only* because they come last, and the v187/v189 specificity
+    trap is exactly this hazard — for zero visible change and a real chance of
+    subtle breakage. **And `data-theme="light"` is not decoration: layer 1 is
+    still the original DARK theme and layer 2 is what un-hardcodes it, so light
+    mode is made OF that attribute. Removing it would turn the app dark.**
+  - **`sportshub:palette` and `sportshub:theme` are dead keys.** Nothing reads
+    them, so a device that saved `'onyx'` cannot resurrect a palette whose
+    tokens no longer exist — driven as a test, because that device is the
+    owner's own.
+  - **`draft.html` and `trivia.html` are untouched, and that is not an
+    oversight.** They set no `data-theme` and never did, so they inherit layer
+    1 and have always been dark-SKINNED Labs pages with their own CSS built for
+    a dark ground (`draft.css`/`trivia.css` hardcode `rgba(255,255,255,.08)`
+    hairlines). That is a design, not a mode — relighting them would be a
+    redesign of two pages the owner did not ask about. Flagged rather than
+    guessed at.
+  - Verified in headless Chromium — **32 checks**, the important ones driven
+    with the **browser reporting a DARK OS preference**, which is the condition
+    that used to flip the app: palette, theme, body luminance, computed
+    `color-scheme` and `theme-color` all correct; a device with `'onyx'` saved
+    ignoring it; the toggle gone while the rail toggle and mode badge survive;
+    the masthead not spilling with one fewer button; all ten tabs rendering
+    with no overflow; and `power.html` / `workout.html` pinned light while
+    `draft.html` / `trivia.html` keep their own skins. The v218 Pick'em suite
+    (73) and the tab regression sweep (12) pass with the Onyx dimension
+    dropped.
+  - ⚠️ **Suite note:** the v218 suites iterated `['champagne','onyx']`, so they
+    would have failed against perfectly correct code the moment Onyx stopped
+    existing. **When a palette is deleted, the suites that loop over palettes
+    are part of the change.**
 
 - **🎯 Pick'em — the owner's ATS pool, tracked against the model (v218)** —
   the owner: *"Im in a nfl pick em league with my friends where u pick every
@@ -2504,6 +2579,10 @@ Current version as of this writing: **v218** (backend **b14-football-boxplayer**
     dead. Deleting the dead half is a follow-up, not this change.
   - **Four palettes → two.** Champagne (light, default) and Onyx (dark), the
     same design on two grounds. Saved v187–v190 preferences migrate.
+    - ⚠️ **SUPERSEDED in v219: there is ONE palette now.** Onyx, the toggle and
+      the whole migration path are deleted; Champagne is pinned in the markup.
+      Everything else in this entry — the flow layer, the dark-type-on-gold
+      rule, `--wm`, the alignment work — is unchanged and still current.
   - **Two things gold forces that blue did not**, both now written into Files:
     accent fills take **dark** type (white on gold is ~1.9:1; `--on-ac` measures
     7.8:1), and `--wm` moves off amber to a bronze-taupe, because gold occupies
@@ -2667,8 +2746,10 @@ Current version as of this writing: **v218** (backend **b14-football-boxplayer**
   owner's brief was explicit: *"i dont want u changing the content, i want u
   improving the feel and functionality."* So every tab, section, heading and
   string is where it was; what changed is the form and the mechanics.
-  - **Palettes replace light/dark.** `data-palette` = `sand` (default, warm
-    paper) · `terracotta` · `paper` · `dusk`. Each is 14 colours plus one
+  - **Palettes replace light/dark.** ⚠️ **SUPERSEDED — twice: v191 cut these
+    four to Champagne + Onyx, and v219 removed dark mode entirely, leaving
+    Champagne alone with no switch of any kind.** `data-palette` = `sand`
+    (default, warm paper) · `terracotta` · `paper` · `dusk`. Each is 14 colours plus one
     `--base` ink triple that generates the whole alpha ramp (`--l07` … `--l4`),
     and the block re-points the app's OWN variables (`--bg`, `--card`,
     `--text`, `--muted`, `--accent`, `--line`, `--radius`) at them — so every
@@ -5315,8 +5396,12 @@ rewrite.**
      Board fills, so the rail costs no extra model run and no extra ESPN call.
      Folds via the ⌃ RAIL header button (`sportshub:railhidden`), which
      re-asserts after every repaint so the 30s refresh can't re-open it.
-  2. **The masthead** — brand · version · palette cycler · rail fold · the
-     LIVE/OFFLINE badge.
+  2. **The masthead** — brand · version · rail fold · the LIVE/OFFLINE badge.
+     (The palette cycler was removed in v219 with dark mode. ⚠️ `theme-color`
+     moved to the markup with it — `applyPalette` used to overwrite that meta
+     with the palette's ground, so the tag carries `#f3f1ec` now; leaving it at
+     the old `#004c54` would have quietly turned the iOS status bar Eagles
+     green.)
      - ⚠️ **It stands on its OWN opaque ground and declares no filter** (v217,
        layer 8): all three chrome bars — masthead, `nav.tabs` and `#botbar` —
        paint `rgba(var(--barRGB), 1)`, a per-palette token that is the page
@@ -5981,13 +6066,10 @@ rewrite.**
 - `sportshub:railoff` — leagues the user has filtered OUT of the top rail
   (array of sport keys). Only the hidden ones are stored, so a league you've
   never touched — including one whose season starts next week — shows by default.
-- `sportshub:palette` — chosen palette (`'champagne'` | `'onyx'`), v191. Absent =
-  follow the OS `prefers-color-scheme`. Read by the inline `<head>` script and by
-  `applyPalette`. **v187–v190 values (sand/paper/terracotta/dusk) still resolve**
-  via `PALETTE_MIGRATE`, which lives in BOTH places — see Files → styles.css.
-- `sportshub:theme` — the pre-v187 light/dark preference. **No longer written**,
-  but still READ: an install that saved one before v187 keeps its side of the
-  choice instead of being dragged back to following the OS.
+- `sportshub:palette` / `sportshub:theme` — **BOTH DEAD as of v219**, when dark
+  mode was removed. Nothing reads or writes them, so a device that saved
+  `'onyx'` cannot resurrect a palette whose tokens no longer exist — asserted
+  by test. Left on devices, harmless, like `sportshub:sharp`.
 - `sportshub:railhidden` — `'1'` when the owner has folded the top rail (v187).
   Re-asserted after every rail repaint, so the 30s refresh can't re-open it.
 - `sportshub:sharp` — **DEAD as of v192.** Held the 💰 sharp-money toggle's

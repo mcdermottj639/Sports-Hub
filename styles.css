@@ -1424,10 +1424,17 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
 /* ==========================================================================
    MODERNIST — the feel & function pass (v187).
-   The token layer. Chosen with <html data-palette="champagne|onyx">; `data-theme` still rides alongside (light for the three
-   paper grounds, dark for Dusk) so the Editorial light block above keeps
-   doing its job of un-hardcoding the dark-only values, and the ramps below
-   then say what the colour actually is.
+   The token layer. ⚠️ v219 removed dark mode, so there is now exactly ONE
+   palette: <html> carries data-palette="champagne" data-theme="light"
+   statically and nothing at runtime can change either. The Onyx token block
+   that used to sit beside this one is deleted.
+   Both attributes are KEPT rather than stripped from the ~660 rules that
+   select on them: they are constants that are always true, and rewriting the
+   selectors would change the specificity relationships this file's layer
+   order depends on (layers 3-9 win only because they come last) for no
+   visible gain. `data-theme="light"` in particular is still load-bearing —
+   the Editorial block above is what un-hardcodes layer 1's dark-only values,
+   and layer 1 is still a dark base underneath it.
 
    Appended last on purpose: `[data-palette]` and `[data-theme]` are the same
    specificity, so source order is what decides, and every rule here wins.
@@ -1465,19 +1472,6 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   --on-ac: #1a1509;
   --grad: linear-gradient(135deg, #f0dc9e 0%, #d7b34a 26%, #b8942f 52%, #e6d290 74%, #bf9c33 100%);
   --glow: 0 4px 14px rgba(184,148,47,.34);
-}
-:root[data-palette="onyx"] {
-  --gr: #14130f; --sf: #1d1b15; --sf2: #24221a;
-  --ink: #f6f2e7; --ink2: #ded8c7; --gy: #b4ac98;
-  --mu: #918a77; --mu2: #6f695b; --tr: #332f26; --tr2: #4b4537;
-  --ac: #d9b445; --ac6: #e8d089; --ac7: #f2e3ad; --wm: #a89263;
-  --pos: #4fb383; --pos2: #9ec14e; --neg2: #e08a3c; --neg: #e8635a;
-  --base: 246, 242, 231;
-  --barRGB: 29, 28, 24;
-  --acRGB: 217, 180, 69;
-  --on-ac: #17140b;
-  --grad: linear-gradient(135deg, #f6e7b4 0%, #dcb84c 28%, #c9a234 54%, #f0dda0 76%, #d3ac3e 100%);
-  --glow: 0 4px 16px rgba(217,180,69,.30);
 }
 
 /* Ink-on-ground alpha ramp. One `--base` triple per palette drives all of
@@ -3049,3 +3043,12 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
    whether it was `hidden` — the property I had just set — instead of measuring
    the box. Assert the pixels, not the flag. */
 :root[data-palette] .ctl-row[hidden] { display: none; }
+
+/* 🌞 One ground, and the native controls follow it (v219).
+   The owner removed dark mode, so the Onyx token block above is gone and
+   <html> carries data-palette="champagne" data-theme="light" statically.
+   `color-scheme: light` is the piece that would otherwise be missed: without
+   it a phone set to dark at the OS level still renders form controls, text
+   selection and scrollbars dark, which on this ground reads as a bug. It is
+   the one place the OS could still reach the page. */
+:root { color-scheme: light; }

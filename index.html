@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-palette="champagne" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#004c54" />
+  <meta name="theme-color" content="#f3f1ec" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Sports-Hub" />
   <title>Sports-Hub</title>
@@ -13,28 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=218" />
-  <script>
-    /* Set the palette before first paint to avoid a flash. Saved preference if
-       present, else Champagne. `data-theme` rides alongside so the light/dark
-       rules underneath the palette layer still resolve — Onyx is the dark one.
-       MIGRATE mirrors PALETTE_MIGRATE in app.js: this runs before app.js does,
-       so a v187–v190 preference has to resolve here too or the first paint
-       lands on a palette that no longer has tokens. */
-    (function () {
-      var MIGRATE = { sand: 'champagne', paper: 'champagne', terracotta: 'champagne', dusk: 'onyx' };
-      try {
-        var p = localStorage.getItem('sportshub:palette');
-        if (MIGRATE[p]) p = MIGRATE[p];
-        if (p !== 'champagne' && p !== 'onyx') {
-          /* No explicit choice yet: follow the OS. */
-          p = window.matchMedia('(prefers-color-scheme: light)').matches ? 'champagne' : 'onyx';
-        }
-        document.documentElement.setAttribute('data-palette', p);
-        document.documentElement.setAttribute('data-theme', p === 'onyx' ? 'dark' : 'light');
-      } catch (e) {}
-    })();
-  </script>
+  <link rel="stylesheet" href="styles.css?v=219" />
 </head>
 <body>
   <!-- Live rail (v163): one card per in-progress game, each carrying that
@@ -58,7 +37,6 @@
       <span id="app-version" class="version"></span>
     </div>
     <div class="head-right">
-      <button id="palette-toggle" class="hd-btn" type="button" title="Change theme">LIGHT</button>
       <button id="rail-toggle" class="hd-btn" type="button" title="Show or hide the rail">⌃ RAIL</button>
       <div id="mode-badge" class="badge">…</div>
     </div>
@@ -280,6 +258,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=218" defer></script>
+  <script src="app.js?v=219" defer></script>
 </body>
 </html>

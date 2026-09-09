@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-palette="champagne" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#004c54" />
+  <meta name="theme-color" content="#f3f1ec" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Power Rankings" />
   <title>Power Rankings Lab — Sports-Hub Labs</title>
@@ -12,27 +12,8 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=208" />
-  <link rel="stylesheet" href="power.css?v=6" />
-  <script>
-    /* Mirrors the inline palette script in index.html — and it has to, or a
-       shared link opens on a palette with no tokens. See CLAUDE.md,
-       Files → styles.css: PALETTE_MIGRATE is duplicated on purpose. Setting
-       BOTH data-palette and data-theme is what buys this page the app's whole
-       token layer, so it looks like the app in either palette for free. */
-    (function () {
-      var MIGRATE = { sand: 'champagne', paper: 'champagne', terracotta: 'champagne', dusk: 'onyx' };
-      try {
-        var p = localStorage.getItem('sportshub:palette');
-        if (MIGRATE[p]) p = MIGRATE[p];
-        if (p !== 'champagne' && p !== 'onyx') {
-          p = window.matchMedia('(prefers-color-scheme: light)').matches ? 'champagne' : 'onyx';
-        }
-        document.documentElement.setAttribute('data-palette', p);
-        document.documentElement.setAttribute('data-theme', p === 'onyx' ? 'dark' : 'light');
-      } catch (e) {}
-    })();
-  </script>
+  <link rel="stylesheet" href="styles.css?v=219" />
+  <link rel="stylesheet" href="power.css?v=7" />
 </head>
 <body class="pr-page">
   <header class="pr-top">
@@ -49,6 +30,6 @@
     <section id="pr-shared" hidden></section>
   </main>
 
-  <script src="power.js?v=6" defer></script>
+  <script src="power.js?v=7" defer></script>
 </body>
 </html>

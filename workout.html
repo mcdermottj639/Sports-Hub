@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,20 +10,8 @@
   <meta name="description" content="A 3-day training split — chest &amp; triceps, back &amp; biceps, legs &amp; shoulders — with guided sessions, rest timers and load tracking." />
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
-  <link rel="stylesheet" href="styles.css?v=143" />
-  <link rel="stylesheet" href="workout.css?v=4" />
-  <script>
-    /* Match the app: set the theme before first paint so there's no flash. */
-    (function () {
-      try {
-        var t = localStorage.getItem('sportshub:theme');
-        if (t !== 'light' && t !== 'dark') {
-          t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-        }
-        document.documentElement.setAttribute('data-theme', t);
-      } catch (e) {}
-    })();
-  </script>
+  <link rel="stylesheet" href="styles.css?v=219" />
+  <link rel="stylesheet" href="workout.css?v=5" />
 </head>
 <body class="ds-body wk-body">
   <header class="ds-top wk-top">
@@ -43,6 +31,6 @@
     <section id="summary" hidden></section>
   </main>
 
-  <script src="workout.js?v=4" defer></script>
+  <script src="workout.js?v=5" defer></script>
 </body>
 </html>

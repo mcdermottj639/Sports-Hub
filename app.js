@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v218';
+const APP_VERSION = 'v219';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -11275,64 +11275,32 @@ state.aiBoard = null;
 const verEl = $('#app-version');
 if (verEl) verEl.textContent = APP_VERSION;
 
-// --- palettes ---------------------------------------------------------------
-// v187: light/dark became four named palettes, all tokenised in styles.css.
-// The <head> inline script picks one before first paint (saved pref, else the
-// OS setting, warm either way). Here we wire the header button, keep the meta
-// theme-color in sync, and carry `data-theme` alongside `data-palette` so the
-// light/dark rules underneath the palette layer still resolve — three of the
-// four grounds are paper, Dusk is the dark one.
-//
-// Dusk IS the dark mode, so the old 🌙/☀️ toggle isn't gone, it's absorbed:
-// cycling to Dusk is what turning the lights off means now.
-const THEME_KEY = 'sportshub:theme';
-const PALETTE_KEY = 'sportshub:palette';
-const PALETTES = ['champagne', 'onyx'];
-const PALETTE_DARK = { onyx: 1 };
-const PALETTE_META = { champagne: '#f3f1ec', onyx: '#14130f' };
-// v191 replaced the four Modernist grounds with the two gold ones. A saved
-// preference from v187–v190 still resolves — mapping it beats dropping the
-// owner back to a default they didn't pick, and the three light grounds all
-// mean the same thing now.
-const PALETTE_MIGRATE = { sand: 'champagne', paper: 'champagne', terracotta: 'champagne', dusk: 'onyx' };
-const themeMeta = document.querySelector('meta[name="theme-color"]');
-const effectivePalette = () => {
-  const p = document.documentElement.getAttribute('data-palette');
-  if (PALETTES.includes(p)) return p;
-  return PALETTE_MIGRATE[p] || 'champagne';
-};
-const effectiveTheme = () => (PALETTE_DARK[effectivePalette()] ? 'dark' : 'light');
-function applyPalette(p) {
-  if (!PALETTES.includes(p)) p = PALETTE_MIGRATE[p] || 'champagne';
-  const root = document.documentElement;
-  root.setAttribute('data-palette', p);
-  root.setAttribute('data-theme', PALETTE_DARK[p] ? 'dark' : 'light');
-  if (themeMeta) themeMeta.setAttribute('content', PALETTE_META[p]);
-  const btn = $('#palette-toggle');
-  if (btn) {
-    // The MODE, not the palette name. Two reasons: with only two palettes this
-    // is a light/dark switch and that is what the label should say, and
-    // "CHAMPAGNE" is 9 characters in a masthead that had 22px of spill at
-    // 360px. LIGHT/DARK is short and a stable width. The palette's real name
-    // stays on the accessible label.
-    btn.textContent = PALETTE_DARK[p] ? 'DARK' : 'LIGHT';
-    btn.setAttribute('aria-label', `Theme: ${p}. Tap to switch.`);
-    btn.setAttribute('title', `Theme: ${p}`);
-  }
-}
-// Kept as a thin alias: applyTheme('light'|'dark') still means something, it
-// just resolves to a palette now. Anything that used to call it keeps working.
-function applyTheme(t) {
-  applyPalette(t === 'light' ? 'champagne' : 'onyx');
-  try { localStorage.setItem(PALETTE_KEY, effectivePalette()); } catch (e) {}
-}
-applyPalette(effectivePalette());
+/* --- one ground, no theme switch (v219) -------------------------------------
+   The owner: "Remove dark mode completely it's a waste of time I never use
+   it." So there is no palette machinery here any more — no PALETTES, no
+   PALETTE_MIGRATE, no applyPalette/applyTheme, no masthead toggle and no
+   OS-preference listener. `data-palette="champagne"` and `data-theme="light"`
+   are written straight onto <html> in index.html, which is also why the
+   before-first-paint inline script is gone: nothing is decided at runtime, so
+   there is nothing to decide early.
 
-$('#palette-toggle')?.addEventListener('click', () => {
-  const next = PALETTES[(PALETTES.indexOf(effectivePalette()) + 1) % PALETTES.length];
-  try { localStorage.setItem(PALETTE_KEY, next); } catch (e) {}
-  applyPalette(next);
-});
+   ⚠️ `theme-color` moved to the markup WITH IT. applyPalette used to overwrite
+   the meta with the palette's own ground, so leaving the tag at its old
+   #004c54 would have quietly changed the iOS status bar from cream to Eagles
+   green. It carries #f3f1ec now.
+
+   ⚠️ `sportshub:palette` and `sportshub:theme` are DEAD KEYS — nothing reads
+   them, so a device that saved 'onyx' cannot resurrect a palette whose tokens
+   no longer exist. Left on devices, harmless, like `sportshub:sharp`.
+
+   ⚠️ What was deliberately NOT done: styles.css still SELECTS on
+   `:root[data-palette]` and `:root[data-theme="light"]` in ~660 rules. Those
+   are now constants that are always true, and stripping them would be a
+   mechanical rewrite of a stylesheet whose layer order and specificity this
+   file documents as load-bearing (layers 3-9 win only because they come last;
+   see the v187/v189 specificity trap). That is a large risk for zero visible
+   change. The dark GROUND is gone — the Onyx token block is deleted and
+   nothing can set the attribute — which is what "remove dark mode" means. */
 
 // --- rail collapse ----------------------------------------------------------
 // The rail is the single biggest piece of chrome on the screen. On a phone
@@ -11372,17 +11340,6 @@ $('#labs-mock-start')?.addEventListener('click', () => {
   renderMockDraft();
   $('#labs-mock')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
-
-// Follow the OS light/dark setting while the user hasn't picked a palette
-// explicitly — Sand when it's light out, Dusk when it isn't. THEME_KEY is
-// still honoured so an install that saved a light/dark pref before v187 keeps
-// its side of the choice instead of being dragged back to following the OS.
-try {
-  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
-    if (localStorage.getItem(PALETTE_KEY) || localStorage.getItem(THEME_KEY)) return;
-    applyPalette(e.matches ? 'champagne' : 'onyx');
-  });
-} catch (e) {}
 
 $('#bb-go')?.addEventListener('click', () => {
   state.aiSub = 'board';             // Overview is renderPredictions' own landing
