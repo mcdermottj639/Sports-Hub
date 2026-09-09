@@ -600,7 +600,56 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v221** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v222** (backend **b14-football-boxplayer**).
+
+- **🔗 A week of picks can arrive as a LINK — one tap, no typing (v222)** —
+  the owner sent two screenshots of their league's app and asked, fairly:
+  *"ur telling me u can't take the picks from these pics and add them to the
+  app so I don't have to do this stupid pasting?"*
+  - **The v220/v221 answer was right about the wrong half.** No session can
+    write to the owner's device — that part is true and unchanged. But
+    *reading* the picks is something a session can do perfectly well from a
+    screenshot, and pasting was never the point; it was the cost. So the
+    session reads the screenshot and hands back
+    **`index.html#pk=<base64url>`**. The owner taps it, the app opens on
+    Pick'em with the week loaded and previewed, and they tap Import. Zero
+    typing, zero clipboard.
+  - ⚠️ **The link carries TEXT, not a parsed payload**, deliberately:
+    `pkParsePicks` stays the single parse path, so a link and a paste can
+    never disagree about what a line means (the v177 one-implementation
+    rule). The whole feature is ~40 lines on top of v221 for that reason.
+  - **🚨 It never imports on its own.** A URL that silently rewrote a week of
+    picks would be the worst thing on this tab. The link fills the box and
+    runs the preview — the same preview, stating the same consequences — and
+    the owner still taps Import. Asserted: after the link loads and before
+    the tap, `sportshub:pickem` holds nothing.
+  - **The hash is read BEFORE the first `showTab` and cleared immediately**
+    (`history.replaceState`), so the link lands on Pick'em rather than Home,
+    and a reload cannot re-offer an import already dealt with. A junk `#pk=`
+    falls through to Home rather than stranding the owner on an empty panel.
+  - **The link names its own week and SWITCHES to it**, rather than warning
+    about a mismatch the owner had no part in — a `Week N` header is what the
+    paste box already understood, so the link just uses it.
+  - ⚠️ **`atob` is Latin-1 and the text is full of ⭐**, so the payload is
+    decoded as UTF-8 bytes rather than trusting character values — the power-
+    lab encoding lesson, run in reverse.
+  - **What a screenshot does NOT carry: the spreads.** The league's list shows
+    the picked team and the opponent, no numbers — so an imported week falls
+    back to the book's current number on every game, exactly as an unnumbered
+    paste line does, and the preview says so per row. **If the owner wants
+    their pool's locked numbers stored (which is the v218 correctness rule and
+    the reason `sp` exists), the spreads have to come from a screen that shows
+    them.** Said to the owner rather than papered over.
+  - Verified in headless Chromium at 390px — **14 checks** driving the owner's
+    REAL Week 1 (all 16 games off the two screenshots, with the picked team
+    home on half the slate and away on the other half so the orientation rule
+    is exercised both ways): the link landing on Pick'em, the hash cleared,
+    all 16 names resolving with nothing unread, both ⭐ read, **nothing
+    written until the tap**, all 16 stored on the right team and
+    home-oriented, the two key games coming out CHI and DAL, the model's
+    record byte-identical, a reload not re-offering, and a junk hash falling
+    through. The v221 (56), v220 (9) and ten-tab (24) suites pass.
+
 
 - **📥 Pick'em picks can be PASTED in — the tab stopped being tap-only (v221)**
   — the owner had sent a week of picks in chat and asked whether they were on
@@ -649,6 +698,10 @@ Current version as of this writing: **v221** (backend **b14-football-boxplayer**
     games have already finished (so they grade on import), and every line it
     could not read **with the reason**. A paste that silently replaced a week
     would be the worst button on this tab.
+  - ⚠️ **SUPERSEDED in v222 for the DELIVERY, not the parsing** — a week can
+    arrive as a `#pk=` link now, so the owner taps rather than pastes. The
+    parser, the preview and every rule above are unchanged and are what the
+    link runs through.
   - **⚙️ Setup also gained ♻️ Restore**, beside the existing export — which is
     how a season moves between Safari and the home-screen app, since
     localStorage is per browser AND per device. It **replaces** rather than
@@ -6099,7 +6152,8 @@ rewrite.**
   never the live feed, and **nothing here is written to the model's own
   record**. **📥 Paste my picks** (v221) takes a whole week as text — one pick
   a line, `NE +3` / `Seahawks -3.5 ⭐` / `Tiebreaker 45` — behind a preview
-  that states every consequence first; ⚙️ Setup's **♻️ Restore** takes a whole
+  that states every consequence first, and an **`index.html#pk=<base64url>`
+  link** (v222) delivers that same text in one tap; ⚙️ Setup's **♻️ Restore** takes a whole
   season back from the export. See the v218 and v221 entries and
   `sportshub:pickem`.
 
@@ -6202,7 +6256,9 @@ rewrite.**
   makes the you-vs-model split honest. Nothing here ever reaches
   `sportshub:aitally`.
   ⚠️ Written by tapping the tab, by 🤖 Fill from the model, by the v221
-  **📥 paste importer** on 📋 This Week, and by ⚙️ Setup's **♻️ Restore**
+  **📥 paste importer** on 📋 This Week (which a v222 **`#pk=` link** also
+  feeds — same parser, same preview, still one confirming tap), and by
+  ⚙️ Setup's **♻️ Restore**
   (which replaces the whole season — that is how it crosses the Safari / PWA
   storage split). No session can write to the device, so a week of picks sent
   to Claude in a chat still has to be pasted in by the owner — but that is now

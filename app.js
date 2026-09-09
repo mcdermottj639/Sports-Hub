@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v221';
+const APP_VERSION = 'v222';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -10569,7 +10569,7 @@ const pkState = { week: null, curWeek: null, sub: 'week', slate: null, board: nu
   // The import panel. Held here rather than in the DOM because pkPaint is a
   // full re-render and a tap anywhere on the tab would otherwise wipe a
   // half-typed paste.
-  pasteOpen: false, pasteText: '', preview: null };
+  pasteOpen: false, pasteText: '', preview: null, fromLink: false };
 
 /* ---------------------------------------------------------------- slate ---
    ESPN's NFL scoreboard takes `week` + `seasontype` + `dates` (the SEASON
@@ -10900,6 +10900,14 @@ async function pkPaintWeek(st, tok) {
   if (tok !== pkState.tok) return;
   const byId = new Map((board?.rows || []).map((r) => [r.g.id, r]));
   const wk = pkWeek(st, week);
+  // A link is consumed ONCE, here, because parsing it needs the slate.
+  if (pkPendingLink) {
+    pkState.pasteOpen = true;
+    pkState.pasteText = pkPendingLink.text;
+    pkState.preview = pkParsePicks(pkPendingLink.text, games);
+    pkState.fromLink = true;
+    pkPendingLink = null;
+  }
   const sc = pkScoreWeek(st.cfg, wk, games);
   const tbg = pkTiebreakGame(games);
   const modelReads = games.filter((g) => byId.get(g.id)?.atsR).length;
@@ -11042,6 +11050,53 @@ function pkFootHTML(board) {
   return `<div class="pk-mini pk-foot">The model read and the 💰 money split are the same ones the AI Picks tab uses — nothing here is written to the model's own record.${live ? '' : ' DraftKings splits were not reachable for this slate.'}</div>`;
 }
 
+/* 🔗 A week can arrive as a LINK — `index.html#pk=<base64url>` carrying the
+   same text the paste box takes.
+
+   Why: the owner's picks are made in the league's own app, and the honest
+   answer to "can you just put them in" is that no session can write to their
+   device. But reading a screenshot and handing back a LINK removes every part
+   of that they were actually complaining about — no typing, no clipboard, no
+   app-switching. One tap.
+
+   ⚠️ It carries TEXT, not a parsed payload, deliberately: `pkParsePicks` stays
+   the single parse path, so a link and a paste can never disagree about what a
+   line means (the v177 one-implementation rule).
+
+   🚨 It NEVER imports on its own. A URL that silently rewrote a week of picks
+   would be the worst thing on this tab — the link fills the box and runs the
+   preview, and the owner still taps Import. */
+let pkPendingLink = null;
+
+function pkB64ToStr(b64) {
+  let t = String(b64).replace(/-/g, '+').replace(/_/g, '/');
+  while (t.length % 4) t += '=';
+  // ⚠️ atob is Latin-1, and the text is full of ⭐ — decode the bytes as UTF-8
+  // rather than trusting the character values (the power-lab lesson, reversed).
+  const bin = atob(t);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+/* Read a `#pk=` hash at boot and clear it, so a reload cannot re-offer an
+   import the owner already dealt with. Returns true when one was found. */
+function pkReadLink() {
+  let h = '';
+  try { h = String(location.hash || ''); } catch (_) { return false; }
+  const m = h.match(/[#&]pk=([A-Za-z0-9_\-=]+)/);
+  if (!m) return false;
+  let text = '';
+  try { text = pkB64ToStr(m[1]); } catch (_) { text = ''; }
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+  if (!text.trim()) return false;
+  const wk = text.match(/^\s*week\s*(\d{1,2})\b/im);
+  // The link names its own week, so it SWITCHES to it rather than warning
+  // about a mismatch the owner had no part in.
+  pkPendingLink = { text, week: wk ? Number(wk[1]) : null };
+  return true;
+}
+
 /* --- the import panel ---------------------------------------------------- */
 const PK_PASTE_HELP = 'One pick a line — the team you took and the number you took it at: '
   + '<code>NE +3</code>, <code>Seahawks -3.5 ⭐</code>, <code>KC PK</code>. '
@@ -11054,8 +11109,10 @@ function pkImportHTML(st, wk, games) {
   }
   const pv = pkState.preview;
   return `<div class="pk-imp">
-    <div class="pk-imp-head">📥 Paste this week's picks</div>
-    <div class="pk-mini">${PK_PASTE_HELP}</div>
+    <div class="pk-imp-head">${pkState.fromLink ? '🔗 Picks from a link' : '📥 Paste this week\'s picks'}</div>
+    <div class="pk-mini">${pkState.fromLink
+      ? 'These came in on the link you tapped. Nothing is saved until you tap Import — check them over first.'
+      : PK_PASTE_HELP}</div>
     <textarea id="pk-paste-txt" class="pk-imp-txt" rows="6" spellcheck="false"
       placeholder="NE +3&#10;SEA -3 ⭐&#10;Tiebreaker 45">${esc(pkState.pasteText || '')}</textarea>
     <div class="pk-acts">
@@ -11265,9 +11322,9 @@ function pkWireWeek(st, week, games, byId, tbg) {
       st.weeks[String(week)] = { picks: {}, keys: [], tb: null };
       return repaint();
     }
-    if (e.target.id === 'pk-paste') { pkState.pasteOpen = true; pkState.preview = null; return pkPaint(); }
+    if (e.target.id === 'pk-paste') { pkState.pasteOpen = true; pkState.preview = null; pkState.fromLink = false; return pkPaint(); }
     if (e.target.id === 'pk-paste-cancel') {
-      pkState.pasteOpen = false; pkState.pasteText = ''; pkState.preview = null; return pkPaint();
+      pkState.pasteOpen = false; pkState.pasteText = ''; pkState.preview = null; pkState.fromLink = false; return pkPaint();
     }
     if (e.target.id === 'pk-paste-read') {
       // Read whatever is in the box right now — the `input` handler keeps
@@ -11281,7 +11338,7 @@ function pkWireWeek(st, week, games, byId, tbg) {
     if (e.target.id === 'pk-paste-go') {
       if (!pkState.preview) return;
       pkApplyImport(week, wk, pkState.preview, byId);
-      pkState.pasteOpen = false; pkState.pasteText = ''; pkState.preview = null;
+      pkState.pasteOpen = false; pkState.pasteText = ''; pkState.preview = null; pkState.fromLink = false;
       return repaint();
     }
   });
@@ -11729,7 +11786,13 @@ if (toTop) {
   onScroll();
 }
 
-showTab('home');
+/* 🔗 A `#pk=` link opens straight onto Pick'em, on the week the link names.
+   Read BEFORE the first showTab so the hash is gone by the time anything
+   paints — and so a reload cannot re-offer an import already dealt with. */
+if (pkReadLink()) {
+  if (pkPendingLink?.week) pkState.week = pkPendingLink.week;
+  showTab('pickem');
+} else showTab('home');
 
 // The live rail is chrome, not a tab — it starts here and refreshes itself on
 // a timer (paused while the page is hidden) so it stays current no matter
