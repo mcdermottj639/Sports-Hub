@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=217" />
+  <link rel="stylesheet" href="styles.css?v=218" />
   <script>
     /* Set the palette before first paint to avoid a flash. Saved preference if
        present, else Champagne. `data-theme` rides alongside so the light/dark
@@ -76,6 +76,7 @@
     <button id="tab-redsox" data-tab="redsox" role="tab" aria-selected="false" aria-controls="redsox"><span class="ic" aria-hidden="true">⚾</span><span class="lb">Red Sox</span></button>
     <button id="tab-predictions" data-tab="predictions" role="tab" aria-selected="false" aria-controls="predictions"><span class="ic" aria-hidden="true">🤖</span><span class="lb">AI Picks</span></button>
     <button id="tab-fantasy" data-tab="fantasy" role="tab" aria-selected="false" aria-controls="fantasy"><span class="ic" aria-hidden="true">🏆</span><span class="lb">Fantasy</span></button>
+    <button id="tab-pickem" data-tab="pickem" role="tab" aria-selected="false" aria-controls="pickem"><span class="ic" aria-hidden="true">🎯</span><span class="lb">Pick'em</span></button>
     <button id="tab-labs" data-tab="labs" role="tab" aria-selected="false" aria-controls="labs"><span class="ic" aria-hidden="true">🧪</span><span class="lb">Labs</span></button>
     <button id="tab-about" data-tab="about" role="tab" aria-selected="false" aria-controls="about"><span class="ic" aria-hidden="true">ℹ️</span><span class="lb">About</span></button>
   </nav>
@@ -223,6 +224,13 @@
       </div>
     </section>
 
+    <section id="pickem" class="tab-panel" role="tabpanel" aria-labelledby="tab-pickem" tabindex="0">
+      <h2 class="section-title no-acc">🎯 Pick'em — my ATS pool</h2>
+      <div id="pk-sub" class="ai-sub" role="tablist" aria-label="Pick'em view"></div>
+      <p id="pk-blurb" class="muted"></p>
+      <div id="pickem-body"></div>
+    </section>
+
     <section id="labs" class="tab-panel" role="tabpanel" aria-labelledby="tab-labs" tabindex="0">
       <div class="setup-card">
         <h2>🧪 Labs</h2>
@@ -272,6 +280,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="app.js?v=217" defer></script>
+  <script src="app.js?v=218" defer></script>
 </body>
 </html>

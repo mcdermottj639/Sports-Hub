@@ -190,10 +190,11 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
 - `index.html` — single page, all tabs/sections. Asset URLs carry `?v=N` cache-busting.
   Holds `#rail-wrap` (v187 — the rail plus the league-filter column, above the
-  masthead), the nine-tab grid, `#home-board` (🎲 The Board, between My Teams
+  masthead), the ten-tab grid (5×2 on a phone — v218's 🎯 Pick'em filled the
+  orphan cell the nine left), `#home-board` (🎲 The Board, between My Teams
   and ⛳ Golf) and `#botbar` (the persistent model-read bar).
 - `app.js` (~10,750 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
-- `styles.css` — all styling, in EIGHT layers, and **order matters**: (1) the
+- `styles.css` — all styling, in NINE layers, and **order matters**: (1) the
   original dark `:root` vars and components; (2) the `:root[data-theme="light"]`
   "Editorial / Premium" block, which un-hardcodes the dark-only values (white
   hairline borders, dark gradients, chips, tracks); (3) the **token layer**
@@ -203,7 +204,16 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   `.ai-lgstrip`, `.mc-*`) and (8) the **chrome-bar ground layer** (v217 — the
   masthead, `nav.tabs` and `#botbar` take an opaque `--barRGB` ground and
   declare `backdrop-filter: none`; **do not put the filter back**, see the
-  v217 entry), all keyed on `:root[data-palette]`.
+  v217 entry) and (9) the **`.pk-` Pick'em layer** (v218 — the ATS pool tab,
+  plus the one rule that makes `hidden` work on a `.ctl-row`), all keyed on
+  `:root[data-palette]`.
+  ⚠️ **`el.hidden = true` does NOT hide an element the palette layer gives a
+  `display` to.** `[hidden] { display: none }` is the UA sheet at (0,1,0) and
+  `:root[data-palette] .ctl-row { display: flex }` is (0,2,0), so the layer
+  wins and the property is a visual no-op — that is how Labs and About painted
+  an empty 18px white bar from v187 to v218 with nothing reporting it. If you
+  hide something by property, add a `[hidden]` rule at the layer's own
+  specificity.
   ⚠️ **`font: <weight> <size>/<lh> inherit` is INVALID and is dropped silently**
   — the shorthand needs a real family, and `inherit` is legal only as the whole
   value (`font: inherit` alone is fine). v213 shipped four of these and the
@@ -577,7 +587,106 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v217** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v218** (backend **b14-football-boxplayer**).
+
+- **🎯 Pick'em — the owner's ATS pool, tracked against the model (v218)** —
+  the owner: *"Im in a nfl pick em league with my friends where u pick every
+  game ats. 2 key games which are worth double and score mnf tiebreaker. How
+  can we add this to the app so I can see my stats as I go and cross reference
+  the ai model and other info we already have"*. A tenth tab, 🎯 **Pick'em**.
+  - **It is a TRACKER and a READ, not a replacement.** The picks are made in
+    the league's own app; what was missing here is the running record and the
+    cross-reference. Three sub-tabs on the AI Picks `.ai-sub` pattern —
+    **📋 This Week · 📊 Season · ⚙️ Setup**.
+  - **🚨 THE LEAGUE'S SPREAD IS THE SOURCE OF TRUTH, NOT ESPN'S**, and this is
+    the one decision the whole tab's correctness rests on. The league locks
+    its spreads on Wednesday (the owner's own screenshot says so on the week
+    header) and never moves them; ESPN's number is a LIVE quote that keeps
+    moving all week. Grading a Wednesday pick against Sunday's number would
+    mark picks wrong that the pool scored as wins. So the number is
+    **snapshotted onto the pick** (`sp`) when it is made, it is editable — the
+    pool's number may never have matched ESPN's — and grading reads the stored
+    copy and never the feed. `pkDrift` shows how far the book has moved since,
+    because a stale snapshot must be visible rather than silent.
+    Verified by assertion: editing your own number to −10.5 turns a graded win
+    into a loss, and landing exactly on it is a push.
+  - **Why it lives in `app.js` and not as a standalone Labs page.** The whole
+    ask is the cross-reference, so it needs `weekSlate` → `buildBoard` →
+    `atsRead` plus the sharp-money splits — and a standalone page would have
+    had to re-implement the model, which is a second answer to the same
+    question (the v177/v183 lesson). Every number the model shows here comes
+    through the same door the AI Picks board uses.
+  - **🚨 It records NOTHING to the model's own tally.** `buildBoard` is pure
+    and `commitRow` is simply never called: the owner's pool is not model
+    calibration data, and a second writer at this leash would re-create the
+    v200 blind-write bug. A suite check asserts `sportshub:aitally` and
+    `sportshub:pending` are byte-identical after filling a whole week.
+  - **`md` — the model's side AT PICK TIME — is stored beside the pick**, and
+    that is what makes the Season tab's *"you vs the model"* split honest. The
+    model's read moves all week as lines and injuries land, so re-deriving it
+    at grade time would compare the pick against an opinion the model did not
+    hold when the pick was made.
+  - **🤖 Fill from the model** takes the model's side on every SCHEDULED game
+    (never a final — that would be predicting a finished game) and stars its
+    two biggest qualifying edges, which is the only defensible automatic
+    choice. The stars move afterwards.
+  - **The key-game cap is enforced, not warned about** — it is the league's
+    rule — but a silently refused tap reads as a broken button, so the third
+    star says which one to drop first.
+  - **The tiebreaker game is the LAST kickoff of the week, not "the Monday
+    one"**: a week can end on a Saturday and can carry two Monday games, and
+    "the last game" is what a pool means in every one of those cases.
+  - **Scoring is configurable** (1 / 2 / push / key-miss) rather than constant,
+    because a pool's fine print varies and the owner should not need a deploy
+    to correct it. Every stat recomputes from it, including already-graded
+    weeks — asserted.
+  - **🚨 Two faults only the RENDER caught, which is this file's oldest lesson
+    and it landed twice in one version:**
+    - **The model line named the wrong team.** `ar.proj` is the HOME-oriented
+      projected margin; `ar.abbr` is the side the model likes AGAINST THE
+      SPREAD, and they are routinely opposite. On ATL @ PIT with PIT −3.5 the
+      model had **PIT by 2.4** — a PIT win and an ATL cover — and the card
+      rendered *"model has it ATL by 2.4"*, i.e. the wrong team winning. This
+      is the v179 confusion exactly (a moneyline read and a spread read are two
+      different bets off one projection) and it is written the way v179 settled
+      it: *"model makes it PIT by 2.4, so it likes ATL +3.5 by 1.1 pts."*
+      Every assertion was green.
+    - **👻 An empty `.ctl-row`, and it was NOT new — Labs and About had been
+      painting it since v187.** `buildControlRow` builds the row for every tab
+      unconditionally, and those two have no sport chips, no jump nav and fewer
+      than two sections, so the row rendered as an 18px empty white bar under
+      the tab grid. The v217 ghost class of fault: chrome with no content still
+      occupying a bar's worth of space. `syncCtlRow` now hides a row with
+      nothing in it, called from `buildControlRow` AND from the end of
+      `applySections` — `wireSectionToggle` is what decides whether `.sec-all`
+      is visible, so the row's emptiness can only be settled after it runs.
+  - **⚠️ And the first fix of that ghost did nothing, while its test PASSED.**
+    `[hidden] { display: none }` is the UA sheet at (0,1,0); `:root[data-palette]
+    .ctl-row { display: flex }` is (0,2,0) and wins — so `el.hidden = true` was
+    a **visual no-op** and the bar kept painting. The check passed because it
+    asked the element whether it was `hidden`, which is the property the code
+    had just set, instead of measuring the box. **Assert the pixels, not the
+    flag** — the suite reads `getComputedStyle(...).display` and the bounding
+    rect now, and layer 9 carries the `[hidden]` rule that actually bites.
+  - Verified in headless Chromium — **89 checks** across nine contexts: the
+    slate and the model read on all 16 games, grading (win / loss / push) and
+    the double-scoring ⭐, the snapshot rule above, fill-from-model touching
+    only scheduled games, the season tiles and the you-vs-model split calling a
+    2-pick sample thin rather than giving it a percentage, persistence across a
+    reload, the tab re-entering on the CURRENT week, the model's record left
+    untouched, and **both palettes at 390px and 1280px** — no overflow, nothing
+    spilling its container, no clipped labels, every control over the touch
+    floor, no input under 16px (the iOS zoom rule) and no console errors.
+  - ⚠️ **Test-fixture note:** the fixture stubs `/teams/*/schedule` empty, so
+    every `teamProfile` is null and the model returns the SAME margin for all
+    16 games — fine for wiring and layout, but it means the suite proves the
+    read is plumbed, never that it is varied. The v205 note says the same
+    thing about its own fixture. Live behaviour verifies on device.
+  - ⚠️ **Unverified live:** the sandbox reaches neither ESPN nor Render, so the
+    look-back week fetch (`?week=N&seasontype=2&dates=<season>`) is coded
+    against the documented shape but confirmed only against the fixture.
+    **First on-device check: open Pick'em, step back a week, and see whether
+    the slate loads.**
 
 - **👻 The white shape under the ⌃ RAIL button — the chrome bars were 96%
   transparent (v217)** — the owner, twice: a screenshot of a white rounded
@@ -5170,7 +5279,8 @@ rewrite.**
 - `LEAGUES` — per-sport config (label, emoji, espnPath, `fav` favorite teams, type).
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
 - Tabs: Home, Eagles, **🏈 NFL** (league-wide lens, v145), **🎓 CFB** (college
-  football, Top 25 only, v161), **Red Sox**, AI Picks, Fantasy, **Labs**, About. `showTab()` +
+  football, Top 25 only, v161), **Red Sox**, AI Picks, Fantasy, **🎯 Pick'em**
+  (the owner's ATS pool, v218), **Labs**, About. `showTab()` +
   `renderers{}` map drive rendering.
   - **`TAB_ENTER` (v216) — anything that must happen once per tab OPENING goes
     here, never in a renderer.** 🚨 `renderers[currentTab]()` has TWO callers:
@@ -5717,6 +5827,19 @@ rewrite.**
     connection — the sandbox can't reach ESPN, so the team list + depth data were
     NOT testable here (structure + the modal were verified with seeded data);
     verify live on device.
+- **🎯 Pick'em (v218)** — the owner's season-long NFL pool, where every game is
+  picked ATS, two games a week are ⭐ key games worth double, and the last
+  kickoff carries a combined-score tiebreaker. **📋 This Week** lists the whole
+  week (`weekSlate`, so it is never a single day — the v214 rule) with two
+  spread buttons per game, the ⭐ toggle capped at two, the model's ATS read
+  heat-coloured on the same scale as the AI Picks cards, the 💰 DK split where
+  one exists, and a with/against-the-model badge. **📊 Season** carries six
+  tiles, the **you vs the model** split, and a week-by-week table that jumps
+  back into any week. **⚙️ Setup** holds the scoring, which is configurable.
+  🚨 Two rules it cannot break: grading reads **the spread stored on the pick**,
+  never the live feed, and **nothing here is written to the model's own
+  record**. See the v218 entry and `sportshub:pickem`.
+
 - **AI record persistence** — every pick is stashed in `localStorage`
   (`sportshub:pending`) and **auto-graded** against final results on app load
   (`gradePending`), so the all-time + vs-line tallies (`sportshub:aitally`) keep
@@ -5807,6 +5930,14 @@ rewrite.**
   evictable budget, and this view does not read raw responses. Carries
   `syncedAt`, which is the age of the DATA (the oldest `__at` among the
   payloads it was built from), never the age of the assembly.
+- `sportshub:pickem` — 🎯 the owner's ATS pool (v218), keyed by season →
+  `{cfg, weeks: {N: {picks: {gameId: {side, sp, md, at, m}}, keys: [], tb}}}`.
+  ⚠️ **`sp` is the spread the pick was made at and is what grading reads** —
+  the pool locks its number on Wednesday while ESPN's keeps moving, so
+  re-reading the feed at grade time would mark picks wrong that the league
+  scored as wins. **`md` is the model's side at pick time**, which is what
+  makes the you-vs-model split honest. Nothing here ever reaches
+  `sportshub:aitally`.
 - `sportshub:mlbidx` — cached MLB player→team index for fantasy auto-detect.
 - `sportshub:lines:{YYYYMMDD}` — device-local line tracking for today's games:
   first-seen, latest, and (v167) a bounded **`hist`** of every observed change

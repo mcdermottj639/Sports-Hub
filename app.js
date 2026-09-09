@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v217';
+const APP_VERSION = 'v218';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -9171,6 +9171,9 @@ function applySections(name) {
   makeAccordion(panel, '.section-title, .lad-sec, .ai-section-head',
     SEC_OPEN_DEFAULT[name] ?? SEC_OPEN_ALL, name);
   wireSectionToggle(panel);
+  // wireSectionToggle is what decides .sec-all's visibility, so the row's own
+  // emptiness can only be settled here, after it has run.
+  syncCtlRow(panel.querySelector(':scope > .ctl-row'));
 }
 
 // Collapse-all / expand-all for a whole tab (v172). Re-wired on every render —
@@ -9957,7 +9960,28 @@ function buildControlRow(name) {
   let all = panel.querySelector('.sec-all');
   if (!all) { all = el('button', 'sec-all'); all.type = 'button'; all.hidden = true; }
   if (all.parentElement !== row) row.appendChild(all);
+  syncCtlRow(row);
   return row;
+}
+
+/* 👻 A control row with nothing in it is 18px of empty white bar (v218).
+   Found by RENDERING the new Pick'em tab — and it turned out not to be new at
+   all: **Labs and About have been painting that empty pill since v187**,
+   because the row is built unconditionally while those two tabs have no sport
+   chips, no jump nav (Labs has no .section-title at all) and fewer than two
+   sections, so wireSectionToggle keeps .sec-all hidden. Nothing errored and no
+   assertion could have caught it; it is the v217 ghost class of fault — a bar
+   with no content still occupying a bar's worth of chrome.
+
+   ⚠️ It has to be re-evaluated AFTER applySections, not just here: showTab
+   runs injectJumpNav (→ buildControlRow) and only then applySections, which is
+   what decides whether .sec-all is visible. Called from both. */
+function syncCtlRow(row) {
+  if (!row) return;
+  const chips = row.querySelector('.ctl-chips');
+  const hasChips = !!chips && [...chips.children].some((c) => c.children.length || (c.textContent || '').trim());
+  const hasAll = !!row.querySelector('.sec-all:not([hidden])');
+  row.hidden = !hasChips && !hasAll;
 }
 
 // Scroll-spy: the jump rail flags the section you are actually in. A rail that
@@ -10441,7 +10465,679 @@ function renderAbout() {
     b.onclick = () => { dcClear(); cache.clear(); b.textContent = '✅ Cleared'; renderAbout(); setTimeout(() => { b.textContent = '🗑️ Clear saved data'; }, 2000); };
   }
 }
-const renderers = { home: renderHome, eagles: renderEagles, nfl: renderNFL, cfb: renderCFB, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, labs: () => {}, about: renderAbout };
+/* ==========================================================================
+   🎯 PICK'EM — the owner's ATS pool, tracked against the model (v218)
+   --------------------------------------------------------------------------
+   The owner is in a season-long NFL pick'em league with their friends. Every
+   game is picked AGAINST THE SPREAD, two games a week are nominated as KEY
+   games worth double, and the Monday-night game carries a combined-score
+   tiebreaker. The picks themselves are made in the league's own app; the ask
+   here is "see my stats as I go and cross reference the ai model and other
+   info we already have."
+   So this is a TRACKER and a READ, not a replacement for the league's app.
+
+   🚨 THE LEAGUE'S SPREAD IS THE SOURCE OF TRUTH, NOT ESPN'S — and getting
+   this wrong would silently corrupt every record on the tab. The league locks
+   its spreads on Wednesday (the owner's screenshot says so on the week
+   header) and then never moves them; ESPN's number keeps moving all week and
+   is a LIVE quote. Grading a Wednesday pick against Sunday's number would
+   mark a pick wrong that the league scored as a win. So the number is
+   SNAPSHOTTED onto the pick when it is made (`sp`), it is editable, and
+   grading reads the stored copy and never the feed. `spDrift` surfaces the
+   gap so a stale snapshot is visible rather than silent.
+
+   Everything the model says here comes from the SAME functions the AI Picks
+   tab uses — `weekSlate` → `buildBoard` → `atsRead` — deliberately, so the
+   two views can never disagree about what the model said for one game. That
+   is also why this lives in app.js rather than as a standalone Labs page: a
+   second copy of the model would be a second answer (the v177/v183 lesson).
+
+   ⚠️ It records NOTHING to the model's own tally. `buildBoard` is pure, and
+   this calls it with `record:false` semantics by simply never calling
+   commitRow — the owner's pool is not a source of model calibration data,
+   and writing picks here at this leash would re-create the v200 blind-write
+   bug.
+   ========================================================================== */
+
+const PK_KEY = 'sportshub:pickem';
+const PK_MAX_KEYS = 2;          // the league nominates two key games a week
+const PK_WEEKS = 18;            // NFL regular season
+// Scoring, with the league's stated rules as the defaults. They are settings
+// rather than constants because a pool's fine print (does a push pay? does a
+// missed key game cost you?) varies and the owner should not need a deploy to
+// correct it.
+const PK_CFG_DEFAULT = { win: 1, key: 2, push: 0, keyMiss: 0, tbMode: 'total' };
+
+function pkSeason() { return footballSeason(); }
+function pkLoad() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PK_KEY) || '{}');
+    const s = String(pkSeason());
+    const st = raw[s] || {};
+    return { all: raw, season: s, cfg: { ...PK_CFG_DEFAULT, ...(st.cfg || {}) }, weeks: st.weeks || {} };
+  } catch { return { all: {}, season: String(pkSeason()), cfg: { ...PK_CFG_DEFAULT }, weeks: {} }; }
+}
+function pkSave(st) {
+  const all = st.all || {};
+  all[st.season] = { cfg: st.cfg, weeks: st.weeks };
+  try { localStorage.setItem(PK_KEY, JSON.stringify(all)); } catch (e) { console.warn('pickem save failed', e); }
+}
+function pkWeek(st, w) {
+  const k = String(w);
+  if (!st.weeks[k]) st.weeks[k] = { picks: {}, keys: [], tb: null };
+  const wk = st.weeks[k];
+  wk.picks = wk.picks || {}; wk.keys = wk.keys || [];
+  return wk;
+}
+
+/* The tab's own state. `week` is the week being READ, which is not always the
+   current one — the owner will want to look back at a graded week — so it is
+   held here rather than derived on every paint. */
+const pkState = { week: null, curWeek: null, sub: 'week', slate: null, board: null, busy: false, tok: 0 };
+
+/* ---------------------------------------------------------------- slate ---
+   ESPN's NFL scoreboard takes `week` + `seasontype` + `dates` (the SEASON
+   year, not a date, on this endpoint), which is how a past week is fetched.
+   The bare call returns the current week — that is what `weekSlate` uses —
+   so the current week goes through the shared helper and only a look-back
+   pays for the extra parameters.
+   ⚠️ It must not go through getGames: that asks for a calendar DATE and would
+   return the single day's games, which is the exact v214 bug. */
+async function pkSlate(week) {
+  if (week == null || week === pkState.curWeek) {
+    const w = await weekSlate('nfl');
+    return { games: w.games, label: w.label, week: pkState.curWeek };
+  }
+  const url = `${SITE}/football/nfl/scoreboard?week=${week}&seasontype=2&dates=${pkSeason()}`;
+  const json = await fetchJSON(url, 5 * 60000);
+  return { games: (json.events || []).map(normEvent), label: `Week ${week}`, week };
+}
+// The current week number off the live scoreboard payload. Everything else
+// keys off it (which week opens, which weeks are look-backs), so it is read
+// once and cached on pkState.
+async function pkCurrentWeek() {
+  if (pkState.curWeek != null) return pkState.curWeek;
+  try {
+    const { json } = await scoreboard('nfl');
+    const n = Number(json?.week?.number);
+    const stype = Number(json?.season?.type ?? json?.leagues?.[0]?.season?.type);
+    // Preseason weeks share the 1..4 numbering with the regular season, so a
+    // preseason payload must not be read as "Week 3" of the pool.
+    pkState.curWeek = (stype === 2 && n >= 1 && n <= PK_WEEKS) ? n : (stype === 1 ? 1 : (n || 1));
+  } catch { pkState.curWeek = 1; }
+  return pkState.curWeek;
+}
+
+/* Monday night: the tiebreaker game. Taken as the LAST kickoff of the week
+   rather than by weekday, because a week can end on a Saturday (late season)
+   or carry two Monday games, and "the last game" is what a pool means by the
+   tiebreaker in every one of those cases. */
+function pkTiebreakGame(games) {
+  const sorted = (games || []).filter((g) => g.date).slice()
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  return sorted.length ? sorted[sorted.length - 1] : null;
+}
+
+/* The spread to GRADE against, home-oriented. The stored snapshot wins; the
+   live feed is only a fallback for a game not yet picked. */
+function pkSpread(wk, g, info) {
+  const p = wk.picks[g.id];
+  if (p && p.sp != null && isFinite(Number(p.sp))) return Number(p.sp);
+  const live = info?.spread;
+  return live != null && isFinite(Number(live)) ? Number(live) : null;
+}
+// How far ESPN's live number has moved off the snapshot the pick was made at.
+// Shown, not corrected — the pool's number is the one that pays.
+function pkDrift(wk, g, info) {
+  const p = wk.picks[g.id];
+  if (!p || p.sp == null || info?.spread == null) return null;
+  const d = Number(info.spread) - Number(p.sp);
+  return isFinite(d) && Math.abs(d) >= 0.5 ? d : null;
+}
+const pkSpTxt = (n) => (n == null || !isFinite(n) ? 'PK' : n === 0 ? 'PK' : `${n > 0 ? '+' : ''}${n}`);
+
+/* Grade one pick. Returns 'win' | 'loss' | 'push' | null (not final / no
+   number). It is atsResult — the same push rule and the same orientation the
+   model's own ATS record is graded on. */
+function pkGrade(wk, g) {
+  const p = wk.picks[g.id];
+  if (!p || gameState(g) !== 'final') return null;
+  const sp = p.sp != null ? Number(p.sp) : null;
+  if (sp == null || !isFinite(sp)) return null;
+  const r = atsResult(g, sp, p.side === 'home');
+  return r === null ? 'push' : r ? 'win' : 'loss';
+}
+function pkIsKey(wk, id) { return (wk.keys || []).includes(id); }
+
+/* One week's scoring, from the picks and the finals. Pure — it takes the
+   games so a look-back week and the live week score identically. */
+function pkScoreWeek(cfg, wk, games) {
+  const out = { w: 0, l: 0, p: 0, kw: 0, kl: 0, kp: 0, pts: 0, made: 0, graded: 0,
+                withModel: { w: 0, l: 0 }, vsModel: { w: 0, l: 0 }, tbMiss: null, tbActual: null };
+  for (const g of games || []) {
+    const pick = wk.picks[g.id];
+    if (!pick) continue;
+    out.made++;
+    const res = pkGrade(wk, g);
+    if (!res) continue;
+    out.graded++;
+    const key = pkIsKey(wk, g.id);
+    if (res === 'push') { out.p++; if (key) out.kp++; out.pts += Number(cfg.push) || 0; }
+    else if (res === 'win') {
+      out.w++; if (key) { out.kw++; out.pts += Number(cfg.key) || 0; } else out.pts += Number(cfg.win) || 0;
+    } else {
+      out.l++; if (key) { out.kl++; out.pts += Number(cfg.keyMiss) || 0; }
+    }
+    // 🚨 The cross-reference the owner asked for: was this pick the side the
+    // model was on? `md` is snapshotted at pick time (the model's side then),
+    // because the model's read moves all week as lines and injuries land —
+    // re-deriving it at grade time would compare the pick against an opinion
+    // the model did not hold when the pick was made.
+    if (pick.md && res !== 'push') {
+      const agree = pick.md === pick.side;
+      (agree ? out.withModel : out.vsModel)[res === 'win' ? 'w' : 'l']++;
+    }
+  }
+  const tbg = pkTiebreakGame(games);
+  if (tbg && wk.tb != null && gameState(tbg) === 'final'
+      && tbg.home.score != null && tbg.away.score != null) {
+    out.tbActual = Number(tbg.home.score) + Number(tbg.away.score);
+    out.tbMiss = Math.abs(out.tbActual - Number(wk.tb));
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------- rendering -- */
+const PK_SUBS = [['week', '📋 This Week'], ['season', '📊 Season'], ['setup', '⚙️ Setup']];
+const PK_BLURB = {
+  week: 'Every game against the spread, your pick beside the model\'s read. Two ⭐ key games count double.',
+  season: 'How you are actually doing — and whether following the model has helped or hurt.',
+  setup: 'The pool\'s scoring rules, and your saved picks.',
+};
+
+function renderPickem() { return pkPaint(); }
+
+async function pkPaint() {
+  const host = $('#pickem-body');
+  if (!host) return;
+  const tok = ++pkState.tok;
+  pkBuildSubs();
+  const blurb = $('#pk-blurb');
+  if (blurb) blurb.textContent = PK_BLURB[pkState.sub] || '';
+  const st = pkLoad();
+  if (pkState.sub === 'setup') { host.innerHTML = pkSetupHTML(st); pkWireSetup(); return; }
+  if (pkState.sub === 'season') { host.innerHTML = '<div class="ai-note">Adding up your season…</div>'; return pkPaintSeason(st, tok); }
+  return pkPaintWeek(st, tok);
+}
+function pkBuildSubs() {
+  const box = $('#pk-sub');
+  if (!box) return;
+  const cur = pkState.sub;
+  box.innerHTML = PK_SUBS.map(([k, l]) =>
+    `<button type="button" role="tab" class="${k === cur ? 'on' : ''}" aria-selected="${k === cur}" data-pksub="${k}">${l}</button>`).join('');
+  if (!box.dataset.wired) {
+    box.dataset.wired = '1';
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-pksub]');
+      if (b && b.dataset.pksub !== pkState.sub) { pkState.sub = b.dataset.pksub; pkPaint(); }
+    });
+  }
+}
+
+/* --- This Week ----------------------------------------------------------- */
+async function pkPaintWeek(st, tok) {
+  const host = $('#pickem-body');
+  const cur = await pkCurrentWeek();
+  if (pkState.week == null) pkState.week = cur;
+  const week = pkState.week;
+  host.innerHTML = '<div class="ai-note">Loading the slate and running the model…</div>';
+  let slate;
+  try { slate = await pkSlate(week === cur ? null : week); } catch { slate = null; }
+  if (tok !== pkState.tok) return;
+  if (!slate || !slate.games.length) {
+    host.innerHTML = pkWeekNavHTML(cur, week) +
+      `<div class="ai-note">No NFL games came back for week ${week}. If the season hasn't reached it yet, that's expected — pick a week that has a slate.</div>`;
+    pkWireWeekNav();
+    return;
+  }
+  const games = slate.games.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+  // The model, through the SAME door the AI Picks board uses.
+  let board = null;
+  try { board = await buildBoard('nfl', games, { wait: SHARP_WAIT.board }); } catch { board = null; }
+  if (tok !== pkState.tok) return;
+  const byId = new Map((board?.rows || []).map((r) => [r.g.id, r]));
+  const wk = pkWeek(st, week);
+  const sc = pkScoreWeek(st.cfg, wk, games);
+  const tbg = pkTiebreakGame(games);
+  const modelReads = games.filter((g) => byId.get(g.id)?.atsR).length;
+
+  host.innerHTML = pkWeekNavHTML(cur, week, slate.label)
+    + pkWeekHeadHTML(st, wk, sc, games, modelReads)
+    + `<div class="pk-list">${games.map((g) => pkGameHTML(st, wk, g, byId.get(g.id), tbg && g.id === tbg.id)).join('')}</div>`
+    + pkFootHTML(board);
+  pkWireWeek(st, week, games, byId, tbg);
+  pkWireWeekNav();
+}
+
+function pkWeekNavHTML(cur, week, label) {
+  const opts = [];
+  for (let i = 1; i <= PK_WEEKS; i++) {
+    opts.push(`<option value="${i}"${i === week ? ' selected' : ''}>Week ${i}${i === cur ? ' (current)' : ''}</option>`);
+  }
+  return `<div class="pk-nav">
+    <button type="button" class="pk-arrow" id="pk-prev" ${week <= 1 ? 'disabled' : ''} aria-label="Previous week">‹</button>
+    <label class="pk-wsel"><span class="pk-wlab">${esc(label || `Week ${week}`)}</span>
+      <select id="pk-week" aria-label="Choose week">${opts.join('')}</select></label>
+    <button type="button" class="pk-arrow" id="pk-next" ${week >= PK_WEEKS ? 'disabled' : ''} aria-label="Next week">›</button>
+  </div>`;
+}
+
+function pkWeekHeadHTML(st, wk, sc, games, modelReads) {
+  const n = games.length;
+  const keys = (wk.keys || []).length;
+  const tbg = pkTiebreakGame(games);
+  const tbSet = wk.tb != null && wk.tb !== '';
+  const done = sc.made >= n && keys === PK_MAX_KEYS && tbSet;
+  const bits = [];
+  bits.push(`<span class="pk-cnt ${sc.made >= n ? 'ok' : ''}">${sc.made}/${n} picks</span>`);
+  bits.push(`<span class="pk-cnt ${keys === PK_MAX_KEYS ? 'ok' : ''}">⭐ ${keys}/${PK_MAX_KEYS} key</span>`);
+  bits.push(`<span class="pk-cnt ${tbSet ? 'ok' : ''}">🌙 ${tbSet ? `TB ${esc(String(wk.tb))}` : 'no tiebreaker'}</span>`);
+  if (sc.graded) bits.push(`<span class="pk-cnt">${sc.w}-${sc.l}${sc.p ? `-${sc.p}` : ''} · <b>${sc.pts} pt${sc.pts === 1 ? '' : 's'}</b></span>`);
+  const pct = n ? Math.round((sc.made / n) * 100) : 0;
+  return `<div class="pk-head">
+    <div class="pk-bar"><span style="width:${pct}%"></span></div>
+    <div class="pk-cnts">${bits.join('')}</div>
+    ${done ? '' : `<div class="pk-acts">
+      <button type="button" class="pk-btn" id="pk-fill">🤖 Fill from the model</button>
+      ${sc.made ? '<button type="button" class="pk-btn ghost" id="pk-clear">Clear week</button>' : ''}
+    </div>`}
+    ${modelReads < games.length ? `<div class="pk-mini">The model has a spread read on ${modelReads} of ${games.length} games — the rest have no number posted yet.</div>` : ''}
+    ${tbg && !tbSet ? `<div class="pk-mini">Tiebreaker game: ${esc(tbg.away.abbr || tbg.away.name)} @ ${esc(tbg.home.abbr || tbg.home.name)} — its card has the box.</div>` : ''}
+  </div>`;
+}
+
+/* One game. The owner's two pick buttons carry the number they are picking AT,
+   the model's read sits underneath with its heat colour, and the sharp-money
+   line rides along where DK published a split. */
+function pkGameHTML(st, wk, g, row, isTB) {
+  const pick = wk.picks[g.id];
+  const info = row?.info || normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
+  const sp = pkSpread(wk, g, info);
+  const drift = pkDrift(wk, g, info);
+  const key = pkIsKey(wk, g.id);
+  const res = pkGrade(wk, g);
+  const state = gameState(g);
+  const ar = row?.atsR || null;
+  const locked = state !== 'scheduled';
+  const aAbbr = esc(g.away.abbr || g.away.name), hAbbr = esc(g.home.abbr || g.home.name);
+  const side = (which) => {
+    const on = pick?.side === which;
+    const num = sp == null ? null : (which === 'home' ? sp : -sp);
+    const mdOn = ar && (ar.home ? 'home' : 'away') === which;
+    return `<button type="button" class="pk-side${on ? ' on' : ''}${mdOn ? ' md' : ''}" data-pick="${which}" data-gid="${esc(g.id)}"
+      aria-pressed="${on}"><span class="pk-t">${which === 'home' ? hAbbr : aAbbr}</span><span class="pk-n">${esc(pkSpTxt(num))}</span></button>`;
+  };
+  const scoreLine = state === 'scheduled'
+    ? esc(new Date(g.date).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }))
+    : `${aAbbr} ${g.away.score ?? '–'} · ${hAbbr} ${g.home.score ?? '–'} · ${state === 'live' ? 'LIVE' : 'Final'}`;
+  let mdLine = '<span class="pk-md-none">No spread posted, so the model has no read here.</span>';
+  if (ar) {
+    const bar = ATS_EDGE_MIN.nfl ?? 2;
+    const heat = heatCls(ar.edge, bar);
+    /* 🚨 The margin's side is NOT the ATS side, and conflating them made this
+       line say the opposite of what the model thinks. `ar.proj` is the
+       HOME-oriented projected margin; `ar.abbr` is the side the model likes
+       AGAINST THE SPREAD. On ATL @ PIT with PIT -3.5 the model had PIT by 2.4
+       — which is a PIT win and an ATL cover — and the first cut rendered
+       "model has it ATL by 2.4", i.e. the wrong team winning.
+       This is the v179 confusion exactly (a moneyline read and a spread read
+       are two different bets off one projection) and the v205 negative-"by"
+       fix, so it is written the way v179 settled it: name the margin's own
+       side, then say what that means for the number. */
+    const mHome = ar.proj > 0;
+    const mAbbr = mHome ? hAbbr : aAbbr;
+    const mBy = Math.abs(ar.proj).toFixed(1);
+    const off = Math.abs(ar.edge).toFixed(1);
+    mdLine = `<span class="pk-chip ${heat}">🤖 ${esc(ar.label)}</span>`
+      + `<span class="pk-md-txt">model makes it ${mAbbr} by ${mBy}, so it ${ar.qualifies ? 'likes' : 'leans'} `
+      + `${esc(ar.label)} by ${off} pt${off === '1.0' ? '' : 's'}${ar.qualifies ? '' : ' — under its own bar, a read not a play'}</span>`;
+  }
+  const sharp = row?.p?.sharp;
+  const sharpLine = sharp
+    ? `<div class="pk-sharp">💰 ${esc(sharp.abbr)} — ${sharp.handle}% of the money on ${sharp.bets}% of the bets</div>` : '';
+  const agree = pick && ar ? ((ar.home ? 'home' : 'away') === pick.side) : null;
+  const tag = res ? `<span class="pk-res ${res}">${res === 'win' ? '✅' : res === 'loss' ? '❌' : '➖'} ${res === 'push' ? 'Push' : res === 'win' ? 'Win' : 'Loss'}</span>` : '';
+  return `<div class="pk-game${key ? ' key' : ''}${res ? ` r-${res}` : ''}" data-gid="${esc(g.id)}">
+    <div class="pk-top">
+      <div class="pk-match">${aAbbr} @ ${hAbbr}${isTB ? ' <span class="pk-tb-tag">🌙 MNF</span>' : ''}</div>
+      <div class="pk-when">${scoreLine}</div>
+    </div>
+    <div class="pk-sides">${side('away')}${side('home')}
+      <button type="button" class="pk-star${key ? ' on' : ''}" data-key="${esc(g.id)}" aria-pressed="${key}"
+        title="Key game (counts double)" aria-label="Mark as key game">${key ? '⭐' : '☆'}</button>
+    </div>
+    <div class="pk-md">${mdLine}</div>
+    ${sharpLine}
+    ${pick && agree !== null ? `<div class="pk-agree ${agree ? 'y' : 'n'}">${agree ? '✅ You are on the model\'s side' : '⚔️ You are against the model'}</div>` : ''}
+    ${drift ? `<div class="pk-drift">📈 The book has moved ${drift > 0 ? '+' : ''}${drift} since you locked ${pkSpTxt(sp)} — you are graded on your number, not this one.</div>` : ''}
+    <div class="pk-line">
+      <label class="pk-sp">Your number
+        <input type="number" step="0.5" inputmode="decimal" value="${sp == null ? '' : esc(String(sp))}"
+          data-sp="${esc(g.id)}" ${locked && !pick ? 'disabled' : ''} aria-label="Home spread for this game" />
+      </label>
+      <span class="pk-sp-note">home-oriented — ${hAbbr} ${esc(pkSpTxt(sp))}</span>
+      ${tag}
+    </div>
+    ${isTB ? pkTbHTML(wk, g, row) : ''}
+  </div>`;
+}
+function pkTbHTML(wk, g, row) {
+  const proj = row?.p?.projTotal;
+  const actual = (gameState(g) === 'final' && g.home.score != null && g.away.score != null)
+    ? Number(g.home.score) + Number(g.away.score) : null;
+  const miss = actual != null && wk.tb != null ? Math.abs(actual - Number(wk.tb)) : null;
+  return `<div class="pk-tb">
+    <label class="pk-sp">🌙 Tiebreaker — combined score
+      <input type="number" inputmode="numeric" min="0" value="${wk.tb == null ? '' : esc(String(wk.tb))}" data-tb="1" aria-label="Monday night combined score" />
+    </label>
+    <span class="pk-sp-note">${proj != null ? `model projects ${proj.toFixed(1)}` : 'no model total for this game'}${actual != null ? ` · actual ${actual}${miss != null ? ` · you were off by ${miss}` : ''}` : ''}</span>
+  </div>`;
+}
+function pkFootHTML(board) {
+  const live = board?.report?.splits?.ok;
+  return `<div class="pk-mini pk-foot">The model read and the 💰 money split are the same ones the AI Picks tab uses — nothing here is written to the model's own record.${live ? '' : ' DraftKings splits were not reachable for this slate.'}</div>`;
+}
+
+function pkWireWeekNav() {
+  const sel = $('#pk-week');
+  if (sel) sel.onchange = () => { pkState.week = Number(sel.value); pkPaint(); };
+  const prev = $('#pk-prev'), next = $('#pk-next');
+  if (prev) prev.onclick = () => { pkState.week = Math.max(1, (pkState.week || 1) - 1); pkPaint(); };
+  if (next) next.onclick = () => { pkState.week = Math.min(PK_WEEKS, (pkState.week || 1) + 1); pkPaint(); };
+}
+
+/* Every mutation writes through one function so a pick can never be stored
+   without the number it was made at, or without the model's side at the time.
+   Both are what the season stats are computed from. */
+function pkSetPick(week, g, side, row, wk) {
+  const info = row?.info || normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
+  const prev = wk.picks[g.id];
+  const sp = prev?.sp != null ? Number(prev.sp) : (info?.spread != null ? Number(info.spread) : null);
+  const ar = row?.atsR;
+  wk.picks[g.id] = {
+    side, sp,
+    // The model's side AT PICK TIME, kept so the agreement split compares the
+    // pick against the opinion the model actually held when it was made.
+    md: prev?.md || (ar ? (ar.home ? 'home' : 'away') : null),
+    at: prev?.at || Date.now(),
+    m: `${g.away.abbr || g.away.name} @ ${g.home.abbr || g.home.name}`,
+  };
+}
+
+function pkWireWeek(st, week, games, byId, tbg) {
+  const host = $('#pickem-body');
+  if (!host) return;
+  const wk = pkWeek(st, week);
+  const gameById = new Map(games.map((g) => [g.id, g]));
+  const repaint = () => { pkSave(st); pkPaint(); };
+
+  host.addEventListener('click', (e) => {
+    const sideBtn = e.target.closest('button[data-pick]');
+    if (sideBtn) {
+      const g = gameById.get(sideBtn.dataset.gid);
+      if (!g) return;
+      const want = sideBtn.dataset.pick;
+      // Tapping the side you already picked clears it, which is the only way
+      // to un-pick a game without a separate control.
+      if (wk.picks[g.id]?.side === want) {
+        delete wk.picks[g.id];
+        wk.keys = (wk.keys || []).filter((k) => k !== g.id);
+      } else pkSetPick(week, g, want, byId.get(g.id), wk);
+      return repaint();
+    }
+    const star = e.target.closest('button[data-key]');
+    if (star) {
+      const id = star.dataset.key;
+      const keys = wk.keys || (wk.keys = []);
+      if (keys.includes(id)) wk.keys = keys.filter((k) => k !== id);
+      else if (keys.length >= PK_MAX_KEYS) {
+        // 🚨 The cap is the league's rule, so it is enforced rather than
+        // warned about — but silently refusing a tap reads as a broken
+        // button, so it says which star to drop first.
+        star.classList.add('shake');
+        const note = $('#pk-keynote');
+        if (note) note.remove();
+        star.closest('.pk-game')?.insertAdjacentHTML('beforeend',
+          `<div class="pk-mini pk-warn" id="pk-keynote">You already have ${PK_MAX_KEYS} key games this week — tap one of those ⭐ off first.</div>`);
+        setTimeout(() => star.classList.remove('shake'), 400);
+        return;
+      } else {
+        keys.push(id);
+        // A key game must be a game you actually picked, or it can score
+        // nothing — so starring an unpicked game takes the model's side if
+        // there is one, and otherwise just waits for a pick.
+        if (!wk.picks[id]) {
+          const g = gameById.get(id), r = byId.get(id);
+          if (g && r?.atsR) pkSetPick(week, g, r.atsR.home ? 'home' : 'away', r, wk);
+        }
+      }
+      return repaint();
+    }
+    if (e.target.id === 'pk-fill') {
+      let n = 0;
+      for (const g of games) {
+        const r = byId.get(g.id);
+        if (!r?.atsR || wk.picks[g.id] || gameState(g) !== 'scheduled') continue;
+        pkSetPick(week, g, r.atsR.home ? 'home' : 'away', r, wk);
+        n++;
+      }
+      // The two key games go to the model's biggest edges among what it just
+      // filled — that is the only defensible automatic choice, and the owner
+      // can move the stars afterwards.
+      if ((wk.keys || []).length < PK_MAX_KEYS) {
+        const ranked = games.map((g) => byId.get(g.id)).filter((r) => r?.atsR?.qualifies && wk.picks[r.g.id])
+          .sort((a, b) => Math.abs(b.atsR.edge) - Math.abs(a.atsR.edge));
+        for (const r of ranked) {
+          if ((wk.keys || []).length >= PK_MAX_KEYS) break;
+          if (!wk.keys.includes(r.g.id)) wk.keys.push(r.g.id);
+        }
+      }
+      if (!n && !(wk.keys || []).length) return;
+      return repaint();
+    }
+    if (e.target.id === 'pk-clear') {
+      st.weeks[String(week)] = { picks: {}, keys: [], tb: null };
+      return repaint();
+    }
+  });
+
+  host.addEventListener('change', (e) => {
+    const spIn = e.target.closest('input[data-sp]');
+    if (spIn) {
+      const id = spIn.dataset.sp, g = gameById.get(id);
+      const v = spIn.value.trim();
+      if (!wk.picks[id] && g) {
+        // Setting a number before picking a side is legitimate — the league
+        // locks spreads days before picks are due.
+        wk.picks[id] = { side: null, sp: null, md: byId.get(id)?.atsR ? (byId.get(id).atsR.home ? 'home' : 'away') : null,
+          at: Date.now(), m: `${g.away.abbr || g.away.name} @ ${g.home.abbr || g.home.name}` };
+      }
+      if (wk.picks[id]) wk.picks[id].sp = v === '' ? null : Number(v);
+      return repaint();
+    }
+    const tbIn = e.target.closest('input[data-tb]');
+    if (tbIn) {
+      const v = tbIn.value.trim();
+      wk.tb = v === '' ? null : Number(v);
+      return repaint();
+    }
+  });
+}
+
+/* --- Season -------------------------------------------------------------- */
+async function pkPaintSeason(st, tok) {
+  const host = $('#pickem-body');
+  const cur = await pkCurrentWeek();
+  const weeks = Object.keys(st.weeks).map(Number).filter((n) => n >= 1 && n <= PK_WEEKS).sort((a, b) => a - b);
+  if (!weeks.length) {
+    host.innerHTML = `<div class="ai-note">No picks saved yet. Open <b>📋 This Week</b>, tap a side on each game and star your two key games — the record starts building the moment those games go final.</div>`;
+    return;
+  }
+  // Every week with picks needs its slate to grade against. They are fetched
+  // in parallel and each is independently allowed to fail, so one bad week
+  // cannot empty the season.
+  const slates = await Promise.all(weeks.map((w) =>
+    pkSlate(w === cur ? null : w).then((s) => s.games).catch(() => null)));
+  if (tok !== pkState.tok) return;
+  const rows = [];
+  const tot = { w: 0, l: 0, p: 0, kw: 0, kl: 0, kp: 0, pts: 0, made: 0, graded: 0,
+                withModel: { w: 0, l: 0 }, vsModel: { w: 0, l: 0 }, tbMiss: [], failed: 0 };
+  weeks.forEach((w, i) => {
+    const games = slates[i];
+    if (!games) { tot.failed++; rows.push({ w, failed: true }); return; }
+    const sc = pkScoreWeek(st.cfg, st.weeks[String(w)], games);
+    rows.push({ w, sc, n: games.length });
+    tot.w += sc.w; tot.l += sc.l; tot.p += sc.p;
+    tot.kw += sc.kw; tot.kl += sc.kl; tot.kp += sc.kp;
+    tot.pts += sc.pts; tot.made += sc.made; tot.graded += sc.graded;
+    tot.withModel.w += sc.withModel.w; tot.withModel.l += sc.withModel.l;
+    tot.vsModel.w += sc.vsModel.w; tot.vsModel.l += sc.vsModel.l;
+    if (sc.tbMiss != null) tot.tbMiss.push(sc.tbMiss);
+  });
+  if (tok !== pkState.tok) return;
+  host.innerHTML = pkSeasonHTML(st, tot, rows, cur);
+  const jump = $('#pickem-body');
+  jump?.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-gow]');
+    if (b) { pkState.week = Number(b.dataset.gow); pkState.sub = 'week'; pkPaint(); }
+  });
+}
+
+// A record under this many graded picks is noise dressed as precision — the
+// same THIN_N bar the model's own record card uses, for the same reason.
+const pkPct = (w, l) => (w + l >= THIN_N ? ` (${Math.round((w / (w + l)) * 100)}%)` : (w + l ? ' — thin' : ''));
+
+function pkSeasonHTML(st, tot, rows, cur) {
+  const tiles = [
+    ['Points', String(tot.pts), `${st.cfg.win}/game · ⭐ ${st.cfg.key}`],
+    ['ATS', `${tot.w}-${tot.l}${tot.p ? `-${tot.p}` : ''}`, `${tot.graded} graded${pkPct(tot.w, tot.l)}`],
+    ['Key games', `${tot.kw}-${tot.kl}${tot.kp ? `-${tot.kp}` : ''}`, `worth ${st.cfg.key}× — ${tot.kw * (Number(st.cfg.key) || 0)} pts`],
+    ['Weeks', String(rows.filter((r) => !r.failed).length), `${tot.made} picks made`],
+    ['Tiebreaker', tot.tbMiss.length ? `±${(tot.tbMiss.reduce((a, b) => a + b, 0) / tot.tbMiss.length).toFixed(1)}` : '—',
+      tot.tbMiss.length ? `avg miss over ${tot.tbMiss.length}` : 'none graded yet'],
+    ['Best week', (() => {
+      const best = rows.filter((r) => r.sc?.graded).sort((a, b) => b.sc.pts - a.sc.pts)[0];
+      return best ? `${best.sc.pts} pts` : '—';
+    })(), (() => {
+      const best = rows.filter((r) => r.sc?.graded).sort((a, b) => b.sc.pts - a.sc.pts)[0];
+      return best ? `Week ${best.w}` : 'nothing graded yet';
+    })()],
+  ];
+  const wm = tot.withModel, vm = tot.vsModel;
+  const n = wm.w + wm.l + vm.w + vm.l;
+  let xref;
+  if (!n) {
+    xref = `<p class="pk-mini">Once your picks start grading, this is where you'll see whether siding with the model helped. Nothing has graded yet.</p>`;
+  } else {
+    const wp = wm.w + wm.l, vp = vm.w + vm.l;
+    const rate = (o) => (o.w + o.l ? (o.w / (o.w + o.l)) * 100 : null);
+    const rw = rate(wm), rv = rate(vm);
+    const thin = wp < THIN_N || vp < THIN_N;
+    let verdict;
+    if (thin) verdict = `Too thin to read yet — ${THIN_N} graded picks on each side is the bar before a gap here means anything.`;
+    else if (rw == null || rv == null) verdict = 'Only one of the two has a sample so far.';
+    else {
+      const d = rw - rv;
+      verdict = Math.abs(d) < 5
+        ? 'No real gap so far — following the model and fighting it are producing about the same result.'
+        : d > 0
+          ? `Siding with the model is running ${d.toFixed(0)} points better. On the current sample, its side is the one paying.`
+          : `You are running ${Math.abs(d).toFixed(0)} points better on the games you FOUGHT the model. Worth knowing before you lean on it.`;
+    }
+    xref = `<div class="pk-xrow"><span class="pk-xlab">✅ With the model</span><span class="pk-xv">${wm.w}-${wm.l}${pkPct(wm.w, wm.l)}</span></div>
+      <div class="pk-xrow"><span class="pk-xlab">⚔️ Against it</span><span class="pk-xv">${vm.w}-${vm.l}${pkPct(vm.w, vm.l)}</span></div>
+      <p class="pk-mini">${esc(verdict)}</p>`;
+  }
+  const table = rows.map((r) => {
+    if (r.failed) return `<div class="pk-wrow"><span class="pk-w">Week ${r.w}</span><span class="pk-wv muted">slate unavailable</span></div>`;
+    const s = r.sc;
+    return `<div class="pk-wrow"><button type="button" class="pk-w" data-gow="${r.w}">Week ${r.w}${r.w === cur ? ' •' : ''}</button>
+      <span class="pk-wv">${s.graded ? `${s.w}-${s.l}${s.p ? `-${s.p}` : ''}` : `${s.made} picked`}${s.kw + s.kl ? ` · ⭐ ${s.kw}-${s.kl}` : ''}</span>
+      <span class="pk-wp">${s.graded ? `${s.pts} pt${s.pts === 1 ? '' : 's'}` : '—'}</span>
+      <span class="pk-wt">${s.tbMiss != null ? `TB ±${s.tbMiss}` : ''}</span></div>`;
+  }).join('');
+  return `<div class="pk-tiles">${tiles.map(([l, v, s]) =>
+      `<div class="pk-tile"><div class="pk-tv">${esc(v)}</div><div class="pk-tl">${esc(l)}</div><div class="pk-ts">${esc(s)}</div></div>`).join('')}</div>
+    <h2 class="section-title">🤖 You vs the model</h2>
+    <div class="brd-card">${xref}</div>
+    <h2 class="section-title">📅 Week by week</h2>
+    <div class="brd-card pk-wtab">${table}</div>
+    ${tot.failed ? `<p class="pk-mini">${tot.failed} week${tot.failed === 1 ? '' : 's'} could not be graded because its slate didn't load — those are missing from the totals above, not lost.</p>` : ''}`;
+}
+
+/* --- Setup --------------------------------------------------------------- */
+function pkSetupHTML(st) {
+  const c = st.cfg;
+  const num = (k, label, note) =>
+    `<label class="pk-cfg"><span class="pk-cfg-l">${esc(label)}</span>
+      <input type="number" step="0.5" value="${esc(String(c[k]))}" data-cfg="${k}" />
+      <span class="pk-cfg-n">${esc(note)}</span></label>`;
+  const weeks = Object.keys(st.weeks).filter((w) => Object.keys(st.weeks[w].picks || {}).length).length;
+  return `<div class="brd-card">
+    <h3 class="pk-h3">Scoring</h3>
+    <p class="pk-mini">Defaults match the rules you described — one point a game, key games double. Change them here if your pool's fine print differs; every stat on the Season tab recomputes from these, including weeks already graded.</p>
+    ${num('win', 'Points for a correct pick', 'the standard game')}
+    ${num('key', 'Points for a correct ⭐ key game', 'the double')}
+    ${num('push', 'Points for a push', 'a game landing exactly on the number')}
+    ${num('keyMiss', 'Points for a missed key game', 'negative if your pool penalises them')}
+    <h3 class="pk-h3">Your data</h3>
+    <p class="pk-mini">${weeks ? `${weeks} week${weeks === 1 ? '' : 's'} of picks saved on this device for the ${esc(st.season)} season.` : 'No picks saved yet.'} Picks live in this browser only — they never leave the device, so the phone and the home-screen app keep separate copies.</p>
+    <p><button type="button" class="pk-btn" id="pk-export">📋 Copy my pick data</button>
+      <button type="button" class="pk-btn ghost" id="pk-wipe">🗑️ Delete this season</button></p>
+    <div id="pk-exp"></div>
+  </div>`;
+}
+function pkWireSetup() {
+  const host = $('#pickem-body');
+  if (!host) return;
+  host.addEventListener('change', (e) => {
+    const inp = e.target.closest('input[data-cfg]');
+    if (!inp) return;
+    const st = pkLoad();
+    const v = Number(inp.value);
+    st.cfg[inp.dataset.cfg] = isFinite(v) ? v : PK_CFG_DEFAULT[inp.dataset.cfg];
+    pkSave(st);
+  });
+  host.addEventListener('click', (e) => {
+    if (e.target.id === 'pk-export') {
+      const st = pkLoad();
+      const txt = JSON.stringify({ season: st.season, cfg: st.cfg, weeks: st.weeks });
+      const done = () => { e.target.textContent = '✅ Copied'; setTimeout(() => { e.target.textContent = '📋 Copy my pick data'; }, 2000); };
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(txt).then(done).catch(() => pkExpFallback(txt));
+      else pkExpFallback(txt);
+    }
+    if (e.target.id === 'pk-wipe') {
+      if (e.target.dataset.armed) {
+        const st = pkLoad();
+        delete st.all[st.season];
+        try { localStorage.setItem(PK_KEY, JSON.stringify(st.all)); } catch {}
+        pkPaint();
+      } else {
+        e.target.dataset.armed = '1';
+        e.target.textContent = '⚠️ Tap again to delete every pick';
+      }
+    }
+  });
+}
+function pkExpFallback(txt) {
+  const box = $('#pk-exp');
+  if (!box) return;
+  box.innerHTML = '<textarea class="pk-exp" readonly rows="4"></textarea>';
+  const ta = box.querySelector('textarea');
+  ta.value = txt; ta.select();
+}
+
+const renderers = { home: renderHome, eagles: renderEagles, nfl: renderNFL, cfb: renderCFB, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, pickem: renderPickem, labs: () => {}, about: renderAbout };
 
 /* Per-tab ENTRY hooks (v216).
    🚨 A RENDERER IS NOT AN ENTRY SIGNAL, and assuming it was is what broke the
@@ -10459,6 +11155,13 @@ const TAB_ENTER = {
   // back is what returns you home. `aiSub` deliberately does NOT reset —
   // which LEAGUE resets, which QUESTION you were asking persists.
   predictions() { state.aiSport = 'all'; state.aiDate = null; },
+  // 🎯 The pool opens on the CURRENT week, every time — the same reasoning as
+  // AI Picks' Overview landing. A look-back week is a deliberate choice made
+  // with the picker, and it should not still be showing days later; the week
+  // you have picks to make is the one you opened the tab for. Which SUB-VIEW
+  // you were reading persists, for the v215 reason: which week resets, which
+  // question you were asking does not.
+  pickem() { pkState.week = pkState.curWeek; },
 };
 let currentTab = 'home';
 function showTab(name) {

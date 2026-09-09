@@ -1748,7 +1748,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 }
 :root[data-palette] .tabs button[data-live="1"] .ic::after { display: none; }
 @media (min-width: 700px) {
-  :root[data-palette] .tabs { grid-template-columns: repeat(9, 1fr); }
+  :root[data-palette] .tabs { grid-template-columns: repeat(10, 1fr); }
 }
 
 /* --- rail: league filter as a column inside it ---------------------------- */
@@ -2785,3 +2785,267 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   background-image: none;
   backdrop-filter: none; -webkit-backdrop-filter: none;
 }
+
+/* ==========================================================================
+   LAYER 9 — 🎯 Pick'em (v218)
+   --------------------------------------------------------------------------
+   Namespaced `.pk-` so nothing above can reach it: the v187/v189 specificity
+   trap only bites a class an earlier layer already targets, and no layer does.
+   Every colour is a token, per the standing rule — a hardcoded hex here would
+   be wrong in one of the two palettes. Accent fills take --on-ac, never #fff,
+   and win/loss ride --pos/--neg rather than the accent (the v189 rule).
+   ========================================================================== */
+
+/* --- week picker ---------------------------------------------------------- */
+:root[data-palette] .pk-nav {
+  display: flex; align-items: stretch; gap: 8px; margin: 0 0 12px;
+}
+:root[data-palette] .pk-arrow {
+  flex: 0 0 44px; min-height: 44px; cursor: pointer;
+  font: inherit; font-size: 20px; font-weight: 800; line-height: 1;
+  color: var(--text); background: var(--card);
+  border: 1px solid var(--l2); border-radius: 10px; box-shadow: var(--e1);
+}
+:root[data-palette] .pk-arrow[disabled] { opacity: .35; cursor: default; }
+:root[data-palette] .pk-wsel {
+  position: relative; flex: 1; display: flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 12px; border-radius: 10px;
+  background: var(--card); border: 1px solid var(--l2); box-shadow: var(--e1);
+}
+:root[data-palette] .pk-wlab {
+  font-size: 14px; font-weight: 800; letter-spacing: .02em; color: var(--text);
+}
+/* The native picker sits invisibly over the label, so tapping the week name
+   opens the OS list — 18 weeks is far too many to arrow through. Same idea as
+   the power lab's rank picker, and for the same reason. */
+:root[data-palette] .pk-wsel select {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; font-size: 16px; /* ≥16px or iOS zooms on focus */
+}
+
+/* --- week header ---------------------------------------------------------- */
+:root[data-palette] .pk-head {
+  margin: 0 0 14px; padding: 12px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--l2); box-shadow: var(--e1);
+}
+:root[data-palette] .pk-bar {
+  height: 4px; border-radius: 99px; background: var(--l12); overflow: hidden; margin: 0 0 10px;
+}
+:root[data-palette] .pk-bar span {
+  display: block; height: 100%; border-radius: 99px; background: var(--grad);
+  transition: width .25s ease;
+}
+:root[data-palette] .pk-cnts { display: flex; flex-wrap: wrap; gap: 6px; }
+:root[data-palette] .pk-cnt {
+  padding: 4px 9px; border-radius: 99px;
+  font-size: 11.5px; font-weight: 700; line-height: 1.4;
+  color: var(--mu); background: var(--l07); border: 1px solid var(--l12);
+}
+:root[data-palette] .pk-cnt.ok { color: var(--pos); border-color: var(--pos); }
+:root[data-palette] .pk-cnt b { color: var(--text); }
+:root[data-palette] .pk-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+:root[data-palette] .pk-btn {
+  min-height: 40px; padding: 9px 14px; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; font-weight: 800; line-height: 1;
+  color: var(--on-ac); background: var(--grad);
+  border: 1px solid transparent; border-radius: 10px; box-shadow: var(--e1);
+}
+:root[data-palette] .pk-btn.ghost {
+  color: var(--mu); background: transparent; border-color: var(--l2); box-shadow: none;
+}
+:root[data-palette] .pk-mini {
+  margin: 8px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--mu);
+}
+:root[data-palette] .pk-mini.pk-warn { color: var(--neg); font-weight: 700; }
+:root[data-palette] .pk-foot { margin: 14px 0 4px; }
+
+/* --- one game ------------------------------------------------------------- */
+:root[data-palette] .pk-list { display: flex; flex-direction: column; gap: 10px; }
+:root[data-palette] .pk-game {
+  padding: 12px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--l2); box-shadow: var(--e1);
+  border-left: 3px solid transparent;
+}
+/* A key game is the one thing on this list that changes what a result is
+   WORTH, so it gets the accent edge — and only it, so the edge stays rare
+   enough to mean something. */
+:root[data-palette] .pk-game.key { border-left-color: rgb(var(--acRGB)); }
+:root[data-palette] .pk-game.r-win { border-left-color: var(--pos); }
+:root[data-palette] .pk-game.r-loss { border-left-color: var(--neg); }
+:root[data-palette] .pk-top {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 0 9px;
+}
+:root[data-palette] .pk-match {
+  font-size: 14px; font-weight: 800; letter-spacing: .01em; color: var(--text);
+}
+:root[data-palette] .pk-tb-tag {
+  margin-left: 4px; padding: 2px 6px; border-radius: 99px;
+  font-size: 9.5px; font-weight: 800; letter-spacing: .04em;
+  color: var(--on-ac); background: var(--grad);
+}
+:root[data-palette] .pk-when {
+  flex: none; font-size: 11px; font-weight: 700; color: var(--mu); text-align: right;
+}
+
+/* The two sides. They are the primary control on the whole tab, so they get
+   the height and the weight; a 44px row is the touch-target floor. */
+:root[data-palette] .pk-sides { display: flex; gap: 6px; align-items: stretch; }
+:root[data-palette] .pk-side {
+  flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  min-height: 46px; padding: 8px 11px; cursor: pointer;
+  font-family: inherit; color: var(--text); background: var(--l07);
+  border: 1.5px solid var(--l12); border-radius: 10px; text-align: left;
+}
+:root[data-palette] .pk-side .pk-t { font-size: 13.5px; font-weight: 800; }
+:root[data-palette] .pk-side .pk-n { font-size: 12.5px; font-weight: 700; color: var(--mu); }
+/* A dotted edge marks the side the MODEL is on — visible before you pick,
+   and still visible after, so a card always shows both opinions. */
+:root[data-palette] .pk-side.md { border-style: dashed; border-color: rgba(var(--acRGB), .55); }
+:root[data-palette] .pk-side.on {
+  color: var(--on-ac); background: var(--grad); border-color: transparent; border-style: solid;
+  box-shadow: var(--e1);
+}
+:root[data-palette] .pk-side.on .pk-n { color: var(--on-ac); opacity: .8; }
+:root[data-palette] .pk-star {
+  flex: 0 0 46px; min-height: 46px; cursor: pointer;
+  font-size: 19px; line-height: 1; color: var(--mu);
+  background: var(--l07); border: 1.5px solid var(--l12); border-radius: 10px;
+}
+:root[data-palette] .pk-star.on { color: rgb(var(--acRGB)); border-color: rgb(var(--acRGB)); }
+:root[data-palette] .pk-star.shake { animation: pkShake .35s ease; }
+@keyframes pkShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* --- the model's read ----------------------------------------------------- */
+:root[data-palette] .pk-md {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin: 9px 0 0;
+  font-size: 11.5px; line-height: 1.5; color: var(--mu);
+}
+:root[data-palette] .pk-md-none { font-style: italic; }
+:root[data-palette] .pk-chip {
+  padding: 3px 8px; border-radius: 99px;
+  font-size: 11px; font-weight: 800; line-height: 1.3;
+  color: var(--text); background: var(--l07); border: 1px solid var(--l2);
+}
+/* The heat ramp, in units of the bar the market has to clear — the same scale
+   and the same meaning as the AI Picks cards (v182). Cold and cool are
+   ringless, so a read can never be mistaken for a play at a glance. */
+:root[data-palette] .pk-chip.h0 { color: var(--mu); }
+:root[data-palette] .pk-chip.h1 { color: var(--mu2); }
+:root[data-palette] .pk-chip.h2 { color: var(--text); border-color: var(--wm); }
+:root[data-palette] .pk-chip.h3 { color: var(--text); border-color: rgb(var(--acRGB)); }
+:root[data-palette] .pk-chip.h4 {
+  color: var(--on-ac); background: var(--grad); border-color: transparent;
+}
+:root[data-palette] .pk-sharp, :root[data-palette] .pk-agree, :root[data-palette] .pk-drift {
+  margin: 7px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--mu);
+}
+:root[data-palette] .pk-agree.y { color: var(--pos); font-weight: 700; }
+:root[data-palette] .pk-agree.n { color: var(--wm); font-weight: 700; }
+:root[data-palette] .pk-drift { color: var(--wm); }
+
+/* --- your number + result -------------------------------------------------- */
+:root[data-palette] .pk-line, :root[data-palette] .pk-tb {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--l07);
+}
+:root[data-palette] .pk-sp {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; color: var(--mu);
+}
+/* ⚠️ 16px or iOS Safari zooms the viewport on focus and never zooms back —
+   the workout lab's v3 lesson. Keep every input on this tab at 16px+. */
+:root[data-palette] .pk-sp input {
+  width: 74px; min-height: 38px; padding: 6px 8px;
+  font-family: inherit; font-size: 16px; font-weight: 700; color: var(--text);
+  background: var(--l07); border: 1px solid var(--l12); border-radius: 8px;
+}
+:root[data-palette] .pk-sp-note { font-size: 10.5px; color: var(--mu2); }
+:root[data-palette] .pk-res {
+  margin-left: auto; padding: 3px 9px; border-radius: 99px;
+  font-size: 11px; font-weight: 800;
+}
+:root[data-palette] .pk-res.win { color: var(--pos); border: 1px solid var(--pos); }
+:root[data-palette] .pk-res.loss { color: var(--neg); border: 1px solid var(--neg); }
+:root[data-palette] .pk-res.push { color: var(--mu); border: 1px solid var(--l2); }
+
+/* --- season --------------------------------------------------------------- */
+/* Six tiles, not five: five wrap 3+2 on a 390px phone and the orphan row
+   reads as broken — the v196 fantasy-strip lesson. */
+:root[data-palette] .pk-tiles {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 6px;
+}
+:root[data-palette] .pk-tile {
+  padding: 10px 8px; border-radius: 10px; text-align: center;
+  background: var(--card); border: 1px solid var(--l2); box-shadow: var(--e1);
+}
+:root[data-palette] .pk-tv { font-size: 17px; font-weight: 800; color: var(--text); line-height: 1.2; }
+:root[data-palette] .pk-tl {
+  margin-top: 3px; font-size: 9.5px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--mu);
+}
+:root[data-palette] .pk-ts { margin-top: 3px; font-size: 10px; line-height: 1.4; color: var(--mu2); }
+:root[data-palette] .pk-xrow {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--l07);
+}
+:root[data-palette] .pk-xlab { font-size: 12.5px; font-weight: 700; color: var(--text); }
+:root[data-palette] .pk-xv { font-size: 13px; font-weight: 800; color: var(--text); }
+:root[data-palette] .pk-wtab { padding: 4px 12px; }
+:root[data-palette] .pk-wrow {
+  display: grid; grid-template-columns: minmax(64px, auto) 1fr auto auto;
+  align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--l07);
+  font-size: 12px;
+}
+:root[data-palette] .pk-wrow:last-child { border-bottom: 0; }
+:root[data-palette] button.pk-w {
+  padding: 0; cursor: pointer; text-align: left;
+  font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--text);
+  background: none; border: 0;
+}
+:root[data-palette] .pk-wv { color: var(--mu); }
+:root[data-palette] .pk-wp { font-weight: 800; color: var(--text); }
+:root[data-palette] .pk-wt { font-size: 10.5px; color: var(--mu2); }
+
+/* --- setup ---------------------------------------------------------------- */
+:root[data-palette] .pk-h3 {
+  margin: 14px 0 4px; font-size: 12px; font-weight: 800;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--mu);
+}
+:root[data-palette] .pk-h3:first-child { margin-top: 2px; }
+:root[data-palette] .pk-cfg {
+  display: grid; grid-template-columns: 1fr 80px; align-items: center; gap: 8px;
+  padding: 9px 0; border-bottom: 1px solid var(--l07);
+}
+:root[data-palette] .pk-cfg-l { font-size: 12.5px; font-weight: 700; color: var(--text); }
+:root[data-palette] .pk-cfg-n { grid-column: 1 / -1; font-size: 10.5px; color: var(--mu2); }
+:root[data-palette] .pk-cfg input {
+  width: 100%; min-height: 38px; padding: 6px 8px; text-align: center;
+  font-family: inherit; font-size: 16px; font-weight: 700; color: var(--text);
+  background: var(--l07); border: 1px solid var(--l12); border-radius: 8px;
+}
+:root[data-palette] .pk-exp {
+  width: 100%; margin-top: 8px; padding: 8px; font-size: 16px;
+  color: var(--text); background: var(--l07);
+  border: 1px solid var(--l12); border-radius: 8px;
+}
+
+@media (min-width: 700px) {
+  :root[data-palette] .pk-tiles { grid-template-columns: repeat(6, 1fr); }
+  :root[data-palette] .pk-md, :root[data-palette] .pk-mini { font-size: 12.5px; }
+}
+
+/* 👻 `hidden` has to actually hide it (v218).
+   🚨 `:root[data-palette] .ctl-row { display: flex }` is (0,2,0) and the UA's
+   own `[hidden] { display: none }` is (0,1,0) — so the palette layer WINS and
+   setting `el.hidden = true` on a control row was a visual no-op. The row went
+   on painting as an 18px empty white bar under the tab grid on Labs, About and
+   Pick'em, which is the v217 ghost all over again: chrome with nothing in it,
+   still taking a bar's worth of space.
+   ⚠️ And the first test of the fix PASSED anyway, because it asked the element
+   whether it was `hidden` — the property I had just set — instead of measuring
+   the box. Assert the pixels, not the flag. */
+:root[data-palette] .ctl-row[hidden] { display: none; }
