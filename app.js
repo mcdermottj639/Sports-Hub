@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v227';
+const APP_VERSION = 'v228';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -2610,7 +2610,20 @@ function aiPickHead(pred, sport, g, info) {
   const marginTxt = pred.projMargin != null
     ? `model margin: ${esc(pred.projMargin >= 0 ? homeAbbr : awayAbbr)} by ${Math.abs(pred.projMargin).toFixed(1)}` : '';
   const bits = [pred.projTotal != null ? `Model total: ${pred.projTotal.toFixed(1)}` : '', marginTxt].filter(Boolean);
+  // 🏁 A FINISHED game still gets the full read — the owner references it, and
+  // v224 built the pregame-line restore precisely so a game keeps its numbers
+  // once it kicks off. But the card gave no hint the game was over, so it read
+  // as a live, loggable pick: the modal is reachable from any date, and the
+  // ONLY thing marking it "not recorded" was the cold-read line below, which
+  // blames the heat bar for something the final score is actually responsible
+  // for. This leads the block, because it says what every number under it IS —
+  // the v224 lesson about where that sentence belongs. The look-back slate has
+  // said this since v199; the modal never got the banner.
+  const played = g && gameState(g) === 'final'
+    ? '<div class="ai-why">🏁 This game is already final. The read below is computed now rather than before kickoff, so it is shown for reference and records nothing — a prediction made after the result is known is not a prediction (see 📈 Record for what the model was actually held to).</div>'
+    : '';
   return `<div class="md-section-title acc-open">🤖 AI Pick</div>
+    ${played}
     <div class="ai-plays">${rows.join('')}</div>
     <div class="conf-bar"><span style="width:${pred.conf}%"></span></div>${split}${softNote}
     ${bits.length ? `<div class="ai-why">${bits.join(' · ')}</div>` : ''}

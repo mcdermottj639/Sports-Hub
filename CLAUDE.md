@@ -538,7 +538,49 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v227** (backend **b15-ir-slot**).
+Current version as of this writing: **v228** (backend **b15-ir-slot**).
+
+- **🏁 The game modal says when a game is already over (v228)** — the owner, on
+  a screenshot of the NE @ SEA card the morning after it was played: *"Why can't
+  u log last nights"*. A fair question to have to ask, because the card gave no
+  sign the game was finished.
+  - **What it looked like.** The modal painted the full live treatment on a game
+    that had ended hours earlier — C / C+ price grades, `MONEYLINE Seattle
+    Seahawks 61%`, a spread and a total, a confidence bar. Nothing on it said
+    "final".
+  - **🚨 And the one line that mentioned recording blamed the wrong thing.**
+    *"🌡️ Cold = under the bar: the spread and total reads are shown but not
+    recorded as a play"* — which reads as *the heat bar is why nothing was
+    logged*. On a finished game the bar is irrelevant: **nothing is recorded
+    because the game is over**, and the MONEYLINE is not recorded either, which
+    that sentence does not cover at all. A true sentence, pointing at the wrong
+    cause, is worse than no sentence.
+  - **The fix is one line, and it LEADS the block** — before the market rows,
+    not after them — because it says what every number under it *is*. That is
+    the v224 lesson about sentence order, applied to the same card. The
+    look-back slate has carried this banner since v199; the modal never got one.
+  - **⚠️ The read itself is untouched, deliberately.** v224 built the
+    pregame-line restore precisely so a game keeps its numbers through kickoff
+    and after — the owner references them. So the fix is a LABEL, not a
+    removal: every row, the model total and the model margin still render.
+  - **Why the game genuinely cannot be logged now**, since that was the actual
+    question: `recordSlate` skips any game in `final` state, and the week board
+    passes `record: false` for any game not dated today (v214). Underneath both
+    is the v138 look-ahead rule. **The pick that mattered was made legitimately
+    pregame and was destroyed by the v227 purge bug** — that is a different
+    fault from this one, and re-creating it now would be the look-ahead rule.
+    Told to the owner rather than quietly backfilled.
+  - ⚠️ **Live games are NOT labelled**, and that is the point of the check being
+    `gameState(g) === 'final'` rather than "not scheduled": a live game IS still
+    recorded (`recordSlate` takes pregame and live), so a banner there would be
+    a lie in the other direction.
+  - Verified by driving the **shipped** `aiPickHead` — **14 checks**: a final
+    carrying the banner, stating that nothing is recorded, and the banner
+    landing before the first market row AND before the cold-read line it
+    disambiguates; the moneyline, spread, total, model total and model margin
+    all still rendering on that same final; and a live game, a scheduled game
+    and a null game object all correctly unlabelled while still rendering their
+    reads. The v227 purge suite (14) passes.
 
 - **🚨 The season opener was DELETED from the record on every launch — kickoff
   was a Wednesday and the constant said Thursday (v227)** — the owner, the
