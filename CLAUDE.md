@@ -600,7 +600,127 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v223** (backend **b15-ir-slot**).
+Current version as of this writing: **v224** (backend **b15-ir-slot**).
+
+- **📜 LEAGUE HISTORY — 13 seasons of Nectars Bolonga, inside the Fantasy tab
+  (v224)** — the owner: *"I want the fantasy page to have a current year tab
+  showing all that we already have and then a history tab within fantasy
+  showing the history of our league nectars bolgna."* Then, over a dozen
+  messages, they fed in the source data and corrected it as we went, and
+  finished with two asks that shaped the result: *"Head to head stats would be
+  cool too"* and **"make sure it's clear when the stats are only based on
+  playoffs."**
+  - **The shape.** Level 1 on the Fantasy tab is **📅 This Season | 📜 League
+    History** (`#fan-sub`, `fanBar`). Inside History, level 2 is
+    **Honours · Seasons · Records · Cum Bowl · You**, and every name on every
+    screen opens that manager's career profile. This Season is byte-for-byte
+    what the tab did in v223 — everything it had is inside `#fantasy-now`,
+    which History simply hides.
+  - **It lives in its own file, `history.js`**, loaded before `app.js` and
+    exposing ONE global: `LeagueHistory.SUBS / .view(k) / .profile(m)`.
+    Everything in `app.js` is routing. A fixed 13-season archive that never
+    changes at runtime does not belong in a 10,750-line file, and a season's
+    worth of corrections should not mean re-reading that file.
+  - **🚨 It is PURE: zero network requests, zero writes.** Measured — entering
+    History fires **0** fetches, and it touches no localStorage at all. So it
+    cannot slow the tab down, and it cannot reach `sportshub:aitally`: the v213
+    "no second writer" rule, obeyed by having no writer.
+  - **🚨 THE DATA WAS VERIFIED, NOT TRANSCRIBED, and one mapping was wrong.**
+    All 156 team-seasons are mapped to PEOPLE, cross-checked against ESPN's own
+    owner-name column on the seasons that carry it: ~144 confirmations, **one
+    correction**, zero unresolved conflicts. The correction is the lesson —
+    **"Christels Mattress" is Will Hurd**, a team named AT Christel rather than
+    by him, exactly like "Slemp The Man Whore" and "Buley is Greek", which are
+    both McD's. **Never map a fantasy team to a person by name similarity.**
+  - **Two structural findings unlocked most of the tab.** A **top-6 seed always
+    finishes top 6** in this format — verified on every bracket on file — which
+    is what makes playoff appearances knowable for all 13 seasons rather than
+    the 7 with brackets. And the **rank is the playoff finish while the record
+    beside it is the regular season**; they disagree constantly (2023's champion
+    went 7-7, 2021's 11-3 team finished 3rd), and that gap is the history worth
+    showing.
+  - **⚑ SAYING WHICH POOL EACH NUMBER COMES FROM IS A FEATURE, NOT A FOOTNOTE.**
+    The archive holds three different kinds of fact and conflating them would
+    make the whole tab untrustworthy: **regular season** (every W-L and points
+    total — ESPN's standings are regular-season standings), **playoffs only**
+    (119 bracket games from 7 of 13 seasons, plus 13 Cum Bowls), and **final
+    placing** (1st-12th). A `SRC` table + `tag()` / `dot()` put a badge on
+    every heading and, in the record book, on every ROW — because that card is
+    the one place a regular-season scoring record sits directly above a single
+    playoff game, and a card-level caption reads as covering everything above
+    it (the v203 "label smaller than the thing it labels" fault). A **How to
+    read this** card states the three once, at the top.
+    - ⚠️ **There is NO regular-season schedule anywhere in this data.** So
+      nothing here is a career head-to-head however much it looks like one, and
+      every h2h surface says so. **If you add a stat, tag it.**
+    - ⚠️ **Colour alone was not enough, and it was measured.** Plain `--wm` on
+      `--gy` is `rgb(138,122,88)` beside `rgb(138,130,114)` — a difference
+      nobody spots mid-page, which would have made the badge decorative. It is
+      darkened a step AND carries a **⚑**, so it is distinguishable by shape
+      too. Still never red: this is a caveat, not an error (the v189 rule).
+  - **⚔️ Head-to-head**, over **126 meetings** — the 119 bracket games plus the
+    six Cum Bowls that live outside the brackets (2013-17, 2025) and the 2025
+    final. 56 of 66 possible pairs have met; most-played is Gotch v Zach 3-2 in
+    five; the perfect records are You 4-0 over Hyman (two of them finals),
+    Buley 3-0 over CC, Woods 3-0 over Riz. A full 12×12 grid sits behind a fold.
+  - **🚨 Four faults only the RENDER caught, and the first two are general.**
+    - **The grid named the same twelve people two different ways** — 3-letter
+      codes across the top, CSS-truncated full names down the side — and the
+      truncation collapsed **Woods/Wolff to `W…`** and **Hyman/Hurd to `H…`**.
+      A label that cannot identify its own row is the "CC CC" fault (v208).
+      One shared abbreviation set on both axes now.
+    - **⚠️ The clip audit was a hand-written selector list, and the grid was not
+      on it** — a green audit over a visibly broken label. It now sweeps
+      **every element the stylesheet has told to ellipsize**, which is the app
+      declaring "this may be too narrow" and therefore exactly the set worth
+      measuring. That generic check then caught the next two on its own.
+    - **⚠️ `width` on a `tbody` cell is INERT under `table-layout: fixed`** —
+      only the first row sets column widths, which is why widening the label
+      column did nothing twice in a row. It has to go on the header row.
+    - **Five sub-tabs at 390px: "Cum Bowl" clipped by 4px** — clipped, not
+      wrapped, so a wrap check was blind to it (the v218 lesson again).
+  - **⚠️ 🥊 in the Rivalries heading crashed headless Chromium, reproducibly.**
+    The Records view SIGILLed the renderer 3/3 while every other view rendered;
+    bisecting the five emoji showed removing **only** 🥊 fixed it 3/3, and the
+    crash needed the whole view (that emoji alone in a chip is fine). It is
+    almost certainly a font-shaping bug in the sandbox's headless build rather
+    than anything an iPhone would hit — but **a view I cannot render is a view
+    I cannot audit**, and the emoji is arbitrary, so it is **⚔️** now. If a
+    future view goes dark in the harness for no reason, suspect an emoji.
+  - **🚨 Two pre-existing app bugs the integration exposed.**
+    - **`wireSectionToggle` counted HIDDEN sections.** `injectJumpNav` has had
+      an `offsetParent` filter since the Football prep view started hiding the
+      baseball half; this function never got it, so the Fantasy button already
+      read **"⌄ ALL 16" over the 14 sections you could see**. With History
+      hiding all of `#fantasy-now` it would have been far worse: one tap would
+      fold 14 sections nobody was looking at and relabel itself as though
+      nothing happened. Fixed; the sweep asserts the count matches the visible
+      headings on every tab.
+    - The jump-nav label strip had to learn `.fh-src`, or every provenance
+      badge would have been read into a one-word chip.
+  - **An untracked manager on the podium says "not tracked", not their team
+    name.** The owner asked for two managers out of the stats; printing the
+    franchise there would put them straight back in, while deleting the row
+    would make a real silver medal vanish — the older and worse fault.
+  - `TAB_ENTER.fantasy` opens on **This Season** every time and drops any
+    manager profile, for the v215/v216 reason: the tab exists to answer "how is
+    my team doing", and a 13-year archive is not that question on arrival.
+    Which sub-view of the archive you were reading does persist.
+  - **CSS is a new namespaced layer 10** (`.fh-`, plus one `#fantasy-history`
+    scope), appended last — the v195 `.ffp-` precedent, which is why the
+    v187/v189 specificity trap cannot bite it. Every colour is a token.
+  - Verified in headless Chromium against the REAL `index.html` — the five
+    sub-tabs, a manager profile and the level-1 round trip, at 390px: no
+    clipping, nothing under the 9px type floor, no sub-tab label clipped, no
+    horizontal overflow, every crest loading, **0 network requests on entry**,
+    the collapse-all count matching the visible headings, and History leaving
+    no trace when you switch back. Plus **7 conservation laws run against the
+    shipped `history.js` itself** (150 season-finishes · 24 Cum Bowl
+    appearances · 11 losses · 238 bracket game-slots · 13 titles · 76 playoff
+    berths · h2h games == meetings), a per-season W==L and all-play closure
+    check, and a template-hole sweep of every view and all twelve profiles.
+    ⚠️ The `.sec-chev` 28px tap target the audit flags is **app-wide since
+    v165** and not from this change — the whole heading row is tappable.
 
 - **🚨 A player on IR was being counted as a STARTER — the backend's slot table
   was written for baseball (v223, backend `b15-ir-slot`)** — the owner, on a
