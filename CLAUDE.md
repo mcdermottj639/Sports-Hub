@@ -538,7 +538,68 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v226** (backend **b15-ir-slot**).
+Current version as of this writing: **v227** (backend **b15-ir-slot**).
+
+- **🚨 The season opener was DELETED from the record on every launch — kickoff
+  was a Wednesday and the constant said Thursday (v227)** — the owner, the
+  morning after NE @ SEA: *"Why didn't ai picks log the nfl game from last
+  night in record"*. It did log it. Then it threw it away, repeatedly.
+  - **`NFL_KICKOFF` was `'2026-09-10'`.** The 2026 season actually opened
+    **Wednesday 9 Sep** — Patriots at Seahawks, the Super Bowl LX rematch, the
+    league's first Wednesday opener since 2012. The constant was set on the
+    reasonable assumption that Week 1 always opens on a Thursday.
+  - **🚨 That constant is not a display value — it is the boundary a DELETE
+    runs on.** `clearNflPreseason()` drops every NFL entry dated
+    `>= July 1 && < NFL_KICKOFF`, from the tally AND the pending queue, **at
+    every boot**. The opener's slate date is `20260909`, one day inside that
+    window, so the pick was purged the next time the app opened and every time
+    after — and because the pending entry went with it, the game could never
+    grade either. Nothing errored; the record simply had no NFL row in it.
+  - ⚠️ **The failure is silent by construction and had two layers of cover.**
+    The purge is documented as "surgical and idempotent … can never touch an
+    in-season result", which is true only if the date is right; and the app is
+    *supposed* to have no NFL record before kickoff, so an empty NFL row on
+    9 Sep looked exactly like correct behaviour. **A hand-maintained constant
+    that gates a deletion has no failure mode that looks like a failure.**
+  - **Fixed in two places, and the second is the one that matters.** The date
+    is `'2026-09-09'`; and picks now store **`st`** — ESPN's own `seasonType`
+    (1 pre / 2 regular / 3 post) — which `clearNflPreseason` checks FIRST. An
+    entry ESPN labelled regular season or playoffs is never deleted, whatever
+    the calendar constant says. The date rule survives only as the fallback
+    for entries written before `st` existed. **ESPN already knew this was a
+    regular-season game; nothing was asking it.**
+    - `st` rides the same path every other meta field does — `recordPick` /
+      `recordAtsPick` / `recordTotalPick` → `sportshub:pending` → both grading
+      paths → `sportshub:aitally` — so all three markets carry it, and
+      `stOf(entry, g)` prefers the stored value and falls back to the
+      re-fetched game at grade time.
+  - **The NFL hero's hardcoded `Thu Sep 10` is derived now** (`kickoffLabel()`).
+    It sat beside a countdown computed from `NFL_KICKOFF`, so the two could
+    disagree — and did. Both countdown call sites already degrade correctly on
+    a past date ("Season underway", no chip), so nothing else moved.
+  - ⚠️ **Last night's pick is NOT recoverable and was not re-created.** It was
+    deleted from the owner's localStorage; and re-predicting a finished game to
+    put a result in the record is the v138 look-ahead rule, which is the one
+    thing this record's honesty rests on. **The NFL sample starts from Week 1's
+    Thursday slate.** Say so rather than quietly backfilling a row.
+  - ⚠️ **This is also why the v170 entry warns that NFL test fixtures must be
+    seeded IN season** — the purge runs at boot and rewrites localStorage, so a
+    suite seeding an August NFL result watches its own fixture disappear. Same
+    mechanism, pointed at a test instead of at the season opener.
+  - ⚠️ **Read this before the row-8 NFL calibration read** (the 1 Oct run). That
+    row says to filter `d >= 20260910`; the season opened on the **9th**, so
+    that filter would silently drop opening night. It should read `>= 20260909`
+    — and this year that game is missing from the record anyway, for the reason
+    above.
+  - Verified by driving the **shipped** `clearNflPreseason` against a stubbed
+    `localStorage` at both dates — **14 checks**. The v226 function reproduces
+    the owner's case exactly (the graded opener, its ATS row and the pending
+    pick all DELETED, 5 entries dropped); v227 drops only the 2 genuine
+    preseason rows and keeps the opener, its ATS row, the pending pick,
+    Thursday's slate, last season and MLB. Plus the guard on its own: with the
+    kickoff date deliberately set wrong again, `st: 2` still protects the
+    opener while `st: 1` is still purged and legacy rows still fall back to the
+    date. Idempotent.
 
 - **📦 League History and the Power Rankings Lab moved to their own repo
   (v226)** — the owner: *"I started a repo called league history and it's gonna
@@ -6453,7 +6514,13 @@ rewrite.**
   entries carry `sh` (points the sharp-money factor moved the pick, signed
   toward the side taken — absent when there was no qualifying split); v164+
   entries carry `gp` (model-vs-market gap) and `tr` (ladder tier), and ATS
-  entries carry `pm` (the model's projected margin). **v200+ side entries carry
+  entries carry `pm` (the model's projected margin). **v227+ entries carry `st`
+  = ESPN's `seasonType`** (1 pre / 2 regular / 3 post), on all three markets and
+  in the pending queue. ⚠️ It exists so `clearNflPreseason` can tell a preseason
+  pick from a real one WITHOUT trusting a hand-maintained kickoff date — which
+  deleted the 2026 season opener on every launch (v227). An entry with
+  `st !== 1` is never purged; entries written before v227 carry no `st` and
+  still fall back to the date rule. **v200+ side entries carry
   `sr: 1`** = the DK splits feed was READABLE when the pick was made, whether or
   not that game cleared the 7-point deadband. ⚠️ It is what makes an absent `sh`
   tellable from "the money was balanced" — without it the two are identical in

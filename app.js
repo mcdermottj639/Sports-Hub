@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v226';
+const APP_VERSION = 'v227';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -3272,6 +3272,10 @@ function recordPick(id, sport, date, pick, fav, conf, isEdge, meta = {}) {
     // "the money was balanced" tellable from "the feed never answered".
     ...(meta.sr != null ? { sr: meta.sr } : {}),
     ...(meta.gp != null ? { gp: meta.gp } : {}),
+    // st = ESPN's seasonType (1 pre / 2 regular / 3 post). Stored so
+    // clearNflPreseason can tell a preseason pick from a real one without
+    // trusting a hand-maintained kickoff date. See that function.
+    ...(meta.st != null ? { st: meta.st } : {}),
     ...(meta.tr ? { tr: meta.tr } : {}) };
   setPending(p);
 }
@@ -3279,14 +3283,15 @@ function recordPick(id, sport, date, pick, fav, conf, isEdge, meta = {}) {
 // moneyline pick or the totals pick — the three are separate markets and keep
 // separate records. `line` is the picked side's own spread; `home` says which
 // side that is, which is all grading needs.
-function recordAtsPick(gameId, sport, date, ats, m) {
+function recordAtsPick(gameId, sport, date, ats, m, st) {
   const id = `${gameId}:s`;
   if (!gameId || !ats) return;
   if (getTally()[id]) return;
   const p = getPending();
   if (p[id]) return;
   p[id] = { sport, date, a: 1, pick: ats.label, home: ats.home ? 1 : 0,
-    hsp: ats.homeSpread, proj: ats.proj, ...(m ? { m } : {}) };
+    hsp: ats.homeSpread, proj: ats.proj, ...(m ? { m } : {}),
+    ...(st != null ? { st } : {}) };
   setPending(p);
 }
 // Did the picked side cover? Home covers when (homeMargin + homeSpread) > 0.
@@ -3301,14 +3306,15 @@ function atsResult(g, homeSpread, tookHome) {
 // proj (v159) = the model's projected total at pick time. Without it a graded
 // export shows only WHICH side we took, so a directional skew (the OVER lean)
 // can be seen but never sized — see the projected-total bias note in the card.
-function recordTotalPick(gameId, sport, date, side, line, proj, tier, m) {
+function recordTotalPick(gameId, sport, date, side, line, proj, tier, m, st) {
   const id = `${gameId}:t`;
   if (!gameId || !side || line == null) return;
   if (getTally()[id]) return;
   const p = getPending();
   if (p[id]) return;
   p[id] = { sport, date, t: 1, pick: side, line, proj: proj ?? null,
-    ...(tier ? { tr: tier } : {}), ...(m ? { m } : {}) };
+    ...(tier ? { tr: tier } : {}), ...(m ? { m } : {}),
+    ...(st != null ? { st } : {}) };
   setPending(p);
 }
 
@@ -3339,6 +3345,12 @@ function pendingSummary(sport) {
   list.sort((a, b) => Number(b.date || 0) - Number(a.date || 0));
   return { by, total, list, shLive, shMl };
 }
+// The seasonType to file a graded pick under: what was stored when the pick
+// was made, else what the re-fetched game says. Grading is where a pending
+// entry becomes permanent, so this is the last chance to carry the flag that
+// keeps clearNflPreseason off a real result.
+const stOf = (entry, g) => entry?.st ?? g?.seasonType ?? null;
+
 async function gradePending() {
   const p = getPending();
   const tally = getTally();
@@ -3375,6 +3387,7 @@ async function gradePending() {
         if (hit == null) { delete p[id]; changed = true; return; }
         recordResult(id, hit, null,
           { s: sport, d: Number(date), a: 1, p: entry.pick, m: matchupLabel(sport, g),
+            ...(stOf(entry, g) != null ? { st: stOf(entry, g) } : {}),
             ...(entry.proj != null ? { pm: entry.proj } : {}) });
         delete p[id]; changed = true; return;
       }
@@ -3385,6 +3398,7 @@ async function gradePending() {
         recordResult(id, hit, null,
           { s: sport, d: Number(date), t: 1, p: `${entry.pick} ${entry.line}`, m: matchupLabel(sport, g),
             ...(entry.proj != null ? { pt: Math.round(entry.proj * 10) / 10 } : {}),
+            ...(stOf(entry, g) != null ? { st: stOf(entry, g) } : {}),
             ...(entry.tr ? { tr: entry.tr } : {}) });
         delete p[id]; changed = true; return;
       }
@@ -3396,6 +3410,7 @@ async function gradePending() {
       recordResult(id, hit, wasEdge ? (hit ? 'h' : 'm') : null,
         { s: sport, d: Number(date), cf: conf ?? null, p: pick, m: matchupLabel(sport, g),
           ...(sh != null ? { sh } : {}), ...(sr != null ? { sr } : {}),
+          ...(stOf(entry, g) != null ? { st: stOf(entry, g) } : {}),
           ...(gp != null ? { gp } : {}), ...(tr ? { tr } : {}) });
       delete p[id]; changed = true;
     });
@@ -3742,6 +3757,15 @@ function clearNflPreseason() {
         const r = o[id] || {};
         const sp = r.s ?? r.sport;                 // tally uses s, pending uses sport
         const d = Number(r.d ?? r.date);           // tally uses d, pending uses date
+        // 🚨 ESPN's own seasonType wins over the hand-maintained date. 1 is
+        // preseason; 2 and 3 are the regular season and the playoffs, and a
+        // pick on one of those is a real result no calendar constant gets to
+        // delete. NFL_KICKOFF was a day late in 2026 (the opener was a
+        // Wednesday) and this window swallowed the season opener whole — the
+        // date rule can only ever be as right as somebody remembered to make
+        // it, so it is now the FALLBACK, used only for entries written before
+        // `st` existed.
+        if (r.st != null && r.st !== 1) return;
         if (sp === 'nfl' && isFinite(d) && d >= from && d < cut) { delete o[id]; changed = true; dropped++; }
       });
       if (changed) localStorage.setItem(key, JSON.stringify(o));
@@ -4365,6 +4389,7 @@ function commitRow(r, dateStr, opts = {}) {
       const edge = info && info.favName ? (isEdge ? (hit ? 'h' : 'm') : null) : null;
       if (record) recordResult(g.id, hit, edge,
         { s: sport, d: Number(dateStr), cf: p.conf, p: p.winner.name, m: matchupLabel(sport, g),
+          ...(g.seasonType != null ? { st: g.seasonType } : {}),
           ...(p.sharp ? { sh: p.sharp.pts } : {}), ...(shLive ? { sr: 1 } : {}),
           ...(gap != null ? { gp: gap } : {}), ...(tier ? { tr: tier } : {}) });
       r.resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
@@ -4376,14 +4401,16 @@ function commitRow(r, dateStr, opts = {}) {
       if (total !== tot.line) {
         recordResult(`${g.id}:t`, tot.side === 'OVER' ? total > tot.line : total < tot.line, null,
           { s: sport, d: Number(dateStr), t: 1, p: `${tot.side} ${tot.line}`, m: matchupLabel(sport, g),
-            pt: Math.round(tot.proj * 10) / 10, ...(tot.tier ? { tr: tot.tier } : {}) });
+            pt: Math.round(tot.proj * 10) / 10, ...(tot.tier ? { tr: tot.tier } : {}),
+            ...(g.seasonType != null ? { st: g.seasonType } : {}) });
       }
     }
     if (r.ats) {
       const covered = atsResult(g, r.ats.homeSpread, r.ats.home);
       if (covered != null) {
         recordResult(`${g.id}:s`, covered, null,
-          { s: sport, d: Number(dateStr), a: 1, p: r.ats.label, m: matchupLabel(sport, g), pm: r.ats.proj });
+          { s: sport, d: Number(dateStr), a: 1, p: r.ats.label, m: matchupLabel(sport, g), pm: r.ats.proj,
+            ...(g.seasonType != null ? { st: g.seasonType } : {}) });
       }
     }
     return out;
@@ -4392,12 +4419,13 @@ function commitRow(r, dateStr, opts = {}) {
   const label = matchupLabel(sport, g);
   recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge,
     { sh: p.sharp?.pts ?? null, sr: shLive ? 1 : null, gp: gap, tr: tier, m: label,
+      st: g.seasonType ?? null,
       // up (v200): this is the recorder's second pass, made after the splits
       // feed woke up — allowed to replace a still-pregame entry that was
       // logged blind. See recordPick for why that is not look-ahead.
       up: opts.upgrade === true });
-  if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line, tot.proj, tot.tier, label);
-  if (r.ats) recordAtsPick(g.id, sport, dateStr, r.ats, label);
+  if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line, tot.proj, tot.tier, label, g.seasonType);
+  if (r.ats) recordAtsPick(g.id, sport, dateStr, r.ats, label, g.seasonType);
   return null;
 }
 
@@ -5843,8 +5871,22 @@ async function renderFantasyArticles() {
   else paintArticles(null, `📰 ${why}`);
 }
 
-// 2026 NFL calendar (expected). Kickoff is the Week-1 Thursday nighter.
-const NFL_KICKOFF = '2026-09-10';
+// 2026 NFL calendar (expected).
+//
+// 🚨 KICKOFF IS A WEDNESDAY THIS YEAR — 9 Sep 2026, NE @ SEA, the Super Bowl LX
+// rematch and the league's first Wednesday opener since 2012. This was set to
+// the 10th on the reasonable assumption that Week 1 always opens on a Thursday,
+// and that one day off SILENTLY DELETED THE SEASON OPENER FROM THE RECORD:
+// clearNflPreseason() drops every NFL entry dated before this constant, on
+// EVERY launch, so the pick that was logged live during NE @ SEA was purged
+// from both the tally and the pending queue and could never grade.
+//
+// ⚠️ So this is not a display constant. It is the boundary the purge runs on,
+// which means a wrong date here destroys real results rather than merely
+// mislabelling a countdown. Check it against the actual schedule each season,
+// and see the seasonType guard in clearNflPreseason for why a future slip can
+// no longer do this.
+const NFL_KICKOFF = '2026-09-09';
 const NFL_DATES = [
   ['Training camps open', '2026-07-22'],
   ['Hall of Fame Game', '2026-07-30'],
@@ -6060,6 +6102,12 @@ function pickAngles(name) {
 // Owner's league scoring (edit here if the league settings change).
 const NFL_SCORING = 'Half-PPR (0.5 per reception)';
 const daysUntil = (iso) => Math.ceil((new Date(iso + 'T12:00:00') - new Date()) / 86400000);
+// The kickoff day, written out. Derived, never typed: the NFL hero used to
+// carry a hardcoded "Thu Sep 10" beside a countdown computed from
+// NFL_KICKOFF, so the two could disagree — and in 2026 they did, because the
+// opener was a Wednesday.
+const kickoffLabel = () => new Date(NFL_KICKOFF + 'T12:00:00')
+  .toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 
 function renderFantasyFootball() {
   const box = $('#fantasy-football');
@@ -10558,7 +10606,7 @@ async function renderNFLWeek() {
     : '2026 Season';
   heroEl.innerHTML = `
     <h2 style="margin:0">NFL</h2><div class="muted">${esc(phase)}</div>
-    ${stype !== 2 && stype !== 3 && kick > 0 ? `<div class="nfl-kick">🏈 Kickoff in <b>${kick} day${kick === 1 ? '' : 's'}</b> — Thu Sep 10</div>` : ''}
+    ${stype !== 2 && stype !== 3 && kick > 0 ? `<div class="nfl-kick">🏈 Kickoff in <b>${kick} day${kick === 1 ? '' : 's'}</b> — ${esc(kickoffLabel())}</div>` : ''}
     ${stype === 1 ? '<div class="muted" style="margin-top:4px;font-size:.85rem">Preseason results don\'t feed the AI model — backups play, nothing predictive.</div>' : ''}`;
   if (setMode && events.length) setMode(true);
   if (!events.length) {
