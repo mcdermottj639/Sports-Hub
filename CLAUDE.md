@@ -214,7 +214,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   masthead), the ten-tab grid (5×2 on a phone — v218's 🎯 Pick'em filled the
   orphan cell the nine left), `#home-board` (🎲 The Board, between My Teams
   and ⛳ Golf) and `#botbar` (the persistent model-read bar).
-- `app.js` (~10,750 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
+- `app.js` (~12,000 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
 - `styles.css` — all styling, in NINE layers, and **order matters**: (1) the
   original dark `:root` vars and components; (2) the `:root[data-theme="light"]`
   "Editorial / Premium" block, which un-hardcodes the dark-only values (white
@@ -504,103 +504,15 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     you change shared CSS it leans on.
 - ~~`power.html` / `power.css` / `power.js`~~ — **GONE, moved to
   `mcdermottj639/League-History` on 10 Sep 2026** with the League History
-  archive. See the banner at the top of this file. The Labs tab links out to
-  it. Everything below described it while it lived here and is kept only as
-  history — **it is maintained in that repo now.**
-- ~~`history.js`~~ — **GONE, same move.** The 13-season archive.
-  Was: **🏆 Labs: Power Rankings Lab**, a standalone page (linked from the Labs tab). The owner's **weekly fantasy
-  power rankings** for their ESPN league: the model pre-builds a ranking each
-  week, the owner reorders anyone and writes a take on anyone, and the result
-  ships to the league as a link or as plain text. **The model is the starting
-  point, never the answer** — a row the owner moved says where the model had
-  it, which is the point of the whole thing.
-  - **Data: ONE call**, `/api/fantasy/football/season` (v195), which already
-    carries per-team `scores`/`outcomes`/W-L/`pointsFor` plus the derived
-    **all-play** record off the backend's cached League snapshot. No new
-    endpoint, no extra ESPN request. Last good payload cached on device
-    (`powerlab:season`).
-  - **The model** (`buildModel`): all-play win% **40%** · points per game
-    **25%** · last `RECENT_N` (3) weeks **25%** · actual record **10%**, the
-    three continuous inputs z-normalised across the league first so they are
-    commensurable. All-play is heaviest because it is the only input immune to
-    schedule luck — it is what separates a power ranking from the standings.
-    ⚠️ **The weights are a judgment call, NOT fitted** — a power ranking has no
-    graded outcome, so nothing here can be measured the way `app.js`'s betting
-    model is. Never present it as validated; never "tune" it as if a sample
-    existed. Said in the app too, in the "How the model ranks" card.
-  - **Preseason (zero weeks played) invents nothing** — no order, and **no
-    records or ppg on the rows**, because a fabricated 0-0 beside a name is a
-    lie. It hands over the twelve teams and says why.
-  - **A week is keyed by WEEKS PLAYED**, not `league.current_week` — label
-    `Preseason` / `After Week N`. The draft (`powerlab:draft`) restores only
-    for the same key, so a new week's results pre-build a fresh ranking and
-    can never eat edits belonging to a week already published.
-  - **Reordering:** ▲▼ for nudges plus an invisible `<select>` over each rank
-    number, so tapping the number opens the native iOS picker and 12th → 1st
-    is one gesture. Deliberately not HTML5 drag (dead under iOS touch).
-  - **Sharing** — `power.html#r=<base64url>`, a **self-contained** payload
-    (names, records, ppg, takes, the model's rank, movement), so a recipient
-    makes **no backend call**: it survives a sleeping backend, and a link that
-    re-derived from the live feed would show a different ranking a week later
-    than the one that was sent. `btoa` is Latin-1 only, so the payload is
-    UTF-8-encoded and chunked before encoding — takes are full of emoji. Plus
-    a plain-text copy, which is what actually gets pasted into the league chat.
-  - **🚨 Sharing PUBLISHES the week** (`powerlab:pub`), and the button says so:
-    ▲▼ movement is measured against the last set the owner actually shared,
-    never against the model's own previous guess. No published prior week → no
-    arrows and a line saying why.
-  - **The shared view carries a BYLINE** (`S.byline`, defaulting to the owner's
-    own team name, editable in the header, `b` in the payload). *"Someone
-    shared their power rankings"* is useless in a twelve-person league — the
-    first thing a recipient needs is whose take it is.
-  - **Movement follows the owner's OWN published table**: a team that held its
-    spot reads **`—`**, and every mark carries a **`LW N`** last-week rank
-    beside it. `moveStr`/`moveCls`/`lastWk`, gated on `hasMove` = *a week has
-    been published at all* (`null`), never on *the team moved* (`0`).
-    ⚠️ v208 shipped the dash's ABSENCE, on the v196 stray-dash reasoning; that
-    reasoning is about a dash ALONE, and the last-week line is the context that
-    makes it read as "held". Dates are formatted (`niceDate`) — a raw
-    `2026-09-07` reads like a database field. A manager label that just repeats
-    the team name is suppressed ("CC CC").
-  - **⛑️ Crests: the league's OWN logos, with the generated helmet as the
-    fallback** (`logos/`, `CREST_SRC`, `crestSrc`/`crestURL`/`drawCrest`,
-    `preloadSrcs`/`CREST_READY`). **All twelve** teams carry their real logo,
-    lifted from the owner's own 2023 rankings sheet, as a 144px same-origin
-    PNG (~420 KB for the set).
-    - ⚠️ **Keyed by MANAGER, never by team name** — the names change every year
-      (the 2023 sheet says "Death Dont Hurts Very Long" where the league now
-      says "Current Champ") while the twelve people do not. And it keys off
-      **`mgrFor`, NOT `mgrLabel`**: `mgrLabel` deliberately returns `''` when
-      the label would just repeat the team name (the "CC CC" rule), so keying
-      off it would have silently denied CC — and only CC — its own logo.
-    - ⚠️ **It is an OVERRIDE, not a replacement.** A manager with no file falls
-      back to the generated helmet, and that is what keeps the export
-      unbreakable: a generated crest needs no network, cannot 404 and cannot
-      taint the canvas. Same-origin PNGs don't taint it either, but they *can*
-      fail to load, and `drawCrest` treats a failure as "use the helmet". A
-      suite check points a row at a dead file and asserts the save still works.
-    - ⚠️ **The helmet is a FALLBACK, not a filter, and the distinction cost a
-      round trip.** The first cut shipped nine, holding back three of the
-      owner's own logos on the writing carve-out. That carve-out governs what
-      the **template engine generates**; it was never about the league's own
-      historical artefacts, which the owner made and all twelve managers have
-      had since 2023. The owner said so — *"U don't get to leave stuff out.
-      Add it all"* — and they were right. The helmet path stays live for a
-      manager the map doesn't know and for a file that fails to load; a suite
-      check drives both, since no team in this league exercises it any more.
-    - `onePager` draws synchronously, so the files must already be decoded:
-      `preloadSrcs` runs at boot and `saveOnePager` awaits it. `drawCrest` also
-      falls back to the module-level `CREST_READY` map, because the first cut
-      required the caller to hand one in and any caller that forgot silently
-      got helmets with no error.
-  - Mirrors index.html's inline palette script (sets BOTH `data-palette` and
-    `data-theme`), so it rides the app's token layer and looks like the app in
-    both palettes. ⚠️ That makes a **third** copy of `PALETTE_MIGRATE` — change
-    it with the other two. Every colour is a token; ▲/▼ are `--pos`/`--neg`
-    (the v189 rule) and accent fills take `--on-ac`, never `#fff`.
-  - Standalone, so NOT part of the `APP_VERSION`/`?v=` ritual — but bump
-    `power.css`/`power.js` `?v=` in `power.html` on changes (currently **v6**)
-    and its `styles.css?v=` (now 208) if you change shared CSS it leans on.
+  archive, because both are for the OTHER eleven managers rather than for the
+  owner. See the banner at the top of this file. Labs links out to it. The
+  lab's full documentation — the model, the voice engine and its carve-out,
+  the crests, the one-pager, the share/publish payload — **moved with it and
+  is maintained in that repo's `CLAUDE.md`.** Do not re-derive it here.
+- ~~`history.js`~~ — **GONE, same move.** The 13-season Nectars Bolonga
+  archive that shipped in the Fantasy tab as v225. Its data rules (the owner-
+  column verification, the "Christels Mattress is Hurd" correction, the three
+  kinds of fact) are all still true and all still enforced — in that repo.
 - ~~`survivor/`~~ — **GONE, moved to its own repo on 3 Sep 2026.** See the
   banner at the top of this file for where it went and why. Nothing in
   Sports-Hub reads it, referenced it, or breaks without it.
@@ -1907,7 +1819,9 @@ Current version as of this writing: **v226** (backend **b15-ir-slot**).
     1280px, no overflow, nothing spilling the viewport, no console errors.
 
 - **🏆 Power Rankings Lab — the league's weekly rankings, pre-built then argued
-  with (v208)** — the owner: *"I want a weekly power rankings lab for the
+  with (v208)** ⚠️ **MOVED OUT in v226 to `mcdermottj639/League-History`, and
+  the working documentation went with it — this entry is the record of how it
+  was built, not a description of anything in this repo.** — the owner: *"I want a weekly power rankings lab for the
   fantasy league where I can change peoples ranking and add comments. U
   pre-build the rankings each week tho and needs to be shareable to the
   league."* All four halves shipped as a standalone Labs page
@@ -5927,7 +5841,9 @@ rewrite.**
     in. `showTab` calls `TAB_ENTER[name]?.()` before the renderer; a renderer
     should hold only work that is safe to repeat on any repaint. (**Labs** — its own top-level tab as of
   v107, holding the Labs experiments: the standalone `draft.html`/`trivia.html`/
-  `workout.html`/`power.html` links plus the in-app **Fantasy Mock Draft** rendered into `#labs-mock`; its
+  `workout.html` links, a link OUT to the Power Rankings Lab (which moved to
+  `mcdermottj639/League-History` in v226), plus the in-app **Fantasy Mock
+  Draft** rendered into `#labs-mock`; its
   renderer is a no-op since the content is static + launched on demand.) (**Scores** and **Standings** tabs were
   removed in v78 — the owner gets those better elsewhere; Home is now the daily
   full-slate overview. In v79 the Home slate was made view-only; **v89 reversed
@@ -6621,19 +6537,12 @@ rewrite.**
   — a device with no remembered league pulls no roster at boot. It is an
   optimistic head start, never the source of truth: the real `/api/health`
   check still runs and corrects it.
-- `powerlab:draft` — the Power Rankings Lab's week in progress
-  (`{key, order, comments, at}`, autosaved on every edit). `key` = weeks
-  played, so it is restored only for the week it belongs to — a new week's
-  results pre-build a fresh ranking instead.
-- `powerlab:pub` — published weeks keyed by that same key
-  (`{order, comments, at, label}`). Written when the owner SHARES, and it is
-  what ▲▼ movement is measured against — movement the league never saw is not
-  movement.
-- `powerlab:season` — last good `/api/fantasy/football/season` payload, so the
-  lab still ranks when the free-tier backend is asleep (with a stale banner).
-- `powerlab:spice` — `'0'` when the owner has turned off the rationed
-  profanity in the pre-written takes. Absent/`'1'` = on, which is the default
-  and matches the style spec's ~2-3 lines a week.
+- ~~`powerlab:draft` / `powerlab:pub` / `powerlab:season` / `powerlab:spice`~~ —
+  **the Power Rankings Lab's keys, and the lab left this repo on 10 Sep 2026.**
+  Nothing here reads or writes them; they are documented in
+  `mcdermottj639/League-History`. Devices that used the lab while it lived here
+  still carry them, harmlessly — same as `sportshub:sharp` and
+  `sportshub:palette`.
 - `sportshub:fparticles` — last good FantasyPros article list (`{at, items}`), so
   the 📰 Fantasy Advice section paints instantly and still shows something when
   the backend is asleep.
@@ -6680,20 +6589,34 @@ everything". **It is nowhere near any hosting limit.** The one number that IS
 under pressure is this file. Re-measure rather than trusting these figures if
 the repo has grown a lot.
 
+**Re-measured 10 Sep 2026**, after League History left. The Supabase row that
+used to sit here belonged to Family Survivor and went with it in September.
+
 | What | Now | The limit | Headroom |
 |---|---|---|---|
-| Deployed site (what Pages serves) | **~1.4 MB** | 1 GB published site | 0.14 % |
-| Packed git objects | **~650 KB** | 1 GB repo (soft), 100 MB/file (hard) | 0.06 % |
-| Pages bandwidth | 20 relatives × a few opens/week × ~400 KB | 100 GB/month (soft) | rounding error |
-| Supabase rows | 20 players × 18 weeks = **360 picks/season**, ~40 KB | 500 MB free tier | 0.008 % |
+| Deployed site (what Pages serves) | **~2.3 MB** | 1 GB published site | 0.23 % |
+| Packed git objects | **~5.2 MB** | 1 GB repo (soft), 100 MB/file (hard) | 0.5 % |
+| Pages bandwidth | one person, a few opens a day | 100 GB/month (soft) | rounding error |
+| `CLAUDE.md` | **~6,630 lines / 469 KB** | none, but see below | — |
 
-- **🚨 The real constraint is `CLAUDE.md` itself.** It is read at the start of
-  every session, and at 4,700 lines / 333 KB it had become the most expensive
-  thing in the repo by a wide margin — bigger than `app.js`. Splitting
-  Survivor out took the root file to ~4,080 lines / 289 KB and put its 705
-  lines where only Survivor sessions pay for them; the app itself followed
-  into its own repo the next day. **When a section describes
+- **🚨 The real constraint is `CLAUDE.md` itself, and it is now the largest
+  thing in the repo** — read in full at the start of every session, and at
+  **~6,630 lines / 469 KB** it is over twice what it was in early September
+  and larger than `app.js`'s source. Two splits have already been made for
+  exactly this reason: Family Survivor took 705 lines out on 3 Sep, and
+  League History + the Power Rankings Lab took ~200 more out on 10 Sep (99
+  lines of lab documentation and 13 of storage keys moved into that repo's own
+  file, where only its sessions pay for them). **When a section describes
   something that is really its own thing, give it its own file.**
+- ⚠️ **The growth is the CHANGELOG, and it is deliberate** — this file's own
+  standing rule is that entries are annotated, never rewritten, because the
+  reasoning behind a decision is what stops the next session repeating a
+  mistake. That is worth paying for. But it does mean the next reduction has
+  to come from splitting, not from trimming prose: **the honest lever is
+  moving a subject out, not making the record shorter.** A plausible next
+  candidate is the Labs pages (`draft`/`trivia`/`workout`), which are ~130
+  lines of Files documentation for three standalone apps that share nothing
+  with `app.js` but the stylesheet.
 - ⚠️ **`sportshub:aitally` is the one key that grows without bound.** It used
   to share a ~5 MB origin quota with Survivor, which has moved out — so the
   whole bucket is Sports-Hub's now, but the growth is still worth watching. **`sportshub:aitally` is the only key here that
@@ -6704,9 +6627,10 @@ the repo has grown a lot.
   calibration sample silently loses its oldest era.
 - `sportshub:lines:{date}` self-purges to today only, and `sportshub:pending`
   purges at 14 days. Those two cannot grow.
-- **Moving `survivor/` out changed none of these numbers** — it went for the
-  three reasons in the banner at the top of this file, none of which was
-  storage.
+- **Neither move was made for storage** — `survivor/` went for the three
+  reasons in its banner and League History for the two in its own, and none of
+  the five was a size limit. The `CLAUDE.md` saving was a side effect both
+  times, and a welcome one.
 
 ## GitHub Pages gotcha
 
