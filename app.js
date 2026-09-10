@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v224';
+const APP_VERSION = 'v225';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -669,6 +669,73 @@ function trackLines(sport, games) {
     }
   } catch (_) {}
 }
+
+// This device's stored line record for one game. Three readers wanted it and
+// each carried its own copy of the key and the JSON.parse (lineMoves,
+// moveHistory, and now pregameOdds) — one door instead, per the v177 rule.
+function lineRec(sport, g) {
+  try {
+    return JSON.parse(localStorage.getItem(`sportshub:lines:${ymd(sportsDate())}`) || '{}')[`${sport}:${g?.id}`] || null;
+  } catch (_) { return null; }
+}
+
+// 🚨 ESPN's scoreboard STOPS carrying the pregame line the moment a game kicks
+// off. `odds` goes null, so the card that read "SEA -3.5 · O/U 43.5" all week
+// blanks to "no line posted / no total posted" at exactly the moment the owner
+// is watching the game and wants to check the model against the number it was
+// priced at.
+//
+// Nothing needs fetching. trackLines has been snapshotting every line this
+// device saw while a game was still SCHEDULED since v88 — the numbers were
+// already on the phone, sitting in the same key the 🔪 Sharp Action move
+// counter reads. The read just had to look.
+//
+// ⚠️ The LAST pregame snapshot, not the first: it is the closest thing this
+// device has to a CLOSING line, and the closing number is what "the pregame
+// line" means. `first` is the fallback for a game the app only ever saw once.
+//
+// ⚠️ Returns null for a SCHEDULED game, deliberately — before kickoff the live
+// feed is the truth and a stored copy could only ever be staler.
+function pregameOdds(sport, g) {
+  if (!g || gameState(g) === 'scheduled') return null;
+  const rec = lineRec(sport, g);
+  const s = rec?.last || rec?.first;
+  if (!s) return null;
+  // favName is not stored (it is a team NAME, and the snapshot keeps sides as
+  // a boolean), so rebuild it from the game object the caller already has.
+  const favName = s.fh == null ? null : (s.fh ? g.home?.name : g.away?.name);
+  return { details: s.details ?? null, ou: s.ou ?? null, hML: s.hML ?? null, aML: s.aML ?? null,
+    dML: s.dML ?? null, spread: s.sp ?? null, favHome: s.fh ?? null, favName,
+    provider: null, at: s.t || null };
+}
+
+// The odds a card should SHOW: the live feed while a game is scheduled, this
+// device's own pregame snapshot once it has started.
+//
+// ⚠️ The pregame numbers REPLACE the live ones wholesale rather than filling
+// gaps in them, and that is the point rather than a shortcut. A book's in-game
+// price tracks the score — the v169 rule, that is the game happening, not
+// money moving on it — so pricing a pregame model read against it would be
+// comparing the model to a number that already knows what the model didn't.
+// Merging the two would also produce a row labelled "pregame" carrying a live
+// number, which is the kind of half-true display this file keeps having to fix.
+// If the snapshot never captured a total, the row still says "no total posted",
+// because that is true OF THE PREGAME MARKET.
+//
+// 🚨 DISPLAY ONLY. The restored line never reaches the record: buildBoard keeps
+// `info`/`gap`/`tier`/`ats`/`tot` on the live feed, which is what commitRow
+// reads. Letting it through would let a FINISHED game acquire a spread or
+// totals pick it never had — a fresh prediction of a completed game, which is
+// the v199 look-ahead rule exactly.
+function shownOdds(sport, g, live) {
+  const pre = pregameOdds(sport, g);
+  if (!pre) return { info: live, pregame: false, at: null };
+  return { info: { ...pre, provider: live?.provider ?? null }, pregame: true, at: pre.at };
+}
+const lineAtLabel = (t) => {
+  if (!t) return '';
+  try { return new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (_) { return ''; }
+};
 async function getStandings(sport, season) {
   const path = LEAGUES[sport].espnPath;
   // level=3 asks ESPN to nest by division (MLB East/Central/West, NFL
@@ -1115,17 +1182,21 @@ const gradeHue = (letter) =>
   letter[0] === 'A' ? 'var(--pos)' : letter[0] === 'B' ? 'var(--pos2)'
   : letter[0] === 'C' ? 'var(--wm)' : letter[0] === 'D' ? 'var(--neg2)' : 'var(--neg)';
 
-function oddsSectionHTML(info, awayAbbr, homeAbbr, pred, sport, g) {
+function oddsSectionHTML(info, awayAbbr, homeAbbr, pred, sport, g, pregameAt) {
   if (!info) return '';
   const cmp = marketCompare(pred, info.favName, info, sport, g);
   const ml = (v) => (v == null ? '—' : (Number(v) > 0 ? `+${v}` : `${v}`));
-  return `<div class="md-section-title acc-open">Betting Odds${info.provider ? ` · ${info.provider}` : ''}</div>
+  const at = pregameAt === true ? '' : lineAtLabel(pregameAt);
+  const src = pregameAt
+    ? `<div class="ai-why" style="margin-top:2px">Last pregame line this device saw${at ? ` (${at})` : ''} — ESPN stops publishing the line at kickoff.</div>`
+    : '';
+  return `<div class="md-section-title acc-open">Betting Odds${pregameAt ? ' · pregame' : info.provider ? ` · ${info.provider}` : ''}</div>
     <div class="odds-grid">
       <div><div class="ol">Spread</div><div class="ov">${info.details ?? '—'}</div></div>
       <div><div class="ol">O/U</div><div class="ov">${info.ou ?? '—'}</div></div>
       <div><div class="ol">${awayAbbr || 'Away'} ML</div><div class="ov">${ml(info.aML)}</div></div>
       <div><div class="ol">${homeAbbr || 'Home'} ML</div><div class="ov">${ml(info.hML)}</div></div>
-    </div>${cmp ? `<div class="market-cmp">${cmp}</div>` : ''}
+    </div>${src}${cmp ? `<div class="market-cmp">${cmp}</div>` : ''}
     <div class="ai-why" style="opacity:.7;margin-top:2px">Odds for reference only — not betting advice.</div>`;
 }
 
@@ -1209,8 +1280,20 @@ function renderGameDetail(sport, data, pred, extra, g, report) {
   if (live) html += liveSituationHTML(sport, data, comp, g);
 
   const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g?.odds;
-  const oddsInfo = normOdds(rawO, home.team?.displayName, away.team?.displayName, home.team?.abbreviation, away.team?.abbreviation);
-  html += oddsSectionHTML(oddsInfo, away.team?.abbreviation, home.team?.abbreviation, pred, sport, g);
+  let oddsInfo = normOdds(rawO, home.team?.displayName, away.team?.displayName, home.team?.abbreviation, away.team?.abbreviation);
+  // ⚠️ Gap-FILL here, not the wholesale replacement the slate cards do, and the
+  // difference is which feed each one reads. `pickcenter` normally keeps the
+  // closing number through a game; it is the SCOREBOARD's `odds` that goes null
+  // at kickoff. So the device snapshot only stands in when nothing usable came
+  // back at all — otherwise the modal would show a stored copy in place of the
+  // book's own close, which is strictly worse information.
+  let oddsPre = null;
+  const bare = (o) => !o || (o.spread == null && o.ou == null && o.hML == null && o.aML == null && !o.details);
+  if (bare(oddsInfo)) {
+    const pre = pregameOdds(sport, g);
+    if (pre) { oddsInfo = pre; oddsPre = pre.at ?? true; }
+  }
+  html += oddsSectionHTML(oddsInfo, away.team?.abbreviation, home.team?.abbreviation, pred, sport, g, oddsPre);
   html += report || '';
 
   // Pass the game + odds so the pick block can show the spread and total
@@ -2697,10 +2780,8 @@ function splitsFor(report, g) {
 function lineMoves(sport, g, report) {
   const be = report?.movement?.[String(g.id)];
   if (be?.first && be.n > 1) return { first: be.first, last: be.last || be.first, src: 'server' };
-  try {
-    const rec = JSON.parse(localStorage.getItem(`sportshub:lines:${ymd(sportsDate())}`) || '{}')[`${sport}:${g.id}`];
-    if (rec?.first) return { first: rec.first, last: rec.last || rec.first, src: 'device' };
-  } catch (_) {}
+  const rec = lineRec(sport, g);
+  if (rec?.first) return { first: rec.first, last: rec.last || rec.first, src: 'device' };
   return be?.first ? { first: be.first, last: be.last || be.first, src: 'server' } : null;
 }
 // ===================== 🔪 Sharp Action (v167) ==============================
@@ -2782,9 +2863,7 @@ function moveHistory(sport, g, report) {
   };
   const be = from(report?.movement?.[String(g.id)], 'server');
   if (be) return be;
-  try {
-    return from(JSON.parse(localStorage.getItem(`sportshub:lines:${ymd(sportsDate())}`) || '{}')[`${sport}:${g.id}`], 'device');
-  } catch (_) { return null; }
+  return from(lineRec(sport, g), 'device');
 }
 
 // Every book ESPN lists for this game. `pickcenter` is an array of providers;
@@ -4230,8 +4309,15 @@ async function buildBoard(sport, games, opts = {}) {
     // when the number is under the bar, and "no play" when the model is
     // pinned or the book posted nothing. Recording still reads ats/tot only,
     // so nothing here can change what enters the record.
-    const atsR = atsRead(sport, g, p, info);
-    const totR = totalRead(sport, p, info);
+    // 🚨 DISPLAY vs RECORD, and the split is the whole safety of this feature.
+    // `info`/`gap`/`tier`/`ats`/`tot`/`isEdge` above stay on the LIVE feed and
+    // are what commitRow writes, so the record is byte-identical to before.
+    // `shownInfo` is the same thing with the device's pregame snapshot standing
+    // in once the game has kicked off (see shownOdds) — and only the raw reads,
+    // which were already display-only by design, are computed from it.
+    const shown = shownOdds(sport, g, info);
+    const atsR = atsRead(sport, g, p, shown.info);
+    const totR = totalRead(sport, p, shown.info);
     // 🚨 v200 — shLive says the DK splits feed was READABLE for this slate,
     // which is a different fact from `p.sharp` (this game had a qualifying
     // 7+ point divergence). Without it the two are indistinguishable in the
@@ -4240,6 +4326,8 @@ async function buildBoard(sport, games, opts = {}) {
     // second one ~99% of the time without anything saying so. That ambiguity
     // is exactly what hid this bug for forty versions.
     return { g, sport, p, info, gap, tier, tot, ats, atsR, totR,
+      shownInfo: shown.info, shownGap: p && shown.info ? marketGap(p, shown.info) : null,
+      linePregame: shown.pregame, lineAt: shown.at,
       shLive: !!report?.splits?.ok,
       isEdge: tier === 'alert' || tier === 'best' || tier === 'edge' };
   });
@@ -4461,7 +4549,12 @@ async function recordFromModal(sport, g) {
 // 1× there is no ring, which is how the colour and the threshold stay honest
 // with each other.
 function marketRowsHTML(r) {
-  const { g, sport, p, info, gap } = r;
+  const { g, sport, p } = r;
+  // Display reads the SHOWN odds — the live feed before kickoff, this device's
+  // pregame snapshot after it. The record still reads r.info / r.gap / r.ats /
+  // r.tot, so nothing rendered here can change what is stored.
+  const info = r.shownInfo !== undefined ? r.shownInfo : r.info;
+  const gap = r.linePregame ? r.shownGap : r.gap;
   const row = (k, pick, edge, cls) =>
     `<div class="mkt-row"><span class="mkt-k">${k}</span>` +
     `<span class="mkt-p">${pick}</span>` +
@@ -4498,6 +4591,13 @@ function marketRowsHTML(r) {
   // projection, so a card showing the model on the favourite's ML and the
   // dog's spread is not contradicting itself, and should say why.
   const notes = [];
+  // Provenance FIRST. The render made the case: it read as a trailing footnote
+  // after two "shown, not recorded" caveats, when it is the sentence that tells
+  // you what every number above it IS.
+  if (r.linePregame && info) {
+    const at = lineAtLabel(r.lineAt);
+    notes.push(`Numbers are the last pregame line this device saw${at ? ` (${at})` : ''} — ESPN stops publishing the line at kickoff, so this is what the model was priced against, not a live market.`);
+  }
   if (ar && !ar.pinned && !ar.qualifies) notes.push(`Spread read is under the ${ATS_EDGE_MIN[sport] ?? 2}-pt ${(LEAGUES[sport]?.label || sport)} bar — shown, not recorded.`);
   if (tr?.broken) notes.push(`Total projection is ${Math.abs(tr.diff).toFixed(1)} off the book — past the ${TOT_MAX_DIFF[sport] ?? 4}-pt sanity bar, so this is a data hole, not a play.`);
   else if (tr && !tr.qualifies) notes.push(`Total read is under the ${TOT_EDGE_MIN[sport] ?? 1}-pt bar — shown, not recorded.`);
@@ -4514,7 +4614,8 @@ function marketRowsHTML(r) {
 // side. A bar alone says "68% — of what?"; the tick says what the book thinks,
 // and the distance between them IS the play.
 function confVsMarketHTML(r) {
-  const { p, info } = r;
+  const { p } = r;
+  const info = r.shownInfo !== undefined ? r.shownInfo : r.info;
   if (!p?.conf) return '';
   const mkt = marketHomeProb(info);
   const mktPick = mkt == null ? null
@@ -10295,6 +10396,13 @@ async function enrichSlate(sport, host, games) {
   // sample selected by kickoff time. Not awaited: the strips are what the
   // user is waiting for.
   recordSlate(sport, open);
+  // The NFL/CFB tabs read the slate through `scoreboard()` directly, which —
+  // unlike getGames and weekSlate — does no line tracking. That left this tab
+  // depending on Home or AI Picks having been rendered first for the pregame
+  // line to ever reach the device, and the pregame line is what the card falls
+  // back to once a game kicks off. Same today-only filter weekSlate uses.
+  const todayY = ymd(sportsDate());
+  trackLines(sport, (games || []).filter((g) => slateDateFor(g) === todayY));
   if (!slate.length) return;
 
   // The note goes in first as a placeholder so the section doesn't reflow when
@@ -10320,7 +10428,13 @@ async function enrichSlate(sport, host, games) {
     const card = cards[g.id];
     if (!card || card.querySelector('.bb-strip')) return;
     const p = preds[i];
-    const info = normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
+    const live = normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
+    // ESPN drops the line at kickoff, so a game in progress falls back to this
+    // device's own last pregame snapshot — see shownOdds. This strip renders
+    // nothing to the record (recordSlate above is the writer, and it runs off
+    // the raw feed), so the substitution is display-only here by construction.
+    const shown = shownOdds(sport, g, live);
+    const info = shown.info;
     const sp = splitsFor(report, g);
     if (sp) withSplits++;
     const gap = p && info ? marketGap(p, info) : null;
@@ -10338,7 +10452,11 @@ async function enrichSlate(sport, host, games) {
                    info.hML != null ? `${g.home.abbr || 'Home'} ${ml(info.hML)}` : ''].filter(Boolean).join(' / ');
       }
       const bits = [lineTxt, info?.ou != null ? `O/U ${info.ou}` : ''].filter(Boolean).join(' · ');
-      if (bits) lineRow = `<div class="bb-line">📊 ${esc(bits)}</div>`;
+      // A live card gets the line back from the device's pregame snapshot, and
+      // says so — an unlabelled number on an in-progress game would read as the
+      // current market, which is the one thing it is not.
+      const tag = shown.pregame ? ` <span class="bb-muted">· pregame${lineAtLabel(shown.at) ? ' ' + lineAtLabel(shown.at) : ''}</span>` : '';
+      if (bits) lineRow = `<div class="bb-line">📊 ${esc(bits)}${tag}</div>`;
     }
 
     let modelTxt;
@@ -10356,6 +10474,7 @@ async function enrichSlate(sport, host, games) {
     // where a week is actually read, and a strip that named only the winner
     // made the spread and the total look like they hadn't been priced.
     const markets = p ? marketRowsHTML({ g, sport, p, info, gap,
+      shownInfo: info, shownGap: gap, linePregame: shown.pregame, lineAt: shown.at,
       atsR: atsRead(sport, g, p, info), totR: totalRead(sport, p, info) }) : '';
     const strip = el('div', 'bb-strip' + (isEdge ? ' edge' : ''));
     strip.innerHTML = `${lineRow}<div class="bb-model">${modelTxt}</div>${markets}${sharpRows}`;

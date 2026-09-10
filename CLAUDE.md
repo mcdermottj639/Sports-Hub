@@ -600,10 +600,10 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v224** (backend **b15-ir-slot**).
+Current version as of this writing: **v225** (backend **b15-ir-slot**).
 
 - **📜 LEAGUE HISTORY — 13 seasons of Nectars Bolonga, inside the Fantasy tab
-  (v224)** — the owner: *"I want the fantasy page to have a current year tab
+  (v225)** — the owner: *"I want the fantasy page to have a current year tab
   showing all that we already have and then a history tab within fantasy
   showing the history of our league nectars bolgna."* Then, over a dozen
   messages, they fed in the source data and corrected it as we went, and
@@ -721,6 +721,91 @@ Current version as of this writing: **v224** (backend **b15-ir-slot**).
     check, and a template-hole sweep of every view and all twelve profiles.
     ⚠️ The `.sec-chev` 28px tap target the audit flags is **app-wide since
     v165** and not from this change — the whole heading row is tappable.
+  - ⚠️ **This shipped as v225, not v224, because another session took v224
+    while it was being built** (the live-game pregame-line fix below). The
+    merge is a real merge — both changes touch `app.js`, `styles.css`,
+    `index.html` and `sw.js` — and the whole suite above plus the ten-tab
+    sweep was re-run on the merged tree, not just on mine. **When a version
+    number collides, bump YOURS and re-verify against the other change; do not
+    rewrite the shipped one.**
+
+- **📊 A live game keeps its PREGAME line on the card (v224)** — the owner, on
+  the NFL slate with NE @ SEA in the 2nd quarter reading `SPREAD no line
+  posted` / `TOTAL no total posted`: *"This game went live but it should still
+  show the model picks vs the pregame lines here. I like to reference that
+  during a game."*
+  - **ESPN's scoreboard stops carrying `odds` at kickoff.** Spread, total and
+    both moneylines go null the moment a game starts, so the card that read
+    `SEA -3.5 · O/U 43.5` all week blanked at exactly the moment the owner was
+    watching the game — and with `info` null the moneyline row also lost its
+    `vs market` number and read as a bare percentage.
+  - **🚨 Nothing needed fetching. The numbers were already on the phone.**
+    `trackLines` has snapshotted every line this device saw while a game was
+    still SCHEDULED since v88 (`sportshub:lines:{date}`) — that store is what
+    the 🔪 Sharp Action move counter reads. The card just never looked at it.
+    New `pregameOdds` reads the **last** pregame snapshot (the closest thing
+    the device has to a CLOSING line, which is what "the pregame line" means;
+    `first` is the fallback), and `shownOdds` is the one door both card
+    renderers go through.
+  - **⚠️ The pregame numbers REPLACE the live ones wholesale rather than
+    filling gaps in them**, and that is the design rather than a shortcut. A
+    book's in-game price tracks the score — v169's rule, that is the game
+    happening, not money moving on it — so pricing a pregame model read against
+    it would compare the model to a number that already knows what the model
+    didn't. Merging would also produce a row labelled "pregame" carrying a live
+    number. If the snapshot never captured a total the row still says **"no
+    total posted"**, because that is true *of the pregame market*.
+  - **🚨 DISPLAY ONLY, and this is the whole safety of it.** `buildBoard` keeps
+    `info` / `gap` / `tier` / `ats` / `tot` / `isEdge` on the LIVE feed — those
+    are what `commitRow` writes — and the restore feeds only `shownInfo` /
+    `shownGap` plus `atsR` / `totR`, **which were already the display-only pair
+    by design since v187**. Letting it through would let a FINISHED game acquire
+    a spread or totals pick it never had, i.e. a fresh prediction of a completed
+    game — the v199 look-ahead rule exactly. Asserted: after the live render the
+    pending queue holds no `:s` and no `:t` for the game whose card is showing
+    both, and `sportshub:aitally` is byte-identical.
+  - **It says what it is showing.** The `📊` line reads `· pregame 7:12 PM` and
+    the card's note leads with where the numbers came from. An unlabelled
+    number on an in-progress game would read as the current market, which is
+    the one thing it is not.
+    - ⚠️ **The render is what put that sentence FIRST.** It was written last in
+      the note list and read as a footnote after two "shown, not recorded"
+      caveats — when it is the sentence that tells you what every number above
+      it *is*.
+  - **The game modal gap-FILLS instead**, and the difference is which feed each
+    one reads: `pickcenter` normally keeps the close through a game, and it is
+    the scoreboard's `odds` that goes null. So the modal substitutes only when
+    nothing usable came back at all — otherwise it would show a stored copy in
+    place of the book's own closing number, which is strictly worse.
+  - **Found while wiring it: the NFL and CFB tabs never tracked lines at all.**
+    They read the slate through `scoreboard()` directly, which — unlike
+    `getGames` and `weekSlate` — does no tracking, so this tab depended on Home
+    or AI Picks having been rendered first for the pregame line to ever reach
+    the device. `enrichSlate` now tracks its own slate, same today-only filter
+    `weekSlate` uses.
+  - `lineRec` consolidates the three copies of the key-building and
+    `JSON.parse` that `lineMoves`, `moveHistory` and now `pregameOdds` each
+    carried (the v177 rule).
+  - Verified in headless Chromium at 390px — **20 checks** in a **persistent**
+    context, because the whole feature lives in localStorage that has to survive
+    the reload between "scheduled" and "live" (the v216 lesson). The suite
+    drives the owner's exact case: the line is posted and snapshotted while the
+    game is scheduled, then ESPN's payload flips to live **with `odds` removed**.
+    Against v223 it reproduces the screenshot verbatim (`MONEYLINE Seattle
+    Seahawks · 57% —`, `SPREAD no line posted`, `TOTAL no total posted`) and
+    fails 9; after the fix all three markets are priced against `-3.5` / `43.5`,
+    labelled pregame. Controls: a scheduled card still uses the LIVE feed and is
+    not labelled, a live game the device never saw priced still says "no line
+    posted", and the record is untouched. The v223 suites (14 + 14) and the
+    24-check ten-tab sweep pass.
+  - ⚠️ **Test-fixture note, and it produced two FALSE PASSES:** the first cut
+    stubbed `/teams/*/schedule` with nothing, so every `teamProfile` was null,
+    `projTotal` was null, and the TOTAL row rendered **"no model read"** — which
+    contains the word "model", so an assertion of `/TOTAL/ && /model/` passed
+    against a row that proved nothing. **Match the NUMBER, not a word that
+    appears in the failure string.** The schedule fixture also has to echo the
+    team id it was asked for and send scores as `{value, displayValue}` (the
+    v205 note).
 
 - **🚨 A player on IR was being counted as a STARTER — the backend's slot table
   was written for baseball (v223, backend `b15-ir-slot`)** — the owner, on a
@@ -6470,6 +6555,14 @@ rewrite.**
   first-seen, latest, and (v167) a bounded **`hist`** of every observed change
   with the numeric spread, which is what the 🔪 Sharp Action move counts are
   built from. Only today's key is kept; older days are purged on write.
+  **v224 gave it a second job**: ESPN's scoreboard drops `odds` at kickoff, so
+  once a game has started its card falls back to the **last pregame snapshot**
+  here for the spread, total and moneylines (`lineRec` → `pregameOdds` →
+  `shownOdds`) and says so. ⚠️ That restore is **display-only** — `buildBoard`
+  keeps `info`/`gap`/`tier`/`ats`/`tot` on the live feed, which is what
+  `commitRow` records, or a finished game could acquire a spread pick it never
+  had. Written only while a game is `scheduled`, by `getGames`, `weekSlate`
+  and (v224) `enrichSlate`.
 - `sportshub:debugbooks` — set to `'1'` to log ESPN's raw `pickcenter` payload
   to the console when a game opens (v167; the multi-book shape is unverified).
 - `sportshub:fantasy:{sport}` — the saved fantasy roster, one per sport
