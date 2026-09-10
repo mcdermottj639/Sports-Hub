@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=225" />
+  <link rel="stylesheet" href="styles.css?v=226" />
 </head>
 <body>
   <!-- Live rail (v163): one card per in-progress game, each carrying that
@@ -174,11 +174,9 @@
         <h2 class="section-title no-acc" style="margin-top:0">Fantasy Tracker</h2>
         <div id="fantasy-sport" class="chips"></div>
       </div>
-      <!-- Level 1: this season vs the 13-year archive. Level 2 (#fan-sub2)
-           only exists inside History and is built by renderLeagueHistory. -->
-      <div id="fan-sub" class="ai-sub" role="tablist" aria-label="Fantasy view"></div>
-      <div id="fantasy-history" hidden></div>
-      <div id="fantasy-now">
+      <!-- 📜 League History MOVED to mcdermottj639/League-History (Sep 2026).
+           The #fan-sub bar and #fantasy-history panel went with it. -->
+      <p class="muted" style="margin:10px 0 0"><a href="https://mcdermottj639.github.io/League-History/" target="_blank" rel="noopener">📜 League history &amp; power rankings →</a> — thirteen seasons of Nectars Bolonga, now its own app.</p>
       <!-- NFL preseason-prep view (shown for the Football chip; before the season
            / before the live league is connected). Populated by renderFantasyFootball. -->
       <div id="fantasy-football"></div>
@@ -205,7 +203,6 @@
         <div id="fantasy-standings"></div>
         <div id="fantasy-playoffs"></div>
       </div>
-      </div><!-- /#fantasy-now -->
     </section>
 
     <section id="pickem" class="tab-panel" role="tabpanel" aria-labelledby="tab-pickem" tabindex="0">
@@ -222,7 +219,10 @@
         <p><a class="fan-btn" href="draft.html" style="display:inline-block;text-decoration:none">🏈 NFL Mock Draft Simulator →</a></p>
         <p><a class="fan-btn" href="trivia.html" style="display:inline-block;text-decoration:none">🧠 Sports Trivia Lab →</a></p>
         <p><a class="fan-btn" href="workout.html" style="display:inline-block;text-decoration:none">🏋️ Workout Lab (3-day split) →</a></p>
-        <p><a class="fan-btn" href="power.html" style="display:inline-block;text-decoration:none">🏆 Power Rankings Lab (your league) →</a></p>
+        <!-- 🏆 The Power Rankings Lab MOVED to the league's own repo (Sep 2026),
+             with the League History archive. It is not here any more; this is a
+             link out, not a lab. -->
+        <p><a class="fan-btn" href="https://mcdermottj639.github.io/League-History/power.html" style="display:inline-block;text-decoration:none">🏆 Power Rankings Lab (moved) →</a></p>
         <p><button id="labs-mock-start" class="fan-btn" type="button" style="display:inline-block">🏟️ Fantasy Mock Draft (vs CPU)</button></p>
       </div>
       <div id="labs-mock"></div>
@@ -264,7 +264,6 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="history.js?v=225" defer></script>
-  <script src="app.js?v=225" defer></script>
+  <script src="app.js?v=226" defer></script>
 </body>
 </html>

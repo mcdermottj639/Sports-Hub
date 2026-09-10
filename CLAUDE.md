@@ -27,6 +27,27 @@ Guidance for Claude (and humans) working on this repo. Read this first.
 > ⚠️ **This file is Sports-Hub only.** Anything about Survivor lives in that
 > repo's own `CLAUDE.md`. Do not add a second application to this one.
 
+> # 📦 League History + the Power Rankings Lab have MOVED OUT (10 Sep 2026)
+> The **Nectars Bolonga** archive (13 seasons, 2013-2025) shipped inside the
+> Fantasy tab as v225, and the **Power Rankings Lab** lived in Labs from v208.
+> Both now have their own repo and their own origin:
+> **`mcdermottj639/League-History`** → https://mcdermottj639.github.io/League-History/
+>
+> **Nothing in this repo depends on them and nothing here should recreate them.**
+> `history.js` is deleted, the `.fh-` CSS layer is deleted, `power.*` is gone,
+> and the Fantasy tab's two-level bar went with them. Labs and Fantasy each
+> carry a link out.
+>
+> ⚠️ **Why it left, and the reason would come straight back:** Sports-Hub is
+> ONE person's app at a URL whose sibling paths carry a betting model and a
+> fantasy team. League History is a link handed to **eleven other people**.
+> Same reasoning as Family Survivor, and the same rule follows from it — **do
+> not add a second application to this repo.**
+>
+> ⚠️ **And a 13-season archive must exist exactly ONCE.** Two copies diverge,
+> and then neither can be trusted. If something here ever needs league history,
+> link to that app; do not copy the data back.
+
 > ## ⚠️ Standing rule: keep this file current
 > Whenever you change the architecture, build/deploy pipeline, data model, or
 > add/remove a feature, **update the relevant section of this file in the SAME
@@ -481,8 +502,13 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     NOT part of the `APP_VERSION`/`?v=` ritual — but bump `workout.css`/`workout.js` `?v=`
     in `workout.html` on changes (currently **v4**), and its `styles.css?v=` (now 143) if
     you change shared CSS it leans on.
-- `power.html` / `power.css` / `power.js` — **🏆 Labs: Power Rankings Lab**, a
-  standalone page (linked from the Labs tab). The owner's **weekly fantasy
+- ~~`power.html` / `power.css` / `power.js`~~ — **GONE, moved to
+  `mcdermottj639/League-History` on 10 Sep 2026** with the League History
+  archive. See the banner at the top of this file. The Labs tab links out to
+  it. Everything below described it while it lived here and is kept only as
+  history — **it is maintained in that repo now.**
+- ~~`history.js`~~ — **GONE, same move.** The 13-season archive.
+  Was: **🏆 Labs: Power Rankings Lab**, a standalone page (linked from the Labs tab). The owner's **weekly fantasy
   power rankings** for their ESPN league: the model pre-builds a ranking each
   week, the owner reorders anyone and writes a take on anyone, and the result
   ships to the league as a link or as plain text. **The model is the starting
@@ -600,10 +626,31 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v225** (backend **b15-ir-slot**).
+Current version as of this writing: **v226** (backend **b15-ir-slot**).
+
+- **📦 League History and the Power Rankings Lab moved to their own repo
+  (v226)** — the owner: *"I started a repo called league history and it's gonna
+  be so that I can send it out to all the members of the league… Move all this
+  league history to that repo the new one and the power ranking one."*
+  - **What left this repo:** `history.js`, the `.fh-` CSS layer 10, the Fantasy
+    tab's `#fan-sub` two-level bar and `#fantasy-history` panel, `fanBar` /
+    `renderLeagueHistory` / `TAB_ENTER.fantasy`, and all four `power.*` files.
+    The Fantasy tab is back to exactly what it was at v224, and Labs and
+    Fantasy each carry one link out.
+  - **What STAYED, deliberately:** the `wireSectionToggle` visibility filter
+    from v225. It fixed a **pre-existing** bug — the Fantasy collapse-all
+    button read "ALL 16" over the 14 sections you could actually see — and has
+    nothing to do with the archive. **When you revert a feature, keep the bug
+    fixes it happened to surface.**
+  - ⚠️ **The v225 entry below is now a record of something that lives
+    elsewhere.** Its data rules (the ~144 owner-column confirmations, the
+    "Christels Mattress is Hurd" correction, the three-kinds-of-fact badges,
+    the top-6-seed finding) are all still true — they are just true in
+    `mcdermottj639/League-History` now, and that repo's own `CLAUDE.md` is
+    where they are maintained. Do not act on them here.
 
 - **📜 LEAGUE HISTORY — 13 seasons of Nectars Bolonga, inside the Fantasy tab
-  (v225)** — the owner: *"I want the fantasy page to have a current year tab
+  (v225)** ⚠️ **MOVED OUT in v226 — see the banner at the top of this file.** — the owner: *"I want the fantasy page to have a current year tab
   showing all that we already have and then a history tab within fantasy
   showing the history of our league nectars bolgna."* Then, over a dozen
   messages, they fed in the source data and corrected it as we went, and

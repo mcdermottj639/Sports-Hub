@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v225';
+const APP_VERSION = 'v226';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -5611,10 +5611,7 @@ const DEFAULT_ROSTERS = {
   football: [],
 };
 
-/* `fanView` is the Fantasy tab's LEVEL-1 choice: 'now' (this season) or
-   'hist' (the 13-year archive). `fanSub` is the archive's own level-2 view.
-   Neither is persisted — see TAB_ENTER.fantasy for why. */
-const fanState = { sport: 'football', gamesByTeam: {}, fanView: 'now', fanSub: 'hon' };
+const fanState = { sport: 'football', gamesByTeam: {} };
 const fanKey = (s) => `sportshub:fantasy:${s}`;
 function loadRoster(sport) {
   const saved = localStorage.getItem(fanKey(sport));
@@ -7437,73 +7434,6 @@ function renderMockDraft() {
   box.querySelector('#mk-exit').onclick = closeMockDraft;
 }
 
-/* ══ 📜 LEAGUE HISTORY ════════════════════════════════════════════════════
-   The archive lives in history.js (its own file, loaded before app.js) and
-   exposes exactly three things: SUBS, view(key) and profile(manager). All of
-   the work below is routing — which keeps 13 seasons of curated data out of
-   this file entirely.
-
-   🚨 It is PURE: no ESPN call, no backend, no localStorage write. So it can
-   never slow the Fantasy tab down, and it cannot touch the model's record —
-   the v213 rule about a second writer, applied by simply having no writer. */
-function fanBar() {
-  const box = $('#fan-sub');
-  if (!box) return;
-  const hist = fanState.fanView === 'hist';
-  box.innerHTML =
-    `<button type="button" role="tab" class="${hist ? '' : 'on'}" aria-selected="${!hist}" data-fanview="now">📅 This Season</button>` +
-    `<button type="button" role="tab" class="${hist ? 'on' : ''}" aria-selected="${hist}" data-fanview="hist">📜 League History</button>`;
-  if (!box.dataset.wired) {
-    box.dataset.wired = '1';
-    box.addEventListener('click', (e) => {
-      const b = e.target.closest('button[data-fanview]');
-      if (b && b.dataset.fanview !== fanState.fanView) {
-        fanState.fanView = b.dataset.fanview;
-        fanState.fanProf = null;
-        renderFantasy();
-      }
-    });
-  }
-}
-
-function renderLeagueHistory() {
-  const box = $('#fantasy-history');
-  const LH = window.LeagueHistory;
-  if (!box) return;
-  box.hidden = false;
-  /* history.js is a separate <script>. If it failed to load, say so rather
-     than rendering an empty tab — a blank panel reads as a broken app. */
-  if (!LH) {
-    box.innerHTML = '<div class="ffp-card"><div class="ffp-empty"><b>League history didn\'t load.</b>The archive ships as its own file (history.js) and the browser didn\'t get it. Pull to refresh — the service worker is network-first, so a reload fetches it again.</div></div>';
-    return;
-  }
-  /* A manager profile is a DRILL-DOWN, not a sixth sub-tab: it is reached by
-     tapping a name and left with its own Back. Keeping it out of the tab bar
-     is what stops the bar growing a slot that means "whoever you last
-     tapped", which would be meaningless on arrival. */
-  if (fanState.fanProf) {
-    box.innerHTML = '<button type="button" class="fh-back" id="fh-back">‹ Back to the league</button>' + LH.profile(fanState.fanProf);
-  } else {
-    const cur = fanState.fanSub;
-    box.innerHTML = `<div class="ai-sub fh-sub2" role="tablist" aria-label="History view">${LH.SUBS.map(([k, l]) =>
-      `<button type="button" role="tab" class="${k === cur ? 'on' : ''}" aria-selected="${k === cur}" data-fansub="${k}">${l}</button>`).join('')}</div>` + LH.view(cur);
-  }
-  if (!box.dataset.wired) {
-    box.dataset.wired = '1';
-    box.addEventListener('click', (e) => {
-      const sub = e.target.closest('button[data-fansub]');
-      if (sub) {
-        if (sub.dataset.fansub !== fanState.fanSub) { fanState.fanSub = sub.dataset.fansub; renderFantasy(); }
-        return;
-      }
-      /* Every name in the archive is a door to that manager's career. */
-      const who = e.target.closest('button[data-mgr]');
-      if (who) { fanState.fanProf = who.dataset.mgr; renderFantasy(); window.scrollTo({ top: 0 }); return; }
-      if (e.target.closest('#fh-back')) { fanState.fanProf = null; renderFantasy(); window.scrollTo({ top: 0 }); }
-    });
-  }
-}
-
 async function renderFantasy() {
   // Baseball has a live category league; Football is shown year-round for
   // preseason prep (its live-league sections will come once an NFL league is
@@ -7519,23 +7449,6 @@ async function renderFantasy() {
   const sports = [['football', '🏈 Football']];
   if (!sports.some(([s]) => s === fanState.sport)) fanState.sport = 'football';
 
-  /* 📜 History is a pure archive, so it short-circuits everything below —
-     no config check, no sync, no ESPN call. It also hides the sport chips:
-     the archive is football and always was, so a "🏈 Football" chip above it
-     would be a control with nothing to control. */
-  const nowBox = $('#fantasy-now');
-  const histBox = $('#fantasy-history');
-  fanBar();
-  if (fanState.fanView === 'hist') {
-    if (nowBox) nowBox.hidden = true;
-    $('#fantasy-sport').style.display = 'none';
-    renderLeagueHistory();
-    injectJumpNav('fantasy');
-    applySections('fantasy');
-    return;
-  }
-  if (nowBox) nowBox.hidden = false;
-  if (histBox) { histBox.hidden = true; histBox.innerHTML = ''; }
 
   // sport chips (hidden while only one sport is live — see shelf note above)
   const chips = $('#fantasy-sport');
@@ -10310,9 +10223,7 @@ function injectJumpNav(name) {
   const items = titles.map((h, i) => {
     if (!h.id) h.id = `${name}-sec-${i}`;
     const clone = h.cloneNode(true);
-    // .fh-src is the History tab's "Playoffs only / Regular season" badge —
-    // real content in the heading, noise in a one-word jump chip.
-    clone.querySelectorAll('.chips, button, .season-tag, .n, .fh-src').forEach((n) => n.remove());
+    clone.querySelectorAll('.chips, button, .season-tag, .n').forEach((n) => n.remove());
     const label = clone.textContent.trim().replace(/\s+/g, ' ').replace(/[🤖🦅]/g, '').trim();
     return { id: h.id, label };
   }).filter((x) => x.label);
@@ -11851,12 +11762,6 @@ const TAB_ENTER = {
   // you were reading persists, for the v215 reason: which week resets, which
   // question you were asking does not.
   pickem() { pkState.week = pkState.curWeek; },
-  /* 📜 The Fantasy tab opens on THIS SEASON, every time, and a manager profile
-     never survives leaving the tab. Same v215 reasoning as the two above: the
-     tab exists to answer "how is my team doing", and a 13-year archive — or
-     worse, whoever's career you last tapped into — is not that question on
-     arrival. Which SUB-VIEW of the archive you were reading does persist. */
-  fantasy() { fanState.fanView = 'now'; fanState.fanProf = null; },
 };
 let currentTab = 'home';
 function showTab(name) {
