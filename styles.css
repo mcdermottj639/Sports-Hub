@@ -2479,6 +2479,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ffp-pts.proj { color: var(--gy); font-weight: 700; font-size: 13px; }
 .ffp-grp { font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; margin: 4px 0 2px; }
 .ffp-grp.st { color: var(--ac); } .ffp-grp.bn { color: var(--gy); }
+:root[data-palette] .ffp-grp.ir { color: var(--neg); }
 
 /* --- head-to-head mirrored comparison ------------------------------------ */
 .ffp-mu-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; font-size: 11px; font-weight: 800; color: var(--gy); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; gap: 8px; }

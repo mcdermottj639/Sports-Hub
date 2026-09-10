@@ -32,7 +32,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b14-football-boxplayer"
+SERVER_VERSION = "b15-ir-slot"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -133,6 +133,20 @@ _BAT_SLOTS = {"C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "OF", "DH",
 _BAT_ORDER = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "OF", "DH"]
 
 
+# 🚨 Slots that mean "NOT in this week's lineup", across BOTH sports. This set
+# was written as a baseball one — `IL` and `BE` — and football does not use the
+# word IL: espn_api's football POSITION_MAP puts injured reserve at slot 21 =
+# **`IR`** (baseball's slot 17 = `IL`). So every football player the owner had
+# stashed on IR fell through to `active` and was reported to the frontend as a
+# STARTER — counted in the position-group projections, the win probability, the
+# projected weekly total, the bye/injury alerts and the Starters list. Nothing
+# errored; the roster simply claimed a player on IR was in the lineup.
+# ⚠️ Add a slot here, not to a per-sport branch — the two vocabularies overlap
+# everywhere except this one word, and a branch is what let them diverge.
+_RESERVE_SLOTS = {"IL", "IR", "NA", "ER"}   # injured / not-active reserve
+_BENCH_SLOTS = {"BE", "BENCH"}
+
+
 def _derive(eligible, lineup_slot):
     """From eligible slots + current lineup slot, work out (isPitcher, pos, status)."""
     elig = set(eligible or [])
@@ -142,7 +156,9 @@ def _derive(eligible, lineup_slot):
     else:
         pos = next((s for s in _BAT_ORDER if s in elig), "UTIL")
     slot = (lineup_slot or "").upper()
-    status = "il" if slot == "IL" else "bench" if slot in ("BE", "BENCH") else "active"
+    status = ("il" if slot in _RESERVE_SLOTS
+              else "bench" if slot in _BENCH_SLOTS
+              else "active")
     return is_pitcher, pos, status
 
 
@@ -162,7 +178,7 @@ def player_dict(p) -> dict:
         "isPitcher": is_pitcher,
         "lineupSlot": lineup_slot,
         "status": status,                                # active | bench | il
-        "eligibleSlots": [s for s in eligible if s not in ("BE", "IL")],
+        "eligibleSlots": [s for s in eligible if s not in _BENCH_SLOTS and s not in _RESERVE_SLOTS],
         "proTeam": getattr(p, "proTeam", "") or "",
         "injuryStatus": getattr(p, "injuryStatus", "") or "",
         "owned": getattr(p, "percent_owned", None),

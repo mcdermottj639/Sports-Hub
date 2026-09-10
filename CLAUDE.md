@@ -600,7 +600,82 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v222** (backend **b14-football-boxplayer**).
+Current version as of this writing: **v223** (backend **b15-ir-slot**).
+
+- **🚨 A player on IR was being counted as a STARTER — the backend's slot table
+  was written for baseball (v223, backend `b15-ir-slot`)** — the owner, on a
+  screenshot of the This Week card reading `18.6 · Love · Holani · Henderson`:
+  *"Henderson is on my IR. Why is that not reflected here? They think he's
+  still starting"*. They did, and the reason is one word.
+  - **🚨 ESPN's football reserve slot is `IR`. Baseball's is `IL`.** The backend
+    derives every player's `status` in `_derive`, and its test was
+    `"il" if slot == "IL" else "bench" if slot in ("BE","BENCH") else "active"`
+    — a **baseball** vocabulary, written when baseball was the only live
+    league. espn_api's football `POSITION_MAP` puts injured reserve at slot
+    **21 → `IR`** (baseball's 17 → `IL`), so `IR` matched neither test and fell
+    through to **`active`**. The frontend's football views then all filter on
+    `status === 'active'`, so an IR player was in the lineup everywhere at
+    once: the position-group totals on the This Week card, the projected total,
+    the **Proj wk** tile, the win probability, the bye/injury alerts, Start/Sit
+    and the Starters list.
+  - ⚠️ **Nothing errored and every number was individually plausible**, which is
+    why it went unreported through v195–v222: the RB row simply listed three
+    names where two were playing, and 18.6 is a perfectly believable RB total.
+    **The same shape as v195's `nflBucket` bug** — a football payload read
+    through a baseball assumption, silently.
+  - **Fixed in BOTH places, and the second one is not belt-and-braces.**
+    `_RESERVE_SLOTS = {IL, IR, NA, ER}` / `_BENCH_SLOTS = {BE, BENCH}` at the
+    source (also applied to the `eligibleSlots` strip, which had the same
+    baseball-only pair hardcoded); and the frontend now reads the **slot**
+    itself through one predicate — `isStarting` / `isBenched` / `isReserve`
+    (`slotOf`). **The slot is the fact; `status` is somebody's reading of it.**
+    GitHub Pages ships in seconds and Render only picks the fix up on a
+    redeploy, so for some window the app will be running the new frontend
+    against a **b14** backend still calling IR players active — the suite drives
+    exactly that payload, and it is the case that had to work.
+  - **⚠️ Reserve and bench are NOT the same and the difference is load-bearing.**
+    A bench player CAN be started; a reserve player cannot. So Start/Sit
+    excludes reserve from **both** sides: an IR player must never be
+    recommended, and must never be the *sit* either — he is the
+    lowest-projected name on the roster, so he became the `worst` starter in
+    every bucket and the one recommendation the fixture produces read
+    **"start Tony Pollard over TreVeyon Henderson"**, i.e. over a man who is
+    not playing. After the fix it correctly reads "over Pomare Holani".
+  - **The roster list gained its own `Injured reserve — not in your lineup`
+    group** rather than folding IR into Bench or dropping it. Dropping it would
+    make the list silently shorter than the roster (this file's own oldest
+    lesson); folding it into Bench would claim a player who cannot be started
+    is startable. **The heading is what answers the owner's actual question** —
+    why he is not in the totals above.
+  - **🚨 Three things only the RENDER caught, again:**
+    - **The flex starter sorted below the kicker.** `NFL_SLOT_ORDER` listed
+      `FLEX`, `RB/WR` and `WR/TE` but not **`RB/WR/TE`** — which is the slot
+      ESPN actually sends for a three-way flex (POSITION_MAP 23); `FLEX` is our
+      own label and never arrives. `posRank` falls back to 90 for an unlisted
+      slot, so every flex starter went to the bottom of the list.
+    - **The most severe injury status wore the amber tone.** `injCls` tested
+      `/OUT|IR|SUSPEND/` and ESPN spells it **`INJURY_RESERVE`**, which
+      contains no `IR` substring — so a plain OUT went red while IR read as a
+      soft warning. The v189 semantic-colour rule, inverted.
+    - **And it truncated to `INJU`.** `inj.slice(0,4)` is fine for QUES / DOUB
+      / SUSP and meaningless for this one; it renders `IR`, with the full
+      status on the `title`.
+  - **The correction runs BOTH ways.** The opponent's roster goes through the
+    same `player_dict`, so their IR players were inflating their side too — the
+    fixture's opponent drops 112.5 → 108.1 while the owner's drops 92.3 → 89.3.
+    A matchup card can be wrong in your favour.
+  - Verified in headless Chromium at 390px — **14 checks**, run in three
+    contexts. The first reproduces the owner's screenshot **byte-identically**
+    against v222 (`18.6 | Love · Holani · Henderson`, projected total `92.3`)
+    and fails 9 of them; the second runs the same suite against v223 with a
+    **b14-shaped payload** (the un-redeployed backend) and passes 14/14; the
+    third runs it with the b15 shape and passes 14/14, proving the two agree.
+    Plus **9 unit checks** on `_derive` itself — football IR and ER, baseball
+    IL, bench and starter slots on both sports, and an empty slot — and a
+    24-check sweep of all ten tabs at 390px and 1280px with no overflow and no
+    console errors.
+  - ⚠️ **On-device check after the Render redeploy:** `/api/health` → `version`
+    should read **`b15-ir-slot`**. The frontend fix does not need it.
 
 - **🔗 A week of picks can arrive as a LINK — one tap, no typing (v222)** —
   the owner sent two screenshots of their league's app and asked, fairly:
@@ -6070,7 +6145,13 @@ rewrite.**
     Start/Sit · My Roster (sparkline + hot/cold + ESPN PRK badge) · Roster Shape ·
     Scoring by Week · Luck & All-Play · League (ESPN's own playoff odds) · Waiver
     Wire. Styled by the `.ffp-` **layer 6** in `styles.css` — all tokens, no
-    hardcoded colours; see the v195 entry for the three bugs it replaced. The Labs rookie
+    hardcoded colours; see the v195 entry for the three bugs it replaced.
+  ⚠️ **Who is in the lineup is decided by `isStarting` / `isBenched` /
+  `isReserve` (v223), never by `status === 'active'` alone** — the SLOT is the
+  fact and `status` is only the backend's reading of it, and that reading was
+  baseball-only (`IL`, never football's `IR`) until b15. A reserve player is in
+  neither the totals nor Start/Sit, and gets his own group in the roster list.
+  The Labs rookie
     **Mock Draft Simulator** is a different thing (real NFL draft of incoming rookies).
   - **🏈 Fantasy Mock Draft** (v100; moved out of the Fantasy tab in v106; the
     **Labs tab** became its own top-level tab in v107) — a client-side snake

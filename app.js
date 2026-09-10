@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v222';
+const APP_VERSION = 'v223';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -7797,7 +7797,35 @@ function renderLeagueHeader(sport) {
 // matchup, standings, roster with weekly/projected points, and top waiver adds.
 // All fields are read defensively (the shapes come from espn-api's football
 // League, which couldn't be tested here — no league existed at build time).
-const NFL_SLOT_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'RB/WR', 'WR/TE', 'D/ST', 'DST', 'K'];
+// ⚠️ 'RB/WR/TE' is the slot ESPN actually sends for a three-way flex (espn_api
+// football POSITION_MAP 23) — 'FLEX' is our own label and never arrives. Its
+// absence here sent every flex starter to the BOTTOM of the Starters list,
+// below the kicker, because posRank falls back to 90 for an unlisted slot.
+const NFL_SLOT_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'RB/WR/TE', 'RB/WR', 'WR/TE', 'D/ST', 'DST', 'K'];
+
+// 🚨 WHO IS ACTUALLY IN THE LINEUP. Every football view used to test
+// `status === 'active'` and nothing else — and `status` is derived on the
+// BACKEND from a slot table that was written for baseball. ESPN's football
+// reserve slot is **IR** (espn_api football POSITION_MAP 21); baseball's is
+// **IL** (17). So `IR` matched neither the IL test nor the BE test, fell
+// through to `active`, and a player the owner had stashed on injured reserve
+// was counted as a STARTER — in the position-group totals on the This Week
+// card, the win probability, Proj wk, the bye/injury alerts and the Starters
+// list. Every number on the page still looked plausible, which is why it went
+// unreported: the RB row simply read three names where two were playing.
+// Fixed at the source in b15, and read from the SLOT here as well, because the
+// slot is the fact and `status` is only somebody's reading of it — a device on
+// a cached payload, an un-redeployed backend, or a reserve slot ESPN adds
+// later must not be able to put a bench player back in the lineup.
+// ⚠️ Reserve and bench are NOT the same thing and the difference is load-
+// bearing: a bench player CAN be started (Start/Sit may recommend it), a
+// reserve player cannot be started at all.
+const RESERVE_SLOTS = new Set(['IR', 'IL', 'NA', 'ER']);
+const BENCH_SLOTS = new Set(['BE', 'BENCH']);
+const slotOf = (p) => String((p && p.lineupSlot) || (p && p.slot) || '').toUpperCase().trim();
+const isReserve = (p) => RESERVE_SLOTS.has(slotOf(p)) || (p && p.status) === 'il';
+const isBenched = (p) => !isReserve(p) && (BENCH_SLOTS.has(slotOf(p)) || (p && p.status) === 'bench');
+const isStarting = (p) => !isReserve(p) && !isBenched(p) && ((p && p.status) || 'active') === 'active';
 const NFL_BUCKETS = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'];
 const fpts = (v) => (v == null || v === '' || Number.isNaN(Number(v))) ? null : Math.round(Number(v) * 10) / 10;
 // Bucket a fantasy player into a scoring position (from pos/eligibility, so a
@@ -7840,8 +7868,13 @@ function footballWinProb(myS, opS) {
 // Start/Sit: bench players who out-project a startable starter at the same slot
 // (incl. a FLEX swap for RB/WR/TE). Returns the top upgrades by projected gain.
 function startSitAdvice(full) {
-  const starters = full.filter((p) => (p.status || '') === 'active');
-  const bench = full.filter((p) => (p.status || '') === 'bench');
+  const starters = full.filter(isStarting);
+  // ⚠️ Reserve players are excluded from BOTH sides here. You cannot start an
+  // IR player, so one must never be recommended — and one must never be the
+  // "sit" either: an IR player is the lowest-projected name on the roster, so
+  // he'd become the `worst` starter for every bucket and every recommendation
+  // would read "start X over <a guy who isn't playing>".
+  const bench = full.filter(isBenched);
   const prj = (p) => fpts(p.projected);
   const recs = [];
   bench.forEach((b) => {
@@ -8114,10 +8147,11 @@ async function renderFootballLive() {
   const weekOK = week && Object.keys(week).length > 0;
 
   const full = L.rosterFull || [];
-  const starters = full.filter((p) => (p.status || '') === 'active');
-  const bench = full.filter((p) => (p.status || '') !== 'active');
+  const starters = full.filter(isStarting);
+  const bench = full.filter(isBenched);
+  const reserve = full.filter(isReserve);
   const oppFull = ((L.opponent || {}).roster) || [];
-  const oppStarters = oppFull.filter((p) => (p.status || '') === 'active');
+  const oppStarters = oppFull.filter(isStarting);
   const oppEff = oppStarters.length ? oppStarters : oppFull;
   const season = L.season || null;
   const projFor = (list) => { let s = 0, any = false; list.forEach((p) => { const v = fpts(p.projected); if (v != null) { s += v; any = true; } }); return any ? Math.round(s * 10) / 10 : null; };
@@ -8226,7 +8260,12 @@ async function renderFootballLive() {
     const g = weekOK ? week[String(p.proTeam || '').toUpperCase()] : null;
     const bye = isBye(p);
     const inj = (p.injuryStatus && !/ACTIVE|NORMAL/i.test(p.injuryStatus)) ? p.injuryStatus : '';
-    const injCls = /OUT|IR|SUSPEND/i.test(inj) ? 'out' : 'warn';
+    // ⚠️ ESPN spells injured reserve `INJURY_RESERVE`, which contains no "IR"
+    // substring — so the MOST severe status was the one taking the amber
+    // "warn" tone while a plain OUT went red (the v189 semantic-colour rule,
+    // inverted). It also truncated to a meaningless `INJU`.
+    const injCls = /OUT|INJURY_RESERVE|\bIR\b|SUSPEND/i.test(inj) ? 'out' : 'warn';
+    const injTxt = /INJURY_RESERVE|RESERVE/i.test(inj) ? 'IR' : inj.slice(0, 4);
     const tone = fbTrend(p);
     const hist = fbWeeks(p).map((w) => w.pts);
     const val = pts != null ? `<span class="ffp-pts">${pts}</span>`
@@ -8238,7 +8277,7 @@ async function renderFootballLive() {
         <span class="ffp-slot">${esc(p.lineupSlot || p.pos || '')}</span>
         <span class="ffp-pname">${esc(p.name)}</span>
         ${tone ? `<span class="ffp-badge ${tone === 'hot' ? 'mu-easy' : 'warn'}" title="last 3 weeks vs season average">${tone === 'hot' ? '▲ hot' : '▼ cold'}</span>` : ''}
-        ${inj ? `<span class="ffp-badge ${injCls}">${esc(inj.slice(0, 4))}</span>` : ''}
+        ${inj ? `<span class="ffp-badge ${injCls}" title="${esc(inj)}">${esc(injTxt)}</span>` : ''}
         ${bye ? '<span class="ffp-badge bye">BYE</span>' : fbMatchupBadge(p)}
       </div>
       <div class="ffp-prow-l2">
@@ -8246,8 +8285,13 @@ async function renderFootballLive() {
         ${fbSpark(hist, tone === 'cold' ? 'cold' : 'hot')}
         ${val}</div></div>`;
   };
+  // ⚠️ Reserve gets its OWN group rather than being folded into Bench or
+  // dropped. Dropping it would make the roster list silently shorter than the
+  // roster; folding it into Bench would say a player who cannot be started is
+  // startable. The heading is what tells the owner WHY he isn't in the totals
+  // above — which is the whole question this section has to answer.
   const rosterHTML = full.length
-    ? `<div class="ffp-card"><div class="ffp-grp st">Starters</div>${starters.slice().sort((a, b) => posRank(a) - posRank(b)).map(rosterRow).join('')}${bench.length ? `<div class="ffp-grp bn" style="margin-top:12px">Bench</div>${bench.map(rosterRow).join('')}` : ''}${L.live ? '' : '<div class="ffp-cap">Weekly points appear once ESPN posts a box score for the current week.</div>'}</div>`
+    ? `<div class="ffp-card"><div class="ffp-grp st">Starters</div>${starters.slice().sort((a, b) => posRank(a) - posRank(b)).map(rosterRow).join('')}${bench.length ? `<div class="ffp-grp bn" style="margin-top:12px">Bench</div>${bench.map(rosterRow).join('')}` : ''}${reserve.length ? `<div class="ffp-grp ir" style="margin-top:12px">Injured reserve — not in your lineup</div>${reserve.map(rosterRow).join('')}` : ''}${L.live ? '' : '<div class="ffp-cap">Weekly points appear once ESPN posts a box score for the current week.</div>'}</div>`
     : `<div class="ffp-card"><div class="ffp-empty"><b>Roster not loaded</b>Tap Refresh from ESPN above.</div></div>`;
 
   // --- Waiver wire ---
