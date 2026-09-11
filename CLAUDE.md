@@ -538,7 +538,87 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v228** (backend **b15-ir-slot**).
+Current version as of this writing: **v229** (backend **b15-ir-slot**).
+
+- **🤖 A finished Pick'em game says which side the model was on (v229)** — the
+  owner, on a screenshot of SF @ LAR reading `No spread posted, so the model has
+  no read here.` over a 27-7 final: *"For competed games it should still show
+  what side the model was on here"*. It should, and the answer was already on
+  the device.
+  - **Why it went blank.** The card reads `row.atsR`, which `buildBoard` prices
+    off `shownOdds` — and **that is the LIVE feed plus this device's pregame
+    snapshot, both of which are gone by the next day.** ESPN drops `odds` at
+    kickoff (v224), and `lineRec` only ever reads `sportshub:lines:{TODAY}`
+    because `trackLines` purges every older day on write. So a game played
+    earlier in the week has no number left to price, and every completed card
+    on the tab went silent about the model.
+  - **🚨 Nothing needed fetching, and nothing needed re-predicting.** The pick
+    already carries **`md`** — the model's side AT PICK TIME, stored by
+    `pkSetPick` since v218 and the fact the Season tab's you-vs-model split is
+    built on. The opinion was never lost; the card just never looked at it.
+    New **`pkModelSide(pick, ar)`** is the one door: the stored side wins, the
+    live read is the fallback.
+  - ⚠️ **Re-deriving the model on a finished game would have been the wrong fix
+    and is the v199 look-ahead rule.** `md` is a snapshot of what the model
+    thought *before* the game, which is the only honest thing to show after it.
+  - **🚨 And the two sources could already contradict each other.** The card's
+    ✅/⚔️ badge was computed from `ar` (the live read) while `pkScoreWeek`
+    counts from `md` — and the model's read moves all week as lines and
+    injuries land, so a pick could read *"you are on the model's side"* on the
+    card while the Season tab counted it **against**. Both read `pkModelSide`
+    now. Asserted directly: a fixture where the live read has flipped since the
+    pick renders "went against the model" on the card **and** `vsModel 0-1` in
+    the week's score.
+  - **It also says whether the model was right**, derived rather than stored:
+    the model's side and yours are graded on the SAME number, so agreeing means
+    the same result and disagreeing means the opposite one. That is exactly
+    `pkScoreWeek`'s rule, extracted as `pkModelRes(res, agree)` so the card and
+    the record cannot drift.
+  - **🚨 The first cut blamed the wrong thing, which is the v228 lesson one card
+    over.** `No spread posted` is true of a scheduled game and false of a
+    finished one — the spread was posted all week, it is simply gone now — so
+    the empty state is state-aware, and the reason clause on a stored side only
+    appears **before** kickoff (where "why is there no fresher read" is a live
+    question). After kickoff it is dropped entirely: it would otherwise print
+    two lines of feed mechanics under every completed game for the rest of the
+    season. **The provenance that has to survive is three words — "when you
+    picked" — not the explanation.**
+  - ⚠️ **The stored-side chip is deliberately UNHEATED.** `heatCls` sizes an
+    edge against the bar and a stored side has no edge to size, so a heat colour
+    there would be invented precision — and neutral is also what tells a stored
+    side apart from a live read at a glance.
+  - **The header's "spread read on N of M games" counts what the card can
+    actually show**, not what has a live read, or it under-reports the model on
+    exactly the games it still has an answer for.
+  - **🚨 A pre-existing bug the rewire surfaced: the card claimed a position on
+    a game the owner had not picked.** `pkWireWeek` creates an entry with
+    **`side: null`** when a number is typed before a side is chosen (the league
+    locks spreads days before picks are due) — and `'home' === null` is false,
+    so the badge read **"⚔️ You are against the model"** over a blank game.
+    Every surface here now requires a real `pick.side`, and the stored-side
+    sentence drops "when you picked" rather than asserting a pick that has not
+    happened.
+  - ⚠️ **`pkModelSide` returns the SIDE and nothing else.** The first cut also
+    returned `{ ar, stored }`, which nothing read — the v206 dead-output shape,
+    written fresh.
+  - Verified by driving the **shipped** `pkGameHTML` / `pkScoreWeek` in headless
+    Chromium — **41 checks** reproducing the owner's card: the final naming SF,
+    saying it covered (SF +3.5, won by 20), the badge rendering at all and in
+    past tense, the Loss tag and the stored number untouched; the mirror case
+    (agree + lose → the model did not cover); an unpicked final saying the line
+    is gone rather than blaming a missing spread; a scheduled game keeping the
+    original message when nothing is stored and naming the reason correctly when
+    something is; the live read still rendering in full with no duplicate
+    sentence; a `side: null` entry naming the model's side while claiming no
+    position and grading nobody; and the divergence case above. Rendered at 390px and 1280px
+    against the real stylesheet: no horizontal overflow, nothing spilling its
+    card, nothing clipped, nothing under the 9px type floor, no console errors.
+  - ⚠️ **Test-fixture note:** `gameState` reads a **flat `g.state`**
+    (`'pre'`/`'in'`/`'post'`), not `g.status.type.state` — a fixture built with
+    the raw ESPN shape makes every game read as scheduled, and every
+    completed-game assertion then passes or fails for the wrong reason. It is
+    also a `const` arrow, so unlike `pkGameHTML` it is **not on `window`** (the
+    v201 trap).
 
 - **🏁 The game modal says when a game is already over (v228)** — the owner, on
   a screenshot of the NE @ SEA card the morning after it was played: *"Why can't
@@ -6502,7 +6582,11 @@ rewrite.**
   back into any week. **⚙️ Setup** holds the scoring, which is configurable.
   🚨 Two rules it cannot break: grading reads **the spread stored on the pick**,
   never the live feed, and **nothing here is written to the model's own
-  record**. **📥 Paste my picks** (v221) takes a whole week as text — one pick
+  record**.
+  On a **completed** game the model's side comes off the pick's stored `md`
+  (v229), because ESPN drops `odds` at kickoff and this device's line
+  snapshot only covers today — `pkModelSide` is the one door, and the agree
+  badge reads it so the card and the Season tab can never disagree. **📥 Paste my picks** (v221) takes a whole week as text — one pick
   a line, `NE +3` / `Seahawks -3.5 ⭐` / `Tiebreaker 45` — behind a preview
   that states every consequence first, and an **`index.html#pk=<base64url>`
   link** (v222) delivers that same text in one tap; ⚙️ Setup's **♻️ Restore** takes a whole
@@ -6611,7 +6695,8 @@ rewrite.**
   the pool locks its number on Wednesday while ESPN's keeps moving, so
   re-reading the feed at grade time would mark picks wrong that the league
   scored as wins. **`md` is the model's side at pick time**, which is what
-  makes the you-vs-model split honest. Nothing here ever reaches
+  makes the you-vs-model split honest — and, since v229, what a finished
+  game's card shows, since by then there is no number left to price. Nothing here ever reaches
   `sportshub:aitally`.
   ⚠️ Written by tapping the tab, by 🤖 Fill from the model, by the v221
   **📥 paste importer** on 📋 This Week (which a v222 **`#pk=` link** also

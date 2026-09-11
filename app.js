@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v228';
+const APP_VERSION = 'v229';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -10877,6 +10877,39 @@ function pkGrade(wk, g) {
 }
 function pkIsKey(wk, id) { return (wk.keys || []).includes(id); }
 
+/* 🚨 What side was the model on, and where does that fact come from?
+   ONE door, because there are two sources and they can disagree.
+
+   The live read (`atsR`) is the model priced against the number showing right
+   now. `pick.md` is the side the model was on AT PICK TIME, snapshotted by
+   pkSetPick — and that is the fact the Season tab's you-vs-model split is
+   built on, because the model's read moves all week as lines and injuries
+   land. Two facts, so a card reading `atsR` while the record reads `md` can
+   tell you "you are on the model's side" over a pick the Season tab is
+   counting AGAINST it. The stored side therefore wins wherever one exists.
+
+   🚨 And it is the whole answer for a COMPLETED game. ESPN drops `odds` at
+   kickoff (v224) and this device's own line snapshot is purged to today's
+   slate only, so a game played earlier in the week has no number left to
+   price — `atsR` is null and the card went blank, saying "no spread posted"
+   over a game the model had a clear opinion on all week. The opinion was
+   never lost; it is on the pick. */
+function pkModelSide(pick, ar) {
+  if (pick?.md === 'home' || pick?.md === 'away') return pick.md;
+  if (ar) return ar.home ? 'home' : 'away';
+  return null;
+}
+
+/* Did the model's side cover? Derived, never stored — and derivable only
+   because the model's side and yours are graded on the SAME number, so
+   agreeing means the same result and disagreeing means the opposite one.
+   That is exactly the rule pkScoreWeek already counts by; deriving it the
+   same way here is what stops the card and the Season tab disagreeing. */
+function pkModelRes(res, agree) {
+  if (!res || res === 'push' || agree == null) return null;
+  return agree === (res === 'win') ? 'win' : 'loss';
+}
+
 /* ---------------------------------------------------------------- import ---
    Paste a whole week of picks in as text.
 
@@ -11142,7 +11175,10 @@ async function pkPaintWeek(st, tok) {
   }
   const sc = pkScoreWeek(st.cfg, wk, games);
   const tbg = pkTiebreakGame(games);
-  const modelReads = games.filter((g) => byId.get(g.id)?.atsR).length;
+  // Counts what the card can actually SHOW, which on a completed game is the
+  // side stored on the pick rather than a live read — otherwise this note
+  // under-reports the model on exactly the games it still has an answer for.
+  const modelReads = games.filter((g) => pkModelSide(wk.picks[g.id], byId.get(g.id)?.atsR)).length;
 
   host.innerHTML = pkWeekNavHTML(cur, week, slate.label)
     + pkWeekHeadHTML(st, wk, sc, games, modelReads)
@@ -11214,7 +11250,23 @@ function pkGameHTML(st, wk, g, row, isTB) {
   const scoreLine = state === 'scheduled'
     ? esc(new Date(g.date).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }))
     : `${aAbbr} ${g.away.score ?? '–'} · ${hAbbr} ${g.home.score ?? '–'} · ${state === 'live' ? 'LIVE' : 'Final'}`;
-  let mdLine = '<span class="pk-md-none">No spread posted, so the model has no read here.</span>';
+  const mSide = pkModelSide(pick, ar);
+  /* 🚨 Say which of the two it is. A completed game has no number left in the
+     feed, so "no spread posted" was pointing at the wrong cause — the line was
+     posted all week, it is simply gone now the game is over. The v228 lesson
+     on the modal, one card over. */
+  let mdLine = `<span class="pk-md-none">${locked
+    ? 'The line is no longer posted now this game has started, and no model side was stored for it.'
+    : 'No spread posted, so the model has no read here.'}</span>`;
+  if (!ar && mSide) {
+    // The model's opinion survives on the pick even when the number does not.
+    const mAbbr = mSide === 'home' ? hAbbr : aAbbr;
+    const mr = pick?.side ? pkModelRes(res, mSide === pick.side) : null;
+    mdLine = `<span class="pk-chip">🤖 ${mAbbr}</span>`
+      + `<span class="pk-md-txt">the model was on ${mAbbr}${pick?.side ? ' when you picked' : ''}`
+      + `${mr ? ` — it ${mr === 'win' ? 'covered' : 'did not cover'}` : ''}`
+      + `${locked ? '' : ' — no line is posted right now, so there is no fresher read'}.</span>`;
+  }
   if (ar) {
     const bar = ATS_EDGE_MIN.nfl ?? 2;
     const heat = heatCls(ar.edge, bar);
@@ -11239,7 +11291,7 @@ function pkGameHTML(st, wk, g, row, isTB) {
   const sharp = row?.p?.sharp;
   const sharpLine = sharp
     ? `<div class="pk-sharp">💰 ${esc(sharp.abbr)} — ${sharp.handle}% of the money on ${sharp.bets}% of the bets</div>` : '';
-  const agree = pick && ar ? ((ar.home ? 'home' : 'away') === pick.side) : null;
+  const agree = pick?.side && mSide ? (mSide === pick.side) : null;
   const tag = res ? `<span class="pk-res ${res}">${res === 'win' ? '✅' : res === 'loss' ? '❌' : '➖'} ${res === 'push' ? 'Push' : res === 'win' ? 'Win' : 'Loss'}</span>` : '';
   return `<div class="pk-game${key ? ' key' : ''}${res ? ` r-${res}` : ''}" data-gid="${esc(g.id)}">
     <div class="pk-top">
@@ -11252,7 +11304,9 @@ function pkGameHTML(st, wk, g, row, isTB) {
     </div>
     <div class="pk-md">${mdLine}</div>
     ${sharpLine}
-    ${pick && agree !== null ? `<div class="pk-agree ${agree ? 'y' : 'n'}">${agree ? '✅ You are on the model\'s side' : '⚔️ You are against the model'}</div>` : ''}
+    ${pick && agree !== null ? `<div class="pk-agree ${agree ? 'y' : 'n'}">${agree
+      ? `✅ You ${res ? 'were' : 'are'} on the model's side`
+      : `⚔️ You ${res ? 'went' : 'are going'} against the model`}</div>` : ''}
     ${drift ? `<div class="pk-drift">📈 The book has moved ${drift > 0 ? '+' : ''}${drift} since you locked ${pkSpTxt(sp)} — you are graded on your number, not this one.</div>` : ''}
     <div class="pk-line">
       <label class="pk-sp">Your number
