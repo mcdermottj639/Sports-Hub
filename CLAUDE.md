@@ -538,7 +538,81 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v229** (backend **b15-ir-slot**).
+Current version as of this writing: **v230** (backend **b15-ir-slot**).
+
+- **📐 A completed Pick'em game keeps the model's NUMBERS, not just its side
+  (v230)** — v229 restored which team the model was on; the margin and the edge
+  were still gone, because they had been priced against a number that no longer
+  exists. The owner: *"Yes I want it"*. So the read is now snapshotted onto the
+  pick the same way the spread already was.
+  - **Two numbers, not five.** `mp` (the projected margin) and `msp` (the
+    home-oriented number the model priced it against) go on the pick beside
+    `md`. **Everything else in an `atsRead` derives from those two** — the side,
+    the edge, that side's own spread, the ticket label — so `pkStoredRead`
+    rebuilds them through **atsRead's own arithmetic** instead of keeping a
+    second copy that can drift (the v177 rule). `mq` is the one stored
+    derivative, because `qualifies` also depends on the v178 saturation guard,
+    which reads `marginSat` off a prediction that cannot be recovered later.
+    - Verified as a **round trip**: six proj/spread combinations through the
+      real `atsRead`, stored, rebuilt, and compared field by field — side,
+      edge, spread, label, abbr, qualifies. Hand-written expectations got the
+      sign of `edge` and the orientation of `spread` wrong three different
+      ways before this; **a derivation test must round-trip the real function,
+      not restate its arithmetic.**
+  - **🚨 The three model fields are written as ONE unit and never re-written.**
+    Separately, a side snapshotted on Wednesday could end up carrying Sunday's
+    numbers — which is the single way this could lie, since the whole point is
+    that it records what the model thought *then*. A half-written snapshot is
+    also refused outright (all the numbers or none): `pkStoredRead` cannot
+    rebuild one, so it would be a read that silently disappears forever.
+    - ⚠️ **`Number(null)` is `0`, not `NaN`** — so an `isFinite` check alone
+      would have rebuilt a confident read of exactly zero from a blob carrying
+      `mp: null`, and ⚙️ Setup's **♻️ Restore** takes arbitrary JSON. The null
+      check in front of it is load-bearing; such a pick correctly falls back to
+      the side-only sentence instead.
+  - **🚨 The stored read now WINS over the live one, and that is the same rule
+    the number already follows.** The pool locks its spread on Wednesday and
+    this card grades on the copy stored with the pick, never the live quote
+    (v218) — the model's read is locked the same way. Getting it backwards is
+    exactly what v229 had to fix: the sentence was priced off the live read
+    while the badge and the Season tab counted the stored side, so a card could
+    say the model liked LAR directly above a badge saying you went against it.
+    A live read stands in only for a game with nothing stored, or one whose
+    stored side it still agrees with — where the two cannot contradict.
+  - **📈 So the card gained the model-side twin of `pkDrift`.** Showing the
+    pick-time read as primary would otherwise let a still-pickable game
+    silently hide that the model has **changed its mind** — which is precisely
+    the information a pick is still worth changing over. Side changes only: a
+    shift in magnitude is not news, same as the 0.5-point floor on the number's
+    own drift. And an agreement badge is a pick-time fact, so it goes past
+    tense the moment the model moves off it, not only when the game is graded.
+  - **ONE renderer for both reads**, so the stored and live paths cannot phrase
+    the same read two different ways — tense is the only thing that varies,
+    and the v179 margin-side-is-not-the-ATS-side rule is inherited rather than
+    re-derived.
+  - **🚨 The provenance LEADS the sentence.** The first cut trailed it —
+    *"…so it liked SF +3.5 by 5.2 pts when you picked"* — where a clause that
+    qualifies every number before it reads as a footnote. It is
+    *"when you picked, the model made it SF by 1.7, so it liked SF +3.5 by 5.2
+    pts — it covered."* now. The v224 lesson, on the same tab this time, and
+    only the render showed it.
+  - ⚠️ **This is additive and cannot reach back.** Picks made before v230 carry
+    `md` alone and still render the v229 side-only sentence; they are never
+    back-filled from a later read, because a number the model produced today is
+    not what it thought when the pick was made (the v199 look-ahead rule).
+    **The full read starts from this build forward.**
+  - Verified by driving the **shipped** `pkSetPick` / `pkStoredRead` /
+    `pkGameHTML` / `pkScoreWeek` / `atsRead` in headless Chromium — **85
+    checks**, the v229 suite included: the owner's finished card carrying the
+    label, the margin, the edge and a heated chip; past tense throughout with
+    the provenance first and the grade last; the stored read beating a live one
+    that has flipped while the badge still matches the Season tab; the flip
+    notice and its past-tense badge; a sub-bar read still saying "a read not a
+    play"; the write being atomic, frozen against a later read, and refusing to
+    back-fill a v229-era pick; and the round trip above. Rendered at 390px and
+    1280px against the real stylesheet: no horizontal overflow, nothing
+    spilling its card, nothing clipped, nothing under the 9px type floor, no
+    console errors.
 
 - **🤖 A finished Pick'em game says which side the model was on (v229)** — the
   owner, on a screenshot of SF @ LAR reading `No spread posted, so the model has
@@ -553,7 +627,9 @@ Current version as of this writing: **v229** (backend **b15-ir-slot**).
     earlier in the week has no number left to price, and every completed card
     on the tab went silent about the model.
   - **🚨 Nothing needed fetching, and nothing needed re-predicting.** The pick
-    already carries **`md`** — the model's side AT PICK TIME, stored by
+    already carries **`md`** — the model's side AT PICK TIME (v230 added `mp`
+    and `msp` beside it, so a finished game now keeps the margin and the edge
+    as well), stored by
     `pkSetPick` since v218 and the fact the Season tab's you-vs-model split is
     built on. The opinion was never lost; the card just never looked at it.
     New **`pkModelSide(pick, ar)`** is the one door: the stored side wins, the
@@ -587,6 +663,11 @@ Current version as of this writing: **v229** (backend **b15-ir-slot**).
     edge against the bar and a stored side has no edge to size, so a heat colour
     there would be invented precision — and neutral is also what tells a stored
     side apart from a live read at a glance.
+    ⚠️ **SUPERSEDED in v230 for picks made from that build on** — they store the
+    margin too, so there IS an edge to size and the chip is heated from it. The
+    reasoning is unchanged and still governs a **v229-era pick**, which carries
+    a side and no numbers: its chip stays plain, precisely because inventing a
+    heat for it would be inventing precision.
   - **The header's "spread read on N of M games" counts what the card can
     actually show**, not what has a live read, or it under-reports the model on
     exactly the games it still has an answer for.
@@ -6583,10 +6664,12 @@ rewrite.**
   🚨 Two rules it cannot break: grading reads **the spread stored on the pick**,
   never the live feed, and **nothing here is written to the model's own
   record**.
-  On a **completed** game the model's side comes off the pick's stored `md`
-  (v229), because ESPN drops `odds` at kickoff and this device's line
-  snapshot only covers today — `pkModelSide` is the one door, and the agree
-  badge reads it so the card and the Season tab can never disagree. **📥 Paste my picks** (v221) takes a whole week as text — one pick
+  On a **completed** game the model's read comes off the pick itself — `md`
+  for the side (v229), `mp`/`msp` for the margin and the edge (v230) — because
+  ESPN drops `odds` at kickoff and this device's line snapshot only covers
+  today. `pkModelSide` and `pkStoredRead` are the two doors, the **stored read
+  beats the live one** wherever it exists (same rule as `sp`), and a card whose
+  live read has since flipped says so rather than hiding it. **📥 Paste my picks** (v221) takes a whole week as text — one pick
   a line, `NE +3` / `Seahawks -3.5 ⭐` / `Tiebreaker 45` — behind a preview
   that states every consequence first, and an **`index.html#pk=<base64url>`
   link** (v222) delivers that same text in one tap; ⚙️ Setup's **♻️ Restore** takes a whole
@@ -6696,7 +6779,14 @@ rewrite.**
   re-reading the feed at grade time would mark picks wrong that the league
   scored as wins. **`md` is the model's side at pick time**, which is what
   makes the you-vs-model split honest — and, since v229, what a finished
-  game's card shows, since by then there is no number left to price. Nothing here ever reaches
+  game's card shows, since by then there is no number left to price.
+  **`mp`/`msp`/`mq` (v230) are that read's projected margin, the home-oriented
+  number it was priced against, and whether it cleared the bar** — written as
+  ONE unit with `md` and never re-written, so the snapshot can never end up
+  half from one day and half from another. Everything else (`edge`, side,
+  label, that side's spread) is DERIVED by `pkStoredRead` through atsRead's own
+  arithmetic; do not add a second stored copy. Picks made before v230 carry
+  `md` alone and are never back-filled. Nothing here ever reaches
   `sportshub:aitally`.
   ⚠️ Written by tapping the tab, by 🤖 Fill from the model, by the v221
   **📥 paste importer** on 📋 This Week (which a v222 **`#pk=` link** also

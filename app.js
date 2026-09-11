@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v229';
+const APP_VERSION = 'v230';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -10900,6 +10900,31 @@ function pkModelSide(pick, ar) {
   return null;
 }
 
+/* Rebuild the pick-time read from the two numbers on the pick, in exactly the
+   shape atsRead returns — so the stored path and the live path can share one
+   renderer and cannot phrase the same read two different ways.
+
+   ⚠️ The arithmetic is atsRead's own, deliberately: edge = projected margin +
+   the home-oriented number the model priced against, positive means HOME
+   covers. Copying the derived values into storage instead would give the same
+   read two sources that drift (v177). */
+function pkStoredRead(pick, g) {
+  if (pick?.mp == null || pick?.msp == null || !g) return null;
+  const proj = Number(pick.mp), sp = Number(pick.msp);
+  if (!isFinite(proj) || !isFinite(sp)) return null;
+  const edge = proj + sp;
+  if (!isFinite(edge)) return null;
+  const home = edge > 0;
+  const team = home ? g.home : g.away;
+  const teamSpread = home ? sp : -sp;
+  return {
+    home, team: team.name, abbr: team.abbr || (team.name || '').split(' ').pop(),
+    spread: teamSpread, homeSpread: sp, proj, edge, pinned: false,
+    qualifies: !!pick.mq,
+    label: `${team.abbr || team.name} ${teamSpread > 0 ? '+' : ''}${teamSpread}`,
+  };
+}
+
 /* Did the model's side cover? Derived, never stored — and derivable only
    because the model's side and yours are graded on the SAME number, so
    agreeing means the same result and disagreeing means the opposite one.
@@ -11251,28 +11276,34 @@ function pkGameHTML(st, wk, g, row, isTB) {
     ? esc(new Date(g.date).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }))
     : `${aAbbr} ${g.away.score ?? '–'} · ${hAbbr} ${g.home.score ?? '–'} · ${state === 'live' ? 'LIVE' : 'Final'}`;
   const mSide = pkModelSide(pick, ar);
+  /* 🚨 WHICH read gets shown, and it is the same rule the number follows.
+     The pool locks its spread on Wednesday and this card grades on the copy
+     stored with the pick, never the live quote (v218). The model's read is
+     locked the same way: `pkStoredRead` rebuilds the one the pick was actually
+     made on, and it wins wherever it exists. The live read only stands in for
+     a game with nothing stored — or one whose stored side it still agrees
+     with, where the two cannot contradict each other.
+
+     Getting this backwards is what v229 had to fix: the sentence was priced
+     off the live read while the ✅/⚔️ badge and the Season tab counted the
+     stored side, so a card could say the model liked LAR directly above a
+     badge saying you went against it. */
+  const stored = pkStoredRead(pick, g);
+  const shown = stored
+    || (ar && (!mSide || (ar.home ? 'home' : 'away') === mSide) ? ar : null);
   /* 🚨 Say which of the two it is. A completed game has no number left in the
      feed, so "no spread posted" was pointing at the wrong cause — the line was
      posted all week, it is simply gone now the game is over. The v228 lesson
      on the modal, one card over. */
   let mdLine = `<span class="pk-md-none">${locked
-    ? 'The line is no longer posted now this game has started, and no model side was stored for it.'
+    ? 'The line is no longer posted now this game has started, and no model read was stored for it.'
     : 'No spread posted, so the model has no read here.'}</span>`;
-  if (!ar && mSide) {
-    // The model's opinion survives on the pick even when the number does not.
-    const mAbbr = mSide === 'home' ? hAbbr : aAbbr;
-    const mr = pick?.side ? pkModelRes(res, mSide === pick.side) : null;
-    mdLine = `<span class="pk-chip">🤖 ${mAbbr}</span>`
-      + `<span class="pk-md-txt">the model was on ${mAbbr}${pick?.side ? ' when you picked' : ''}`
-      + `${mr ? ` — it ${mr === 'win' ? 'covered' : 'did not cover'}` : ''}`
-      + `${locked ? '' : ' — no line is posted right now, so there is no fresher read'}.</span>`;
-  }
-  if (ar) {
+  if (shown) {
     const bar = ATS_EDGE_MIN.nfl ?? 2;
-    const heat = heatCls(ar.edge, bar);
+    const heat = heatCls(shown.edge, bar);
     /* 🚨 The margin's side is NOT the ATS side, and conflating them made this
-       line say the opposite of what the model thinks. `ar.proj` is the
-       HOME-oriented projected margin; `ar.abbr` is the side the model likes
+       line say the opposite of what the model thinks. `shown.proj` is the
+       HOME-oriented projected margin; `shown.abbr` is the side the model likes
        AGAINST THE SPREAD. On ATL @ PIT with PIT -3.5 the model had PIT by 2.4
        — which is a PIT win and an ATL cover — and the first cut rendered
        "model has it ATL by 2.4", i.e. the wrong team winning.
@@ -11280,14 +11311,38 @@ function pkGameHTML(st, wk, g, row, isTB) {
        are two different bets off one projection) and the v205 negative-"by"
        fix, so it is written the way v179 settled it: name the margin's own
        side, then say what that means for the number. */
-    const mHome = ar.proj > 0;
-    const mAbbr = mHome ? hAbbr : aAbbr;
-    const mBy = Math.abs(ar.proj).toFixed(1);
-    const off = Math.abs(ar.edge).toFixed(1);
-    mdLine = `<span class="pk-chip ${heat}">🤖 ${esc(ar.label)}</span>`
-      + `<span class="pk-md-txt">model makes it ${mAbbr} by ${mBy}, so it ${ar.qualifies ? 'likes' : 'leans'} `
-      + `${esc(ar.label)} by ${off} pt${off === '1.0' ? '' : 's'}${ar.qualifies ? '' : ' — under its own bar, a read not a play'}</span>`;
+    const mAbbr = shown.proj > 0 ? hAbbr : aAbbr;
+    const mBy = Math.abs(shown.proj).toFixed(1);
+    const off = Math.abs(shown.edge).toFixed(1);
+    // Past tense once the pick is locked in against it, so a stored read never
+    // reads as a live quote — the v224 rule, that an unlabelled number on a
+    // game in progress reads as the current market.
+    const was = !!stored && !!pick?.side;
+    const mr = was ? pkModelRes(res, shown.home === (pick.side === 'home')) : null;
+    mdLine = `<span class="pk-chip ${heat}">🤖 ${esc(shown.label)}</span>`
+      + `<span class="pk-md-txt">${was ? 'when you picked, the ' : ''}model ${was ? 'made' : 'makes'} it ${mAbbr} by ${mBy}, so it `
+      + `${was ? (shown.qualifies ? 'liked' : 'leaned') : (shown.qualifies ? 'likes' : 'leans')} `
+      + `${esc(shown.label)} by ${off} pt${off === '1.0' ? '' : 's'}`
+      + `${shown.qualifies ? '' : ' — under its own bar, a read not a play'}`
+      + `${mr ? ` — it ${mr === 'win' ? 'covered' : 'did not cover'}` : ''}.</span>`;
+  } else if (mSide) {
+    /* A pick from before the numbers were stored (v229, side only), or one the
+       model has since moved off. Either way the side is all there is. */
+    const mAbbr = mSide === 'home' ? hAbbr : aAbbr;
+    const mr = pick?.side ? pkModelRes(res, mSide === pick.side) : null;
+    mdLine = `<span class="pk-chip">🤖 ${mAbbr}</span>`
+      + `<span class="pk-md-txt">the model was on ${mAbbr}${pick?.side ? ' when you picked' : ''}`
+      + `${mr ? ` — it ${mr === 'win' ? 'covered' : 'did not cover'}` : ''}`
+      + `${locked || ar ? '' : ' — no line is posted right now, so there is no fresher read'}.</span>`;
   }
+  /* 📈 The model-side twin of pkDrift. Showing the pick-time read as primary
+     would otherwise let the card silently hide that the model has changed its
+     mind while a game is still pickable — which is exactly the information a
+     pick is still worth changing over. Side changes only: a shift in magnitude
+     is not news, same as the 0.5-point floor on the number's own drift. */
+  const flipped = ar && mSide && (ar.home ? 'home' : 'away') !== mSide;
+  const flipLine = flipped
+    ? `<div class="pk-drift">🤖 The model has since moved to ${esc(ar.label)} — you are compared against its pick-time read.</div>` : '';
   const sharp = row?.p?.sharp;
   const sharpLine = sharp
     ? `<div class="pk-sharp">💰 ${esc(sharp.abbr)} — ${sharp.handle}% of the money on ${sharp.bets}% of the bets</div>` : '';
@@ -11305,8 +11360,9 @@ function pkGameHTML(st, wk, g, row, isTB) {
     <div class="pk-md">${mdLine}</div>
     ${sharpLine}
     ${pick && agree !== null ? `<div class="pk-agree ${agree ? 'y' : 'n'}">${agree
-      ? `✅ You ${res ? 'were' : 'are'} on the model's side`
-      : `⚔️ You ${res ? 'went' : 'are going'} against the model`}</div>` : ''}
+      ? `✅ You ${res || flipped ? 'were' : 'are'} on the model's side`
+      : `⚔️ You ${res || flipped ? 'went' : 'are going'} against the model`}</div>` : ''}
+    ${flipLine}
     ${drift ? `<div class="pk-drift">📈 The book has moved ${drift > 0 ? '+' : ''}${drift} since you locked ${pkSpTxt(sp)} — you are graded on your number, not this one.</div>` : ''}
     <div class="pk-line">
       <label class="pk-sp">Your number
@@ -11523,11 +11579,29 @@ function pkSetPick(week, g, side, row, wk) {
   const prev = wk.picks[g.id];
   const sp = prev?.sp != null ? Number(prev.sp) : (info?.spread != null ? Number(info.spread) : null);
   const ar = row?.atsR;
+  // 🚨 The model's read AT PICK TIME, all three fields written as ONE unit and
+  // never re-written afterwards. `md` alone survives a completed game (v229)
+  // but only names a side; `mp`/`msp` are what let the card still say BY HOW
+  // MUCH, because by then there is no number left in the feed to re-price
+  // against. Storing them separately would let a side snapshotted on Wednesday
+  // end up carrying Sunday's numbers, which is the one way this could lie.
+  //
+  // ⚠️ Two numbers, not five. Everything else in an atsRead — the side, the
+  // edge, that side's own spread, the ticket label — DERIVES from the
+  // projected margin and the number the model priced it against, so
+  // pkStoredRead rebuilds them through the same arithmetic atsRead uses
+  // rather than keeping a second copy that can drift (the v177 rule).
+  // `mq` is the exception: it also depends on the v178 saturation guard,
+  // which reads `marginSat` off a prediction we cannot recover later.
+  const model = prev?.md !== undefined && prev?.md !== null
+    ? { md: prev.md, ...(prev.mp != null ? { mp: prev.mp, msp: prev.msp, mq: prev.mq } : {}) }
+    : (ar
+        ? { md: ar.home ? 'home' : 'away',
+            ...(Number.isFinite(ar.proj) && Number.isFinite(ar.homeSpread)
+              ? { mp: ar.proj, msp: ar.homeSpread, mq: ar.qualifies ? 1 : 0 } : {}) }
+        : { md: null });
   wk.picks[g.id] = {
-    side, sp,
-    // The model's side AT PICK TIME, kept so the agreement split compares the
-    // pick against the opinion the model actually held when it was made.
-    md: prev?.md || (ar ? (ar.home ? 'home' : 'away') : null),
+    side, sp, ...model,
     at: prev?.at || Date.now(),
     m: `${g.away.abbr || g.away.name} @ ${g.home.abbr || g.home.name}`,
   };
