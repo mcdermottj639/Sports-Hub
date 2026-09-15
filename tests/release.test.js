@@ -33,3 +33,9 @@ test('phone AI navigation enables grid, not only its column definition', () => {
   const css = read('styles.css');
   assert.match(css, /#ai-sub\s*\{\s*display:\s*grid;\s*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
 });
+
+test('Home and league boards record the full upcoming football week', () => {
+  const app = read('app.js');
+  assert.match(app, /recordSlate\(s, weekly\?\.games \|\| games\)/);
+  assert.match(app, /commitRow\(r, d, \{ record: isToday \}\)/);
+});

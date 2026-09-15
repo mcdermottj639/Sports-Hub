@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v236';
+const APP_VERSION = 'v237';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v232';
 const AI_MATH = globalThis.SportsHubAI;
@@ -4528,6 +4528,21 @@ function commitRow(r, dateStr, opts = {}) {
   return null;
 }
 
+// Match a saved result by ESPN event id first, then by immutable metadata.
+// The fallback preserves legacy/imported records whose key changed while the
+// saved sport, slate date and matchup still identify exactly one game.
+function savedPickForGame(saved, g, sport, market = 'moneyline') {
+  const suffix = market === 'spread' ? ':s' : market === 'total' ? ':t' : '';
+  const exact = saved?.[`${g?.id || ''}${suffix}`];
+  if (exact) return exact;
+  const isMarket = (r) => market === 'spread' ? !!r.a : market === 'total' ? !!r.t : !r.a && !r.t;
+  const date = Number(slateDateFor(g));
+  const matchup = matchupLabel(sport, g).replace(/\s+/g, ' ').trim().toUpperCase();
+  return Object.values(saved || {}).find((r) => r && isMarket(r) && r.s === sport
+    && Number(r.d) === date
+    && String(r.m || '').replace(/\s+/g, ' ').trim().toUpperCase() === matchup) || null;
+}
+
 // The slate date a game belongs to, by the SAME 4 AM ET rule sportsDate() uses
 // for "today". This is not cosmetic: gradePending re-fetches
 // getGames(sport, date) to find the game again, so a date that doesn't match
@@ -4923,12 +4938,18 @@ async function renderHomeBoard() {
     <div class="empty">Crunching the numbers…</div>`;
   const sports = sortedSports({ teamOnly: true });
   const built = await Promise.allSettled(sports.map(async (s) => {
-    const games = await getGames(s, ymd(sportsDate()));
-    // v184: Home is the one surface that sees EVERY in-season sport, so it's
-    // where the day's full slate gets logged — no tab visit required. It gets
-    // the uncapped list (BOARD_SPORT_CAP trims what's DISPLAYED) and its own
-    // full-leash pass, because the board itself displays at SHARP_WAIT.board.
-    recordSlate(s, games);
+    const today = ymd(sportsDate());
+    // Football is a weekly market. The old recorder displayed the full week
+    // but saved only the exact calendar day, so opening on Tuesday did nothing
+    // for Sunday's NFL/CFB games. Use the weekly payload for recording and
+    // filter it back to today only for Home's visual board.
+    const weekly = WEEK_SPORTS.has(s) ? await weekSlate(s).catch(() => null) : null;
+    const games = weekly ? weekly.games.filter((g) => slateDateFor(g) === today)
+      : await getGames(s, today);
+    // Home is the automatic writer: one visit saves every still-pregame game
+    // in the current football week, and today's slate for daily sports. The
+    // uncapped list is recorded; BOARD_SPORT_CAP trims only what is displayed.
+    recordSlate(s, weekly?.games || games);
     return buildBoard(s, games.slice(0, BOARD_SPORT_CAP), { wait: SHARP_WAIT.board });
   }));
   const rows = [];
@@ -5423,6 +5444,7 @@ async function paintSportBoard(tok) {
 
   container.innerHTML = '';
   let right = 0, graded = 0;
+  const upcoming = rows.filter((r) => AI_MATH.pregame(r.g));
 
   // Grade finals inline and stash everything else for deferred grading. This
   // is the ONLY place picks are recorded — Home renders the same rows but
@@ -5438,26 +5460,18 @@ async function paintSportBoard(tok) {
     // again, so a Thursday game filed under Sunday would never grade and would
     // be purged in silence at the 14-day cutoff — the exact v183 `:s` shape.
     const d = weekMode ? slateDateFor(r.g) : dateStr;
-    // 🚨 And only TODAY's games are RECORDED, so widening the display to a
-    // week leaves the record byte-for-byte what it was. Two reasons, both
-    // existing rules rather than new policy:
-    //   • A pick logged Wednesday for Sunday is made without the injury news,
-    //     line movement and DK splits that will exist on Sunday — and
-    //     recordPick is first-write-wins, so the week board would permanently
-    //     freeze a staler read than the app already gets today.
-    //   • A game earlier in the week that is already final had its pick
-    //     recorded on its own day and graded by gradePending; committing it
-    //     again here would be freshly predicting a finished game, which is
-    //     look-ahead (v138). It still GRADES for display — commitRow returns
-    //     the ✅/❌ under record:false — it just writes nothing.
-    const c = commitRow(r, d, { record: isToday && (!weekMode || d === today) });
+    // v237: every still-pregame game on the CURRENT weekly board is recorded,
+    // even when its kickoff is later in the week. That is a timestamped,
+    // legitimate pregame forecast and is much better evidence than losing the
+    // game because the app was not reopened on Sunday. Finals and live games
+    // still cannot enter: commitRow checks state plus the kickoff clock.
+    const c = commitRow(r, d, { record: isToday });
     if (c?.graded) { graded++; if (c.hit) right++; }
   });
 
   // No line ≠ no disagreement: if ESPN sent no odds, say so instead of
   // claiming the model agrees with a book that never posted.
   const anyLines = rows.some((r) => r.info?.favName);
-  const upcoming = rows.filter((r) => AI_MATH.pregame(r.g));
   const byTier = (t) => upcoming.filter((r) => r.tier === t)
     .sort((a, b) => (b.gap ?? -1) - (a.gap ?? -1) || (b.p?.conf || 0) - (a.p?.conf || 0));
   const alerts = byTier('alert'), best = byTier('best'), edges = byTier('edge'), leans = byTier('lean');
@@ -5471,6 +5485,12 @@ async function paintSportBoard(tok) {
                     upAts ? `${upAts} ATS` : '', upTot ? `${upTot} O/U` : ''].filter(Boolean).join(' · ');
   container.appendChild(playsLine(playCount,
     playCount ? `${playBits} · experimental signals, not guarantees` : anyLines ? 'no qualified signals — inspect the reads below' : 'no lines posted yet'));
+  if (upcoming.length) {
+    const pending = getPending(), gradedNow = getTally();
+    const logged = upcoming.filter((r) => pending[r.g.id] || gradedNow[r.g.id]).length;
+    container.appendChild(el('div', 'ai-note',
+      `📥 Pregame winner snapshots saved for ${logged} of ${upcoming.length} upcoming game${upcoming.length === 1 ? '' : 's'} on this browser. Spread and total snapshots save only when their posted line produces a qualifying signal.`));
+  }
   // Say which day this is and why, so a slate of finished games can't be
   // mistaken for today's board.
   if (!isToday) {
@@ -5574,11 +5594,18 @@ async function paintSportBoard(tok) {
   const finals = rows.filter((r) => gameState(r.g) === 'final');
   if (finals.length) {
     const saved = getTally();
+    const results = finals.map((r) => ({ row: r,
+      ml: savedPickForGame(saved, r.g, sport),
+      sp: savedPickForGame(saved, r.g, sport, 'spread'),
+      tot: savedPickForGame(saved, r.g, sport, 'total') }));
+    const missing = results.filter((r) => !r.ml && !r.sp && !r.tot).length;
     const d = el('details', 'lad-fold');
     d.open = !upcoming.length;
     const mark = (r) => !r ? 'Not logged' : `${esc(r.p || '')} · ${r.pu ? 'Push' : r.c ? 'Won' : 'Lost'}`;
-    d.innerHTML = `<summary>Finished games · saved picks only (${finals.length})</summary><p class="ai-why">No reconstructed results. Legacy entries retain their original provenance; new snapshots are versioned in Results.</p>
-      ${finals.map((r) => `<div class="lad-row"><span class="lm">${esc(matchupLabel(sport, r.g))}</span><span class="lp">Winner: ${mark(saved[r.g.id])}<br>Spread: ${mark(saved[r.g.id + ':s'])}<br>Total: ${mark(saved[r.g.id + ':t'])}</span></div>`).join('')}`;
+    d.innerHTML = `<summary>Finished games · saved picks only (${finals.length})</summary><p class="ai-why">${missing
+      ? `${missing} game${missing === 1 ? ' has' : 's have'} no pregame snapshot in this browser. Finished games cannot be backfilled honestly. Safari, an installed home-screen app and another device each keep separate records.`
+      : 'Every finished game below matched a saved pregame record on this browser.'} Legacy entries retain their original provenance; new snapshots are versioned in Results.</p>
+      ${results.map(({ row: r, ml, sp, tot }) => `<div class="lad-row"><span class="lm">${esc(matchupLabel(sport, r.g))}</span><span class="lp">Winner: ${mark(ml)}<br>Spread: ${mark(sp)}<br>Total: ${mark(tot)}</span></div>`).join('')}`;
     container.appendChild(d);
   }
 

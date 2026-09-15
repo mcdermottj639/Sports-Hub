@@ -552,7 +552,15 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v236** (backend **b15-ir-slot**).
+Current version as of this writing: **v237** (backend **b15-ir-slot**).
+
+- **Weekly pregame capture and visible coverage (v237):** opening Home or a
+  league board saves every still-upcoming NFL/CFB game in ESPN's current-week
+  payload, not only games kicking off on that calendar day. The board states
+  how many upcoming winner snapshots this browser holds. Finished rows match
+  exact ids first and safe sport/date/matchup metadata second, and explicitly
+  explain that browser/PWA/device storage is separate. Finished games are never
+  backfilled; the v232 model/evaluation cohort is unchanged.
 
 - **Explanation aligned with the gate (v236):** both the all-league and league
   How it works pages name the two-quote, positive actual-price EV and data-quality

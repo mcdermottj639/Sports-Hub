@@ -32,7 +32,7 @@ function load() {
     }
     script.runInContext(s);
   }
-  for (const name of ['statVal', 'shrinkERA', 'cfbTierFromName', 'cfbRating', 'normCdf', 'invNorm', 'projMarginFor', 'predictGame', 'normOdds', 'marketHomeProb', 'pickedPrice', 'pickTier', 'marketGap', 'atsRead', 'atsCall', 'totalRead', 'recordResult', 'recordPick', 'recordAtsPick', 'recordTotalPick', 'atsResult', 'gradePending', 'tallyStats', 'pickSnapshot', 'commitRow', 'comparisonGraphic', 'moneylineValuesHTML', 'marketRowsHTML']) {
+  for (const name of ['statVal', 'shrinkERA', 'cfbTierFromName', 'cfbRating', 'normCdf', 'invNorm', 'projMarginFor', 'predictGame', 'normOdds', 'marketHomeProb', 'pickedPrice', 'pickTier', 'marketGap', 'atsRead', 'atsCall', 'totalRead', 'recordResult', 'recordPick', 'recordAtsPick', 'recordTotalPick', 'atsResult', 'gradePending', 'tallyStats', 'pickSnapshot', 'commitRow', 'slateDateFor', 'savedPickForGame', 'comparisonGraphic', 'moneylineValuesHTML', 'marketRowsHTML']) {
     const match = source.match(new RegExp(`^(?:async )?function ${name}\\([^]*?^}`, 'm'));
     assert.ok(match, name); vm.runInContext(match[0], s);
   }
@@ -142,6 +142,17 @@ test('first pregame snapshot is immutable; markets coexist without collisions', 
   assert.equal(rows.fixture.q.price, -150); assert.equal(rows['fixture:s'].q.price, null);
   assert.equal(rows.fixture.q.v, source.match(/AI_MODEL_VERSION = '([^']+)'/)[1]);
   assert.equal(rows.fixture.q.app, source.match(/APP_VERSION = '([^']+)'/)[1]);
+});
+test('saved results fall back to exact sport, date and matchup metadata', () => {
+  const s = load(), g = game();
+  const date = Number(s.slateDateFor(g));
+  const saved = {
+    'legacy-key': { s: 'nfl', d: date, p: 'Home', m: 'Away @ Home', c: 1 },
+    'legacy-spread': { s: 'nfl', d: date, p: 'HOM -3', m: 'Away @ Home', c: 0, a: 1 },
+  };
+  assert.equal(s.savedPickForGame(saved, g, 'nfl'), saved['legacy-key']);
+  assert.equal(s.savedPickForGame(saved, g, 'nfl', 'spread'), saved['legacy-spread']);
+  assert.equal(s.savedPickForGame(saved, g, 'nfl', 'total'), null);
 });
 test('live, expired cached pregame and final views cannot manufacture a record', () => {
   const s = load();
