@@ -552,7 +552,12 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v232** (backend **b15-ir-slot**).
+Current version as of this writing: **v233** (backend **b15-ir-slot**).
+
+- **Live visual follow-through (v233):** full-width game cards on desktop give
+  the three market panels readable columns. Footer counts spread/total signals,
+  and missing moneyline prices no longer read as "agrees with the book."
+  **SUPERSEDES the v232 two-across card layout.** No model coefficients changed.
 
 - **AI Picks clarity and CFB/MLB correctness (v232).** Fixes neutral-site
   home advantage, unknown/mixed college ratings, baseball innings/stat parsing,

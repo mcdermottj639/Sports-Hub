@@ -3145,6 +3145,10 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-palette] .ai-result-track { height: 6px; background: var(--line); border-radius: 5px; overflow: hidden; }
 :root[data-palette] .ai-result-track i { display: block; height: 100%; background: var(--pos); }
 :root[data-palette] .brd-card { cursor: default; }
+/* Three market panels need one full-width game card, not three tiny columns
+   inside the old two-across card layout. Verified against the live 940px flow. */
+:root[data-palette] #ai-picks > .brd-card,
+:root[data-palette] #home-board > .brd-card { grid-column: 1 / -1; }
 @media (max-width: 760px) {
   :root[data-palette] .ai-market-grid { grid-template-columns: 1fr; }
   :root[data-palette] .ai-guide-steps { grid-template-columns: 1fr; gap: 8px; }

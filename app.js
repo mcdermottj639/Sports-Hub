@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v232';
+const APP_VERSION = 'v233';
 const AI_MATH = globalThis.SportsHubAI;
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
@@ -4860,7 +4860,7 @@ function boardNote() {
 // shared by Home and AI Picks in the first place.
 const MODEL_TODAY = { byGame: new Map(), line: '' };
 const RAIL_TIER = {
-  alert: { cls: 'alert', label: 'RED ALERT' }, best: { cls: 'best', label: 'BEST BET' },
+  alert: { cls: 'alert', label: 'RED ALERT' }, best: { cls: 'best', label: 'LARGEST GAP' },
   edge: { cls: 'edge', label: 'EDGE' }, lean: { cls: 'lean', label: 'LEAN' },
 };
 function noteModelToday(rows) {
@@ -4890,13 +4890,16 @@ function paintBotBar(rows) {
   const bits = [];
   const a = n('alert'), b = n('best'), e = n('edge'), l = n('lean');
   if (a) bits.push(`${a} red alert${a === 1 ? '' : 's'}`);
-  if (b) bits.push(`${b} best bet${b === 1 ? '' : 's'}`);
+  if (b) bits.push(`${b} large-gap signal${b === 1 ? '' : 's'}`);
   if (e) bits.push(`${e} edge${e === 1 ? '' : 's'}`);
   if (l) bits.push(`${l} lean${l === 1 ? '' : 's'}`);
+  const spreads = live.filter((r) => r.ats).length, totals = live.filter((r) => r.tot).length;
+  if (spreads) bits.push(`${spreads} spread signal${spreads === 1 ? '' : 's'}`);
+  if (totals) bits.push(`${totals} total signal${totals === 1 ? '' : 's'}`);
   const agree = live.filter((r) => r.p?.sharp?.agree).length;
   if (agree) bits.push(`sharp agrees on ${agree}`);
   MODEL_TODAY.line = bits.length ? bits.join(' · ')
-    : live.length ? 'Model is with the book across today’s board.'
+    : live.length ? 'No qualified signals — price or data checks may be incomplete.'
     : 'No games left to price today.';
   const readEl = $('#bb-read');
   if (readEl) readEl.textContent = MODEL_TODAY.line;
@@ -5327,7 +5330,7 @@ async function paintOverviewBoard(tok) {
   });
   container.appendChild(strip);
   if (leans.length || passes) {
-    container.appendChild(el('div', 'ai-why', `Also today: ${[leans.length ? `👀 ${leans.length} lean${leans.length === 1 ? '' : 's'} under the ${EDGE_BAR.edge}-point bar` : '', passes ? `✅ ${passes} game${passes === 1 ? '' : 's'} the model agrees with the book on` : ''].filter(Boolean).join(' · ')}. Open a league for its full ladder.`));
+    container.appendChild(el('div', 'ai-why', `Also today: ${[leans.length ? `👀 ${leans.length} lean${leans.length === 1 ? '' : 's'} under the ${EDGE_BAR.edge}-point bar` : '', passes ? `${passes} game${passes === 1 ? '' : 's'} without a qualified moneyline signal` : ''].filter(Boolean).join(' · ')}. Open a league for all reads and data cautions.`));
   }
   container.appendChild(el('div', 'ai-why', '🌐 This view prices every league but records nothing — the day\'s picks are logged from Home and from each league\'s own board, at the full sharp-money wait.'));
   container.appendChild(historyLinks(null));

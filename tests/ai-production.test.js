@@ -112,7 +112,7 @@ test('first pregame snapshot is immutable; markets coexist without collisions', 
   const rows = JSON.parse(before);
   assert.deepEqual(Object.keys(rows).sort(), ['fixture', 'fixture:s', 'fixture:t']);
   assert.equal(rows.fixture.q.price, -150); assert.equal(rows['fixture:s'].q.price, null);
-  assert.equal(rows.fixture.q.v, 'v232');
+  assert.equal(rows.fixture.q.v, source.match(/APP_VERSION = '([^']+)'/)[1]);
 });
 test('live, expired cached pregame and final views cannot manufacture a record', () => {
   const s = load();
