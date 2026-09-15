@@ -41,6 +41,20 @@ function load() {
 const profile = { winPct: 0.6, pdpg: 7, form: 3, homeWP: 0.6, roadWP: 0.6, homeGP: 20, roadGP: 20, ppg: 24, papg: 20, lastDate: '2026-09-01' };
 const game = () => ({ id: 'fixture', state: 'pre', date: new Date(Date.now() + 86400000).toISOString(), seasonType: 2, home: { id: 'h', name: 'Home', abbr: 'HOM' }, away: { id: 'a', name: 'Away', abbr: 'AWY' } });
 const prediction = { winner: { name: 'Home' }, homePick: true, probHome: 0.65, conf: 65, projMargin: 7, projTotal: 47, blockedReasons: [] };
+test('model explainer documents actual-price and two-quote requirements', () => {
+  const s = load();
+  s.el = () => ({ innerHTML: '', addEventListener: () => {} });
+  s.sortedSports = () => ['nfl']; s.lgLabel = () => 'NFL';
+  s.MODEL_NOTES = {}; s.THIN_N = 10;
+  const fn = source.match(/^function modelPanel\([^]*?^}/m);
+  assert.ok(fn); vm.runInContext(fn[0], s);
+  const html = s.modelPanel(null).innerHTML;
+  assert.match(html, /Both moneyline quotes/);
+  assert.match(html, /positive expected value at the actual price/);
+  assert.match(html, /lean <b>2–4<\/b>/);
+  assert.match(html, /largest gap/);
+  assert.doesNotMatch(html, /best bet/i);
+});
 test('league navigation clears stale cards before awaiting the next board', async () => {
   const container = { innerHTML: 'Old MLB cards' };
   const s = vm.createContext({ state: { aiSport: 'cfb', aiSub: 'board' }, aiViewToken: 0,

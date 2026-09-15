@@ -552,7 +552,12 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v235** (backend **b15-ir-slot**).
+Current version as of this writing: **v236** (backend **b15-ir-slot**).
+
+- **Explanation aligned with the gate (v236):** both the all-league and league
+  How it works pages name the two-quote, positive actual-price EV and data-quality
+  checks, use non-overlapping gap ranges and call large gaps experimental.
+  Removes the leftover "best bet" wording in that explainer; no model change.
 
 - **Final navigation and wording check (v235):** explicitly enables the phone
   sub-tab grid (the earlier flex display prevented the v234 column rule from

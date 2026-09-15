@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v235';
+const APP_VERSION = 'v236';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v232';
 const AI_MATH = globalThis.SportsHubAI;
@@ -4103,7 +4103,7 @@ function modelPanel(sport) {
       ${row('Output', 'Three different questions: win probability, scoring margin, combined score. NFL has separately fitted paths. CFB derives probability from a team-rating margin; MLB uses pitcher-aware winner and total forecasts. Spread and total probabilities are not calibrated.')}
       ${row('Markets', `Moneyline everywhere · <b>spread</b> for ${[...ATS_SPORTS].map((s) => LEAGUES[s]?.label || s).join(' and ')} · totals everywhere a line is posted. Each keeps its OWN record — a model can pick winners well and still lose to the number.`)}
       ${sec('When it calls a play')}
-      ${row('vs the book', `The two moneylines are de-vigged into the book's own implied probability, and the gap against the model's is the play: lean ${n(EDGE_BAR.lean + '–' + EDGE_BAR.edge)} · edge ${n(EDGE_BAR.edge + '–' + (EDGE_BAR.best - 1))} · best bet ${n(EDGE_BAR.best + '+')}. Below ${n(EDGE_BAR.lean)} points is noise and is not a play.`)}
+      ${row('vs the book', `Both moneyline quotes are required to remove the bookmaker's margin. The model must also show positive expected value at the actual price and pass data checks. Gap tiers are experimental: lean ${n(EDGE_BAR.lean + '–' + (EDGE_BAR.edge - 1))} · edge ${n(EDGE_BAR.edge + '–' + (EDGE_BAR.best - 1))} · largest gap ${n(EDGE_BAR.best + '+')} percentage points. A larger gap is not proof of a better bet.`)}
       ${row('🚨 Red Alert', `Favorite value is eligible too. Red Alert is the subset where the model's outright winner is priced at ${n('+' + ALERT_DOG_ML)} or longer and clears the ${EDGE_BAR.best}-point gap. It is experimental, not a stronger guarantee.`)}
       ${sec('The honesty rules')}
       ${row('Thin', `Under ${n(THIN_N)} graded picks nothing gets a percentage — it says "thin" instead, because 2-0 rendering as 100% reads like a finding.`)}
@@ -4194,7 +4194,7 @@ function modelPanel(sport) {
   const totMax = TOT_MAX_DIFF[sport] ?? 4;
   const unit = sport === 'mlb' ? 'runs' : 'points';
   h += `${sec('When it calls a play')}
-    ${row('vs the book', `lean ${n(EDGE_BAR.lean + '–' + EDGE_BAR.edge)} · edge ${n(EDGE_BAR.edge + '–' + (EDGE_BAR.best - 1))} · best ${n(EDGE_BAR.best + '+')} points off the de-vigged line · 🚨 Red Alert = a ${n('+' + ALERT_DOG_ML)} dog the model has winning outright`)}
+    ${row('vs the book', `Both moneyline quotes, positive expected value at the actual price and passing data checks are required. Experimental gap tiers: lean ${n(EDGE_BAR.lean + '–' + (EDGE_BAR.edge - 1))} · edge ${n(EDGE_BAR.edge + '–' + (EDGE_BAR.best - 1))} · largest gap ${n(EDGE_BAR.best + '+')} percentage points above the no-vig market probability. Red Alert additionally requires a ${n('+' + ALERT_DOG_ML)} or longer underdog the model has winning outright and a ${EDGE_BAR.best}-point gap. These are signals, not guarantees.`)}
     ${ATS_SPORTS.has(sport)
       ? row('Spread', `plays at ${n(ATS_EDGE_MIN[sport] + '+')} points off the number${sport === 'nfl' && NFL_FIT ? '. The NFL margin is fitted directly in points and has no artificial probability ceiling.' : sport === 'nfl' ? `. The fallback projected margin comes back out of the win probability (spread SD ${PD_SD.nfl}), so it tops out around ${(PD_SD.nfl * 2.054).toFixed(1)} points — past that the model is pinned and refuses the play.` : ''}`)
       : row('Spread', 'not played — the model only takes a spread where the market is a spread market first.')}
