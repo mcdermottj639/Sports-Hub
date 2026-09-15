@@ -47,7 +47,8 @@ preserved, not relabeled as clean validation.
 
 ## New evidence schema
 
-`q` on pending and graded entries stores `v` (app/model build), `at` (observation
+`q` on pending and graded entries stores `v` (model cohort; v234 keeps this at
+v232 through UI-only releases), `app` (observing UI build, v234+), `at` (observation
 time), `start`, `market`, `home`, exact available `price`, `provider`, `prob`
 (moneyline only), `marketProb` (home no-vig probability), `line` (home-oriented
 for spreads), `proj`, normalized `odds`, `neutral`, `quality`, `sharpMode`.

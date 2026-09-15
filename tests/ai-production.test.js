@@ -19,7 +19,7 @@ function load() {
     getGames: async () => [], sharpSplit: () => null, lineAtLabel: () => '',
     LEAGUES: { nfl: { label: 'NFL' }, cfb: { label: 'CFB' }, mlb: { label: 'MLB' } },
   });
-  for (const name of ['APP_VERSION', 'PD_SCALE', 'HR_GAP', 'MODEL_W', 'MODEL_SHRINK', 'CONF_CAP', 'MLB_SP_ERA', 'SP_ERA_PRIOR_IP', 'PARK_WEIGHT', 'MLB_PARK', 'PD_SD', 'CFB_TIER_PTS', 'CFB_MARGIN_K', 'CFB_HFA', 'CFB_FORM_K', 'CFB_SHARP_PTS', 'CFB_P4_RE', 'CFB_ND_RE', 'ATS_SPORTS', 'ATS_EDGE_MIN', 'TOT_EDGE_MIN', 'TOT_MAX_DIFF', 'EDGE_BAR', 'ALERT_DOG_ML', 'TALLY_KEY', 'PENDING_KEY', 'getTally', 'getPending', 'setPending', 'stOf', 'impliedP', 'fmtML']) {
+  for (const name of ['APP_VERSION', 'AI_MODEL_VERSION', 'PD_SCALE', 'HR_GAP', 'MODEL_W', 'MODEL_SHRINK', 'CONF_CAP', 'MLB_SP_ERA', 'SP_ERA_PRIOR_IP', 'PARK_WEIGHT', 'MLB_PARK', 'PD_SD', 'CFB_TIER_PTS', 'CFB_MARGIN_K', 'CFB_HFA', 'CFB_FORM_K', 'CFB_SHARP_PTS', 'CFB_P4_RE', 'CFB_ND_RE', 'ATS_SPORTS', 'ATS_EDGE_MIN', 'TOT_EDGE_MIN', 'TOT_MAX_DIFF', 'EDGE_BAR', 'ALERT_DOG_ML', 'TALLY_KEY', 'PENDING_KEY', 'getTally', 'getPending', 'setPending', 'stOf', 'impliedP', 'fmtML']) {
     const at = source.indexOf(`const ${name} =`);
     assert.ok(at >= 0, name);
     // Compile candidates so a semicolon in a comment or nested try block
@@ -112,7 +112,8 @@ test('first pregame snapshot is immutable; markets coexist without collisions', 
   const rows = JSON.parse(before);
   assert.deepEqual(Object.keys(rows).sort(), ['fixture', 'fixture:s', 'fixture:t']);
   assert.equal(rows.fixture.q.price, -150); assert.equal(rows['fixture:s'].q.price, null);
-  assert.equal(rows.fixture.q.v, source.match(/APP_VERSION = '([^']+)'/)[1]);
+  assert.equal(rows.fixture.q.v, source.match(/AI_MODEL_VERSION = '([^']+)'/)[1]);
+  assert.equal(rows.fixture.q.app, source.match(/APP_VERSION = '([^']+)'/)[1]);
 });
 test('live, expired cached pregame and final views cannot manufacture a record', () => {
   const s = load();

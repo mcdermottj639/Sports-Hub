@@ -552,7 +552,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v233** (backend **b15-ir-slot**).
+Current version as of this writing: **v234** (backend **b15-ir-slot**).
+
+- **Phone labels and stable evaluation cohort (v234):** the AI sub-tabs use a
+  2×2 phone grid so no label is clipped. `AI_MODEL_VERSION` stays v232 through
+  UI-only releases; snapshot `q.v` identifies that cohort and `q.app` identifies
+  the observing UI build. Bump the model version when forecast/eligibility
+  logic changes, not for a CSS edit. **SUPERSEDES app-version-only grouping in
+  v232/v233.** The 390px browser check also confirmed Results reads the queue.
 
 - **Live visual follow-through (v233):** full-width game cards on desktop give
   the three market panels readable columns. Footer counts spread/total signals,

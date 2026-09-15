@@ -1,7 +1,9 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v233';
+const APP_VERSION = 'v234';
+// UI-only releases must not reset the model's evaluation cohort.
+const AI_MODEL_VERSION = 'v232';
 const AI_MATH = globalThis.SportsHubAI;
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
@@ -4495,7 +4497,7 @@ function pickSnapshot(r, market) {
   const price = market === 'moneyline' ? pickedPrice(p, info)
     : market === 'spread' ? (home ? info?.hSpreadPrice : info?.aSpreadPrice)
     : r.tot.side === 'OVER' ? info?.overPrice : info?.underPrice;
-  return { v: APP_VERSION, at: new Date().toISOString(), start: g.date, market,
+  return { v: AI_MODEL_VERSION, app: APP_VERSION, at: new Date().toISOString(), start: g.date, market,
     home, price: price ?? null, provider: info?.provider || null,
     prob: market === 'moneyline' ? (home ? p.probHome : 1 - p.probHome) : null,
     marketProb: marketHomeProb(info),
@@ -5098,8 +5100,8 @@ function aiGuideHTML(sub, sport) {
 function evaluationHTML(sport) {
   const all = Object.values(getTally()).filter((r) => !sport || r.s === sport);
   const markets = [['moneyline', 'Winner', (r) => !r.a && !r.t], ['spread', 'Spread', (r) => !!r.a], ['total', 'Total', (r) => !!r.t]];
-  return `<section class="ai-evidence"><div class="ai-guide-top"><b>Clean pregame evidence</b><span>${APP_VERSION} only</span></div><p>New-version results are separated from legacy history. All tracked forecasts are included; this is not a betting account or an independent-game sample.</p><div class="ai-evidence-grid">${markets.map(([key, title, filter]) => {
-    const e = AI_MATH.evaluate(all.filter(filter), APP_VERSION);
+  return `<section class="ai-evidence"><div class="ai-guide-top"><b>Clean pregame evidence</b><span>Model ${AI_MODEL_VERSION}</span></div><p>New-model results are separated from legacy history. UI updates do not reset this sample. All tracked forecasts are included; this is not a betting account or an independent-game sample.</p><div class="ai-evidence-grid">${markets.map(([key, title, filter]) => {
+    const e = AI_MATH.evaluate(all.filter(filter), AI_MODEL_VERSION);
     const decided = e.w + e.l;
     return `<div><b>${title}</b><strong>${e.n ? `${e.w}W · ${e.l}L · ${e.pushes}P` : 'Collecting'}</strong><div class="ai-result-track" role="img" aria-label="${e.w} wins, ${e.l} losses, ${e.pushes} pushes"><i style="width:${decided ? e.w / decided * 100 : 0}%"></i></div><p>${e.n} settled · ${e.priced} with prices<br>${e.priced ? `${e.units >= 0 ? '+' : ''}${e.units.toFixed(2)} units · ${(e.roi * 100).toFixed(1)}% paper ROI` : 'ROI unavailable — no priced results'}<br>${e.probabilityN ? `Brier ${e.brier.toFixed(3)} · log loss ${e.logLoss.toFixed(3)} · n=${e.probabilityN}` : 'Probability scoring: no eligible sample'}<br>${e.legacy} older/unverified excluded</p></div>`;
   }).join('')}</div><small>Paper ROI risks one unit at each saved quote; pushes return the stake. No assumed −110 prices. Markets on the same game are correlated. Closing-line value is unavailable until closing quotes are captured.</small></section>`;
