@@ -38,7 +38,7 @@
   const logistic = (z) => 1 / (1 + Math.exp(-z));
   const linear = (weights, features) => ORDER.reduce(
     (sum, key) => sum + weights[key] * finite(features?.[key]),
-    weights.intercept,
+    features?.neutral ? 0 : weights.intercept,
   );
 
   function moneylineLogit(features) { return linear(ML, features); }
@@ -51,7 +51,7 @@
   }
   function moneylineContributions(features) {
     return [
-      { key: 'home', label: 'Home field', value: ML.intercept },
+      { key: 'home', label: 'Home field', value: features?.neutral ? 0 : ML.intercept },
       ...ORDER.map((key) => ({ key, label: key, value: ML[key] * finite(features?.[key]) })),
     ];
   }

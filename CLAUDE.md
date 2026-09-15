@@ -218,6 +218,13 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 - `nfl-model.js` — dependency-free v231 NFL moneyline/spread/totals arithmetic.
   It is loaded before `app.js` and required directly by the Node tests, so the
   tested formulas are the production formulas rather than a duplicate.
+- `ai-model-utils.js` — v232 strict stat/odds parsing, baseball innings,
+  quote-specific EV, pregame eligibility and version-filtered evaluation.
+- `tests/ai-model-utils.test.js`, `tests/ai-production.test.js` — regression
+  checks for MLB/CFB guards, odds, immutable snapshots, grading and UI markup.
+- `tests/responsive.html` — production app framed at phone/desktop widths for
+  browser smoke tests; no fixture results are inserted into localStorage.
+- `docs/AI_PICKS_V232_AUDIT.md` — findings, evidence schema and validation limits.
 - `tests/nfl-model.test.js` — focused Node tests for the fitted arithmetic and
   the production moneyline value-tier gate.
 - `styles.css` — all styling, in NINE layers, and **order matters**: (1) the
@@ -545,9 +552,29 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v231** (backend **b15-ir-slot**).
+Current version as of this writing: **v232** (backend **b15-ir-slot**).
+
+- **AI Picks clarity and CFB/MLB correctness (v232).** Fixes neutral-site
+  home advantage, unknown/mixed college ratings, baseball innings/stat parsing,
+  missing-starter signal eligibility, one-sided odds and display-only probability
+  caps. No CFB/MLB coefficient refit or improved betting ROI is claimed.
+  - Picks / Results / Calibration / How it works, three-market comparison
+    graphics, both moneyline prices and break-even rates, data-quality warnings,
+    one card per game and watch-only detail. Advanced reports/trends remain.
+  - Immutable pregame-only `q` snapshots; live/cached-after-kickoff/final reads
+    cannot manufacture records. Pushes retained; slow grading preserves new
+    queue writes. Unresolved older games retained instead of deleted.
+  - Current-build evidence separates priced one-unit paper ROI and probability
+    scores from legacy history. No invented -110 prices or closing-line values.
+  - **SUPERSEDES v200 late-write upgrades, v203 reconstructed finished W–L,
+    v205 missing-team-as-FCS fallback, and v231 label-only probability caps.**
+    See the audit document for deterministic before/after checks and limits.
 
 - **🏈 NFL gets three chronologically fitted market paths (v231 candidate)** —
+  - **⚠️ SUPERSEDED status in v232:** v231 was approved and merged to main;
+    it is no longer a local-only candidate. v232 replaces its recording/UI
+    behavior and aligns probability caps; the historical metrics below refer
+    to the v231 experiment, not a fresh v232 validation.
   the owner supplied the first real NFL record (5–9 ATS; 0–4 totals in the
   visible export) and asked for a code-level audit before anything was pushed.
   This candidate remains local on `audit/nfl-model-v1` until the findings are
@@ -6045,6 +6072,13 @@ rewrite.**
 
 ## Architecture notes
 
+- **v232 AI pipeline:** `predictGame` computes forecasts and explicit
+  `blockedReasons`; display retains blocked reads, qualification refuses them.
+  `commitRow` checks pregame state AND kickoff time, freezes first observations
+  with `q`, and never grades reconstructed forecasts. `gradePending` alone grades
+  saved entries. CFB/MLB weights remain experimental; NFL keeps separate fits.
+  Common math is in `ai-model-utils.js`, loaded before `app.js`.
+
 - **ESPN endpoints used** (`SITE = site.api.espn.com/apis/site/v2/sports`,
   `CORE = site.api.espn.com/apis/v2/sports`, plus core stat hosts
   `sports.core.api.espn.com/...` aliased `FBCORE` (football) / `BBCORE` (baseball)):
@@ -6196,6 +6230,13 @@ rewrite.**
   `renderHome` once any feed loads.
 
 ## Features built (high level)
+
+- **AI Picks v232:** market-specific visual comparisons, glossary and
+  both-side price/EV detail. League cards are deduplicated without dropping
+  spread/total reads. Results starts with current-build pregame evidence and
+  preserves the older history underneath; Calibration is diagnostic, not
+  labeled as a new chronological backtest. Existing modal/trend/export tools
+  remain reachable. Responsive styling is appended after the existing layers.
 
 - **Home** — the app's front door. The day's scores are NOT on this tab any
   more (v166): they live in the **rail** pinned above the masthead — with the
@@ -6742,6 +6783,13 @@ rewrite.**
 
 ## localStorage keys
 
+- **v232 evidence additions (no legacy rewrite):** pending and tally entries
+  carry `q` with version, observation/start time, market, price, probability,
+  normalized odds, projection, data quality and sharp applied/monitor mode.
+  Moneyline rows carry features/CFB ratings; grading adds final scores. Pushes
+  use `pu:1,c:null` and are excluded from W–L. See the v232 audit for field
+  orientation and missing-price semantics.
+
 - `sportshub:aitally` — graded pick results (all-time + vs-line record). Three
   markets share the store, keyed apart and counted apart: moneyline (`{gameId}`),
   totals (`{gameId}:t`, `t:1`) and ATS (`{gameId}:s`, `a:1`). v83+:
@@ -6774,11 +6822,10 @@ rewrite.**
   without double-counting it. (v83+ includes `conf`;
   v160+ includes `sh`; v164+ includes `gp`/`tr`, plus `:s` ATS rows carrying
   `hsp` (the home-oriented spread) so they can be graded without re-fetching odds;
-  v200+ includes `sr`.) **v200: first-write-wins has ONE exception** — the
-  recorder's second pass may replace an entry that was logged before the splits
-  feed woke up (`meta.up`), and only while the pick is still pregame/live and
-  ungraded, and only ever upward (a blind entry can gain a live read; a live one
-  is never overwritten by a blind one).
+  v200+ includes `sr`.) **v232: first-write-wins has no exception.** The
+  recorder's later feed read may affect what is shown, not overwrite the saved
+  forecast. Only pregame state with future kickoff can log. Unresolved entries
+  older than the automatic 14-day retry window are retained for review.
 - `sportshub:marginbias` — v204: one row per priced NFL/CFB game
   (`{d, s, x, sp}`; `x` = model margin + home spread, `sp` = the spread),
   30-day purge. The untruncated spread-side instrument; read by

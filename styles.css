@@ -3097,3 +3097,61 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
    instead — red on "the pool allows 2, so the first 2 are taken" reads as a
    failure. The v189 rule: the colour has to mean what it says. */
 :root[data-palette] .pk-mini.pk-caut { color: var(--wm); font-weight: 700; }
+
+/* v232 — AI Picks clarity layer. Existing champagne tokens and detail panels stay. */
+:root[data-palette] .ai-guide-card,
+:root[data-palette] .ai-evidence { margin: 14px 0 20px; padding: 18px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--e1); }
+:root[data-palette] .ai-guide-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+:root[data-palette] .ai-eyebrow { font-size: 10px; letter-spacing: .12em; font-weight: 800; color: var(--text); }
+:root[data-palette] .ai-guide-steps,
+:root[data-palette] .ai-evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin: 16px 0; }
+:root[data-palette] .ai-guide-steps b { font-size: 13px; }
+:root[data-palette] .ai-guide-card p,
+:root[data-palette] .ai-evidence p { margin: 6px 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
+:root[data-palette] .ai-guide-card summary,
+:root[data-palette] .ai-value-detail summary { cursor: pointer; font-size: 12px; font-weight: 700; padding: 10px 0; min-height: 24px; }
+:root[data-palette] .ai-glossary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 18px; }
+:root[data-palette] .ai-quality { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+:root[data-palette] .ai-quality span,
+:root[data-palette] .ai-status { font-size: 10px; font-weight: 700; color: var(--muted); background: var(--card-2); border-radius: 5px; padding: 4px 6px; }
+:root[data-palette] .ai-data-warning { border-left: 3px solid var(--wm); padding: 7px 10px; color: var(--wm); font-size: 12px; line-height: 1.5; }
+:root[data-palette] .ai-market-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0 8px; }
+:root[data-palette] .ai-market-read { min-width: 0; padding: 12px; background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; }
+:root[data-palette] .ai-market-title { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 6px; }
+:root[data-palette] .ai-market-title b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+:root[data-palette] .ai-market-title div > span { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; }
+:root[data-palette] .ai-market-selection { font-size: 15px; line-height: 1.4; font-weight: 750; margin-top: 12px; overflow-wrap: anywhere; }
+:root[data-palette] .ai-market-selection strong { white-space: nowrap; color: var(--accent); }
+:root[data-palette] .ai-market-read p { font-size: 12px; line-height: 1.5; margin: 8px 0; color: var(--muted); }
+:root[data-palette] .ai-market-read small,
+:root[data-palette] .ai-evidence small,
+:root[data-palette] .ai-read-foot { display: block; color: var(--muted); font-size: 11px; line-height: 1.55; }
+:root[data-palette] .ai-compare { margin: 12px 0 8px; }
+:root[data-palette] .ai-compare > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px; font-size: 10px; }
+:root[data-palette] .ai-compare svg { display: block; width: 100%; max-height: 44px; margin-top: 4px; }
+:root[data-palette] .ai-track { stroke: var(--line); stroke-width: 3; }
+:root[data-palette] .ai-zero { stroke: var(--muted); stroke-width: 1; opacity: .5; }
+:root[data-palette] .ai-model-line { stroke: var(--accent); stroke-width: 3; }
+:root[data-palette] .ai-model-dot { fill: var(--accent); }
+:root[data-palette] .ai-book-line { stroke: var(--muted); stroke-width: 3; }
+:root[data-palette] .ai-book-dot { fill: var(--muted); }
+:root[data-palette] .ai-price-table { font-size: 10px; font-variant-numeric: tabular-nums; }
+:root[data-palette] .ai-price-table > div { display: grid; grid-template-columns: .7fr .7fr 1.6fr .8fr; gap: 4px; padding: 7px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+:root[data-palette] .ai-detail-button { display: block; width: 100%; padding: 12px; margin-top: 12px; font-family: inherit; font-size: 12px; font-weight: 700; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--text); cursor: pointer; text-align: left; }
+:root[data-palette] .ai-detail-button:focus-visible,
+:root[data-palette] #predictions summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+:root[data-palette] .ai-evidence-grid > div { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+:root[data-palette] .ai-evidence-grid strong { display: block; font-size: 18px; margin: 8px 0; }
+:root[data-palette] .ai-result-track { height: 6px; background: var(--line); border-radius: 5px; overflow: hidden; }
+:root[data-palette] .ai-result-track i { display: block; height: 100%; background: var(--pos); }
+:root[data-palette] .brd-card { cursor: default; }
+@media (max-width: 760px) {
+  :root[data-palette] .ai-market-grid { grid-template-columns: 1fr; }
+  :root[data-palette] .ai-guide-steps { grid-template-columns: 1fr; gap: 8px; }
+  :root[data-palette] .ai-guide-steps p { margin: 2px 0; }
+  :root[data-palette] .ai-evidence-grid { grid-template-columns: 1fr; gap: 8px; }
+  :root[data-palette] .ai-glossary { grid-template-columns: 1fr; }
+  :root[data-palette] .ai-market-title { flex-wrap: nowrap; }
+  :root[data-palette] .ai-sub button { font-size: 11px; padding-left: 5px; padding-right: 5px; }
+  :root[data-palette] .ai-market-selection { font-size: 16px; }
+}

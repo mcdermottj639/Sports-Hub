@@ -17,6 +17,7 @@ test('release version is synchronized across app, HTML assets and service worker
   assert.match(html, new RegExp(`styles\\.css\\?v=${version}`));
   assert.match(html, new RegExp(`nfl-model\\.js\\?v=${version}`));
   assert.match(html, new RegExp(`app\\.js\\?v=${version}`));
+  assert.match(html, new RegExp(`ai-model-utils\\.js\\?v=${version}`));
   assert.match(sw, new RegExp(`sportshub-v${version}`));
 });
 
@@ -25,4 +26,5 @@ test('NFL model loads before the main application', () => {
   const modelScript = html.indexOf('<script src="nfl-model.js');
   const appScript = html.indexOf('<script src="app.js');
   assert.ok(modelScript >= 0 && modelScript < appScript);
+  assert.ok(html.indexOf('<script src="ai-model-utils.js') < appScript);
 });

@@ -15,6 +15,7 @@ function loadProductionPickTier() {
     EDGE_BAR: { best: 10, edge: 5, lean: 2 },
     ALERT_DOG_ML: 150,
     pickedPrice: (pred) => pred.price,
+    AI_MATH: require('../ai-model-utils.js'),
   };
   vm.runInNewContext(`${source.slice(start, end)}; this.pickTier = pickTier;`, sandbox);
   return sandbox.pickTier;
@@ -61,7 +62,7 @@ test('invalid feature values cannot poison a slate', () => {
 
 test('moneyline tier keeps value on a favorite the model and book both favor', () => {
   const pickTier = loadProductionPickTier();
-  const pred = { winner: { name: 'Philadelphia Eagles' }, price: -150 };
+  const pred = { winner: { name: 'Philadelphia Eagles' }, price: -150, homePick: true, probHome: 0.66 };
   const info = { favName: 'Philadelphia Eagles' };
   assert.equal(pickTier(pred, info, 6), 'edge');
   assert.equal(pickTier(pred, info, 1), null);
@@ -69,7 +70,7 @@ test('moneyline tier keeps value on a favorite the model and book both favor', (
 
 test('red alert remains restricted to a true plus-money underdog', () => {
   const pickTier = loadProductionPickTier();
-  const pred = { winner: { name: 'Giants' }, price: 160 };
+  const pred = { winner: { name: 'Giants' }, price: 160, homePick: true, probHome: 0.56 };
   assert.equal(pickTier(pred, { favName: 'Eagles' }, 12), 'alert');
   assert.equal(pickTier({ ...pred, price: 140 }, { favName: 'Eagles' }, 12), 'best');
 });

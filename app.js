@@ -1,7 +1,8 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v231';
+const APP_VERSION = 'v232';
+const AI_MATH = globalThis.SportsHubAI;
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -447,6 +448,7 @@ function normEvent(ev) {
     seasonType: Number(ev.season?.type ?? comp.season?.type) || null, // 1 pre, 2 regular, 3 post
     statusText: st.shortDetail || st.detail || st.description,
     situation: comp.situation || null,
+    neutralSite: comp.neutralSite === true,
     home: teamObj(home),
     away: teamObj(away),
     tv: tvFor(comp),
@@ -1057,7 +1059,7 @@ async function openGameDetail(sport, id, g) {
 // figure out the market favorite by name.
 function normOdds(o, homeName, awayName, homeAbbr, awayAbbr) {
   if (!o) return null;
-  const hML = o.homeTeamOdds?.moneyLine, aML = o.awayTeamOdds?.moneyLine;
+  const hML = AI_MATH.american(o.homeTeamOdds?.moneyLine), aML = AI_MATH.american(o.awayTeamOdds?.moneyLine);
   const details = o.details ?? o.spread ?? null;
   let favName = o.homeTeamOdds?.favorite ? homeName : o.awayTeamOdds?.favorite ? awayName
     : (typeof hML === 'number' && typeof aML === 'number') ? (hML < aML ? homeName : awayName) : null;
@@ -1086,8 +1088,9 @@ function normOdds(o, homeName, awayName, homeAbbr, awayAbbr) {
   // magnitude test — no team is ever a 100-point favorite, and MLB's details
   // string ("SEA -231") is a moneyline, not a spread.
   let spread = null;
-  const rawSp = Number(o.spread);
-  if (isFinite(rawSp) && Math.abs(rawSp) > 0 && Math.abs(rawSp) < 100) spread = rawSp;
+  const rawSp = AI_MATH.number(o.spread);
+  if (rawSp != null && Math.abs(rawSp) < 100) spread = rawSp;
+  if (typeof details === 'string' && /^(pk|pick['’]?em|even)$/i.test(details.trim())) spread = 0;
   if (spread == null && typeof details === 'string') {
     const sm = details.match(/([A-Za-z]{2,4})\s*(-\d+(?:\.\d+)?)/);
     if (sm && Math.abs(Number(sm[2])) < 100) {
@@ -1098,23 +1101,18 @@ function normOdds(o, homeName, awayName, homeAbbr, awayAbbr) {
       else if (favName) spread = favName === homeName ? v : -v;
     }
   }
-  const has = (details != null || o.overUnder != null || hML != null || aML != null);
-  return has ? { details, ou: o.overUnder ?? o.total ?? null, hML, aML, dML, spread,
+  const has = (details != null || o.overUnder != null || o.total != null || hML != null || aML != null);
+  return has ? { details, ou: AI_MATH.number(o.overUnder ?? o.total), hML, aML, dML, spread,
+    hSpreadPrice: AI_MATH.american(o.homeTeamOdds?.spreadOdds),
+    aSpreadPrice: AI_MATH.american(o.awayTeamOdds?.spreadOdds),
+    overPrice: AI_MATH.american(o.overOdds), underPrice: AI_MATH.american(o.underOdds),
     favHome: favName ? favName === homeName : null, favName, provider: o.provider?.name || null } : null;
 }
-const impliedP = (ml) => (typeof ml !== 'number' || !isFinite(ml) || ml === 0) ? null
-  : (ml < 0 ? -ml / (-ml + 100) : 100 / (ml + 100));
-// Market's implied win probability for the HOME side — de-vigged from the two
-// moneylines when both exist, else from the favorite's ML in the details
-// string (no de-vig possible there; close enough for gap sizing).
+const impliedP = (ml) => AI_MATH.implied(ml);
+// No-vig probability requires TWO real quotes. A lone favorite quote cannot
+// supply the missing side or safely stand in for a no-vig market.
 function marketHomeProb(info) {
-  const h = impliedP(info?.hML), a = impliedP(info?.aML);
-  if (h != null && a != null && h + a > 0) return h / (h + a);
-  if (info?.dML != null && info?.favHome != null) {
-    const p = impliedP(info.dML);
-    if (p != null) return info.favHome ? p : 1 - p;
-  }
-  return null;
+  return AI_MATH.noVigHome(info);
 }
 // Implied home prob from a single line snapshot (movement records) — raw ML
 // first, else the favorite string matched to a side by abbreviation.
@@ -1142,29 +1140,12 @@ function marketGap(pred, info) {
 // disagreeing on the number is the normal case for a big favourite, and a
 // bare "✅ Model agrees with the line" hid exactly that.
 function marketCompare(pred, favName, info, sport, g) {
-  if (!pred || !favName) return '';
-  if (pred.winner.name === favName) {
-    const mkt = marketHomeProb(info);
-    const gap = marketGap(pred, info);
-    const pickProb = Math.round((pred.homePick ? pred.probHome : 1 - pred.probHome) * 100);
-    const mktPick = mkt == null ? null : Math.round((pred.homePick ? mkt : 1 - mkt) * 100);
-    const value = gap != null && gap >= EDGE_BAR.lean
-      ? `⚡ Model agrees ${esc(favName)} is likelier, and sees price value — model ${pickProb}%, market ${mktPick}%`
-      : `✅ Model agrees with the line (${esc(favName)})`;
-    const ats = (sport && g) ? atsCall(sport, g, pred, info) : null;
-    if (ats && ats.team !== pred.winner.name) {
-      return `${value} — but makes it ${esc(favName)} by ${Math.abs(pred.projMargin).toFixed(0)}, so it likes <b>${esc(ats.label)}</b> against the spread`;
-    }
-    return value;
-  }
-  const mkt = marketHomeProb(info);
-  let probs = '';
-  if (mkt != null && pred.probHome != null) {
-    const pickProb = Math.round((pred.homePick ? pred.probHome : 1 - pred.probHome) * 100);
-    const mktPick = Math.round((pred.homePick ? mkt : 1 - mkt) * 100);
-    probs = ` — model ${pickProb}%, market ${mktPick}%`;
-  }
-  return `⚡ Model sees value — likes ${pred.winner.name}, market favors ${favName}${probs}`;
+  if (!pred) return '';
+  const price = pickedPrice(pred, info);
+  const v = AI_MATH.value(pred.homePick ? pred.probHome : 1 - pred.probHome, price);
+  const text = v ? `Model ${(v.prob * 100).toFixed(1)}%; ${fmtML(price)} needs ${(v.breakeven * 100).toFixed(1)}% to break even. ${v.ev > 0 ? 'Positive model EV (unvalidated).' : 'No positive model EV at this price.'}`
+    : 'No usable quote on this side; price value cannot be established.';
+  return `${esc(pred.winner.name)} is the winner forecast. ${text}`;
 }
 // Fair American moneyline for a win probability (the model's "price").
 const fairML = (p) => {
@@ -1825,11 +1806,10 @@ const MLB_MATCH_W = { sp: 0.42, spForm: 0.18, ops: 0.20 };
 // about half, one with 12 is trusted about a sixth. A guard, not a fit.
 const SP_ERA_PRIOR_IP = 60;
 function shrinkERA(era, stats) {
-  if (era == null || !isFinite(era)) return era;
-  let ip = statVal(stats, ['IP', 'inningsPitched', 'innings']);
+  if (era == null || !isFinite(era) || era < 0) return null;
+  let ip = AI_MATH.innings(statVal(stats, ['IP', 'inningsPitched', 'innings']));
   if (ip == null || !isFinite(ip) || ip < 0) {
-    const w = statVal(stats, ['W', 'wins']), l = statVal(stats, ['L', 'losses']);
-    ip = (w != null || l != null) ? ((w || 0) + (l || 0)) * 6 : 0;
+    ip = 0; // decisions are not innings; no sample means use the prior
   }
   return Math.round(((ip * era + SP_ERA_PRIOR_IP * MLB_SP_ERA) / (ip + SP_ERA_PRIOR_IP)) * 100) / 100;
 }
@@ -1939,6 +1919,7 @@ const CFB_ND_RE = /notre dame/i;
 function cfbTierFromName(confName, teamName) {
   if (CFB_ND_RE.test(teamName || '')) return 'p4';
   if (!confName) return null;
+  if (/\bfcs\b|football championship/i.test(confName)) return 'fcs';
   if (CFB_P4_RE.test(confName)) return 'p4';
   return 'g5';
 }
@@ -1952,7 +1933,7 @@ async function cfbConfMap() {
     try {
       const rows = normStandings(await fetchJSON(`${CORE}/football/college-football/standings?level=3`, 6 * 3600000));
       rows.forEach((r) => {
-        const conf = r.league || r.group || r.division || '';
+        const conf = [r.league, r.group, r.division].filter(Boolean).join(' / ');
         if (r.id) byId.set(String(r.id), conf);
         if (r.team) byName.set(String(r.team).toLowerCase(), conf);
       });
@@ -2016,12 +1997,11 @@ async function cfbRating(team, prof) {
   let confName = null;
   if (team?.id != null && cm.byId.has(String(team.id))) confName = cm.byId.get(String(team.id));
   else if (team?.name && cm.byName.has(team.name.toLowerCase())) confName = cm.byName.get(team.name.toLowerCase());
-  // No standings row at all → not FBS → FCS. But only trust that absence when
-  // the map actually loaded; with the feed down every team would read as FCS.
-  const tier = cfbTierFromName(confName, team?.name) || (cm.ok ? 'fcs' : 'g5');
+  // Absence from a potentially partial feed is UNKNOWN, never proof of FCS.
+  const tier = cfbTierFromName(confName, team?.name);
   const own = prof?.pdpg != null && isFinite(prof.pdpg) ? prof.pdpg : 0;
   const k = tier === 'fcs' ? CFB_MARGIN_K.fcs : CFB_MARGIN_K.fbs;
-  return { r: CFB_TIER_PTS[tier] + k * own, tier, src: 'tier', conf: confName };
+  return { r: (CFB_TIER_PTS[tier] ?? 0) + k * own, tier, src: tier ? 'tier' : 'unknown', conf: confName };
 }
 // ======================= end CFB team rating ===============================
 // Φ — standard normal CDF (Abramowitz–Stegun 7.1.26, |ε| < 1.5e-7). The
@@ -2100,7 +2080,7 @@ function sharpSplit(sp) {
   const div = (s) => {
     if (s?.ml_handle == null || s?.ml_bets == null) return null;
     const h = Number(s.ml_handle), b = Number(s.ml_bets);
-    return isFinite(h) && isFinite(b) ? h - b : null;
+    return isFinite(h) && isFinite(b) && h >= 0 && h <= 100 && b >= 0 && b <= 100 ? h - b : null;
   };
   const dh = div(sp.home), da = div(sp.away);
   if (dh == null && da == null) return null;
@@ -2199,11 +2179,10 @@ async function teamProfile(sport, teamId, beforeDate) {
 function statVal(arr, keys) {
   const s = (arr || []).find((x) => {
     const a = (x.abbreviation || '').toUpperCase(), n = (x.name || '').toLowerCase();
-    return keys.some((k) => a === k.toUpperCase() || n.includes(k.toLowerCase()));
+    return keys.some((k) => a === k.toUpperCase() || n === k.toLowerCase() || (k.length > 3 && n.includes(k.toLowerCase())));
   });
   if (!s) return null;
-  const v = Number(s.displayValue ?? s.value);
-  return isNaN(v) ? null : v;
+  return AI_MATH.number(s.displayValue ?? s.value);
 }
 const BBCORE = 'https://sports.core.api.espn.com/v2/sports/baseball/leagues/mlb';
 const ops3 = (v) => v.toFixed(3).replace(/^0/, ''); // 0.790 -> ".790"
@@ -2318,6 +2297,16 @@ async function starterForm(athleteId, beforeDate) {
 // Player-matchup signal: MLB starting pitchers (season ERA/WHIP + last-3-starts
 // form) and team OPS; football/basketball key player. Returns weighted factors
 // + display notes.
+async function starterSeasonStats(probable, date) {
+  const supplied = probable?.statistics || [];
+  if (!probable?.athlete?.id) return supplied;
+  const year = new Date(date || Date.now()).getUTCFullYear();
+  const data = await safeJSON(`${BBCORE}/seasons/${year}/types/2/athletes/${encodeURIComponent(probable.athlete.id)}/statistics`, 6 * 3600000);
+  // Pitching only: fielding also exposes catcherERA, which must not win a
+  // loose name match. Supplied scoreboard stats are retained as fallbacks.
+  const stats = data?.splits?.categories?.find((c) => c.name === 'pitching')?.stats || [];
+  return [...stats, ...supplied];
+}
 async function matchupFactor(sport, g) {
   const notes = [], factors = [];
   let starters = null; // { hERA, aERA } — surfaced so predictGame can price the total
@@ -2326,6 +2315,10 @@ async function matchupFactor(sport, g) {
     const hn = hp?.athlete?.displayName || hp?.athlete?.shortName;
     const an = ap?.athlete?.displayName || ap?.athlete?.shortName;
     if (hn && an) {
+      const [hStats, aStats] = await Promise.all([
+        starterSeasonStats(hp, g.date).catch(() => hp.statistics || []),
+        starterSeasonStats(ap, g.date).catch(() => ap.statistics || []),
+      ]);
       // 🚨 v204 — shrink each starter's ERA toward the league starter anchor
       // by how much he has actually pitched. A 13.50 ERA two starts into a
       // season was going straight into the total as ~+5.5 runs and into the
@@ -2336,15 +2329,19 @@ async function matchupFactor(sport, g) {
       // failing both, the prior alone — which is the honest read on a pitcher
       // we know nothing about. Raw ERA stays in the note so the card still
       // shows what ESPN says; only the MODEL sees the shrunk number.
-      const hERAraw = statVal(hp?.statistics, ['ERA', 'earnedRunAverage']);
-      const aERAraw = statVal(ap?.statistics, ['ERA', 'earnedRunAverage']);
-      const hERA = shrinkERA(hERAraw, hp?.statistics);
-      const aERA = shrinkERA(aERAraw, ap?.statistics);
-      const hWHIP = statVal(hp?.statistics, ['WHIP', 'walksHitsPerInningPitched']);
-      const aWHIP = statVal(ap?.statistics, ['WHIP', 'walksHitsPerInningPitched']);
+      const hERAraw = statVal(hStats, ['ERA', 'earnedRunAverage']);
+      const aERAraw = statVal(aStats, ['ERA', 'earnedRunAverage']);
+      const hERA = shrinkERA(hERAraw, hStats);
+      const aERA = shrinkERA(aERAraw, aStats);
+      const hWHIP = statVal(hStats, ['WHIP', 'walksHitsPerInningPitched']);
+      const aWHIP = statVal(aStats, ['WHIP', 'walksHitsPerInningPitched']);
+      const hIP = AI_MATH.innings(statVal(hStats, ['IP', 'inningsPitched', 'innings']));
+      const aIP = AI_MATH.innings(statVal(aStats, ['IP', 'inningsPitched', 'innings']));
+      if (hIP == null || aIP == null) notes.push('Starter innings unavailable — ERA falls back to the league prior, not an estimated sample');
       const fmt = (era, whip) => [era != null ? `${era} ERA` : '', whip != null ? `${whip} WHIP` : ''].filter(Boolean).join(', ');
       notes.push(`SP: ${hn}${fmt(hERAraw, hWHIP) ? ` (${fmt(hERAraw, hWHIP)})` : ''} vs ${an}${fmt(aERAraw, aWHIP) ? ` (${fmt(aERAraw, aWHIP)})` : ''}`);
-      starters = { hERA, aERA }; // for the pitcher-aware projected total
+      starters = { hERA, aERA, hERAraw, aERAraw, hIP, aIP, hWHIP, aWHIP,
+        homeId: hp.athlete.id, awayId: ap.athlete.id }; // for totals and immutable feature evidence
       const parts = [];
       if (hERA != null && aERA != null) parts.push(clamp((aERA - hERA) / 1.5, -2, 2)); // lower ERA = home edge
       if (hWHIP != null && aWHIP != null) parts.push(clamp((aWHIP - hWHIP) / 0.25, -2, 2)); // lower WHIP = home edge
@@ -2385,7 +2382,10 @@ async function predictGame(sport, g, opts) {
   const w = MODEL_W[sport] || MODEL_W.default;
   const factors = []; // { label, c (log-odds toward home), detail }
   let z = 0;
-  const add = (label, c, detail) => { if (c && isFinite(c)) { z += c; factors.push({ label, c, detail }); } };
+  const add = (label, c, detail) => {
+    if (g.neutralSite && (label === 'Home field' || label === 'Home/road split')) return;
+    if (c && isFinite(c)) { z += c; factors.push({ label, c, detail }); }
+  };
 
   let nflFeatures = null;
   if (hf && af && sport === 'nfl' && NFL_FIT) {
@@ -2400,7 +2400,7 @@ async function predictGame(sport, g, opts) {
       record: hf.winPct - af.winPct,
       margin: clamp((hf.pdpg - af.pdpg) / PD_SCALE.nfl, -3, 3),
       form: clamp((hf.form - af.form) / PD_SCALE.nfl, -3, 3),
-      split, rest,
+      split: g.neutralSite ? 0 : split, rest, neutral: !!g.neutralSite,
     };
     const det = {
       home: 'historical NFL home edge',
@@ -2491,9 +2491,10 @@ async function predictGame(sport, g, opts) {
       const formPts = (hf && af) ? clamp(hf.form - af.form, -20, 20) * CFB_FORM_K : 0;
       const sharpPts = ss ? ss.units * CFB_SHARP_PTS : 0;
       const gapPts = hR.r - aR.r;
-      const margin = gapPts + CFB_HFA + formPts + sharpPts;
+      const homePts = g.neutralSite ? 0 : CFB_HFA;
+      const margin = gapPts + homePts + formPts + sharpPts;
       const src = hR.src === 'fpi' && aR.src === 'fpi' ? 'fpi' : (hR.src === 'fpi' || aR.src === 'fpi') ? 'mixed' : 'tier';
-      rating = { hR, aR, gapPts, formPts, sharpPts, margin, src };
+      rating = { hR, aR, gapPts, homePts, formPts, sharpPts, margin, src };
     }
   }
   let shrink = MODEL_SHRINK[sport] ?? MODEL_SHRINK.default;
@@ -2507,7 +2508,7 @@ async function predictGame(sport, g, opts) {
     const fmtR = (r) => `${r.r >= 0 ? '+' : ''}${r.r.toFixed(1)}${r.tier ? ' ' + r.tier.toUpperCase() : ''}`;
     const pts = [
       ['Team rating', rating.gapPts, `${fmtR(rating.hR)} vs ${fmtR(rating.aR)} (${rating.src === 'fpi' ? 'ESPN FPI' : rating.src === 'mixed' ? 'FPI + tier' : 'conference tier + own margin'})`],
-      ['Home field', CFB_HFA, `${CFB_HFA} pts`],
+      ['Home field', rating.homePts, `${rating.homePts} pts`],
       ['Recent form', rating.formPts, hf && af ? `last 5: ${hf.form >= 0 ? '+' : ''}${hf.form.toFixed(1)} vs ${af.form >= 0 ? '+' : ''}${af.form.toFixed(1)}` : ''],
       ['Sharp money', rating.sharpPts, sharp ? `${sharp.handle}% of dollars vs ${sharp.bets}% of bets on ${sharp.abbr}` : ''],
     ];
@@ -2522,6 +2523,10 @@ async function predictGame(sport, g, opts) {
   } else {
     pHome = logistic(z * shrink);
   }
+  // One probability for display, price comparisons, snapshots and calibration.
+  // The prior cap used to affect only the label, not the alleged price edge.
+  const cap = (CONF_CAP[sport] || CONF_CAP.default) / 100;
+  pHome = clamp(pHome, 1 - cap, cap);
   const homePick = pHome >= 0.5;
   const winner = homePick ? g.home : g.away;
   const conf = clamp(Math.round((homePick ? pHome : 1 - pHome) * 100), 50, CONF_CAP[sport] || CONF_CAP.default);
@@ -2551,7 +2556,7 @@ async function predictGame(sport, g, opts) {
     // a directional skew that a park-blind season-average total will produce —
     // it prices a game at Coors the same as one at Oracle or T-Mobile.
     const pf = MLB_PARK[(g.home.abbr || '').toUpperCase()];
-    if (pf) projTotal *= 1 + ((pf / 100) - 1) * PARK_WEIGHT;
+    if (pf && !g.neutralSite) projTotal *= 1 + ((pf / 100) - 1) * PARK_WEIGHT;
     projTotal = clamp(projTotal, 4, 20);
   }
   // How much the sharp factor actually moved THIS pick, in probability points
@@ -2559,8 +2564,8 @@ async function predictGame(sport, g, opts) {
   // signal can be measured on real results instead of argued about.
   if (sharp) {
     const side = (p) => (homePick ? p : 1 - p);
-    const pNo = sharp.monitor ? pHome : logistic((z - sharpC) * shrink);
-    const pWith = sharp.monitor ? logistic((z + sharpMonitorC) * shrink) : pHome;
+    const pNo = sharp.monitor ? pHome : clamp(logistic((z - sharpC) * shrink), 1 - cap, cap);
+    const pWith = sharp.monitor ? clamp(logistic((z + sharpMonitorC) * shrink), 1 - cap, cap) : pHome;
     sharp.pts = Math.round((side(pWith) - side(pNo)) * 1000) / 10;
     sharp.agree = sharp.pts >= 0;
     sharp.flipped = sharp.monitor
@@ -2568,6 +2573,12 @@ async function predictGame(sport, g, opts) {
       : (pNo >= 0.5) !== homePick;              // the nudge changed which side we took
   }
   const notes = mu.notes.slice();
+  const blockedReasons = [];
+  if (!(hf && af)) blockedReasons.push('Incomplete team history');
+  if (sport === 'mlb' && (mu.starters?.hERA == null || mu.starters?.aERA == null)) blockedReasons.push('Both starting pitchers and ERA data are not available');
+  if (sport === 'cfb' && (!rating || rating.hR.src === 'unknown' || rating.aR.src === 'unknown')) blockedReasons.push('Unverified college team classification');
+  if (sport === 'cfb' && rating?.src === 'mixed') blockedReasons.push('Mixed FPI and tier scales — not validated against each other');
+  if (g.neutralSite) notes.unshift('Neutral site — no home-field or home/road-split advantage applied');
   if (sharp) notes.unshift(`Sharp money${sharp.monitor ? ' (monitor only — not applied)' : ''}: ${sharp.handle}% of dollars vs ${sharp.bets}% of bets on ${sharp.side}${sharp.flipped ? ` — ${sharp.monitor ? 'would be enough' : 'enough'} to flip the model onto that side` : ''}`);
   if (hf?.blended || af?.blended) notes.unshift('Early season — record/margin blended with last season (damped)');
   if (rating) {
@@ -2590,7 +2601,11 @@ async function predictGame(sport, g, opts) {
     // v205: in rating mode the margin is primary and unbounded, so it is
     // never pinned — the ceiling this flag guarded no longer exists for CFB.
     marginSat: rating || fittedNFLMargin != null ? false : (pHome >= 0.98 || pHome <= 0.02),
-    breakdown, notes, sharp, thin: !(hf && af) };
+    breakdown, notes, sharp, thin: !(hf && af), blockedReasons,
+    features: { home: hf, away: af, nfl: nflFeatures, starters: mu.starters },
+    evidence: sport === 'cfb' ? 'Experimental college ratings; no out-of-sample profitability validation'
+      : sport === 'mlb' ? 'Historical calibration; starter and lineup uncertainty remain'
+      : 'Separate market models; betting profitability not established' };
 }
 
 // 🚨 v179: this used to say just "Pick: USC Trojans 90%", which reads as THE
@@ -2651,7 +2666,7 @@ function aiPickHead(pred, sport, g, info) {
   // Spell out the reconciliation whenever the spread side differs from the
   // winner — the thing that read as a contradiction in v178.
   const split = ats && !ats.pinned && ats.team !== pred.winner.name
-    ? `<div class="ai-why">Both from the same projection: ${esc(pred.winner.name)} by ${Math.abs(pred.projMargin).toFixed(1)} — ${Math.abs(ats.edge) >= 1 ? 'enough to win' : 'a win'}, but ${Math.abs(ats.spread)} is more than that, so the points are on the other side.</div>`
+    ? `<div class="ai-why">Winner and cover are different questions. The margin model projects ${esc(pred.projMargin >= 0 ? g.home.name : g.away.name)} by ${Math.abs(pred.projMargin).toFixed(1)}; against this line, the read is ${esc(ats.label)}. NFL fits these two forecasts separately.</div>`
     : '';
   // Which rows are bets and which are only reads. The heat colour already
   // carries the magnitude (cold = under the bar), so this stays to one short
@@ -2659,7 +2674,7 @@ function aiPickHead(pred, sport, g, info) {
   const soft = [ats && !ats.pinned && !ats.qualifies ? 'spread' : '', tot && !tot.qualifies ? 'total' : '']
     .filter(Boolean);
   const softNote = soft.length
-    ? `<div class="ai-why">🌡️ Cold = under the bar: the ${soft.join(' and ')} ${soft.length > 1 ? 'reads are' : 'read is'} shown but not recorded as a play.</div>`
+    ? `<div class="ai-why">The ${soft.join(' and ')} ${soft.length > 1 ? 'reads do' : 'read does'} not qualify — a threshold or data-quality check is unmet. Shown for context, not recorded as a signal.</div>`
     : '';
   const homeAbbr = g?.home?.abbr || 'home', awayAbbr = g?.away?.abbr || 'away';
   const marginTxt = pred.projMargin != null
@@ -2674,14 +2689,15 @@ function aiPickHead(pred, sport, g, info) {
   // for. This leads the block, because it says what every number under it IS —
   // the v224 lesson about where that sentence belongs. The look-back slate has
   // said this since v199; the modal never got the banner.
-  const played = g && gameState(g) === 'final'
-    ? '<div class="ai-why">🏁 This game is already final. The read below is computed now rather than before kickoff, so it is shown for reference and records nothing — a prediction made after the result is known is not a prediction (see 📈 Record for what the model was actually held to).</div>'
+  const played = g && !AI_MATH.pregame(g)
+    ? '<div class="ai-why">Reference only. The game has started or is not eligible for pregame logging. This read is computed now; Results shows what was actually saved before kickoff.</div>'
     : '';
   return `<div class="md-section-title acc-open">🤖 AI Pick</div>
     ${played}
     <div class="ai-plays">${rows.join('')}</div>
     <div class="conf-bar"><span style="width:${pred.conf}%"></span></div>${split}${softNote}
     ${bits.length ? `<div class="ai-why">${bits.join(' · ')}</div>` : ''}
+    ${pred.blockedReasons?.length ? `<div class="ai-data-warning">Watch only: ${pred.blockedReasons.map(esc).join(' · ')}</div>` : ''}
     ${pred.thin ? '<div class="ai-why">Not enough games played yet for full analysis.</div>' : ''}`;
 }
 function aiFactors(pred) {
@@ -3166,7 +3182,7 @@ const getTally = () => { try { return JSON.parse(localStorage.getItem(TALLY_KEY)
 function recordResult(id, correct, edge, meta) {
   const t = getTally();
   if (t[id]) return; // graded once; re-renders of a final must not wipe the meta
-  t[id] = { c: correct ? 1 : 0, e: edge, ...(meta || {}) }; // e: 'h' edge-hit, 'm' edge-miss, null agreed
+  t[id] = { c: correct == null ? null : correct ? 1 : 0, e: edge, ...(meta || {}) };
   localStorage.setItem(TALLY_KEY, JSON.stringify(t));
 }
 function tallyStats(sport) {
@@ -3183,6 +3199,7 @@ function tallyStats(sport) {
     // dropped from every filtered view — that is correct (they cannot be
     // attributed) and the panels say how many were left out.
     if (sport && r.s !== sport) return;
+    if (r.pu || r.c == null) return; // pushes never become losses
     if (r.t) { tn++; if (r.c) tw++; return; }
     if (r.a) { an++; if (r.c) aw++; return; }   // ATS: its own market, its own record
     n++; if (r.c) w++; if (r.e === 'h') { eh++; en++; } else if (r.e === 'm') en++;
@@ -3252,6 +3269,7 @@ function tallyDetails(sport) {
   const tiers = {};
   const recent = [];
   entries.forEach((r) => {
+    if (r.pu) { if (r.p) recent.push(r); return; }
     const win = !!r.c;
     if (r.t) { // O/U picks: own record, but in history
       totals.n++; if (win) totals.w++;
@@ -3273,7 +3291,7 @@ function tallyDetails(sport) {
     }
     sharp.ml++;
     if (r.sr) sharp.live++;
-    if (r.sh) { const k = r.sh > 0 ? 'agree' : 'against'; sharp[k].n++; if (win) sharp[k].w++; }
+    if (r.sh && r.q?.sharpMode !== 'monitor') { const k = r.sh > 0 ? 'agree' : 'against'; sharp[k].n++; if (win) sharp[k].w++; }
     if (r.tr) bump(tiers, r.tr, win, r.cf);
     if (r.cf != null) bump(buckets, bucketOf(r.cf), win, r.cf); else legacy++;
     if (r.s) bump(sports, r.s, win);
@@ -3318,7 +3336,7 @@ function recordPick(id, sport, date, pick, fav, conf, isEdge, meta = {}) {
   // re-predicted after the fact (the v138 look-ahead rule). And it only ever
   // upgrades UPWARD: an entry that already carries a live-feed read is never
   // overwritten by one that doesn't.
-  if (p[id] && !(meta.up && meta.sr != null && p[id].sr == null)) return;
+  if (p[id]) return; // immutable first pregame observation; upgrades are display-only
   // eg carries the qualified-edge flag (gap-filtered) so deferred grading
   // counts the same picks toward the vs-line record as live grading does.
   // sh (v160) = probability points the sharp-money factor moved this pick,
@@ -3344,21 +3362,21 @@ function recordPick(id, sport, date, pick, fav, conf, isEdge, meta = {}) {
     // clearNflPreseason can tell a preseason pick from a real one without
     // trusting a hand-maintained kickoff date. See that function.
     ...(meta.st != null ? { st: meta.st } : {}),
-    ...(meta.tr ? { tr: meta.tr } : {}) };
+    ...(meta.tr ? { tr: meta.tr } : {}), ...(meta.q ? { q: meta.q } : {}) };
   setPending(p);
 }
 // ATS pick (v164, football): keyed `${gameId}:s` so it never collides with the
 // moneyline pick or the totals pick — the three are separate markets and keep
 // separate records. `line` is the picked side's own spread; `home` says which
 // side that is, which is all grading needs.
-function recordAtsPick(gameId, sport, date, ats, m, st) {
+function recordAtsPick(gameId, sport, date, ats, m, st, q) {
   const id = `${gameId}:s`;
   if (!gameId || !ats) return;
   if (getTally()[id]) return;
   const p = getPending();
   if (p[id]) return;
   p[id] = { sport, date, a: 1, pick: ats.label, home: ats.home ? 1 : 0,
-    hsp: ats.homeSpread, proj: ats.proj, ...(m ? { m } : {}),
+    hsp: ats.homeSpread, proj: ats.proj, ...(m ? { m } : {}), ...(q ? { q } : {}),
     ...(st != null ? { st } : {}) };
   setPending(p);
 }
@@ -3374,13 +3392,13 @@ function atsResult(g, homeSpread, tookHome) {
 // proj (v159) = the model's projected total at pick time. Without it a graded
 // export shows only WHICH side we took, so a directional skew (the OVER lean)
 // can be seen but never sized — see the projected-total bias note in the card.
-function recordTotalPick(gameId, sport, date, side, line, proj, tier, m, st) {
+function recordTotalPick(gameId, sport, date, side, line, proj, tier, m, st, q) {
   const id = `${gameId}:t`;
   if (!gameId || !side || line == null) return;
   if (getTally()[id]) return;
   const p = getPending();
   if (p[id]) return;
-  p[id] = { sport, date, t: 1, pick: side, line, proj: proj ?? null,
+  p[id] = { sport, date, t: 1, pick: side, line, proj: proj ?? null, ...(q ? { q } : {}),
     ...(tier ? { tr: tier } : {}), ...(m ? { m } : {}),
     ...(st != null ? { st } : {}) };
   setPending(p);
@@ -3421,6 +3439,7 @@ const stOf = (entry, g) => entry?.st ?? g?.seasonType ?? null;
 
 async function gradePending() {
   const p = getPending();
+  const initialIds = Object.keys(p);
   const tally = getTally();
   const groups = {};
   let changed = false;
@@ -3428,7 +3447,7 @@ async function gradePending() {
   Object.keys(p).forEach((id) => {
     if (tally[id]) { delete p[id]; changed = true; return; }            // already graded
     const { sport, date } = p[id];
-    if (Number(date) < cutoff) { delete p[id]; changed = true; return; } // too old to chase
+    if (Number(date) < cutoff) return; // retain unresolved games; never silently erase evidence
     (groups[`${sport}|${date}`] = groups[`${sport}|${date}`] || []).push(id);
   });
   await Promise.all(Object.entries(groups).map(async ([key, ids]) => {
@@ -3450,40 +3469,47 @@ async function gradePending() {
       // them fine, which is why the tests missed it.
       const g = byId[id.replace(/:(t|s)$/, '')]; if (!g || gameState(g) !== 'final') return;
       const entry = p[id];
+      if (g.home.score == null || g.away.score == null || /cancel|postpon|suspend/i.test(g.statusText || '')) return;
+      const evidence = entry.q ? { q: { ...entry.q, finalHome: g.home.score, finalAway: g.away.score } } : {};
       if (entry.a) { // ATS pick: did the side we took cover? (push → drop)
         const hit = atsResult(g, entry.hsp, !!entry.home);
-        if (hit == null) { delete p[id]; changed = true; return; }
         recordResult(id, hit, null,
-          { s: sport, d: Number(date), a: 1, p: entry.pick, m: matchupLabel(sport, g),
+          { s: sport, d: Number(date), a: 1, p: entry.pick, m: matchupLabel(sport, g), ...evidence, ...(hit == null ? { pu: 1 } : {}),
             ...(stOf(entry, g) != null ? { st: stOf(entry, g) } : {}),
             ...(entry.proj != null ? { pm: entry.proj } : {}) });
         delete p[id]; changed = true; return;
       }
       if (entry.t) { // totals pick: grade combined score vs the line (push → drop)
         const total = g.home.score != null && g.away.score != null ? g.home.score + g.away.score : null;
-        if (total == null || total === entry.line) { delete p[id]; changed = true; return; }
-        const hit = entry.pick === 'OVER' ? total > entry.line : total < entry.line;
+        if (total == null) return;
+        const hit = total === entry.line ? null : entry.pick === 'OVER' ? total > entry.line : total < entry.line;
         recordResult(id, hit, null,
-          { s: sport, d: Number(date), t: 1, p: `${entry.pick} ${entry.line}`, m: matchupLabel(sport, g),
+          { s: sport, d: Number(date), t: 1, p: `${entry.pick} ${entry.line}`, m: matchupLabel(sport, g), ...evidence, ...(hit == null ? { pu: 1 } : {}),
             ...(entry.proj != null ? { pt: Math.round(entry.proj * 10) / 10 } : {}),
             ...(stOf(entry, g) != null ? { st: stOf(entry, g) } : {}),
             ...(entry.tr ? { tr: entry.tr } : {}) });
         delete p[id]; changed = true; return;
       }
       const actual = winnerName(g);
-      if (!actual || actual === 'TIE') { delete p[id]; changed = true; return; }
+      if (!actual || actual === 'TIE') return; // settlement rules differ; retain for review
       const { pick, fav, conf, eg, sh, sr, gp, tr } = entry;
       const hit = actual === pick;
       const wasEdge = eg != null ? !!eg : !!(fav && pick !== fav); // old entries: fav comparison
       recordResult(id, hit, wasEdge ? (hit ? 'h' : 'm') : null,
-        { s: sport, d: Number(date), cf: conf ?? null, p: pick, m: matchupLabel(sport, g),
+        { s: sport, d: Number(date), cf: conf ?? null, p: pick, m: matchupLabel(sport, g), ...evidence,
           ...(sh != null ? { sh } : {}), ...(sr != null ? { sr } : {}),
           ...(stOf(entry, g) != null ? { st: stOf(entry, g) } : {}),
           ...(gp != null ? { gp } : {}), ...(tr ? { tr } : {}) });
       delete p[id]; changed = true;
     });
   }));
-  if (changed) setPending(p);
+  if (changed) {
+    // A new slate can log while score requests are in flight. Remove only
+    // entries processed from this snapshot, never overwrite the newer queue.
+    const latest = getPending();
+    initialIds.forEach((id) => { if (!(id in p)) delete latest[id]; });
+    setPending(latest);
+  }
 }
 
 // The one-sided-lean warning the v159 export earned: an unbiased projection
@@ -3550,7 +3576,7 @@ function exportButton() {
   return box;
 }
 
-// 🧪 Backtesting — the charts and the instruments. `sport` narrows every card
+// 🧪 Calibrationing — the charts and the instruments. `sport` narrows every card
 // to one league; null is the cumulative view.
 function backtestPanel(det, sport) {
   const box = el('div', 'bt-wrap');
@@ -3856,9 +3882,9 @@ function historyLinks(sport) {
     ? (rec?.n ? `${wlOf(rec)} on the moneyline${det.atsBySport?.[sport]?.n ? ` · ${wlOf(det.atsBySport[sport])} ATS` : ''}` : 'nothing graded yet')
     : (det.total ? 'every league, every market' : 'nothing graded yet');
   const jump = el('div', 'ai-histlink');
-  jump.innerHTML = `<button type="button" data-sub="record"><b>📈 Record</b><span>${mlLine}</span></button>
-    <button type="button" data-sub="backtest"><b>🧪 Backtest</b><span>${det.total ? `${det.total} graded pick${det.total === 1 ? '' : 's'}` : 'no sample yet'}</span></button>
-    <button type="button" data-sub="model"><b>🧠 Model</b><span>what it computes</span></button>`;
+  jump.innerHTML = `<button type="button" data-sub="record"><b>📈 Results</b><span>${mlLine}</span></button>
+    <button type="button" data-sub="backtest"><b>🧪 Calibration</b><span>${det.total ? `${det.total} graded pick${det.total === 1 ? '' : 's'}` : 'no sample yet'}</span></button>
+    <button type="button" data-sub="model"><b>🧠 How it works</b><span>what it computes</span></button>`;
   jump.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-sub]');
     if (b) setAiSub(b.dataset.sub);
@@ -3866,11 +3892,12 @@ function historyLinks(sport) {
   return jump;
 }
 
-// 📈 Record — how the model has actually done. `sport` narrows every number on
+// 📈 Results — how the model has actually done. `sport` narrows every number on
 // the panel to one league; null is the cumulative view.
 function recordPanel(det, pend, sport) {
   const box = el('div');
   const ts = tallyStats(sport);
+  box.insertAdjacentHTML('beforeend', evaluationHTML(sport));
 
   // ---- the stat strip ----
   // 🚨 SIX tiles, not five. Five wrap 3+2 on a 390px phone and the orphan row
@@ -3884,7 +3911,7 @@ function recordPanel(det, pend, sport) {
   const strip = el('div', 'ai-statbar');
   strip.innerHTML =
     tile(ts.n ? `${ts.w}-${ts.l}` : '—', 'Moneyline', ts.n ? pc(ts.w, ts.n, 'all-time') : 'no graded games yet') +
-    tile(ts.en ? `${ts.eh}-${ts.el}` : '—', 'vs the line', ts.en ? pc(ts.eh, ts.en, 'off the book') : 'edges not graded yet') +
+    tile(ts.en ? `${ts.eh}-${ts.el}` : '—', 'ML edge subset', ts.en ? pc(ts.eh, ts.en, 'qualified picks') : 'edges not graded yet') +
     tile(ts.an ? `${ts.aw}-${ts.al}` : '—', 'Spread', ts.an ? pc(ts.aw, ts.an, 'ATS')
       : (sport && !ATS_SPORTS.has(sport)) ? 'no spread market' : 'new — collecting') +
     tile(ts.tn ? `${ts.tw}-${ts.tl}` : '—', 'Totals', ts.tn ? pc(ts.tw, ts.tn, 'O/U') : 'no graded totals yet') +
@@ -3923,7 +3950,7 @@ function recordPanel(det, pend, sport) {
     .map((k) => calRow(k, det.buckets[k])).join('');
   if (bRows) {
     box.appendChild(el('div', 'rep-sec', 'By confidence (→ actual, vs claimed)'));
-    box.insertAdjacentHTML('beforeend', bRows + aiWhy('Green = the model\'s confidence matched reality within 6 points. Red = it was overconfident. The chart of this is on 🧪 Backtest.', ';padding-top:4px'));
+    box.insertAdjacentHTML('beforeend', bRows + aiWhy('Green = the model\'s confidence matched reality within 6 points. Red = it was overconfident. The chart of this is on 🧪 Calibration.', ';padding-top:4px'));
   }
 
   // ---- by league (cumulative view only) ----
@@ -4004,7 +4031,7 @@ function recordPanel(det, pend, sport) {
     const dd = d.length === 8 ? `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}` : '';
     const pickTxt = (r.t || r.a) ? (r.p || '') : (r.p || '').split(' ').slice(-1)[0];
     const lg = !sport && r.s ? `<span class="rep-lg">${LEAGUES[r.s]?.emoji || ''}</span>` : '';
-    return `<div class="rep-pick"><span class="rep-i">${r.c ? '✅' : '❌'}${r.e ? '⚡' : r.t ? '🎯' : r.a ? '📐' : ''}</span>${lg}<span class="rep-m">${esc(r.m || '')}</span><span class="rep-p">${esc(pickTxt)}${r.cf ? ` <span class="rep-cf">${r.cf}%</span>` : ''}</span><span class="rep-d">${dd}</span></div>`;
+    return `<div class="rep-pick"><span class="rep-i">${r.pu ? '↔ Push' : r.c ? '✅' : '❌'}${r.e ? '⚡' : r.t ? '🎯' : r.a ? '📐' : ''}</span>${lg}<span class="rep-m">${esc(r.m || '')}</span><span class="rep-p">${esc(pickTxt)}${r.cf ? ` <span class="rep-cf">${r.cf}%</span>` : ''}</span><span class="rep-d">${dd}</span></div>`;
   };
   const pool = det.recent || [];
   box.appendChild(el('div', 'rep-sec', `Recent results${sport ? '' : ' — all leagues'} (⚡ = against the line · 🎯 = totals · 📐 = spread)`));
@@ -4034,14 +4061,14 @@ const MODEL_NOTES = {
       ['home edge 0.24', 'v126/v171 — post-shrink this is the real ~53% MLB home rate'],
     ],
     guesses: ['sharp money 0.30', 'park weight 0.7', 'ERA prior 60 IP', 'totals floor 1.5'],
-    open: 'The totals projection should sit at <b>0.00 runs</b> off the book and the OVER/UNDER split near even. Last read: still about +0.3 and <b>74% OVER</b>. Read "model total vs the book" on 🧪 Backtest before touching the starter anchor — never the graded-picks row above it.',
+    open: 'The totals projection should sit at <b>0.00 runs</b> off the book and the OVER/UNDER split near even. Last read: still about +0.3 and <b>74% OVER</b>. Read "model total vs the book" on 🧪 Calibration before touching the starter anchor — never the graded-picks row above it.',
   },
   cfb: {
     fitted: [
       ['tier points P4 +12 / G5 0 / FCS −12', 'v205, matched to the market across 19 games by matchup type — so a cupcake prices like a cupcake'],
     ],
     guesses: ['shrink 0.8', 'cap 90%', 'home field 3 pts', 'sharp 3 pts/unit', 'form ×0.25', 'totals floor 6'],
-    open: 'Margin vs the book should sit near <b>0.0</b> with the dog-side share near <b>50%</b>. Before v205 it read −11.8 with the model on the dog side of <b>19 of 19</b> spreads. Fit from that instrument on 🧪 Backtest — <b>never from the ATS picks this model itself produced.</b>',
+    open: 'Margin vs the book should sit near <b>0.0</b> with the dog-side share near <b>50%</b>. Before v205 it read −11.8 with the model on the dog side of <b>19 of 19</b> spreads. Fit from that instrument on 🧪 Calibration — <b>never from the ATS picks this model itself produced.</b>',
   },
   nfl: {
     fitted: [
@@ -4071,11 +4098,11 @@ function modelPanel(sport) {
     const sports = sortedSports({ teamOnly: true });
     let h = `${sec('What the model does')}
       ${row('Inputs', 'Team records, scoring margin, recent form, home/road splits, rest — plus per-sport matchup factors and DraftKings money-vs-tickets splits. Everything comes from ESPN\'s free public feeds and runs in your browser.')}
-      ${row('Output', 'Separate moneyline probability, projected margin and projected total. They share pregame team data, but each is calibrated for its own market instead of forcing three different questions through one number.')}
+      ${row('Output', 'Three different questions: win probability, scoring margin, combined score. NFL has separately fitted paths. CFB derives probability from a team-rating margin; MLB uses pitcher-aware winner and total forecasts. Spread and total probabilities are not calibrated.')}
       ${row('Markets', `Moneyline everywhere · <b>spread</b> for ${[...ATS_SPORTS].map((s) => LEAGUES[s]?.label || s).join(' and ')} · totals everywhere a line is posted. Each keeps its OWN record — a model can pick winners well and still lose to the number.`)}
       ${sec('When it calls a play')}
       ${row('vs the book', `The two moneylines are de-vigged into the book's own implied probability, and the gap against the model's is the play: lean ${n(EDGE_BAR.lean + '–' + EDGE_BAR.edge)} · edge ${n(EDGE_BAR.edge + '–' + (EDGE_BAR.best - 1))} · best bet ${n(EDGE_BAR.best + '+')}. Below ${n(EDGE_BAR.lean)} points is noise and is not a play.`)}
-      ${row('🚨 Red Alert', `Every tier above is already the model taking an underdog outright. Red Alert is the rare one where the book prices that dog at ${n('+' + ALERT_DOG_ML)} or longer — roughly 40% or less — and the model still has them winning.`)}
+      ${row('🚨 Red Alert', `Favorite value is eligible too. Red Alert is the subset where the model's outright winner is priced at ${n('+' + ALERT_DOG_ML)} or longer and clears the ${EDGE_BAR.best}-point gap. It is experimental, not a stronger guarantee.`)}
       ${sec('The honesty rules')}
       ${row('Thin', `Under ${n(THIN_N)} graded picks nothing gets a percentage — it says "thin" instead, because 2-0 rendering as 100% reads like a finding.`)}
       ${row('Read-only', 'A look-back slate is shown but never recorded: freshly predicting a game that already finished is look-ahead, and it would flatter the record.')}
@@ -4094,7 +4121,7 @@ function modelPanel(sport) {
       const fit = (MODEL_NOTES[s]?.fitted || []).length;
       h += `<button type="button" class="mc-lg" data-league="${s}"><span class="mc-lg-n">${lgLabel(s)}</span>
         <span class="mc-lg-d">${bits} · plays ${mk}</span>
-        <span class="mc-lg-f">${fit ? `${fit} constant${fit === 1 ? '' : 's'} fitted to results` : '⚠️ nothing fitted to results yet'}</span></button>`;
+        <span class="mc-lg-f">${s === 'cfb' ? 'Market-matched priors; outcome validation pending' : fit ? `${fit} calibration evidence item${fit === 1 ? '' : 's'}` : '⚠️ nothing fitted to results yet'}</span></button>`;
     });
     h += '</div>';
     box.innerHTML = h;
@@ -4115,15 +4142,16 @@ function modelPanel(sport) {
 
   if (sport === 'cfb') {
     // 🎓 CFB runs backwards to every other sport and the card has to say so.
-    h += `${row('Direction', 'CFB is the exception: a <b>team rating produces the margin first</b>, and the win probability is derived from it. Every other league works the other way round. It changed in v205 because all 19 spread picks were the underdog — the model had no input that could tell a 9-3 built on FCS opponents from an 8-4 built in the SEC.')}
+    h += `${row('Direction', 'A <b>team rating produces the CFB margin first</b>; win probability comes from that margin. NFL instead fits its market paths separately. College tiers remain experimental and are not validated betting advantages.')}
       ${sec('How it rates a team')}
       ${row('Source', `<b>ESPN FPI</b> when that feed answers, otherwise conference tier + the team's own scoring margin. <span class="mc-src" id="mc-fpi">checking which is live…</span>`)}
       ${row('Tier prior', `P4 ${n('+' + CFB_TIER_PTS.p4)} · G5 ${n(CFB_TIER_PTS.g5)} · FCS ${n(CFB_TIER_PTS.fcs)} points, against a G5-average team`)}
       ${row('Own margin', `×${n(CFB_MARGIN_K.fbs)} of the team's own points-per-game differential (FBS) · ×${n(CFB_MARGIN_K.fcs)} for FCS, because an FCS margin was earned against FCS competition`)}
       ${row('Margin', `rating gap + home field ${n(CFB_HFA)} + recent form (×${CFB_FORM_K}) + sharp money (${n(CFB_SHARP_PTS)} pts per unit)`)}
       ${sec('Turning that into a price')}
-      ${row('Probability', `Φ(margin ÷ ${n(PD_SD.cfb)}) — the typical game-to-game spread of college results. Unbounded, so there is no ceiling on how big a favourite it can price.`)}
+      ${row('Probability', `Φ(margin ÷ ${n(PD_SD.cfb)}), bounded by the ${cap}% confidence guard for BOTH display and price calculations. The scoring margin itself remains unbounded.`)}
       ${row('Confidence', `capped at ${n(cap + '%')}. The ×${shr} shrink only applies if the rating path can't run at all.`)}`;
+    h += row('Data safeguards', 'Neutral sites receive no home-field boost. Missing conference entries stay unknown, not FCS, and block signals. Tier priors are not opponent-adjusted schedule ratings; early-season and mixed-source estimates need caution.');
   } else if (sport === 'nfl' && NFL_FIT) {
     const f = (v) => Number(v).toFixed(3);
     h += `${row('Direction', 'NFL uses <b>three fitted paths</b>: logistic win probability for moneyline, linear point margin for spread, and a shrunk scoring projection for totals. All features are pregame-only.')}
@@ -4159,6 +4187,7 @@ function modelPanel(sport) {
   }
 
   // Totals + the play thresholds — same for every league.
+  if (sport === 'mlb') h += row('Data safeguards', 'Baseball innings use outs (12.2 = 12⅔). Missing ERA stays missing; no fake zero ERA. Unknown innings use the prior, not a wins/losses proxy. Without both starter ERAs, forecasts stay visible but signals are blocked. Team OPS is not a confirmed batting lineup; bullpen, weather and lineup changes remain limitations.');
   const totFloor = TOT_EDGE_MIN[sport] ?? 1;
   const totMax = TOT_MAX_DIFF[sport] ?? 4;
   const unit = sport === 'mlb' ? 'runs' : 'points';
@@ -4169,12 +4198,12 @@ function modelPanel(sport) {
       : row('Spread', 'not played — the model only takes a spread where the market is a spread market first.')}
     ${row('Total', `plays at ${n(totFloor + '+')} ${unit} off the O/U · <b>refused</b> past ${n(totMax)} ${unit}, where the projection is a data hole rather than a bold call${sport === 'mlb' ? `. Park run environment is applied at ×${PARK_WEIGHT}.` : ''}`)}
     ${sec('How much to trust the numbers')}`;
-  h += row('Fitted to results', notes.fitted.length
+  h += row('Calibration evidence', notes.fitted.length
     ? notes.fitted.map(([t, why]) => `${pill(t, 'fit')}<span class="mc-why">${why}</span>`).join('')
     : '<span class="mc-none">⚠️ Nothing. Every constant below is a principled guess, not a measurement.</span>');
   h += row('Still guesses', notes.guesses.map((g) => pill(g, 'guess')).join(''));
   h += row('Open read', notes.open);
-  h += `<div class="ai-note" style="margin-top:12px">The rule this app has followed since v126: <b>measure, then fit — and never refit on a sample the change itself produced.</b> The instruments to measure with are on 🧪 Backtest.</div>`;
+  h += `<div class="ai-note" style="margin-top:12px">The rule this app has followed since v126: <b>measure, then fit — and never refit on a sample the change itself produced.</b> The instruments to measure with are on 🧪 Calibration.</div>`;
   box.innerHTML = h;
 
   // Which CFB rating source is actually live. This is the question the owner
@@ -4237,15 +4266,13 @@ const ALERT_DOG_ML = 150;
 // The book's price on the side the model picked, or null when no moneylines
 // were posted (routine on MLB, where the price lives only in the details text).
 function pickedPrice(pred, info) {
-  const ml = pred?.homePick ? info?.hML : info?.aML;
-  const v = Number(ml);
-  return (ml == null || !isFinite(v)) ? null : v;
+  return pred ? AI_MATH.priceFor(info, !!pred.homePick) : null;
 }
 const TIER_META = {
   alert: { label: '🚨 RED ALERT', cls: 't0', head: '🚨 Red Alert', note: 'live dog the model has winning outright' },
-  best: { label: '🔥 BEST BET', cls: 't1', head: '🔥 Best Bets', note: 'gap 10+' },
-  edge: { label: '⚡ EDGE', cls: 't2', head: '⚡ Edges', note: 'gap 5–9' },
-  lean: { label: '👀 LEAN', cls: 't3', head: '👀 Leans', note: 'gap 2–5 · under the bar' },
+  best: { label: '🔥 LARGEST GAP', cls: 't1', head: '🔥 Largest model gaps', note: '10+ percentage points · experimental' },
+  edge: { label: '⚡ MODEL EDGE', cls: 't2', head: '⚡ Model edges', note: '5–9 percentage points · experimental' },
+  lean: { label: '👀 LEAN', cls: 't3', head: '👀 Leans', note: '2–4 percentage points · watch only' },
 };
 const TIER_ORDER = ['alert', 'best', 'edge', 'lean'];
 
@@ -4254,7 +4281,9 @@ const TIER_ORDER = ['alert', 'best', 'edge', 'lean'];
 // too cheap; the old disagreement gate threw every such value bet away and
 // left the ladder populated only by outright upset calls.
 function pickTier(pred, info, gap) {
-  if (!pred || !info || gap == null || gap < EDGE_BAR.lean) return null;
+  if (!pred || !info || pred.thin || pred.blockedReasons?.length || gap == null || gap < EDGE_BAR.lean) return null;
+  const val = AI_MATH.value(pred.homePick ? pred.probHome : 1 - pred.probHome, pickedPrice(pred, info));
+  if (!val || val.ev <= 0) return null;
   // 🚨 A genuine plus-money dog the model has winning outright, not just
   // covering. Rarest thing the model produces and the owner's top-of-board
   // play. Checked BEFORE the gap ladder so it can never be filed as a plain
@@ -4299,7 +4328,7 @@ function atsRead(sport, g, pred, info) {
     home, team: team.name, abbr: team.abbr || (team.name || '').split(' ').pop(),
     spread: teamSpread, homeSpread: sp, proj: pred.projMargin, edge, pinned,
     // Whether this is a PLAY (recorded + graded) or just the read.
-    qualifies: !pinned && Math.abs(edge) >= (ATS_EDGE_MIN[sport] ?? 2),
+    qualifies: !pred.thin && !pred.blockedReasons?.length && !pinned && Math.abs(edge) >= (ATS_EDGE_MIN[sport] ?? 2),
     // "PHI +2.5" — the bet as it would be written on a ticket.
     label: `${team.abbr || team.name} ${teamSpread > 0 ? '+' : ''}${teamSpread}`,
   };
@@ -4349,7 +4378,7 @@ function totalRead(sport, pred, info) {
   // read. Shown so the card can say so; never a play.
   const broken = Math.abs(diff) > (TOT_MAX_DIFF[sport] ?? 4);
   return { side: diff > 0 ? 'OVER' : 'UNDER', line, proj: pred.projTotal, diff, broken,
-    qualifies: !broken && Math.abs(diff) >= (TOT_EDGE_MIN[sport] ?? 1) };
+    qualifies: !pred.thin && !pred.blockedReasons?.length && !broken && Math.abs(diff) >= (TOT_EDGE_MIN[sport] ?? 1) };
 }
 
 // Everything the model has to say about one sport's slate: the pick, the
@@ -4384,7 +4413,7 @@ async function buildBoard(sport, games, opts = {}) {
       const floor = TOT_EDGE_MIN[sport] ?? 1;
       // v204: a projection past TOT_MAX_DIFF is refused here, not promoted —
       // the tier ladder is what turned a 17.3-run total into a "best bet".
-      if (isFinite(diff) && Math.abs(diff) >= floor && Math.abs(diff) <= (TOT_MAX_DIFF[sport] ?? 4)) {
+      if (totalRead(sport, p, info)?.qualifies) {
         // Totals are tiered on the same ladder as the moneyline, in units of
         // the sport's own floor: 2× the floor is a best bet, 1× an edge. A
         // totals disagreement is an edge like any other, and without a tier it
@@ -4459,55 +4488,41 @@ async function buildBoard(sport, games, opts = {}) {
 // That is for the look-back slate the AI tab falls to when nothing is on
 // today — those games are already final, so predicting them now is look-ahead
 // and must never reach the record.
+// Immutable evidence attached to each new pick. No synthetic -110 prices.
+function pickSnapshot(r, market) {
+  const { p, g, info, sport } = r;
+  const home = market === 'spread' ? r.ats.home : p.homePick;
+  const price = market === 'moneyline' ? pickedPrice(p, info)
+    : market === 'spread' ? (home ? info?.hSpreadPrice : info?.aSpreadPrice)
+    : r.tot.side === 'OVER' ? info?.overPrice : info?.underPrice;
+  return { v: APP_VERSION, at: new Date().toISOString(), start: g.date, market,
+    home, price: price ?? null, provider: info?.provider || null,
+    prob: market === 'moneyline' ? (home ? p.probHome : 1 - p.probHome) : null,
+    marketProb: marketHomeProb(info),
+    line: market === 'spread' ? r.ats.homeSpread : market === 'total' ? r.tot.line : null,
+    proj: market === 'spread' ? p.projMargin : market === 'total' ? p.projTotal : null,
+    odds: info, neutral: !!g.neutralSite, quality: p.blockedReasons || [],
+    sharpMode: p.sharp?.monitor ? 'monitor' : p.sharp ? 'applied' : 'absent',
+    ...(market === 'moneyline' ? { features: p.features, rating: p.rating } : {}) };
+}
 function commitRow(r, dateStr, opts = {}) {
-  const record = opts.record !== false;
   const { g, sport, p, info, gap, tier, tot, isEdge, shLive } = r;
   if (!p || !g?.id) return null;
   if (gameState(g) === 'final') {
-    let out = null;
-    const actual = winnerName(g);
-    if (actual && actual !== 'TIE') {
-      const hit = actual === p.winner.name;
-      const edge = info && info.favName ? (isEdge ? (hit ? 'h' : 'm') : null) : null;
-      if (record) recordResult(g.id, hit, edge,
-        { s: sport, d: Number(dateStr), cf: p.conf, p: p.winner.name, m: matchupLabel(sport, g),
-          ...(g.seasonType != null ? { st: g.seasonType } : {}),
-          ...(p.sharp ? { sh: p.sharp.pts } : {}), ...(shLive ? { sr: 1 } : {}),
-          ...(gap != null ? { gp: gap } : {}), ...(tier ? { tr: tier } : {}) });
-      r.resultTag = `<div class="ai-result ${hit ? 'win' : 'loss'}">${hit ? '✅ Model nailed it' : '❌ Model missed'}</div>`;
-      out = { graded: true, hit };
-    }
-    if (!record) return out;
-    if (tot && g.home.score != null && g.away.score != null) {
-      const total = g.home.score + g.away.score;
-      if (total !== tot.line) {
-        recordResult(`${g.id}:t`, tot.side === 'OVER' ? total > tot.line : total < tot.line, null,
-          { s: sport, d: Number(dateStr), t: 1, p: `${tot.side} ${tot.line}`, m: matchupLabel(sport, g),
-            pt: Math.round(tot.proj * 10) / 10, ...(tot.tier ? { tr: tot.tier } : {}),
-            ...(g.seasonType != null ? { st: g.seasonType } : {}) });
-      }
-    }
-    if (r.ats) {
-      const covered = atsResult(g, r.ats.homeSpread, r.ats.home);
-      if (covered != null) {
-        recordResult(`${g.id}:s`, covered, null,
-          { s: sport, d: Number(dateStr), a: 1, p: r.ats.label, m: matchupLabel(sport, g), pm: r.ats.proj,
-            ...(g.seasonType != null ? { st: g.seasonType } : {}) });
-      }
-    }
-    return out;
+    const saved = getTally()[g.id];
+    r.resultTag = saved
+      ? `<div class="ai-result ${saved.c ? 'win' : saved.pu ? '' : 'loss'}">${saved.pu ? 'Push' : saved.c ? '✓ Pregame pick won' : '× Pregame pick lost'} · ${esc(saved.p || '')}</div>`
+      : '<div class="ai-result">No saved pregame pick — not scored</div>';
+    return saved && !saved.pu ? { graded: true, hit: !!saved.c } : null;
   }
-  if (!record) return null;
+  // Check both the state and the clock: cached "pre" data can outlive kickoff.
+  if (opts.record === false || !AI_MATH.pregame(g)) return null;
   const label = matchupLabel(sport, g);
   recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge,
     { sh: p.sharp?.pts ?? null, sr: shLive ? 1 : null, gp: gap, tr: tier, m: label,
-      st: g.seasonType ?? null,
-      // up (v200): this is the recorder's second pass, made after the splits
-      // feed woke up — allowed to replace a still-pregame entry that was
-      // logged blind. See recordPick for why that is not look-ahead.
-      up: opts.upgrade === true });
-  if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line, tot.proj, tot.tier, label, g.seasonType);
-  if (r.ats) recordAtsPick(g.id, sport, dateStr, r.ats, label, g.seasonType);
+      st: g.seasonType ?? null, q: pickSnapshot(r, 'moneyline') });
+  if (tot) recordTotalPick(g.id, sport, dateStr, tot.side, tot.line, tot.proj, tot.tier, label, g.seasonType, pickSnapshot(r, 'total'));
+  if (r.ats) recordAtsPick(g.id, sport, dateStr, r.ats, label, g.seasonType, pickSnapshot(r, 'spread'));
   return null;
 }
 
@@ -4570,7 +4585,7 @@ const SLATE_LOG_MAX = 60;
 let slateLogQueue = Promise.resolve();
 function recordSlate(sport, games) {
   const todo = (games || []).filter((g) => g.id && g.seasonType !== 1
-    && gameState(g) !== 'final' && !slateLogged.has(g.id));
+    && AI_MATH.pregame(g) && !slateLogged.has(g.id));
   if (!todo.length || !LEAGUES[sport] || LEAGUES[sport].type === 'golf') return slateLogQueue;
   const batch = todo.slice(0, SLATE_LOG_MAX);
   slateLogQueue = slateLogQueue.then(async () => {
@@ -4596,7 +4611,7 @@ function recordSlate(sport, games) {
       if (!late?.splits?.ok) return;
       // Pregame and live only — re-predicting a game that has since ended would
       // be look-ahead (v138). Anything already graded is skipped by recordPick.
-      const still = batch.filter((g) => gameState(g) !== 'final');
+      const still = batch.filter((g) => AI_MATH.pregame(g));
       if (!still.length) return;
       const second = await buildBoard(sport, still, { wait: SHARP_WAIT.record });
       second.rows.forEach((r) => {
@@ -4636,7 +4651,7 @@ function recordSlate(sport, games) {
 //      handled by gradePending on boot.
 async function recordFromModal(sport, g) {
   try {
-    if (!g?.id || g.seasonType === 1 || gameState(g) === 'final') return;
+    if (!g?.id || !AI_MATH.pregame(g)) return;
     if (!LEAGUES[sport] || LEAGUES[sport].type === 'golf') return;
     // A one-game slate. recordSlate skips games it has already logged, so
     // opening the same card twice costs nothing — and going through it means
@@ -4658,66 +4673,60 @@ async function recordFromModal(sport, g) {
 // same thing in all three: how far past that market's own bar this is. Under
 // 1× there is no ring, which is how the colour and the threshold stay honest
 // with each other.
+// A shared scale makes model/market disagreement visible without confusing it
+// with confidence. Exact values remain in text; color is never the only cue.
+function comparisonGraphic(model, book, unit, signed = false) {
+  if (!Number.isFinite(model) || !Number.isFinite(book)) return '';
+  const bound = Math.max(Math.abs(model), Math.abs(book), 1) * 1.2;
+  const low = signed ? -bound : 0;
+  const x = (v) => 8 + ((v - low) / (bound - low)) * 264;
+  const label = `Model ${model.toFixed(1)}${unit}; book ${book.toFixed(1)}${unit}`;
+  return `<div class="ai-compare"><div><span>● Model <b>${model.toFixed(1)}${unit}</b></span><span>◆ Book <b>${book.toFixed(1)}${unit}</b></span></div>
+    <svg viewBox="0 0 280 36" role="img" aria-label="${esc(label)}"><path d="M8 10H272 M8 26H272" class="ai-track"/>
+      <path d="M${x(0)} 2V34" class="ai-zero"/>
+      <path d="M${x(0)} 10H${x(model)}" class="ai-model-line"/><circle cx="${x(model)}" cy="10" r="4" class="ai-model-dot"/>
+      <path d="M${x(0)} 26H${x(book)}" class="ai-book-line"/><path d="M${x(book)} 21l5 5-5 5-5-5z" class="ai-book-dot"/>
+    </svg></div>`;
+}
+function moneylineValuesHTML(p, g, info) {
+  if (!p) return '';
+  return `<details class="ai-value-detail"><summary>Compare both moneyline prices</summary><div class="ai-price-table" role="table" aria-label="Moneyline price comparison">
+    <div role="row"><b role="columnheader">Team</b><b role="columnheader">Price</b><b role="columnheader">Model / needed</b><b role="columnheader">Model EV</b></div>
+    ${[false, true].map((home) => {
+      const team = home ? g.home : g.away;
+      const prob = home ? p.probHome : 1 - p.probHome;
+      const v = AI_MATH.value(prob, AI_MATH.priceFor(info, home));
+      return `<div role="row"><span role="cell">${esc(team.abbr || team.name)}</span><span role="cell">${fmtML(v?.price)}</span><span role="cell">${(prob * 100).toFixed(1)}% / ${v ? (v.breakeven * 100).toFixed(1) + '%' : '—'}</span><span role="cell">${v ? (v.ev >= 0 ? '+' : '') + (v.ev * 100).toFixed(1) + '%' : '—'}</span></div>`;
+    }).join('')}</div><p>Needed = win rate to break even at that price. EV = hypothetical return per unit staked if the model probability is right; it is not measured ROI. Both sides are shown, including underdogs below 50%. This comparison does not create a second tracked pick.</p></details>`;
+}
 function marketRowsHTML(r) {
   const { g, sport, p } = r;
-  // Display reads the SHOWN odds — the live feed before kickoff, this device's
-  // pregame snapshot after it. The record still reads r.info / r.gap / r.ats /
-  // r.tot, so nothing rendered here can change what is stored.
+  if (!p) return '<div class="ai-note">Model data unavailable for this game.</div>';
   const info = r.shownInfo !== undefined ? r.shownInfo : r.info;
-  const gap = r.linePregame ? r.shownGap : r.gap;
-  const row = (k, pick, edge, cls) =>
-    `<div class="mkt-row"><span class="mkt-k">${k}</span>` +
-    `<span class="mkt-p">${pick}</span>` +
-    `<span class="ai-edge ${cls || 'h0'}">${edge}</span></div>`;
-
-  // --- moneyline ---
-  let ml;
-  if (!p) ml = row('MONEYLINE', 'no model read', '—');
-  else if (!info?.favName) ml = row('MONEYLINE', `${esc(p.winner.name)} · ${p.conf}%`, '—');
-  else if (gap == null) ml = row('MONEYLINE', `${esc(p.winner.name)} · ${p.conf}%`, '—');
-  else ml = row('MONEYLINE', `${esc(p.winner.name)} to win · ${p.conf}%`,
-    `${gap > 0 ? '+' : ''}${gap}`, heatCls(Math.max(0, gap), EDGE_BAR.edge));
-
-  // --- spread ---
-  let sp;
-  const ar = r.atsR;
-  if (!ATS_SPORTS.has(sport)) sp = row('SPREAD', `no spread market — ${LEAGUES[sport]?.label || sport}`, '—');
-  else if (info?.spread == null) sp = row('SPREAD', 'no line posted', '—');
-  else if (!ar) sp = row('SPREAD', 'no model read', '—');
-  else if (ar.pinned) sp = row('SPREAD', `no play — model tops out near ${Math.abs(ar.proj).toFixed(1)}`, '—');
-  else sp = row('SPREAD',
-    `${esc(ar.label)} · model ${esc(ar.abbr)} by ${Math.abs(ar.proj).toFixed(1)}`,
-    Math.abs(ar.edge).toFixed(1), heatCls(ar.edge, ATS_EDGE_MIN[sport] ?? 2));
-
-  // --- total ---
-  let to;
-  const tr = r.totR;
-  if (info?.ou == null) to = row('TOTAL', 'no total posted', '—');
-  else if (!tr) to = row('TOTAL', 'no model read', '—');
-  else to = row('TOTAL', `${tr.side} ${tr.line} · model ${tr.proj.toFixed(1)}`,
-    Math.abs(tr.diff).toFixed(1), heatCls(tr.diff, TOT_EDGE_MIN[sport] ?? 1));
-
-  // The one sentence that reconciles a split: all three come off ONE
-  // projection, so a card showing the model on the favourite's ML and the
-  // dog's spread is not contradicting itself, and should say why.
-  const notes = [];
-  // Provenance FIRST. The render made the case: it read as a trailing footnote
-  // after two "shown, not recorded" caveats, when it is the sentence that tells
-  // you what every number above it IS.
-  if (r.linePregame && info) {
-    const at = lineAtLabel(r.lineAt);
-    notes.push(`Numbers are the last pregame line this device saw${at ? ` (${at})` : ''} — ESPN stops publishing the line at kickoff, so this is what the model was priced against, not a live market.`);
-  }
-  if (ar && !ar.pinned && !ar.qualifies) notes.push(`Spread read is under the ${ATS_EDGE_MIN[sport] ?? 2}-pt ${(LEAGUES[sport]?.label || sport)} bar — shown, not recorded.`);
-  if (tr?.broken) notes.push(`Total projection is ${Math.abs(tr.diff).toFixed(1)} off the book — past the ${TOT_MAX_DIFF[sport] ?? 4}-pt sanity bar, so this is a data hole, not a play.`);
-  else if (tr && !tr.qualifies) notes.push(`Total read is under the ${TOT_EDGE_MIN[sport] ?? 1}-pt bar — shown, not recorded.`);
-  if (ar?.pinned) notes.push(`The model tops out around ${Math.abs(ar.proj).toFixed(1)} points in ${LEAGUES[sport]?.label || sport}, so it cannot price a number this big.`);
-  if (p && ar && !ar.pinned && ar.team !== p.winner.name) {
-    notes.push(`Both come off one projection: ${esc(p.winner.name)} to win, but by less than the ${Math.abs(ar.homeSpread)} the book is asking.`);
-  }
-
-  return `<div class="mkt-box">${ml}${sp}${to}</div>` +
-    (notes.length ? `<div class="mkt-note">${notes.join(' ')}</div>` : '');
+  const ar = r.atsR, tr = r.totR;
+  const blocked = p.blockedReasons?.length;
+  const live = gameState(g) !== 'scheduled';
+  const prob = p.homePick ? p.probHome : 1 - p.probHome;
+  const noVig = marketHomeProb(info);
+  const marketP = noVig == null ? null : p.homePick ? noVig : 1 - noVig;
+  const value = AI_MATH.value(prob, pickedPrice(p, info));
+  const gap = marketP == null ? null : (prob - marketP) * 100;
+  const status = (ready) => live ? 'Reference only' : blocked ? 'Data check' : ready ? 'Experimental signal' : 'Watch only';
+  const marginWinner = p.projMargin >= 0 ? g.home : g.away;
+  const section = (name, question, selection, badge, body) => `<section class="ai-market-read"><div class="ai-market-title"><div><b>${name}</b><span>${question}</span></div><span class="ai-status">${badge}</span></div><div class="ai-market-selection">${selection}</div>${body}</section>`;
+  const ml = section('Moneyline', 'Who wins the game?', `${esc(p.winner.name)} <strong>${p.conf}%</strong>`, status(!!r.tier && r.tier !== 'lean'),
+    `<p>${value ? `Price <b>${fmtML(value.price)}</b> needs ${(value.breakeven * 100).toFixed(1)}% wins to break even.` : 'No usable price for this side — value is unknown.'} ${gap != null ? `Model gap: ${gap >= 0 ? '+' : ''}${gap.toFixed(1)} percentage points vs no-vig market.` : 'Both prices are needed for a no-vig market comparison.'}</p>
+    ${marketP != null ? comparisonGraphic(prob * 100, marketP * 100, '%') : ''}${moneylineValuesHTML(p, g, info)}`);
+  const spread = section('Spread', 'Who covers the handicap?', !ATS_SPORTS.has(sport) ? 'Not modeled for this league' : ar ? esc(ar.label) : 'Waiting for a usable spread', status(!!ar?.qualifies),
+    ar ? `<p>Projected winner: ${esc(marginWinner.abbr || marginWinner.name)} by ${Math.abs(ar.proj).toFixed(1)}. Difference: <b>${Math.abs(ar.edge).toFixed(1)} points</b> toward ${esc(ar.abbr)} covering. ${ar.pinned ? 'Projection limit reached; no signal.' : ''}</p>
+      ${comparisonGraphic(ar.proj, -ar.homeSpread, '', true)}<small>Margins above are toward ${esc(g.home.abbr || 'home')}; negative means ${esc(g.away.abbr || 'away')}. ${ATS_EDGE_MIN[sport]}-point signal threshold. Cover probability and price-based EV are not calibrated.</small>`
+      : '<p>A winner forecast is not a spread pick.</p>');
+  const total = section('Total', 'How much will both teams score?', tr ? `${tr.side} ${tr.line}` : p.projTotal != null && info?.ou != null ? 'No difference / no signal' : 'Waiting for a total', status(!!tr?.qualifies),
+    tr ? `<p>${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'points'} ${tr.diff > 0 ? 'above' : 'below'} the book. ${tr.broken ? '<b>Outside the sanity limit — not a signal.</b>' : ''}</p>
+      ${comparisonGraphic(tr.proj, tr.line, '')}<small>${TOT_EDGE_MIN[sport] ?? 1}-${sport === 'mlb' ? 'run' : 'point'} signal threshold. A score difference is not a win probability.</small>`
+      : '<p>No total signal without both a projection and a line.</p>');
+  const provenance = r.linePregame ? `Last pregame line saved on this device${lineAtLabel(r.lineAt) ? ' · ' + lineAtLabel(r.lineAt) : ''}. The projection is computed now, not restored from a pregame snapshot.` : info?.provider ? `Odds source: ${info.provider}.` : 'Odds source unavailable.';
+  return `<div class="ai-market-grid">${ml}${spread}${total}</div><p class="ai-read-foot">${esc(provenance)} ${live ? 'Game started: no new pregame pick is recorded.' : 'Different markets answer different questions; winner and cover sides can differ.'}</p>`;
 }
 
 // The model's confidence against the market's own implied number for the same
@@ -4744,7 +4753,7 @@ function boardCard(r, opts = {}) {
   const meta = TIER_META[tier]
     || (r.ats ? { label: '📐 SPREAD', cls: 'ats' }
       : r.tot ? { label: r.tot.tier === 'best' ? '🔥 TOTAL' : '🎯 TOTAL', cls: 'tot' }
-      : TIER_META.edge);
+      : { label: 'MODEL READ', cls: 't3' });
   const cfg = LEAGUES[sport];
   const card = el('div', `brd-card ${meta.cls}`);
   const when = gameState(g) === 'final' ? 'Final' : gameState(g) === 'live' ? (g.statusText || 'LIVE') : scheduledLabel(g);
@@ -4762,13 +4771,18 @@ function boardCard(r, opts = {}) {
     <div class="brd-mu">${esc(g.away.name)} @ ${esc(g.home.name)}</div>
     <div class="brd-pick"><span class="p">${esc(p.winner.name)}</span>
       <span class="cf">${p.conf}%</span>
-      ${gap != null ? `<span class="gp">+${gap} vs market</span>` : ''}</div>
-    ${confVsMarketHTML(r)}
+      ${gap != null ? `<span class="gp">${gap >= 0 ? '+' : ''}${gap} percentage points</span>` : ''}</div>
+    <div class="ai-quality"><span>${g.neutralSite ? 'Neutral site' : 'Home field applied'}</span><span>${p.rating ? `Rating: ${esc(p.rating.src)}` : sport === 'mlb' ? 'Pitcher-aware model' : 'Separate market models'}</span><span>Experimental · not a guarantee</span></div>
+    ${p.blockedReasons?.length ? `<p class="ai-data-warning">Watch only: ${p.blockedReasons.map(esc).join(' · ')}.</p>` : ''}
     ${bookBits ? `<div class="brd-row">${bookBits}</div>` : ''}
     ${marketRowsHTML(r)}
-    ${why ? `<div class="brd-row">${why}</div>` : ''}
+    ${why ? `<div class="brd-row">Main factors: ${why}</div>` : ''}
     ${p.sharp ? `<div class="brd-row${p.sharp.agree ? ' sharp' : ''}">💰 ${p.sharp.handle}% of dollars vs ${p.sharp.bets}% of bets on ${esc(p.sharp.abbr)} — sharp side ${p.sharp.agree ? 'agrees' : 'disagrees'}</div>` : ''}`;
-  if (g.id) card.onclick = () => openGameDetail(sport, g.id, g);
+  if (g.id) {
+    const button = el('button', 'ai-detail-button', 'Full game report · factors, line moves & splits →');
+    button.type = 'button'; button.onclick = () => openGameDetail(sport, g.id, g);
+    card.appendChild(button);
+  }
   return card;
 }
 
@@ -4835,7 +4849,7 @@ function boardNote() {
   const ts = tallyStats();
   if (!ts.en) return 'Where the model disagrees with the book. No graded edges yet — treat this as a watchlist, not advice.';
   const pct = Math.round((ts.eh / ts.en) * 100);
-  return `Where the model disagrees with the book. <b>Edges are ${ts.eh}-${ts.el} (${pct}%)</b> all-time — ${pct >= 53 ? 'above' : 'under'} the 52.4% break-even, so this is a watchlist, not advice.`;
+  return `Experimental watchlist. <b>Qualified moneyline picks: ${ts.eh}-${ts.el} (${pct}%)</b> all-time. Win rate is not ROI: break-even depends on each recorded price, not a universal 52.4%.`;
 }
 
 // ===================== the day's model read (v187) =========================
@@ -4871,7 +4885,7 @@ function noteModelToday(rows) {
 // is on the same side. Counts only, because a bar that names a pick is a bar
 // that is wrong the moment the slate turns over.
 function paintBotBar(rows) {
-  const live = rows.filter((r) => gameState(r.g) !== 'final');
+  const live = rows.filter((r) => AI_MATH.pregame(r.g));
   const n = (t) => live.filter((r) => r.tier === t).length;
   const bits = [];
   const a = n('alert'), b = n('best'), e = n('edge'), l = n('lean');
@@ -4921,7 +4935,7 @@ async function renderHomeBoard() {
   renderLiveRail().catch(() => {});
   // Finals are done — their numbers belong in the modal, not on a board of
   // things to look at.
-  const live = rows.filter((r) => gameState(r.g) !== 'final');
+  const live = rows.filter((r) => AI_MATH.pregame(r.g));
   // 🚨 Red alerts sort ABOVE everything, whatever their gap — that's the
   // owner's rule, and it's why they sort by tier first rather than by gap.
   const plays = live.filter((r) => r.tier === 'alert' || r.tier === 'best' || r.tier === 'edge')
@@ -5065,13 +5079,28 @@ async function aiRecentFor(sport) {
 // Now: level 1 picks the league (or 🌐 Overview = everything), level 2 picks
 // the question. Nothing was dropped — every element of the old tab is on one
 // of the four sub-tabs, and the Board sub-tab is the old ladder untouched.
-const AI_SUBS = [['board', '📋 Board'], ['record', '📈 Record'], ['backtest', '🧪 Backtest'], ['model', '🧠 Model']];
+const AI_SUBS = [['board', '📋 Picks'], ['record', '📈 Results'], ['backtest', '🧪 Calibration'], ['model', '🧠 How it works']];
 const AI_BLURB = {
-  board: 'The model\'s plays on this slate, ranked by conviction. This is the only view that adds picks to the record.',
-  record: 'How the model has actually done — every graded pick, split by market.',
-  backtest: 'The charts and the instruments: is its confidence honest, and does its number beat the book\'s?',
-  model: 'What the model is computing, read live from the code — weights, thresholds, and what is fitted vs still a guess.',
+  board: 'Start with the market, compare the numbers, then check the data. Larger gaps are not guarantees.',
+  record: 'What happened to saved picks — winner, spread and total records stay separate. Historical results below include earlier model versions.',
+  backtest: 'Does a 60% forecast win about 60% of the time? These are device-record diagnostics, not a new out-of-sample backtest.',
+  model: 'Inputs, formulas, limitations and validation — the detail behind every forecast.',
 };
+function aiGuideHTML(sub, sport) {
+  if (sub !== 'board') return '';
+  return `<div class="ai-guide-card"><div class="ai-guide-top"><span class="ai-eyebrow">READ THE PICK, NOT JUST THE COLOR</span><span>${sport === 'all' ? 'All leagues' : esc(LEAGUES[sport]?.label || sport)} · ${APP_VERSION}</span></div>
+    <div class="ai-guide-steps"><div><b>1 · Choose the market</b><p>Winner, cover and total are three different predictions.</p></div><div><b>2 · Compare model & book</b><p>A gap is a disagreement. It does not prove an advantage.</p></div><div><b>3 · Check the evidence</b><p>Missing data means watch only. Review results before trusting a signal.</p></div></div>
+    <details><summary>Quick glossary & what gets saved</summary><div class="ai-glossary"><p><b>Moneyline:</b> pick the winner. 60% means about 6 wins in 10 similar games if calibrated, not certainty.</p><p><b>Spread:</b> the handicap. +7.5 can cover even in a loss by 7; −7.5 needs a win by 8 or more.</p><p><b>Total:</b> combined score. OVER 8.5 needs 9+ runs; UNDER needs 8 or fewer.</p><p><b>pp vs points:</b> 60% vs 55% is +5 percentage points. A projected margin of 7 vs a line of 3 is 4 scoring points.</p><p><b>Tracking:</b> first pregame observations are frozen with version, timestamp, prices and inputs. Live/reconstructed picks cannot enter that record. Your history stays on this device.</p><p><b>Experimental signals:</b> moneyline tiers require a positive model return at a real quote and two-sided market odds. Spread/total signals use projection thresholds, not calibrated cover probabilities. No market has proven profit.</p></div></details></div>`;
+}
+function evaluationHTML(sport) {
+  const all = Object.values(getTally()).filter((r) => !sport || r.s === sport);
+  const markets = [['moneyline', 'Winner', (r) => !r.a && !r.t], ['spread', 'Spread', (r) => !!r.a], ['total', 'Total', (r) => !!r.t]];
+  return `<section class="ai-evidence"><div class="ai-guide-top"><b>Clean pregame evidence</b><span>${APP_VERSION} only</span></div><p>New-version results are separated from legacy history. All tracked forecasts are included; this is not a betting account or an independent-game sample.</p><div class="ai-evidence-grid">${markets.map(([key, title, filter]) => {
+    const e = AI_MATH.evaluate(all.filter(filter), APP_VERSION);
+    const decided = e.w + e.l;
+    return `<div><b>${title}</b><strong>${e.n ? `${e.w}W · ${e.l}L · ${e.pushes}P` : 'Collecting'}</strong><div class="ai-result-track" role="img" aria-label="${e.w} wins, ${e.l} losses, ${e.pushes} pushes"><i style="width:${decided ? e.w / decided * 100 : 0}%"></i></div><p>${e.n} settled · ${e.priced} with prices<br>${e.priced ? `${e.units >= 0 ? '+' : ''}${e.units.toFixed(2)} units · ${(e.roi * 100).toFixed(1)}% paper ROI` : 'ROI unavailable — no priced results'}<br>${e.probabilityN ? `Brier ${e.brier.toFixed(3)} · log loss ${e.logLoss.toFixed(3)} · n=${e.probabilityN}` : 'Probability scoring: no eligible sample'}<br>${e.legacy} older/unverified excluded</p></div>`;
+  }).join('')}</div><small>Paper ROI risks one unit at each saved quote; pushes return the stake. No assumed −110 prices. Markets on the same game are correlated. Closing-line value is unavailable until closing quotes are captured.</small></section>`;
+}
 // Bumped on every view paint so an async fill (the CFB rating probe) that
 // lands after the user has moved on can't paint over the new view.
 let aiViewToken = 0;
@@ -5121,7 +5150,7 @@ function renderAiTally(sport, todayTxt) {
   // reads like a finding. This line was all-sport before v213 and therefore
   // rarely thin; scoped to one league it is thin constantly.
   if (ts.n) parts.push(`ML ${ts.w}-${ts.l}${ts.n >= THIN_N ? ` (${Math.round((ts.w / ts.n) * 100)}%)` : ''}`);
-  if (ts.en) parts.push(`vs line ${ts.eh}-${ts.el}`);
+  if (ts.en) parts.push(`ML edges ${ts.eh}-${ts.el}`);
   if (ts.an) parts.push(`ATS ${ts.aw}-${ts.al}`);
   if (ts.tn) parts.push(`totals ${ts.tw}-${ts.tl}`);
   if (todayTxt) parts.push(todayTxt);
@@ -5138,6 +5167,8 @@ async function paintAiView() {
   const tok = ++aiViewToken;
   const sport = state.aiSport, sub = state.aiSub || 'board';
   const all = sport === 'all';
+  const guide = $('#ai-guide');
+  if (guide) guide.innerHTML = aiGuideHTML(sub, sport);
   const blurb = $('#ai-blurb');
   if (blurb) blurb.textContent = AI_BLURB[sub] || '';
   const head = $('#ai-head');
@@ -5214,7 +5245,7 @@ async function paintOverviewBoard(tok) {
   }
   if (tok !== aiViewToken) return;                       // view changed under us
   const rows = cached.flatMap((c) => c.rows);
-  const live = rows.filter((r) => gameState(r.g) !== 'final');
+  const live = rows.filter((r) => AI_MATH.pregame(r.g));
   const byTier = (t) => live.filter((r) => r.tier === t)
     .sort((a, b) => (b.gap ?? -1) - (a.gap ?? -1) || (b.p?.conf || 0) - (a.p?.conf || 0));
   const alerts = byTier('alert'), best = byTier('best'), edges = byTier('edge'), leans = byTier('lean');
@@ -5235,7 +5266,7 @@ async function paintOverviewBoard(tok) {
   const listed = cached.filter((c) => c.n || slateN(c.sport));
   const played = cached.filter((c) => c.n);
   if (!listed.length) {
-    container.appendChild(el('div', 'ai-note', '📭 No games on anywhere today. Tap a league above to read its record, or 🧠 Model to see what each one is computing.'));
+    container.appendChild(el('div', 'ai-note', '📭 No games on anywhere today. Tap a league above to read its record, or 🧠 How it works to see what each one is computing.'));
     container.appendChild(historyLinks(null));
     applySections('predictions'); injectJumpNav('predictions');
     return;
@@ -5264,7 +5295,7 @@ async function paintOverviewBoard(tok) {
     section('alert', alerts); section('best', best); section('edge', edges);
   } else {
     container.appendChild(el('div', 'ai-note', live.some((r) => r.info?.favName)
-      ? '✅ The model is with the book everywhere today — no edges anywhere. The leans and each league\'s own board are the read.'
+      ? 'No qualified moneyline signals. Check each league for price comparisons, data cautions, spread/total reads and watch-only games.'
       : '📭 No betting lines posted yet — edges appear once the books hang numbers.'));
   }
   // Only games not already drawn above — a spread play on a game that is
@@ -5318,7 +5349,7 @@ async function paintSportBoard(tok) {
   // is what "show me the last slate" means.
   const weekMode = WEEK_SPORTS.has(sport) && isToday;
 
-  // Cached per sport+date so flipping to 📈 Record and back costs no fetch and
+  // Cached per sport+date so flipping to 📈 Results and back costs no fetch and
   // no second model run. renderPredictions clears it, so ENTERING the tab is
   // always fresh; only sub-tab switching reuses it.
   const key = `${sport}|${weekMode ? 'week' : dateStr}`;
@@ -5340,7 +5371,7 @@ async function paintSportBoard(tok) {
   const period = weekMode ? 'this week' : isToday ? 'today' : 'that day';
   const allPreseason = games.length > 0 && !playable.length;
   const renderTally = (todayTxt) => renderAiTally(sport, todayTxt);
-  // 🚨 v213 — the five stat tiles moved to the 📈 Record sub-tab. They are
+  // 🚨 v213 — the five stat tiles moved to the 📈 Results sub-tab. They are
   // RECORD facts and they were sitting on top of the day's plays, pushing the
   // ladder down; the board keeps only what is a board fact, the play count.
   const playsLine = (playCount, playSub) => {
@@ -5419,7 +5450,7 @@ async function paintSportBoard(tok) {
   // No line ≠ no disagreement: if ESPN sent no odds, say so instead of
   // claiming the model agrees with a book that never posted.
   const anyLines = rows.some((r) => r.info?.favName);
-  const upcoming = rows.filter((r) => gameState(r.g) !== 'final');
+  const upcoming = rows.filter((r) => AI_MATH.pregame(r.g));
   const byTier = (t) => upcoming.filter((r) => r.tier === t)
     .sort((a, b) => (b.gap ?? -1) - (a.gap ?? -1) || (b.p?.conf || 0) - (a.p?.conf || 0));
   const alerts = byTier('alert'), best = byTier('best'), edges = byTier('edge'), leans = byTier('lean');
@@ -5432,7 +5463,7 @@ async function paintSportBoard(tok) {
   const playBits = [mlPlays ? `${mlPlays} ML` : '',
                     upAts ? `${upAts} ATS` : '', upTot ? `${upTot} O/U` : ''].filter(Boolean).join(' · ');
   container.appendChild(playsLine(playCount,
-    playCount ? playBits : anyLines ? 'model in line w/ book' : 'no lines posted yet'));
+    playCount ? `${playBits} · experimental signals, not guarantees` : anyLines ? 'no qualified signals — inspect the reads below' : 'no lines posted yet'));
   // Say which day this is and why, so a slate of finished games can't be
   // mistaken for today's board.
   if (!isToday) {
@@ -5454,6 +5485,7 @@ async function paintSportBoard(tok) {
   renderTally(graded ? `${weekMode ? 'this week' : isToday ? 'today' : aiDateLabel(dateStr)} ${right}-${graded - right}` : '');
 
   // ---- the ladder ----
+  const displayed = new Set();
   const section = (key, list) => {
     if (!list.length) return;
     const m = TIER_META[key];
@@ -5463,6 +5495,7 @@ async function paintSportBoard(tok) {
     h.innerHTML = `${m.head} <span class="n">${m.note}</span> <span class="n">${list.length}</span>`;
     container.appendChild(h);
     list.forEach((r) => {
+      displayed.add(r.g.id);
       const card = boardCard(r);
       if (r.resultTag) card.insertAdjacentHTML('beforeend', r.resultTag);
       container.appendChild(card);
@@ -5476,26 +5509,12 @@ async function paintSportBoard(tok) {
     section('best', best);
     section('edge', edges);
   } else if (anyLines) {
-    container.appendChild(el('div', 'ai-note', '✅ No model edges today — the model is within a few points of the book everywhere. The leans and trends below are the read.'));
+    container.appendChild(el('div', 'ai-note', 'No qualified moneyline signals. This can mean a small gap, an unfavorable price or missing data — it does not necessarily mean the model agrees with the book.'));
   } else {
     container.appendChild(el('div', 'ai-note', '📭 No betting lines posted for this slate yet — edges appear once the books hang lines. Check the trends below.'));
   }
 
-  // Leans: real disagreements that don't clear the 5-point bar. They were
-  // computed and discarded before v164; folded away here because they're
-  // context, not calls — and they do NOT count toward the vs-line record.
-  if (leans.length) {
-    container.appendChild(el('div', 'lad-sec', `👀 Leans <span class="n">${TIER_META.lean.note}</span> <span class="n">${leans.length}</span>`));
-    const d = el('details', 'lad-fold');
-    d.innerHTML = `<summary>Model disagrees, but not enough to count <span class="cv">${leans.length} ▸</span></summary>
-      <div class="lad-body">${leans.map((r) => {
-        const abbr = (r.g.home.name === r.p.winner.name ? r.g.home.abbr : r.g.away.abbr) || r.p.winner.name.split(' ').pop();
-        return `<div class="lad-row"><span class="lm">${esc(matchupLabel(r.sport, r.g))}</span>
-          <span class="lp">${esc(abbr)} ${r.p.conf}%</span>
-          <span class="lg">+${r.gap ?? '?'}</span></div>`;
-      }).join('')}</div>`;
-    container.appendChild(d);
-  }
+  // Watch-only reads follow all qualifying markets; each game appears once.
 
   // 📐 Against the spread (football). Its own section and its own record —
   // the model can be good at picking winners and bad at beating the number,
@@ -5505,17 +5524,17 @@ async function paintSportBoard(tok) {
   // a one-day board the two lists barely overlap; across a football week the
   // Thursday game would sit in both, which is the two-near-identical-lists
   // problem this app has fixed three times. Day mode is unchanged.
-  const marketPool = weekMode ? upcoming : rows;
-  const atsRows = marketPool.filter((r) => r.ats).sort((a, b) => Math.abs(b.ats.edge) - Math.abs(a.ats.edge));
+  const marketPool = upcoming;
+  const atsRows = marketPool.filter((r) => r.ats && !displayed.has(r.g.id)).sort((a, b) => Math.abs(b.ats.edge) - Math.abs(a.ats.edge));
   if (atsRows.length) {
-    const at = tallyStats();
+    const at = tallyStats(sport);
     container.appendChild(el('div', 'lad-sec',
       `📐 Against the spread <span class="n">${ATS_SPORTS.has(sport) ? `${ATS_EDGE_MIN[sport]}+ pts off the line` : ''}</span> <span class="n">${atsRows.length}</span>`));
     if (at.an) container.appendChild(el('div', 'ai-note',
       `ATS record ${at.aw}-${at.al} (${Math.round((at.aw / at.an) * 100)}%) all-time${at.an < 20 ? ' — too thin to lean on yet.' : '.'}`));
     else container.appendChild(el('div', 'ai-note',
       'New in v164 — no graded ATS picks yet. The record starts building from today.'));
-    atsRows.forEach((r) => container.appendChild(atsCard(r)));
+    atsRows.forEach((r) => { displayed.add(r.g.id); container.appendChild(boardCard(r)); });
   }
 
   // Totals edges — the model's projected total vs the posted O/U. Finished
@@ -5523,80 +5542,36 @@ async function paintSportBoard(tok) {
   // 🎯 Totals. Rendered as full cards like the other two markets — they used
   // to be one-line text rows, which quietly said "this one matters less". It
   // is the same kind of call: the model's number against the book's.
-  const totRows = marketPool.filter((r) => r.tot).sort((a, b) =>
+  const totRows = marketPool.filter((r) => r.tot && !displayed.has(r.g.id)).sort((a, b) =>
     (b.tot.tier === 'best' ? 1 : 0) - (a.tot.tier === 'best' ? 1 : 0)
     || Math.abs(b.tot.diff) - Math.abs(a.tot.diff));
   if (totRows.length) {
-    const ts2 = tallyStats();
+    const ts2 = tallyStats(sport);
     container.appendChild(el('div', 'lad-sec',
       `🎯 Totals <span class="n">${TOT_EDGE_MIN[sport] ?? 1}+ off the O/U</span> <span class="n">${totRows.length}</span>`));
     if (ts2.tn) {
       const tp = Math.round((ts2.tw / ts2.tn) * 100);
       container.appendChild(el('div', 'ai-note',
-        `Totals record ${ts2.tw}-${ts2.tl} (${tp}%) all-time${det0OverLean(tallyDetails())}`));
+        `Totals record ${ts2.tw}-${ts2.tl} (${tp}%) all-time${det0OverLean(tallyDetails(sport))}`));
     }
-    totRows.forEach((r) => container.appendChild(totalsCard(r)));
+    totRows.forEach((r) => { displayed.add(r.g.id); container.appendChild(boardCard(r)); });
   }
 
-  // Passes: the model and the book agree. Not a play — but "the model looked
-  // and had nothing" is information, and hiding it makes an empty board
-  // ambiguous. Collapsed to a count with the games behind a tap.
-  if (passes.length) {
-    container.appendChild(el('div', 'lad-sec', `✅ Model agrees with the book <span class="n">${passes.length}</span>`));
+  const watch = rows.filter((r) => r.p && gameState(r.g) !== 'final' && !displayed.has(r.g.id));
+  if (watch.length) {
     const d = el('details', 'lad-fold');
-    d.innerHTML = `<summary style="font-weight:650;color:var(--muted)">No play — the model is on the book's side <span class="cv">${passes.length} ▸</span></summary>
-      <div class="lad-body">${passes.map((r) => {
-        const abbr = (r.g.home.name === r.p.winner.name ? r.g.home.abbr : r.g.away.abbr) || r.p.winner.name.split(' ').pop();
-        return `<div class="lad-row"><span class="lm">${esc(matchupLabel(r.sport, r.g))}</span>
-          <span class="lp">${esc(abbr)} ${r.p.conf}%</span>
-          <span class="lg">${r.gap != null ? (r.gap > 0 ? '+' : '') + r.gap : '—'}</span></div>`;
-      }).join('')}</div>`;
+    d.innerHTML = `<summary>Watch-only & live reference · ${watch.length} games — see every model read</summary>`;
+    watch.forEach((r) => d.appendChild(boardCard(r)));
     container.appendChild(d);
   }
-
-  // 📋 Finished games. The ladder above is built from `upcoming`, so a game
-  // that has already ended fell off this tab entirely — which made the
-  // look-back slate (v199) render as a banner over nothing, and quietly hid
-  // today's finished games too. Folded on today's board, where the plays are
-  // the point; open on a look-back slate, where the results ARE the point.
-  const finals = rows.filter((r) => r.p && gameState(r.g) === 'final');
+  const finals = rows.filter((r) => gameState(r.g) === 'final');
   if (finals.length) {
-    const hit = (r) => { const w = winnerName(r.g); return w && w !== 'TIE' ? w === r.p.winner.name : null; };
-    // 🚨 v203 — this header said "model 21-0" on a CFB Saturday while the SAME
-    // games went 6-13 against the spread. `rows` already carries the ats and
-    // tot calls, so all three results are right here and there is no reason to
-    // report only the flattering one. Grading matches commitRow exactly:
-    // atsResult for the spread (a push returns null and is dropped), and a
-    // total landing exactly on the line is a push too.
-    const atsHit = (r) => (r.ats ? atsResult(r.g, r.ats.homeSpread, r.ats.home) : null);
-    const totHit = (r) => {
-      if (!r.tot || r.g.home.score == null || r.g.away.score == null) return null;
-      const tot = r.g.home.score + r.g.away.score;
-      return tot === r.tot.line ? null : (r.tot.side === 'OVER' ? tot > r.tot.line : tot < r.tot.line);
-    };
-    const tally3 = (f) => {
-      const v = finals.map(f);
-      return { w: v.filter((x) => x === true).length, l: v.filter((x) => x === false).length };
-    };
-    const ml = tally3(hit), at = tally3(atsHit), tt = tally3(totHit);
-    const recs = [`ML ${ml.w}-${ml.l}`,
-      at.w + at.l ? `spread ${at.w}-${at.l}` : '',
-      tt.w + tt.l ? `totals ${tt.w}-${tt.l}` : ''].filter(Boolean).join(' · ');
-    container.appendChild(el('div', 'lad-sec',
-      `📋 Finished <span class="n">${recs}</span> <span class="n">${finals.length}</span>`));
+    const saved = getTally();
     const d = el('details', 'lad-fold');
-    // Open once there is nothing left to play — on a look-back slate (every
-    // game final) and at the end of a football week, the results ARE the page.
     d.open = !upcoming.length;
-    const mark = (v) => (v === true ? '✅' : v === false ? '❌' : '—');
-    d.innerHTML = `<summary>How the model did on ${weekMode ? "this week's" : isToday ? "today's" : 'this'} finished games <span class="cv">${finals.length} ▸</span></summary>
-      <div class="lad-body">${finals.map((r) => {
-        const abbr = (r.g.home.name === r.p.winner.name ? r.g.home.abbr : r.g.away.abbr) || r.p.winner.name.split(' ').pop();
-        const a = atsHit(r), t2 = totHit(r);
-        return `<div class="lad-row"><span class="lm">${esc(matchupLabel(r.sport, r.g))}</span>
-          <span class="lp">${esc(abbr)} ${r.p.conf}%</span>
-          <span class="lg">${mark(hit(r))}${a != null ? ` 📐${mark(a)}` : ''}${t2 != null ? ` 🎯${mark(t2)}` : ''}</span></div>`;
-      }).join('')}</div>`;
+    const mark = (r) => !r ? 'Not logged' : `${esc(r.p || '')} · ${r.pu ? 'Push' : r.c ? 'Won' : 'Lost'}`;
+    d.innerHTML = `<summary>Finished games · saved picks only (${finals.length})</summary><p class="ai-why">No reconstructed results. Legacy entries retain their original provenance; new snapshots are versioned in Results.</p>
+      ${finals.map((r) => `<div class="lad-row"><span class="lm">${esc(matchupLabel(sport, r.g))}</span><span class="lp">Winner: ${mark(saved[r.g.id])}<br>Spread: ${mark(saved[r.g.id + ':s'])}<br>Total: ${mark(saved[r.g.id + ':t'])}</span></div>`).join('')}`;
     container.appendChild(d);
   }
 

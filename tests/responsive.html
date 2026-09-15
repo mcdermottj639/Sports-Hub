@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sports-Hub responsive smoke test</title>
+<style>body{margin:16px;background:#eeeae1;font:14px system-ui;color:#282820}button{padding:10px;margin:4px}iframe{display:block;height:850px;border:1px solid #aaa;max-width:100%;background:white}p{max-width:900px}</style></head>
+<body><h1>Responsive smoke test</h1><p>Same production page and scripts, at exact layout widths. No seeded results or synthetic network data. This browser has its own local record.</p>
+<button type="button" data-width="390">Phone · 390px</button><button type="button" data-width="1024">Desktop · 1024px</button><p id="size">390px viewport</p>
+<iframe id="app" title="Sports Hub responsive preview" src="../index.html" width="390"></iframe>
+<script>document.querySelectorAll('button[data-width]').forEach(button=>button.addEventListener('click',()=>{document.getElementById('app').width=button.dataset.width;document.getElementById('size').textContent=button.dataset.width+'px viewport';}));</script>
+</body></html>
