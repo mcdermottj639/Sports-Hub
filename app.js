@@ -1,9 +1,9 @@
-// Sports-Hub — pure browser app. Live data comes straight from ESPN's free
-// public sports feed (no key, no server). Edit LEAGUES below to make it yours.
+// Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
+// AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v238';
+const APP_VERSION = 'v239';
 // UI-only releases must not reset the model's evaluation cohort.
-const AI_MODEL_VERSION = 'v232';
+const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
@@ -2493,9 +2493,12 @@ async function predictGame(sport, g, opts) {
     const t = toHome ? g.home : g.away;
     const row = (opts.splits || {})[toHome ? 'home' : 'away'] || {};
     sharpMonitorC = w.sharp * ss.units;
-    sharpC = sport === 'nfl' ? 0 : sharpMonitorC;
+    // Monitor-only in every league until the feed has enough live, graded
+    // coverage to justify predictive weight. This also keeps browser and
+    // scheduled-cloud forecasts on the same model path.
+    sharpC = 0;
     sharp = { side: t.name, abbr: t.abbr || (t.name || '').split(' ').pop(),
-      handle: row.ml_handle, bets: row.ml_bets, d: Math.round(ss.d), monitor: sport === 'nfl' };
+      handle: row.ml_handle, bets: row.ml_bets, d: Math.round(ss.d), monitor: true };
     add('Sharp money', sharpC, `${row.ml_handle}% of dollars vs ${row.ml_bets}% of bets on ${sharp.abbr}`);
   }
 
@@ -2513,7 +2516,7 @@ async function predictGame(sport, g, opts) {
     const [hR, aR] = await Promise.all([cfbRating(g.home, hf), cfbRating(g.away, af)]);
     if (hR && aR) {
       const formPts = (hf && af) ? clamp(hf.form - af.form, -20, 20) * CFB_FORM_K : 0;
-      const sharpPts = ss ? ss.units * CFB_SHARP_PTS : 0;
+      const sharpPts = 0; // monitor-only until live CFB coverage is validated
       const gapPts = hR.r - aR.r;
       const homePts = g.neutralSite ? 0 : CFB_HFA;
       const margin = gapPts + homePts + formPts + sharpPts;
@@ -3200,12 +3203,22 @@ function gameReportHTML(sport, g, pred, info, report, data) {
 
 // Persistent model performance tally (vs results and vs the betting line).
 const TALLY_KEY = 'sportshub:aitally';
-const getTally = () => { try { return JSON.parse(localStorage.getItem(TALLY_KEY) || '{}'); } catch (_) { return {}; } };
+// Supabase is the durable, cross-device record; the device tally remains for
+// every historical pick made before cloud capture. Event+market keys make the
+// merge deterministic, with the server's immutable observation winning when
+// both stores contain the same pick.
+const getTally = () => {
+  let local = {};
+  try { local = JSON.parse(localStorage.getItem(TALLY_KEY) || '{}'); } catch (_) {}
+  try { return { ...local, ...(globalThis.SportsHubCloudAI?.maps()?.tally || {}) }; }
+  catch (_) { return local; }
+};
 // meta (added v83): s sport, d date YYYYMMDD, cf confidence, p pick name,
 // m matchup label — powers the report card. Older entries only have {c,e}.
 function recordResult(id, correct, edge, meta) {
-  const t = getTally();
-  if (t[id]) return; // graded once; re-renders of a final must not wipe the meta
+  if (getTally()[id]) return; // graded once; re-renders of a final must not wipe the meta
+  let t = {};
+  try { t = JSON.parse(localStorage.getItem(TALLY_KEY) || '{}'); } catch (_) {}
   t[id] = { c: correct == null ? null : correct ? 1 : 0, e: edge, ...(meta || {}) };
   localStorage.setItem(TALLY_KEY, JSON.stringify(t));
 }
@@ -3435,7 +3448,8 @@ function recordTotalPick(gameId, sport, date, side, line, proj, tier, m, st, q) 
 // folds it in. The owner asked twice whether their games were being stored,
 // which is the app failing to answer a fair question about its own state.
 function pendingSummary(sport) {
-  const p = getPending();
+  let p = getPending();
+  try { p = { ...p, ...(globalThis.SportsHubCloudAI?.maps()?.pending || {}) }; } catch (_) {}
   const by = {}; const list = [];
   let total = 0;
   // v200: shLive/shMl = of the moneyline picks sitting in the queue, how many
@@ -5136,9 +5150,15 @@ const AI_BLURB = {
 };
 function aiGuideHTML(sub, sport) {
   if (sub !== 'board') return '';
+  const cloud = globalThis.SportsHubCloudAI?.cached?.();
+  const run = cloud?.run;
+  const cloudLine = run
+    ? `☁️ Automatic capture ${run.status === 'ok' ? 'is healthy' : `last reported ${run.status}`} · last run ${timeAgo(Date.parse(run.finished_at || run.started_at))}. You do not need to open the app to save future picks.`
+    : '☁️ Automatic cloud capture is starting. The page still keeps its device history while the first scheduled run arrives.';
   return `<div class="ai-guide-card"><div class="ai-guide-top"><span class="ai-eyebrow">READ THE PICK, NOT JUST THE COLOR</span><span>${sport === 'all' ? 'All leagues' : esc(LEAGUES[sport]?.label || sport)} · ${APP_VERSION}</span></div>
+    <div class="ai-note">${esc(cloudLine)}</div>
     <div class="ai-guide-steps"><div><b>1 · Choose the market</b><p>Winner, cover and total are three different predictions.</p></div><div><b>2 · Compare model & book</b><p>A gap is a disagreement. It does not prove an advantage.</p></div><div><b>3 · Check the evidence</b><p>Missing data means watch only. Review results before trusting a signal.</p></div></div>
-    <details><summary>Quick glossary & what gets saved</summary><div class="ai-glossary"><p><b>Moneyline:</b> pick the winner. 60% means about 6 wins in 10 similar games if calibrated, not certainty.</p><p><b>Spread:</b> the handicap. +7.5 can cover even in a loss by 7; −7.5 needs a win by 8 or more.</p><p><b>Total:</b> combined score. OVER 8.5 needs 9+ runs; UNDER needs 8 or fewer.</p><p><b>pp vs points:</b> 60% vs 55% is +5 percentage points. A projected margin of 7 vs a line of 3 is 4 scoring points.</p><p><b>Tracking:</b> first pregame observations are frozen with version, timestamp, prices and inputs. Live/reconstructed picks cannot enter that record. Your history stays on this device.</p><p><b>Experimental signals:</b> moneyline tiers require a positive model return at a real quote and two-sided market odds. Spread/total signals use projection thresholds, not calibrated cover probabilities. No market has proven profit.</p></div></details></div>`;
+    <details><summary>Quick glossary & what gets saved</summary><div class="ai-glossary"><p><b>Moneyline:</b> pick the winner. 60% means about 6 wins in 10 similar games if calibrated, not certainty.</p><p><b>Spread:</b> the handicap. +7.5 can cover even in a loss by 7; −7.5 needs a win by 8 or more.</p><p><b>Total:</b> combined score. OVER 8.5 needs 9+ runs; UNDER needs 8 or fewer.</p><p><b>pp vs points:</b> 60% vs 55% is +5 percentage points. A projected margin of 7 vs a line of 3 is 4 scoring points.</p><p><b>Tracking:</b> first pregame observations are frozen in Supabase with version, timestamp, prices and inputs. The scheduled collector runs even when the app is closed; device-only history is merged in for continuity.</p><p><b>Experimental signals:</b> moneyline tiers require a positive model return at a real quote and two-sided market odds. Spread/total signals use projection thresholds, not calibrated cover probabilities. No market has proven profit.</p></div></details></div>`;
 }
 function evaluationHTML(sport) {
   const all = Object.values(getTally()).filter((r) => !sport || r.s === sport);
@@ -12276,6 +12296,13 @@ resetTabSections();
 
 // fold any finished picks from earlier days into the running model record
 gradePending();
+
+// Pull the durable Supabase record in the background. The cached cloud copy
+// paints immediately; a successful refresh updates Results/Calibration without
+// blocking the rest of the app or making capture depend on this page being open.
+globalThis.SportsHubCloudAI?.sync?.().then(() => {
+  if (currentTab === 'predictions') paintAiView().catch(() => {});
+}).catch((e) => console.warn('[cloud-ai] read failed; using cached/device history', e));
 
 // 🚨 v200 — start the betting backend waking NOW, not when something first
 // needs it. Render's free tier sleeps after ~15 min idle and takes 30-60s to

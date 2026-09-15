@@ -82,12 +82,26 @@ Guidance for Claude (and humans) working on this repo. Read this first.
 
 **Sports-Hub** is a personal, multi-sport web app for the owner (a Philadelphia
 Eagles superfan; also follows Red Sox, NFL, **college football (Top 25)**, MLB,
-NBA, and golf). It's a **pure
-static browser app** — HTML/CSS/vanilla JS, no build step,
-no framework, no backend, no API keys. It ships from this repo via **GitHub
-Pages** and runs entirely in the user's browser.
+NBA, and golf). The UI is a **static browser app** — HTML/CSS/vanilla JS, no
+build step or framework — shipped from this repo via **GitHub Pages**. Two
+scoped services sit behind it: Render for private fantasy-league sync and
+Supabase for durable, scheduled AI-pick capture and grading.
 
 Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
+
+> ### Supabase (`supabase/`) — LIVE, powers automatic AI Picks history
+> Project `sports-hub` (`oqrfdhoyyogjmiqmjhnp`, us-east-2) is deliberately
+> separate from `family-survivor`. `sports-hub-ai` is a JWT-protected Edge
+> Function invoked by pg_cron at minutes 7 and 37 every hour. It reads ESPN,
+> saves immutable first pregame NFL/Top-25-CFB/MLB observations in
+> `public.ai_predictions`, grades finals, and audits each run in
+> `public.ai_job_runs`. The first verified run on 15 Sep 2026 completed in 15s
+> and inserted 99 market rows with zero post-kickoff observations. Project URL
+> and invocation token live in Vault; the Edge Function's service-role key is
+> automatic and never enters git. The browser carries only the project's
+> publishable key in `supabase-config.js`: RLS and grants allow anonymous SELECT
+> and deny anonymous writes. `cloud-ai.js` merges the durable history with the
+> older device record. Capture therefore does not require opening the app.
 
 > ### Optional backend (`server/`) — LIVE, powers the Fantasy tab
 > The owner evolved past pure-static for ONE capability: syncing their **real
@@ -186,8 +200,9 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
 ## Hard constraints (do not break these)
 
-- **No backend, no API keys, no build step.** Everything must run client-side
-  from static files. This is deliberate — it's how the owner's other apps deploy.
+- **No frontend build step and no secret in browser code.** GitHub Pages remains
+  static. A Supabase publishable key is intentionally public and read-only under
+  RLS; service-role keys, Vault values and fantasy cookies never enter git.
 - **Deploys from the `main` branch** via GitHub Pages (root). The owner has
   explicitly authorized pushing to `main`. Also keep the feature branch
   `claude/sports-app-ideas-130q0f` in sync (fast-forward it to main and push both).
@@ -220,6 +235,12 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   tested formulas are the production formulas rather than a duplicate.
 - `ai-model-utils.js` — v232 strict stat/odds parsing, baseball innings,
   quote-specific EV, pregame eligibility and version-filtered evaluation.
+- `supabase-config.js`, `cloud-ai.js` — public read-only Supabase configuration
+  and the cached cloud-history adapter used by Results/Calibration.
+- `supabase/migrations/` — AI Picks tables, RLS/grants, pg_cron/pg_net and the
+  twice-hourly capture schedule. Vault secret values are configured remotely.
+- `supabase/functions/sports-hub-ai/index.ts` — scheduled ESPN model runner,
+  immutable market capture, final-score grading and job audit trail.
 - `tests/ai-model-utils.test.js`, `tests/ai-production.test.js` — regression
   checks for MLB/CFB guards, odds, immutable snapshots, grading and UI markup.
 - `tests/responsive.html` — production app framed at phone/desktop widths for
@@ -552,7 +573,21 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v238** (backend **b15-ir-slot**).
+Current version as of this writing: **v239** (backend **b15-ir-slot**).
+
+- **Automatic cloud capture (v239):** a separate Free-plan Supabase project now
+  runs the NFL, Top-25 CFB and MLB collector every 30 minutes whether the site
+  is open or closed. First pregame observations are immutable, each market is
+  stored separately, finals grade server-side, and every run is audited. The
+  public page has read-only access under RLS, merges Supabase results with the
+  older device history, and shows the last cloud-run state in plain language.
+  The browser never receives a service-role key. This supersedes v237's
+  browser-only coverage limitation for future games; old missing games remain
+  missing rather than being reconstructed after the fact. `AI_MODEL_VERSION`
+  advances to v239 so this clean server-captured cohort never mixes with older
+  v232 device observations. DraftKings dollars-vs-tickets is monitor-only in
+  every league until it has adequate live, graded coverage; an intermittently
+  missing scrape cannot make the browser and scheduled collector disagree.
 
 - **Finished-week rollover (v238):** ESPN's bare NFL/CFB scoreboard can remain
   on a fully final week on Tuesday. `weekSlate` now requests the next numbered
@@ -6820,6 +6855,11 @@ rewrite.**
   44px touch-target floor; keyboard focus shows a `:focus-visible` ring.
 
 ## localStorage keys
+
+- `sportshub:cloud-ai:v1` — last successful read-only Supabase response
+  (`ai_predictions` plus newest `ai_job_runs` row). It is a display/offline
+  cache, not the source of truth; the durable record is in Supabase and the
+  scheduled writer runs without the browser.
 
 - **v232 evidence additions (no legacy rewrite):** pending and tally entries
   carry `q` with version, observation/start time, market, price, probability,
