@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v237';
+const APP_VERSION = 'v238';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v232';
 const AI_MATH = globalThis.SportsHubAI;
@@ -524,9 +524,11 @@ async function getGames(sport, dateStr, opts = {}) {
 }
 // Raw scoreboard read, kept separate from getGames so the tab renderers can
 // also see the payload's season/week metadata (which the game list drops).
-async function scoreboard(sport, dateStr) {
+async function scoreboard(sport, dateStr, params = {}) {
   const cfg = LEAGUES[sport];
-  const parts = [cfg.sbQuery, dateStr ? `dates=${dateStr}` : ''].filter(Boolean);
+  const extra = Object.entries(params).filter(([, v]) => v != null && v !== '')
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+  const parts = [cfg.sbQuery, dateStr ? `dates=${dateStr}` : '', ...extra].filter(Boolean);
   const json = await fetchJSON(`${SITE}/${cfg.espnPath}/scoreboard${parts.length ? `?${parts.join('&')}` : ''}`);
   return { json, games: (json.events || []).map(normEvent) };
 }
@@ -548,8 +550,28 @@ function weekLabelOf(json, games) {
   if (stype === 1) return `Preseason${wk ? ` · Week ${wk}` : ''}`;
   return wk ? `Week ${wk}` : 'This week';
 }
+// ESPN's dateless scoreboard can stay on a fully finished football week until
+// the next league day. Advance one numbered regular-season week so a Tuesday
+// visit can snapshot the upcoming slate instead of showing only last weekend.
+function nextWeekRequest(json, games) {
+  if (!games?.length || games.some((g) => gameState(g) !== 'final')) return null;
+  const stype = Number(json?.season?.type ?? json?.leagues?.[0]?.season?.type);
+  const week = Number(json?.week?.number);
+  const year = Number(json?.season?.year ?? json?.leagues?.[0]?.season?.year);
+  if (![1, 2].includes(stype) || !Number.isFinite(week) || !Number.isFinite(year)) return null;
+  return { week: week + 1, seasontype: stype, dates: year };
+}
 async function weekSlate(sport) {
-  const { json, games: raw } = await scoreboard(sport);
+  let { json, games: raw } = await scoreboard(sport);
+  const next = nextWeekRequest(json, raw);
+  if (next) {
+    const advanced = await scoreboard(sport, null, next).catch(() => null);
+    // Only move forward when ESPN actually returned a future/open slate. At
+    // the end of a phase, an empty response must not erase the finished week.
+    if (advanced?.games?.some((g) => gameState(g) !== 'final')) {
+      json = advanced.json; raw = advanced.games;
+    }
+  }
   // Same Top-25 gate getGames applies — it must not be skipped just because
   // the slate arrived by a different door, or CFB would show all 70 games.
   const games = LEAGUES[sport]?.top25 ? await onlyRanked(sport, raw) : raw;

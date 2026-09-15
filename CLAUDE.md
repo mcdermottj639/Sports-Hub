@@ -552,7 +552,13 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v237** (backend **b15-ir-slot**).
+Current version as of this writing: **v238** (backend **b15-ir-slot**).
+
+- **Finished-week rollover (v238):** ESPN's bare NFL/CFB scoreboard can remain
+  on a fully final week on Tuesday. `weekSlate` now requests the next numbered
+  week for preseason/regular season and advances only when ESPN returns an open
+  slate. This makes v237's weekly recorder capture the next week immediately,
+  while retaining the finished slate at phase boundaries.
 
 - **Weekly pregame capture and visible coverage (v237):** opening Home or a
   league board saves every still-upcoming NFL/CFB game in ESPN's current-week

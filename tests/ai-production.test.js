@@ -32,7 +32,7 @@ function load() {
     }
     script.runInContext(s);
   }
-  for (const name of ['statVal', 'shrinkERA', 'cfbTierFromName', 'cfbRating', 'normCdf', 'invNorm', 'projMarginFor', 'predictGame', 'normOdds', 'marketHomeProb', 'pickedPrice', 'pickTier', 'marketGap', 'atsRead', 'atsCall', 'totalRead', 'recordResult', 'recordPick', 'recordAtsPick', 'recordTotalPick', 'atsResult', 'gradePending', 'tallyStats', 'pickSnapshot', 'commitRow', 'slateDateFor', 'savedPickForGame', 'comparisonGraphic', 'moneylineValuesHTML', 'marketRowsHTML']) {
+  for (const name of ['statVal', 'shrinkERA', 'cfbTierFromName', 'cfbRating', 'normCdf', 'invNorm', 'projMarginFor', 'predictGame', 'normOdds', 'marketHomeProb', 'pickedPrice', 'pickTier', 'marketGap', 'atsRead', 'atsCall', 'totalRead', 'recordResult', 'recordPick', 'recordAtsPick', 'recordTotalPick', 'atsResult', 'gradePending', 'tallyStats', 'pickSnapshot', 'commitRow', 'slateDateFor', 'savedPickForGame', 'nextWeekRequest', 'comparisonGraphic', 'moneylineValuesHTML', 'marketRowsHTML']) {
     const match = source.match(new RegExp(`^(?:async )?function ${name}\\([^]*?^}`, 'm'));
     assert.ok(match, name); vm.runInContext(match[0], s);
   }
@@ -153,6 +153,13 @@ test('saved results fall back to exact sport, date and matchup metadata', () => 
   assert.equal(s.savedPickForGame(saved, g, 'nfl'), saved['legacy-key']);
   assert.equal(s.savedPickForGame(saved, g, 'nfl', 'spread'), saved['legacy-spread']);
   assert.equal(s.savedPickForGame(saved, g, 'nfl', 'total'), null);
+});
+test('a completely final football week advances to the next numbered week', () => {
+  const s = load();
+  const json = { season: { type: 2, year: 2026 }, week: { number: 1 } };
+  assert.equal(JSON.stringify(s.nextWeekRequest(json, [{ state: 'post' }])), JSON.stringify({ week: 2, seasontype: 2, dates: 2026 }));
+  assert.equal(s.nextWeekRequest(json, [{ state: 'pre' }]), null);
+  assert.equal(s.nextWeekRequest({ season: { type: 3, year: 2026 }, week: { number: 1 } }, [{ state: 'post' }]), null);
 });
 test('live, expired cached pregame and final views cannot manufacture a record', () => {
   const s = load();
