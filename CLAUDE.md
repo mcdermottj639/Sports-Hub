@@ -214,7 +214,12 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   masthead), the ten-tab grid (5×2 on a phone — v218's 🎯 Pick'em filled the
   orphan cell the nine left), `#home-board` (🎲 The Board, between My Teams
   and ⛳ Golf) and `#botbar` (the persistent model-read bar).
-- `app.js` (~12,000 lines) — all logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
+- `app.js` (~12,000 lines) — main application logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
+- `nfl-model.js` — dependency-free v231 NFL moneyline/spread/totals arithmetic.
+  It is loaded before `app.js` and required directly by the Node tests, so the
+  tested formulas are the production formulas rather than a duplicate.
+- `tests/nfl-model.test.js` — focused Node tests for the fitted arithmetic and
+  the production moneyline value-tier gate.
 - `styles.css` — all styling, in NINE layers, and **order matters**: (1) the
   original dark `:root` vars and components; (2) the `:root[data-theme="light"]`
   "Editorial / Premium" block, which un-hardcodes the dark-only values (white
@@ -528,7 +533,9 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
 1. Bump `APP_VERSION` in `app.js` (e.g. `v60` → `v61`).
 2. Bump the matching `?v=N` on BOTH `styles.css` and `app.js` in `index.html`.
-3. `node --check app.js` (and `sw.js` if touched) — there is no test suite; syntax check is the gate.
+3. `node --check app.js` (plus every touched standalone JS file and `sw.js` if
+   touched), then `node --test tests/*.test.js`. The model suite begins in v231;
+   syntax plus all relevant tests are the gate.
 4. Commit, `git push -u origin main`, then fast-forward + push `claude/sports-app-ideas-130q0f`.
 5. The version shows in a header badge so the user can confirm what they're running.
 
@@ -538,7 +545,36 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v230** (backend **b15-ir-slot**).
+Current version as of this writing: **v231** (backend **b15-ir-slot**).
+
+- **🏈 NFL gets three chronologically fitted market paths (v231 candidate)** —
+  the owner supplied the first real NFL record (5–9 ATS; 0–4 totals in the
+  visible export) and asked for a code-level audit before anything was pushed.
+  This candidate remains local on `audit/nfl-model-v1` until the findings are
+  approved.
+  - Reproduced the browser's pregame-only feature pipeline across 2,493 NFL
+    games: train 2017–2023 (1,922), select on 2024 (286), one untouched test on
+    2025 (285). ESPN finals carry no archived wager price here, so this measures
+    probability/margin/total error—not ROI or closing-line value.
+  - On untouched 2025: Brier **.2336 → .2178**, log loss **.7126 → .6245**,
+    projected-margin MAE **12.48 → 10.17**, margin RMSE **16.01 → 12.97**.
+    Winner accuracy is intentionally not sold as a gain (**66.32% → 65.96%**):
+    the material improvement is calibrated probability and point error.
+  - NFL moneyline, spread and total are separate fitted paths in
+    `nfl-model.js`; the existing cards and grading remain unchanged. Recent
+    form falls nearly to zero, the home/road split is heavily reduced, and
+    ordinary home field remains instead of disappearing as split games accrue.
+  - **🚨 `pickTier` used to discard every favorite value.** It returned null
+    whenever the model and sportsbook agreed on the likely winner, even if the
+    model made that favorite 60% and the market only 53%. It now tiers any
+    positive pick-side gap; Red Alert remains restricted to a +150-or-longer
+    underdog the model picks outright. The play-count header now includes Red
+    Alerts too; it previously omitted its own strongest tier.
+  - NFL sharp money is monitor-only. Feed coverage is still recorded, but the
+    split cannot move an NFL pick after being live for 0 of 15 graded calls and
+    having no historical validation.
+  - Added the repo's first repeatable model suite: **10 Node tests**, plus syntax
+    and whitespace checks. Full findings: `docs/NFL_MODEL_AUDIT.md`.
 
 - **📐 A completed Pick'em game keeps the model's NUMBERS, not just its side
   (v230)** — v229 restored which team the model was on; the margin and the edge
@@ -4277,7 +4313,7 @@ index, not the argument.
 | 5 | **Record by tier** | Backtesting → Record by tier | v164 stored `gp`/`tr` | reads a real W-L instead of "collecting". **Do not touch `EDGE_BAR` before this has ~20 graded picks.** |
 | 6 | **ATS record** | Backtesting → by sport | v171 fixed grading (`:s` was never stripped, so ATS never graded at all) | any non-zero number. `PD_SD` (13.5/16.5) and `ATS_EDGE_MIN` (2/3) are guesses and are the first things to re-fit. **v204: read the "margin vs the book" row (every priced game) FIRST, never the picks-only row** — CFB read −11.8 on picks, and 19 of 19 spread picks were the dog. That is what v205's rating is fitted against. |
 | 7 | **Sharp money split** | Report Card → 💰 Sharp money | v160 stored `sh`; **v200 fixed why it never grew** | **Read the new "Splits feed live at pick time" row FIRST.** Until v200 the recorder logged the whole slate on an 8s leash against a 30-60s cold start, so ~99% of picks were made blind — 6 graded sharp picks at n=400+. It needs 20+ graded picks made with the feed live, and **only picks dated after the v200 ship count**; the 6 before it are a different population. If the coverage row is still near 0 a week after v200, the backend is not answering at all and the factor is dead weight, not unproven. |
-| 8 | **🏈 NFL calibration — the FIRST honest one** | export, filter `s: 'nfl'` + `d >= 20260910` | nothing yet — this read decides | buckets roughly ordered and a Brier that beats always-quoting the base rate. **Every NFL pick before 10 Sep 2026 predates BOTH the v83 confidence meta AND the v138 leak fix — it is history, not calibration data. Exclude it.** |
+| 8 | **🏈 NFL live-market validation** | export, filter `s: 'nfl'` + `d >= 20260910`, then split at v231 | **⚠️ SUPERSEDED in v231:** moneyline/spread/total coefficients were fit chronologically on 2017–2023, selected on 2024 and tested once on untouched 2025 finals | The remaining question is betting performance: ROI and CLV require exact stored prices. Keep n beside every live-season number and do not refit from a thin 2026 bucket. **Every NFL pick before 10 Sep 2026 still predates BOTH the v83 confidence meta AND the v138 leak fix. Exclude it.** |
 | 9 | **🎓 CFB calibration + first ATS sample** | export, filter `s: 'cfb'` + `d >= 20260829` | **v205 rebuilt the CFB margin** (team rating, margin-primary) | **Split at the v205 ship** — the 19 picks before it were 19/19 dogs off a model that could not see the FBS/FCS gap; they are a different population. After it: read `sportshub:marginbias` (v204) FIRST — mean favourite-oriented error near 0 and dog-side well under 100% says the rating prices the market; then the ATS W-L says whether it beats it. `CFB_TIER_PTS` / `CFB_MARGIN_K` are the constants to refit, from the instrument, never from the picks. |
 
 **Known and deliberately NOT fixed:**
@@ -4291,18 +4327,10 @@ index, not the argument.
   same way MLB's was — from a sample, not from the comment.
 - **7 soccer entries** (World Cup, league removed in v125) still count toward
   the all-time headline record.
-- **🏈 NFL is the only sport with NO calibration shrink — and it is an OPEN
-  DECISION, not an oversight.** `MODEL_SHRINK = { mlb: 0.5, cfb: 0.8, default: 1 }`,
-  so NFL falls to `default: 1` (unshrunk) while `CONF_CAP.nfl` is **85**. The
-  argument FOR shrinking it blind: NFL uses `MODEL_W.default` — the same
-  hand-weighted family that was **measured ~2x too confident in MLB** — and
-  v161 gave CFB 0.8 as exactly this kind of cheap precaution, monotonic so it
-  changes no pick, only the stated confidence and the edge sizing that keys off
-  `probHome`. The argument AGAINST: this file's own standing rule is *fit from a
-  sample, not from a comment*, which is why CFB's leftover mismatch is parked
-  right above. **Asked the owner on 1 Sep 2026 ("precaution or purity?"); they
-  did not answer, so it was deliberately left ALONE rather than guessed.**
-  Settle it from the row-8 read, not from taste.
+- **⚠️ SUPERSEDED in v231: NFL had no calibration shrink and every weight was
+  open.** It no longer uses `MODEL_W.default`; `nfl-model.js` holds the three
+  chronologically fitted market paths. `MODEL_SHRINK.default` remains live for
+  the unfitted NBA fallback and must not be mistaken for the NFL calibration.
 
 ## 🗓️ Monthly brainstorm log
 

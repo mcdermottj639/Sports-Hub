@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v230';
+const APP_VERSION = 'v231';
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
 // app can't read private-league endpoints itself — CORS + cookie gated). When
@@ -1144,11 +1144,18 @@ function marketGap(pred, info) {
 function marketCompare(pred, favName, info, sport, g) {
   if (!pred || !favName) return '';
   if (pred.winner.name === favName) {
+    const mkt = marketHomeProb(info);
+    const gap = marketGap(pred, info);
+    const pickProb = Math.round((pred.homePick ? pred.probHome : 1 - pred.probHome) * 100);
+    const mktPick = mkt == null ? null : Math.round((pred.homePick ? mkt : 1 - mkt) * 100);
+    const value = gap != null && gap >= EDGE_BAR.lean
+      ? `⚡ Model agrees ${esc(favName)} is likelier, and sees price value — model ${pickProb}%, market ${mktPick}%`
+      : `✅ Model agrees with the line (${esc(favName)})`;
     const ats = (sport && g) ? atsCall(sport, g, pred, info) : null;
     if (ats && ats.team !== pred.winner.name) {
-      return `✅ Model agrees on the winner (${esc(favName)}) — but makes it ${esc(favName)} by ${Math.abs(pred.projMargin).toFixed(0)}, so it likes <b>${esc(ats.label)}</b> against the spread`;
+      return `${value} — but makes it ${esc(favName)} by ${Math.abs(pred.projMargin).toFixed(0)}, so it likes <b>${esc(ats.label)}</b> against the spread`;
     }
-    return `✅ Model agrees with the line (${esc(favName)})`;
+    return value;
   }
   const mkt = marketHomeProb(info);
   let probs = '';
@@ -1866,6 +1873,13 @@ const PARK_WEIGHT = 0.7;
 // so MLB confidence is capped well below the football/basketball ceiling.
 const CONF_CAP = { mlb: 72, nfl: 85, cfb: 90, default: 92 };
 
+// NFL (v231) uses three independently calibrated market paths from the shared
+// feature set in nfl-model.js. The coefficients were trained on 2017-2023,
+// selected on 2024, then checked once on untouched 2025 games. The old generic
+// log-odds formula remains the fallback if the small companion script fails to
+// load, so one missing asset can never blank the board.
+const NFL_FIT = globalThis.SportsHubNFLModel || null;
+
 // ATS (v164). Football is a SPREAD market — "who wins" is barely the question
 // when the book has already priced the margin — so the model now prices the
 // margin too, and its ATS calls are tracked as their own record.
@@ -2068,7 +2082,9 @@ function projMarginFor(sport, pHome) {
 // a handful of large bettors against a crowd of small ones. That divergence is
 // the one piece of market information the posted price hasn't necessarily
 // absorbed yet, which is why the Game Report has flagged it since v88. This
-// folds it into the pick itself instead of only showing it.
+// folds it into the pick itself instead of only showing it. v231 exception:
+// NFL records the hypothetical direction/size for evaluation but gives it zero
+// prediction weight until the coverage and result sample is real.
 // Deliberately small. The signal is real but modest (money-side edges measure
 // a couple of points, not ten), it rides a free scrape that can go stale, and
 // it has ZERO graded history in this app. So every pick records how far the
@@ -2371,7 +2387,34 @@ async function predictGame(sport, g, opts) {
   let z = 0;
   const add = (label, c, detail) => { if (c && isFinite(c)) { z += c; factors.push({ label, c, detail }); } };
 
-  if (hf && af) {
+  let nflFeatures = null;
+  if (hf && af && sport === 'nfl' && NFL_FIT) {
+    const splitShrink = clamp(Math.min(hf.homeGP ?? 0, af.roadGP ?? 0) / 10, 0, 1);
+    const split = (hf.homeWP != null && af.roadWP != null)
+      ? splitShrink * (hf.homeWP - af.roadWP) : 0;
+    const day = 86400000;
+    const hr = g.date && hf.lastDate ? clamp(Math.round((new Date(g.date) - new Date(hf.lastDate)) / day), 0, 10) : null;
+    const ar = g.date && af.lastDate ? clamp(Math.round((new Date(g.date) - new Date(af.lastDate)) / day), 0, 10) : null;
+    const rest = hr != null && ar != null ? clamp(hr - ar, -5, 5) : 0;
+    nflFeatures = {
+      record: hf.winPct - af.winPct,
+      margin: clamp((hf.pdpg - af.pdpg) / PD_SCALE.nfl, -3, 3),
+      form: clamp((hf.form - af.form) / PD_SCALE.nfl, -3, 3),
+      split, rest,
+    };
+    const det = {
+      home: 'historical NFL home edge',
+      record: `${(hf.winPct * 100).toFixed(0)}% vs ${(af.winPct * 100).toFixed(0)}% win`,
+      margin: `${hf.pdpg >= 0 ? '+' : ''}${hf.pdpg.toFixed(1)} vs ${af.pdpg >= 0 ? '+' : ''}${af.pdpg.toFixed(1)} per game`,
+      form: `last 5: ${hf.form >= 0 ? '+' : ''}${hf.form.toFixed(1)} vs ${af.form >= 0 ? '+' : ''}${af.form.toFixed(1)}`,
+      split: hf.homeWP != null && af.roadWP != null
+        ? `home ${(hf.homeWP * 100).toFixed(0)}% vs road ${(af.roadWP * 100).toFixed(0)}%${splitShrink < 1 ? ' (small sample, damped)' : ''}`
+        : 'split unavailable',
+      rest: hr != null && ar != null ? `${hr}d vs ${ar}d rest` : 'rest unavailable',
+    };
+    const labels = { home: 'Home field', record: 'Record', margin: 'Scoring margin', form: 'Recent form', split: 'Home/road split', rest: 'Rest' };
+    NFL_FIT.moneylineContributions(nflFeatures).forEach((f) => add(labels[f.key] || f.label, f.value, det[f.key]));
+  } else if (hf && af) {
     add('Record', w.record * (hf.winPct - af.winPct), `${(hf.winPct * 100).toFixed(0)}% vs ${(af.winPct * 100).toFixed(0)}% win`);
     add('Scoring margin', w.margin * clamp((hf.pdpg - af.pdpg) / scale, -3, 3), `${hf.pdpg >= 0 ? '+' : ''}${hf.pdpg.toFixed(1)} vs ${af.pdpg >= 0 ? '+' : ''}${af.pdpg.toFixed(1)} per game`);
     add('Recent form', w.form * clamp((hf.form - af.form) / scale, -3, 3), `last 5: ${hf.form >= 0 ? '+' : ''}${hf.form.toFixed(1)} vs ${af.form >= 0 ? '+' : ''}${af.form.toFixed(1)}`);
@@ -2418,14 +2461,17 @@ async function predictGame(sport, g, opts) {
   // stays exact and the calibration shrink applies to it like everything else
   // (a signal with no graded history should be shrunk, not exempted).
   const ss = sharpSplit(opts?.splits);
-  let sharp = null, sharpC = 0;
+  let sharp = null, sharpC = 0, sharpMonitorC = 0;
+  // NFL sharp money stays measured but cannot move a pick yet: it had zero
+  // live coverage in the first graded sample and has no historical validation.
   if (ss && w.sharp) {
     const toHome = ss.d > 0;
     const t = toHome ? g.home : g.away;
     const row = (opts.splits || {})[toHome ? 'home' : 'away'] || {};
-    sharpC = w.sharp * ss.units;
+    sharpMonitorC = w.sharp * ss.units;
+    sharpC = sport === 'nfl' ? 0 : sharpMonitorC;
     sharp = { side: t.name, abbr: t.abbr || (t.name || '').split(' ').pop(),
-      handle: row.ml_handle, bets: row.ml_bets, d: Math.round(ss.d) };
+      handle: row.ml_handle, bets: row.ml_bets, d: Math.round(ss.d), monitor: sport === 'nfl' };
     add('Sharp money', sharpC, `${row.ml_handle}% of dollars vs ${row.ml_bets}% of bets on ${sharp.abbr}`);
   }
 
@@ -2493,6 +2539,9 @@ async function predictGame(sport, g, opts) {
   // 9 innings), clamped to a sane range.
   let projTotal = hf && af && hf.ppg != null && af.ppg != null
     ? (hf.ppg + hf.papg + af.ppg + af.papg) / 2 : null;
+  if (sport === 'nfl' && NFL_FIT && projTotal != null) {
+    projTotal = NFL_FIT.projectedTotal(projTotal);
+  }
   if (sport === 'mlb' && projTotal != null) {
     if (mu.starters && mu.starters.hERA != null && mu.starters.aERA != null) {
       const adj = ((mu.starters.hERA - MLB_SP_ERA) + (mu.starters.aERA - MLB_SP_ERA)) * 0.6;
@@ -2509,21 +2558,27 @@ async function predictGame(sport, g, opts) {
   // toward the side the model landed on. Stored with every graded pick so the
   // signal can be measured on real results instead of argued about.
   if (sharp) {
-    const pNo = logistic((z - sharpC) * shrink);
     const side = (p) => (homePick ? p : 1 - p);
-    sharp.pts = Math.round((side(pHome) - side(pNo)) * 1000) / 10;
+    const pNo = sharp.monitor ? pHome : logistic((z - sharpC) * shrink);
+    const pWith = sharp.monitor ? logistic((z + sharpMonitorC) * shrink) : pHome;
+    sharp.pts = Math.round((side(pWith) - side(pNo)) * 1000) / 10;
     sharp.agree = sharp.pts >= 0;
-    sharp.flipped = (pNo >= 0.5) !== homePick; // the nudge changed which side we took
+    sharp.flipped = sharp.monitor
+      ? (pWith >= 0.5) !== homePick             // hypothetical only
+      : (pNo >= 0.5) !== homePick;              // the nudge changed which side we took
   }
   const notes = mu.notes.slice();
-  if (sharp) notes.unshift(`Sharp money: ${sharp.handle}% of dollars vs ${sharp.bets}% of bets on ${sharp.side}${sharp.flipped ? ' — enough to flip the model onto that side' : ''}`);
+  if (sharp) notes.unshift(`Sharp money${sharp.monitor ? ' (monitor only — not applied)' : ''}: ${sharp.handle}% of dollars vs ${sharp.bets}% of bets on ${sharp.side}${sharp.flipped ? ` — ${sharp.monitor ? 'would be enough' : 'enough'} to flip the model onto that side` : ''}`);
   if (hf?.blended || af?.blended) notes.unshift('Early season — record/margin blended with last season (damped)');
   if (rating) {
     const tierTxt = (r) => (r.tier ? r.tier.toUpperCase() : 'FPI');
     notes.unshift(`🎓 Rating: ${rating.src === 'fpi' ? 'ESPN FPI' : rating.src === 'mixed' ? 'FPI + conference tier' : 'conference tier + own margin'} — ${g.home.abbr || g.home.name} ${tierTxt(rating.hR)} vs ${g.away.abbr || g.away.name} ${tierTxt(rating.aR)}; model margin ${rating.margin >= 0 ? (g.home.abbr || 'home') : (g.away.abbr || 'away')} by ${Math.abs(rating.margin).toFixed(1)}`);
   }
+  const fittedNFLMargin = sport === 'nfl' && NFL_FIT && nflFeatures
+    ? Math.round(NFL_FIT.spreadMargin(nflFeatures) * 10) / 10 : null;
   return { winner, conf, homePick, probHome: pHome, projTotal,
-    projMargin: rating ? Math.round(rating.margin * 10) / 10 : projMarginFor(sport, pHome),
+    projMargin: rating ? Math.round(rating.margin * 10) / 10
+      : fittedNFLMargin != null ? fittedNFLMargin : projMarginFor(sport, pHome),
     rating,
     // 🚨 The projected margin is derived from pHome, which projMarginFor
     // clamps to [0.02, 0.98] — so the margin itself has a HARD CEILING
@@ -2534,7 +2589,7 @@ async function predictGame(sport, g, opts) {
     // atsCall can refuse to make a play it can't justify.
     // v205: in rating mode the margin is primary and unbounded, so it is
     // never pinned — the ceiling this flag guarded no longer exists for CFB.
-    marginSat: rating ? false : (pHome >= 0.98 || pHome <= 0.02),
+    marginSat: rating || fittedNFLMargin != null ? false : (pHome >= 0.98 || pHome <= 0.02),
     breakdown, notes, sharp, thin: !(hf && af) };
 }
 
@@ -3989,9 +4044,13 @@ const MODEL_NOTES = {
     open: 'Margin vs the book should sit near <b>0.0</b> with the dog-side share near <b>50%</b>. Before v205 it read −11.8 with the model on the dog side of <b>19 of 19</b> spreads. Fit from that instrument on 🧪 Backtest — <b>never from the ATS picks this model itself produced.</b>',
   },
   nfl: {
-    fitted: [],
-    guesses: ['every weight', 'cap 85%', 'no calibration shrink at all', 'spread SD 13.5', 'ATS floor 2'],
-    open: '<b>Nothing here is fitted, and the NFL is the only sport with no calibration shrink.</b> It uses the same hand-weighted family that measured ~2× too confident in baseball. Every NFL pick before 10 Sep 2026 predates both the confidence meta and the look-ahead fix, so it is history, not calibration data — exclude it. The first honest read is this season\'s.',
+    fitted: [
+      ['moneyline probability', 'trained 2017–2023 · selected on 2024 · untouched 2025 Brier .2178 vs .2336 before'],
+      ['spread margin', 'untouched 2025 MAE 10.17 points vs 12.48 before'],
+      ['total shrink', 'untouched 2025 RMSE 14.51 points vs 15.22 before'],
+    ],
+    guesses: ['cap 85%', 'ATS floor 2 pts', 'totals floor 4 pts'],
+    open: '<b>Market profitability is not proven.</b> The historical ESPN test has final scores but no archived wager prices or closing lines, so it validates probability and score error—not ROI. Sharp money is monitor-only until at least 20 graded NFL picks were logged with the feed live.',
   },
   nba: {
     fitted: [],
@@ -4012,7 +4071,7 @@ function modelPanel(sport) {
     const sports = sortedSports({ teamOnly: true });
     let h = `${sec('What the model does')}
       ${row('Inputs', 'Team records, scoring margin, recent form, home/road splits, rest — plus per-sport matchup factors and DraftKings money-vs-tickets splits. Everything comes from ESPN\'s free public feeds and runs in your browser.')}
-      ${row('Output', 'One win probability per game. The spread call and the totals call are derived from that same number, so the three markets can never contradict each other.')}
+      ${row('Output', 'Separate moneyline probability, projected margin and projected total. They share pregame team data, but each is calibrated for its own market instead of forcing three different questions through one number.')}
       ${row('Markets', `Moneyline everywhere · <b>spread</b> for ${[...ATS_SPORTS].map((s) => LEAGUES[s]?.label || s).join(' and ')} · totals everywhere a line is posted. Each keeps its OWN record — a model can pick winners well and still lose to the number.`)}
       ${sec('When it calls a play')}
       ${row('vs the book', `The two moneylines are de-vigged into the book's own implied probability, and the gap against the model's is the play: lean ${n(EDGE_BAR.lean + '–' + EDGE_BAR.edge)} · edge ${n(EDGE_BAR.edge + '–' + (EDGE_BAR.best - 1))} · best bet ${n(EDGE_BAR.best + '+')}. Below ${n(EDGE_BAR.lean)} points is noise and is not a play.`)}
@@ -4028,6 +4087,8 @@ function modelPanel(sport) {
       const shr = MODEL_SHRINK[s] ?? MODEL_SHRINK.default;
       const bits = s === 'cfb'
         ? `team rating → margin · cap ${CONF_CAP.cfb}%`
+        : s === 'nfl' && NFL_FIT
+        ? `3 fitted market paths · cap ${CONF_CAP.nfl}%`
         : `${Object.keys(w).length} factors · shrink ×${shr} · cap ${CONF_CAP[s] || CONF_CAP.default}%`;
       const mk = ['ML', ATS_SPORTS.has(s) ? 'spread' : '', 'totals'].filter(Boolean).join(' · ');
       const fit = (MODEL_NOTES[s]?.fitted || []).length;
@@ -4063,6 +4124,18 @@ function modelPanel(sport) {
       ${sec('Turning that into a price')}
       ${row('Probability', `Φ(margin ÷ ${n(PD_SD.cfb)}) — the typical game-to-game spread of college results. Unbounded, so there is no ceiling on how big a favourite it can price.`)}
       ${row('Confidence', `capped at ${n(cap + '%')}. The ×${shr} shrink only applies if the rating path can't run at all.`)}`;
+  } else if (sport === 'nfl' && NFL_FIT) {
+    const f = (v) => Number(v).toFixed(3);
+    h += `${row('Direction', 'NFL uses <b>three fitted paths</b>: logistic win probability for moneyline, linear point margin for spread, and a shrunk scoring projection for totals. All features are pregame-only.')}
+      ${sec('Moneyline — win probability')}
+      ${row('Home baseline', f(NFL_FIT.ML.intercept))}
+      ${row('Record · scoring margin', `${f(NFL_FIT.ML.record)} · ${f(NFL_FIT.ML.margin)}`)}
+      ${row('Recent form · home/road · rest', `${f(NFL_FIT.ML.form)} · ${f(NFL_FIT.ML.split)} · ${f(NFL_FIT.ML.rest)}`)}
+      ${sec('Spread — projected margin')}
+      ${row('Formula', `home ${f(NFL_FIT.SPREAD.intercept)} pts + record ${f(NFL_FIT.SPREAD.record)} + scoring margin ${f(NFL_FIT.SPREAD.margin)} + form ${f(NFL_FIT.SPREAD.form)} + split ${f(NFL_FIT.SPREAD.split)} + rest ${f(NFL_FIT.SPREAD.rest)}`)}
+      ${sec('Totals — projected points')}
+      ${row('Formula', `${f(NFL_FIT.TOTAL.intercept)} + ${f(NFL_FIT.TOTAL.slope)} × the two teams' combined scoring rates`)}
+      ${row('Sharp money', '<b>Monitor only.</b> Feed coverage is logged, but the split cannot move an NFL prediction until coverage and results validate it.')}`;
   } else {
     const fw = [
       ['Record', w.record, 'season win% gap'],
@@ -4092,7 +4165,7 @@ function modelPanel(sport) {
   h += `${sec('When it calls a play')}
     ${row('vs the book', `lean ${n(EDGE_BAR.lean + '–' + EDGE_BAR.edge)} · edge ${n(EDGE_BAR.edge + '–' + (EDGE_BAR.best - 1))} · best ${n(EDGE_BAR.best + '+')} points off the de-vigged line · 🚨 Red Alert = a ${n('+' + ALERT_DOG_ML)} dog the model has winning outright`)}
     ${ATS_SPORTS.has(sport)
-      ? row('Spread', `plays at ${n(ATS_EDGE_MIN[sport] + '+')} points off the number${sport === 'nfl' ? `. The projected margin comes back out of the win probability (spread SD ${PD_SD.nfl}), so it tops out around ${(PD_SD.nfl * 2.054).toFixed(1)} points — past that the model is pinned and refuses the play.` : ''}`)
+      ? row('Spread', `plays at ${n(ATS_EDGE_MIN[sport] + '+')} points off the number${sport === 'nfl' && NFL_FIT ? '. The NFL margin is fitted directly in points and has no artificial probability ceiling.' : sport === 'nfl' ? `. The fallback projected margin comes back out of the win probability (spread SD ${PD_SD.nfl}), so it tops out around ${(PD_SD.nfl * 2.054).toFixed(1)} points — past that the model is pinned and refuses the play.` : ''}`)
       : row('Spread', 'not played — the model only takes a spread where the market is a spread market first.')}
     ${row('Total', `plays at ${n(totFloor + '+')} ${unit} off the O/U · <b>refused</b> past ${n(totMax)} ${unit}, where the projection is a data hole rather than a bold call${sport === 'mlb' ? `. Park run environment is applied at ×${PARK_WEIGHT}.` : ''}`)}
     ${sec('How much to trust the numbers')}`;
@@ -4152,13 +4225,10 @@ const TOT_MAX_DIFF = { mlb: 4, nba: 20, nfl: 14, cfb: 21 };
 // Vegas DK line and our model picks them to win, that's a red alert play moved
 // to the top of the board."
 //
-// Worth knowing before tuning this: EVERY tier below is ALREADY a
-// dog-picked-to-win. pickTier returns null the moment the model agrees with
-// the book's favourite, so `best`/`edge`/`lean` differ only in how big the
-// probability gap is — they are all the model taking the underdog outright.
-// A separate tier is only meaningful if it means something stronger, so what
-// separates ALERT is HOW BIG A DOG: the book has to be pricing this side as a
-// real underdog, not a coin-flip that happens to be a nominal favourite.
+// Worth knowing before tuning this: v231 allows ordinary favorite value into
+// best/edge/lean. ALERT remains different: the book has to be pricing the
+// model's outright winner as a real underdog, not a coin-flip that happens to
+// be a nominal favorite.
 //
 // ALERT_DOG_ML = +150 → the book gives them ~40% or less and the model says
 // they win outright. Note the arithmetic makes every alert a superset case of
@@ -4179,19 +4249,18 @@ const TIER_META = {
 };
 const TIER_ORDER = ['alert', 'best', 'edge', 'lean'];
 
-// Which tier a game's model-vs-market disagreement lands in. null = the model
-// is with the book (a pass), the gap is inside the noise band, or there's no
-// posted line to disagree with.
+// Which tier a game's positive model-vs-market value lands in. A model can
+// agree that the favorite is likelier to win and still find its posted price
+// too cheap; the old disagreement gate threw every such value bet away and
+// left the ladder populated only by outright upset calls.
 function pickTier(pred, info, gap) {
-  if (!pred || !info || !info.favName) return null;
-  if (pred.winner.name === info.favName) return null;      // model agrees → no play
+  if (!pred || !info || gap == null || gap < EDGE_BAR.lean) return null;
   // 🚨 A genuine plus-money dog the model has winning outright, not just
   // covering. Rarest thing the model produces and the owner's top-of-board
   // play. Checked BEFORE the gap ladder so it can never be filed as a plain
   // best bet.
   const price = pickedPrice(pred, info);
   if (price != null && price >= ALERT_DOG_ML && (gap == null || gap >= EDGE_BAR.best)) return 'alert';
-  if (gap == null) return 'edge';                          // spread-only, no MLs: can't size it
   if (gap >= EDGE_BAR.best) return 'best';
   if (gap >= EDGE_BAR.edge) return 'edge';
   if (gap >= EDGE_BAR.lean) return 'lean';
@@ -5358,8 +5427,9 @@ async function paintSportBoard(tok) {
   const gradedEdges = rows.filter((r) => r.isEdge && gameState(r.g) === 'final');
   const upTot = upcoming.filter((r) => r.tot).length;
   const upAts = upcoming.filter((r) => r.ats).length;
-  const playCount = best.length + edges.length + upAts + upTot;
-  const playBits = [best.length + edges.length ? `${best.length + edges.length} ML` : '',
+  const mlPlays = alerts.length + best.length + edges.length;
+  const playCount = mlPlays + upAts + upTot;
+  const playBits = [mlPlays ? `${mlPlays} ML` : '',
                     upAts ? `${upAts} ATS` : '', upTot ? `${upTot} O/U` : ''].filter(Boolean).join(' · ');
   container.appendChild(playsLine(playCount,
     playCount ? playBits : anyLines ? 'model in line w/ book' : 'no lines posted yet'));
@@ -5374,8 +5444,9 @@ async function paintSportBoard(tok) {
   // thing that should be visible, not guessed at.
   const sharpRows = rows.filter((r) => r.p?.sharp);
   if (sharpRows.length) {
+    const monitor = sport === 'nfl' ? 'tracked (monitor only; not applied) on' : 'folded into';
     container.appendChild(el('div', 'ai-note',
-      `💰 Sharp money folded into ${sharpRows.length} of ${rows.length} pick${rows.length === 1 ? '' : 's'} — DraftKings dollars vs tickets (via VSiN).`));
+      `💰 Sharp money ${monitor} ${sharpRows.length} of ${rows.length} pick${rows.length === 1 ? '' : 's'} — DraftKings dollars vs tickets (via VSiN).`));
   } else if (BETTING_SPORTS.has(sport) && !report) {
     container.appendChild(el('div', 'ai-note',
       '💰 Sharp-money splits unavailable right now (betting backend asleep or down) — these picks are model-only.'));
