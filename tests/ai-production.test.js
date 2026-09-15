@@ -41,6 +41,20 @@ function load() {
 const profile = { winPct: 0.6, pdpg: 7, form: 3, homeWP: 0.6, roadWP: 0.6, homeGP: 20, roadGP: 20, ppg: 24, papg: 20, lastDate: '2026-09-01' };
 const game = () => ({ id: 'fixture', state: 'pre', date: new Date(Date.now() + 86400000).toISOString(), seasonType: 2, home: { id: 'h', name: 'Home', abbr: 'HOM' }, away: { id: 'a', name: 'Away', abbr: 'AWY' } });
 const prediction = { winner: { name: 'Home' }, homePick: true, probHome: 0.65, conf: 65, projMargin: 7, projTotal: 47, blockedReasons: [] };
+test('league navigation clears stale cards before awaiting the next board', async () => {
+  const container = { innerHTML: 'Old MLB cards' };
+  const s = vm.createContext({ state: { aiSport: 'cfb', aiSub: 'board' }, aiViewToken: 0,
+    $: (selector) => selector === '#ai-picks' ? container : null,
+    LEAGUES: { cfb: { label: 'CFB' } }, esc: String,
+    renderAiTally: () => {}, paintSportBoard: async () => 'loaded',
+  });
+  const fn = source.match(/^async function paintAiView\([^]*?^}/m);
+  assert.ok(fn); vm.runInContext(fn[0], s);
+  const painting = s.paintAiView();
+  assert.match(container.innerHTML, /Loading CFB forecasts/);
+  assert.doesNotMatch(container.innerHTML, /Old MLB/);
+  assert.equal(await painting, 'loaded');
+});
 test('production odds preserve pick-em and do not turn missing spread into zero', () => {
   const s = load();
   assert.equal(s.normOdds({ spread: 0 }, 'Home', 'Away').spread, 0);

@@ -1,7 +1,7 @@
 // Sports-Hub — pure browser app. Live data comes straight from ESPN's free
 // public sports feed (no key, no server). Edit LEAGUES below to make it yours.
 
-const APP_VERSION = 'v234';
+const APP_VERSION = 'v235';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v232';
 const AI_MATH = globalThis.SportsHubAI;
@@ -4954,7 +4954,7 @@ async function renderHomeBoard() {
     (b.tot.tier === 'best' ? 1 : 0) - (a.tot.tier === 'best' ? 1 : 0)
     || Math.abs(b.tot.diff) - Math.abs(a.tot.diff));
   const leans = live.filter((r) => r.tier === 'lean').length;
-  const passes = live.filter((r) => r.p && r.info?.favName && !r.tier).length;
+  const watchOnly = live.filter((r) => r.p && !r.tier && !r.ats && !r.tot).length;
 
   box.innerHTML = '';
   const head = el('div', 'brd-head');
@@ -4965,7 +4965,7 @@ async function renderHomeBoard() {
     box.appendChild(el('div', 'ai-note', !live.length
       ? '📭 Nothing on the board — no games left to price today.'
       : anyLines
-        ? '✅ The model is with the book everywhere today — no edges to show. The deeper read is on 🤖 AI Picks.'
+        ? 'No qualified signals today. Prices, data checks or signal thresholds may be incomplete; see every forecast on 🤖 AI Picks.'
         : '📭 No betting lines posted yet — the board fills in once the books hang numbers.'));
     return;
   }
@@ -4997,7 +4997,7 @@ async function renderHomeBoard() {
   const bits = [];
   if (hidden) bits.push(`${hidden} more play${hidden === 1 ? '' : 's'}`);
   if (leans) bits.push(`👀 ${leans} lean${leans === 1 ? '' : 's'}`);
-  if (passes) bits.push(`✅ ${passes} the model agrees with the book`);
+  if (watchOnly) bits.push(`${watchOnly} watch-only game${watchOnly === 1 ? '' : 's'} — see prices & data checks`);
   const more = el('button', 'brd-more',
     `${bits.join(' · ') || 'Model record, calibration and the full ladder'}<b>See all on 🤖 AI Picks →</b>`);
   more.type = 'button';
@@ -5189,6 +5189,8 @@ async function paintAiView() {
   }
   if (sub === 'board') {
     renderAiTally(all ? null : sport, '');
+    // Do not leave the previous league's cards under the newly selected heading.
+    container.innerHTML = `<div class="empty" role="status">Loading ${all ? 'all-sport' : esc(LEAGUES[sport]?.label || sport)} forecasts…</div>`;
     return all ? paintOverviewBoard(tok) : paintSportBoard(tok);
   }
   const s = all ? null : sport;

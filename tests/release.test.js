@@ -28,3 +28,8 @@ test('NFL model loads before the main application', () => {
   assert.ok(modelScript >= 0 && modelScript < appScript);
   assert.ok(html.indexOf('<script src="ai-model-utils.js') < appScript);
 });
+
+test('phone AI navigation enables grid, not only its column definition', () => {
+  const css = read('styles.css');
+  assert.match(css, /#ai-sub\s*\{\s*display:\s*grid;\s*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+});

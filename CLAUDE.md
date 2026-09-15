@@ -552,10 +552,17 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v234** (backend **b15-ir-slot**).
+Current version as of this writing: **v235** (backend **b15-ir-slot**).
+
+- **Final navigation and wording check (v235):** explicitly enables the phone
+  sub-tab grid (the earlier flex display prevented the v234 column rule from
+  applying). League changes clear stale cards while loading. Home's watch-only
+  count excludes spread/total signals and never equates missing quotes with
+  market agreement. The v232 model/evaluation cohort is unchanged.
 
 - **Phone labels and stable evaluation cohort (v234):** the AI sub-tabs use a
-  2×2 phone grid so no label is clipped. `AI_MODEL_VERSION` stays v232 through
+  2×2 phone grid so no label is clipped. **⚠️ SUPERSEDED layout fix in v235:**
+  the missing grid display is now explicit. `AI_MODEL_VERSION` stays v232 through
   UI-only releases; snapshot `q.v` identifies that cohort and `q.app` identifies
   the observing UI build. Bump the model version when forecast/eligibility
   logic changes, not for a CSS edit. **SUPERSEDES app-version-only grouping in
