@@ -32,7 +32,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b15-ir-slot"
+SERVER_VERSION = "b16-fantasy-gm"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -437,6 +437,28 @@ def free_agents(sport: str, size: int = 40):
     except Exception as e:
         raise HTTPException(502, f"Could not load free agents: {e}")
     return {"sport": sport, "players": [player_dict(p) for p in fas]}
+
+
+@app.get("/api/fantasy/{sport}/rosters")
+def league_rosters(sport: str):
+    """Every team roster, for need-aware trade matching in the private UI.
+
+    This exposes no league credentials and performs no extra ESPN request: the
+    Team objects and their rosters already live on the cached League snapshot.
+    The frontend deliberately labels its trade fits as leads, not valuations.
+    """
+    league = get_league(sport)
+    my_id = str(SPORTS[sport]["team_id"] or "")
+    teams = []
+    for team in getattr(league, "teams", []) or []:
+        tid = _tid(team)
+        teams.append({
+            "teamId": tid,
+            "team": getattr(team, "team_name", ""),
+            "isMe": tid == my_id,
+            "roster": [player_dict(p) for p in (getattr(team, "roster", []) or [])],
+        })
+    return {"sport": sport, "teams": teams}
 
 
 @app.get("/api/fantasy/{sport}/debug")

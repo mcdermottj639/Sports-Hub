@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v240';
+const APP_VERSION = 'v241';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -7953,7 +7953,7 @@ function warmFantasy() {
 /* 🚨 v212: the assembled league, kept on the device in its own key.
    The generic disk cache (v210) already saves each raw response, but it is a
    shared, evictable budget — and the Fantasy view does not read raw responses,
-   it reads the object syncLeagueOnce assembles OUT of six of them. Storing the
+   it reads the object syncLeagueOnce assembles out of the endpoint set. Storing the
    assembled result means the tab can paint the last load with no network at
    all and nothing to reassemble, exactly like powerlab:season and
    sportshub:fparticles already do for their own payloads.
@@ -7998,9 +7998,9 @@ async function syncLeagueOnce(sport, force) {
     // 🚨 The roster call is awaited ALONE, deliberately, and the rest fan out
     // behind it. Every endpoint reads the backend's cached League object, and
     // `_build_league` is a plain lru_cache with no lock — FastAPI runs these
-    // sync handlers in a threadpool, so six requests arriving together on a
+    // sync handlers in a threadpool, so several requests arriving together on a
     // cold cache would each build their OWN League and hit ESPN six times.
-    // One call warms it; the other five then hit a warm cache in parallel.
+    // One call warms it; the remaining calls then hit a warm cache in parallel.
     const data = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/roster${q()}`, 60000);
     const roster = (data.roster || []).map((p) => ({
       name: p.name,
@@ -8019,7 +8019,7 @@ async function syncLeagueOnce(sport, force) {
     // football, whose equivalent is /season: per-week scores, ESPN's OWN
     // playoff odds and the all-play record, off the cached League snapshot.
     const isBb = sport === 'baseball';
-    const [matchup, standings, freeAgents, opponent, catranks, playoffs, season] = await Promise.all([
+    const [matchup, standings, freeAgents, opponent, catranks, playoffs, season, rosters] = await Promise.all([
       soft(`${FANTASY_API}/api/fantasy/${sport}/matchup${q()}`, 60000),
       soft(`${FANTASY_API}/api/fantasy/${sport}/standings${q()}`, 60000),
       soft(`${FANTASY_API}/api/fantasy/${sport}/freeagents${q('size=40')}`, 300000),
@@ -8027,19 +8027,20 @@ async function syncLeagueOnce(sport, force) {
       isBb ? soft(`${FANTASY_API}/api/fantasy/${sport}/catranks${q()}`, 60000) : null,
       isBb ? soft(`${FANTASY_API}/api/fantasy/${sport}/playoffs${q('slots=6')}`, 60000) : null,
       isBb ? null : soft(`${FANTASY_API}/api/fantasy/${sport}/season${q()}`, 60000),
+      isBb ? null : soft(`${FANTASY_API}/api/fantasy/${sport}/rosters${q()}`, 300000),
     ]);
     fanState.league = fanState.league || {};
     /* 🚨 syncedAt is the age of the DATA, not of the assembly. Since v210 any
-       of these six can come back off the disk cache, so stamping Date.now()
+       of these responses can come back off the disk cache, so stamping Date.now()
        would have a league assembled entirely from saved copies announce itself
        as "synced just now" — the v202/v203 lie, in the one place the user
        looks to find out whether to trust the numbers. Caught by looking at the
        render: a copy deliberately aged 9 hours still read as fresh. */
     let at = 0;
-    [data, matchup, standings, freeAgents, opponent, catranks, playoffs, season].forEach((d) => {
+    [data, matchup, standings, freeAgents, opponent, catranks, playoffs, season, rosters].forEach((d) => {
       if (isStale(d) && d.__at && (!at || d.__at < at)) at = d.__at;
     });
-    const built = { team: data.team, record: data.record, rosterFull: data.roster || [], live: !!data.live, matchup, standings, freeAgents, opponent, catranks, playoffs, season, syncedAt: at || Date.now() };
+    const built = { team: data.team, record: data.record, rosterFull: data.roster || [], live: !!data.live, matchup, standings, freeAgents, opponent, catranks, playoffs, season, rosters, syncedAt: at || Date.now() };
     fanState.league[sport] = built;
     saveLeagueSnap(sport, built);
     return true;
@@ -8422,6 +8423,62 @@ function fbLeagueHTML(season, standings) {
     <div class="ffp-cap">${anyOdds ? 'Playoff odds are ESPN’s own simulation, read straight from the league — not our estimate.' : 'Playoff odds appear once ESPN starts publishing them, usually a few weeks in.'}</div></div>`;
 }
 
+// --- Fantasy GM decision engine (v241) -------------------------------------
+// Transparent roster heuristics, not player-value claims. ESPN's league-
+// scored production supplies the inputs; depth and replacement level decide
+// which position deserves attention first.
+const FB_CORE = ['QB', 'RB', 'WR', 'TE'];
+const fbValue = (p) => {
+  for (const raw of [p && p.avg, p && p.projAvg, p && p.projected]) {
+    const v = Number(raw); if (Number.isFinite(v) && v > 0) return v;
+  }
+  const w = fbWeeks(p).map((r) => r.pts).filter(Number.isFinite);
+  return w.length ? w.reduce((a, v) => a + v, 0) / w.length : 0;
+};
+function fbNeeds(roster, freeAgents) {
+  const target = { QB: 2, RB: 4, WR: 5, TE: 2 };
+  return FB_CORE.map((pos) => {
+    const mine = (roster || []).filter((p) => nflBucket(p) === pos && !isReserve(p));
+    const vals = mine.map(fbValue).filter((v) => v > 0).sort((a, b) => b - a);
+    const fa = (freeAgents || []).filter((p) => nflBucket(p) === pos).map(fbValue).filter((v) => v > 0).sort((a, b) => b - a);
+    const replacement = fa.length ? fa[Math.min(2, fa.length - 1)] : 0;
+    const starter = vals[0] || 0, depthGap = Math.max(0, target[pos] - mine.length);
+    const qualityGap = replacement > 0 && starter > 0 ? Math.max(0, (replacement - starter) / replacement) : (starter ? 0 : .7);
+    const injury = mine.filter((p) => p.injuryStatus && !/ACTIVE|NORMAL/i.test(p.injuryStatus)).length;
+    const score = Math.min(100, Math.round(depthGap * 18 + qualityGap * 55 + injury * 12));
+    const grade = score >= 55 ? 'Critical' : score >= 30 ? 'Need' : score >= 15 ? 'Watch' : 'Strong';
+    const reason = !mine.length ? `No active ${pos}` : depthGap ? `${mine.length} rostered; target ${target[pos]}` : injury ? `${injury} injury flag${injury === 1 ? '' : 's'}` : starter && replacement ? `${starter.toFixed(1)} best avg vs ${replacement.toFixed(1)} replacement` : `${mine.length} rostered`;
+    return { pos, score, grade, reason };
+  }).sort((a, b) => b.score - a.score);
+}
+function fbGMHTML(roster, freeAgents, leagueRosters) {
+  const needs = fbNeeds(roster, freeAgents), needMap = Object.fromEntries(needs.map((n) => [n.pos, n]));
+  const rankedFA = (freeAgents || []).map((p) => {
+    const pos = nflBucket(p), need = needMap[pos], value = fbValue(p), owned = Number(p.owned) || 0;
+    return { p, pos, value, need, score: (need ? need.score * .5 : 0) + value * 2 + Math.min(owned, 80) * .15 + (fbTrend(p) === 'hot' ? 8 : 0) };
+  }).filter((x) => FB_CORE.includes(x.pos)).sort((a, b) => b.score - a.score);
+  const drops = (roster || []).filter((p) => isBenched(p) && !isReserve(p)).map((p) => ({ p, pos: nflBucket(p), value: fbValue(p) })).filter((x) => !['K', 'DST'].includes(x.pos)).sort((a, b) => a.value - b.value);
+  const waiverRows = rankedFA.slice(0, 6).map((x, i) => {
+    const cut = drops.find((d) => d.pos === x.pos && d.value + 1 < x.value) || drops.find((d) => d.value + 2 < x.value);
+    const delta = cut ? x.value - cut.value : 0;
+    return `<div class="gm-move"><div class="gm-rank">${i + 1}</div><div class="gm-main"><div><b>${esc(x.p.name)}</b> <span class="ffp-slot">${x.pos}</span>${fbMatchupBadge(x.p)}</div><div class="gm-why">${x.need && x.need.score >= 30 ? `Fills your #${needs.indexOf(x.need) + 1} need` : 'Best available value'} · ${x.value ? x.value.toFixed(1) + ' pts/g' : 'projection pending'}${x.p.owned != null ? ` · ${Math.round(x.p.owned)}% rostered` : ''}</div>${cut ? `<div class="gm-cut">ADD over ${esc(cut.p.name)}${delta ? ` · estimated +${delta.toFixed(1)} pts/g` : ''}</div>` : '<div class="gm-cut hold">Add only with an open spot; no clear cut</div>'}</div></div>`;
+  }).join('');
+  const tradeLeads = [];
+  (((leagueRosters || {}).teams) || []).filter((t) => !t.isMe).forEach((t) => {
+    const counts = {}; (t.roster || []).forEach((p) => { const b = nflBucket(p); counts[b] = (counts[b] || 0) + 1; });
+    (t.roster || []).forEach((p) => {
+      const pos = nflBucket(p), need = needMap[pos], value = fbValue(p); if (!need || need.score < 15 || !value || isReserve(p)) return;
+      const surplus = (counts[pos] || 0) > ({ QB: 2, RB: 4, WR: 5, TE: 2 }[pos] || 99);
+      tradeLeads.push({ p, pos, value, team: t.team, need, surplus, score: need.score + value * 2 + (surplus ? 18 : 0) });
+    });
+  });
+  tradeLeads.sort((a, b) => b.score - a.score);
+  const trades = tradeLeads.slice(0, 8).map((x) => `<div class="gm-trade"><div><b>${esc(x.p.name)}</b> <span class="ffp-slot">${x.pos}</span></div><div class="gm-owner">${esc(x.team)} · ${x.value.toFixed(1)} pts/g</div><div class="gm-fit">${x.surplus ? '✓ Manager has depth here' : 'Targets your roster need'} · ${x.need.grade} ${x.pos} need</div></div>`).join('');
+  const needRows = needs.map((n) => `<div class="gm-need ${n.grade.toLowerCase()}"><div class="gm-need-top"><b>${n.pos}</b><span>${n.grade}</span></div><div class="gm-need-track"><i style="width:${Math.max(6, n.score)}%"></i></div><div class="gm-why">${esc(n.reason)}</div></div>`).join('');
+  const first = needs[0];
+  return `<div class="gm-hero"><div><div class="pp-kicker">GM COMMAND CENTER</div><h3>${first && first.score >= 15 ? `Priority: improve ${esc(first.pos)}` : 'Roster is balanced'}</h3><p>${first && first.score >= 15 ? esc(first.reason) + '. Waiver and trade lists are ranked around that need.' : 'No major hole is showing. Prioritize upside and injury insurance.'}</p></div><div class="gm-score"><b>${first ? first.score : 0}</b><span>top need</span></div></div><div class="gm-needs">${needRows}</div><div class="gm-grid"><section><h3>Waiver Plan</h3>${waiverRows || '<div class="ffp-empty"><b>No recommendations yet</b>ESPN free-agent data is not available.</div>'}<div class="ffp-cap">Rank blends positional need, league-scored production, availability and recent trend.</div></section><section><h3>Trade Targets</h3>${trades || '<div class="ffp-empty"><b>Trade market loading</b>Every league roster appears after the backend deploys and the next refresh.</div>'}<div class="ffp-cap">Conversation starters, not one-for-one values. “Depth” means that manager rosters more than the normal target at the position.</div></section></div>`;
+}
+
 async function renderFootballLive() {
   const box = $('#fantasy-football');
   if (!box) return;
@@ -8589,6 +8646,7 @@ async function renderFootballLive() {
   const waiverHTML = fas.length
     ? `<div class="ffp-card">${fas.slice(0, 12).map((p) => `<div class="ffp-prow"><div class="ffp-prow-l1"><span class="ffp-slot">${esc(p.pos || '')}</span><span class="ffp-pname">${esc(p.name)}</span>${fbMatchupBadge(p)}</div><div class="ffp-prow-l2"><span class="ffp-meta">${esc(p.proTeam || '')}${p.owned != null ? ' · ' + Math.round(p.owned) + '% rostered' : ''}</span>${fbSpark(fbWeeks(p).map((w) => w.pts), 'hot')}<span class="ffp-pts proj">${fpts(p.projected) != null ? fpts(p.projected) : '–'}</span></div></div>`).join('')}<div class="ffp-cap">Top available by ESPN projection. Waivers run Wed &amp; Sun 11 PM ET.</div></div>`
     : `<div class="ffp-card"><div class="ffp-empty"><b>Waiver wire empty</b>Available players appear after the next sync.</div></div>`;
+  const gmHTML = fbGMHTML(full, fas, L.rosters);
 
   box.innerHTML = `
     <div class="setup-card pp-hero">
@@ -8597,6 +8655,8 @@ async function renderFootballLive() {
       <div class="muted" style="margin-top:4px;font-size:11px">${esc(synced)}${synced ? ' · ' : ''}<span id="fbl-top-resync" role="button" tabindex="0" style="text-decoration:underline;cursor:pointer">🔄 Refresh from ESPN</span></div>
     </div>
     ${stripHTML}
+    <h2 class="section-title">What Should I Do?</h2>
+    ${gmHTML}
     <h2 class="section-title">This Week</h2>
     ${matchupHTML}
     ${alertHTML}

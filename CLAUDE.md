@@ -182,7 +182,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > the tab tap** (`warmFantasy()`, v207 — gated on the device's remembered
 > config), so the cold start overlaps the app's own load; the tab's own call
 > shares the in-flight promise (`syncInFlight`) rather than starting a second
-> one. Inside a sync the **roster is awaited alone and the other five endpoints
+> one. Inside a sync the **roster is awaited alone and the other endpoints
 > then fan out in parallel** — one call warms `_build_league`, which is an
 > unlocked `lru_cache`, so fanning out on a cold cache would hit ESPN six times.
 > **Freshness/caching:** it is NOT real-time —
@@ -559,6 +559,18 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
 ## Release / versioning ritual (do this on EVERY change)
 
+### Publishing when shell Git has no credentials
+
+An HTTPS username error from `git push` does not establish that the connected
+GitHub app is unavailable. Discover the GitHub connector before reporting a
+publishing blocker. With user authorization to publish, read the current remote
+branch, reconcile concurrent changes, and use its supported Git-data tools to
+create blobs, a tree based on the latest remote tree, and a commit parented to
+that remote head. Update only the authorized branch with `force: false` and
+verify the remote ref and file contents afterward. Never overwrite concurrent
+work, extract credentials, bypass branch protections or permission denials, or
+claim a deployment is live merely because the branch update succeeded.
+
 1. Bump `APP_VERSION` in `app.js` (e.g. `v60` → `v61`).
 2. Bump the matching `?v=N` on BOTH `styles.css` and `app.js` in `index.html`.
 3. `node --check app.js` (plus every touched standalone JS file and `sw.js` if
@@ -573,7 +585,18 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v240** (backend **b15-ir-slot**).
+Current version as of this writing: **v241** (backend **b16-fantasy-gm**).
+
+- **Fantasy GM command center (v241 / b16):** the live football page now leads
+  with a decision layer rather than only reporting league state. It ranks QB,
+  RB, WR and TE needs from real roster depth, injuries and ESPN league-scored
+  production versus the available replacement level; turns the free-agent
+  feed into a need-aware waiver plan with conservative add/drop suggestions;
+  and scans every actual league roster for trade leads, naming the manager and
+  flagging genuine positional surplus. Trade results are explicitly leads, not
+  one-for-one valuations. New `/api/fantasy/{sport}/rosters` reads the already
+  cached League object and exposes no credentials. The legacy top-available
+  waiver list remains below for full context.
 
 - **Finished-result scan rows (v240):** the AI Picks finished-game fold no
   longer renders Winner, Spread and Total as one dense right-column paragraph.

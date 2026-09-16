@@ -3189,3 +3189,43 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   :root[data-palette] #ai-sub button { min-height: 42px; white-space: normal; line-height: 1.3; overflow: visible; }
   :root[data-palette] .ai-market-selection { font-size: 16px; }
 }
+
+/* v241 — need-aware fantasy GM command center. */
+:root[data-palette] .gm-hero { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px; border:1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius:16px; background:linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--card)), var(--card)); box-shadow:var(--e1); }
+:root[data-palette] .gm-hero h3 { margin:5px 0 3px; font-size:20px; }
+:root[data-palette] .gm-hero p { margin:0; color:var(--muted); font-size:12px; line-height:1.55; }
+:root[data-palette] .gm-score { flex:0 0 72px; text-align:center; padding:10px; border-radius:14px; background:var(--card-2); }
+:root[data-palette] .gm-score b { display:block; font-size:28px; color:var(--accent); }
+:root[data-palette] .gm-score span { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+:root[data-palette] .gm-needs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:10px 0; }
+:root[data-palette] .gm-need { padding:11px; background:var(--card); border:1px solid var(--line); border-radius:12px; }
+:root[data-palette] .gm-need-top { display:flex; justify-content:space-between; gap:6px; font-size:12px; }
+:root[data-palette] .gm-need-top span { color:var(--pos); font-weight:800; }
+:root[data-palette] .gm-need.need .gm-need-top span,
+:root[data-palette] .gm-need.watch .gm-need-top span { color:var(--wm); }
+:root[data-palette] .gm-need.critical .gm-need-top span { color:var(--neg); }
+:root[data-palette] .gm-need-track { height:5px; margin:8px 0 6px; background:var(--line); border-radius:9px; overflow:hidden; }
+:root[data-palette] .gm-need-track i { display:block; height:100%; background:var(--pos); border-radius:inherit; }
+:root[data-palette] .gm-need.need .gm-need-track i,
+:root[data-palette] .gm-need.watch .gm-need-track i { background:var(--wm); }
+:root[data-palette] .gm-need.critical .gm-need-track i { background:var(--neg); }
+:root[data-palette] .gm-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+:root[data-palette] .gm-grid > section { min-width:0; padding:14px; background:var(--card); border:1px solid var(--line); border-radius:14px; }
+:root[data-palette] .gm-grid h3 { margin:0 0 9px; font-size:14px; }
+:root[data-palette] .gm-move { display:grid; grid-template-columns:25px 1fr; gap:8px; padding:9px 0; border-top:1px solid var(--line); }
+:root[data-palette] .gm-move:first-of-type { border-top:0; }
+:root[data-palette] .gm-rank { display:grid; place-items:center; align-self:start; width:23px; height:23px; border-radius:50%; color:var(--accent); background:var(--card-2); font-size:11px; font-weight:900; }
+:root[data-palette] .gm-main { min-width:0; font-size:12.5px; }
+:root[data-palette] .gm-why,
+:root[data-palette] .gm-owner { margin-top:3px; color:var(--muted); font-size:10.5px; line-height:1.4; }
+:root[data-palette] .gm-cut { margin-top:4px; color:var(--pos); font-size:10.5px; font-weight:800; }
+:root[data-palette] .gm-cut.hold { color:var(--muted); font-weight:600; }
+:root[data-palette] .gm-trade { padding:9px 0; border-top:1px solid var(--line); font-size:12.5px; }
+:root[data-palette] .gm-trade:first-of-type { border-top:0; }
+:root[data-palette] .gm-fit { margin-top:4px; color:var(--accent); font-size:10.5px; font-weight:750; }
+@media (max-width:620px) {
+  :root[data-palette] .gm-needs { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  :root[data-palette] .gm-grid { grid-template-columns:1fr; }
+  :root[data-palette] .gm-hero { align-items:flex-start; }
+  :root[data-palette] .gm-score { flex-basis:60px; }
+}
