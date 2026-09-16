@@ -573,7 +573,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v239** (backend **b15-ir-slot**).
+Current version as of this writing: **v240** (backend **b15-ir-slot**).
+
+- **Finished-result scan rows (v240):** the AI Picks finished-game fold no
+  longer renders Winner, Spread and Total as one dense right-column paragraph.
+  Each market is now its own compact result row with a green check for a win,
+  red miss for a loss, gold equals for a push and a neutral dash when no pick
+  was logged. This is presentation-only; saved picks, grading and the v239
+  evaluation cohort are unchanged.
 
 - **Automatic cloud capture (v239):** a separate Free-plan Supabase project now
   runs the NFL, Top-25 CFB and MLB collector every 30 minutes whether the site

@@ -1080,6 +1080,34 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .lad-row .lp { font-weight: 800; color: var(--muted); white-space: nowrap; }
 .lad-row .lg { font-size: 10px; font-weight: 800; color: var(--muted); min-width: 34px; text-align: right; }
 
+/* Finished-game scan rows (v240): each market reads as a result, not a paragraph. */
+.ai-final-row { align-items: stretch; padding: 10px 11px; gap: 12px; }
+.ai-final-row .lm { align-self: center; flex: 0 0 29%; font-size: 12.5px; }
+.ai-final-results { flex: 1; display: grid; gap: 5px; min-width: 0; }
+.ai-final-result {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 7px;
+  min-width: 0; padding: 6px 8px; border-radius: 8px; background: var(--card-2);
+}
+.ai-final-result i {
+  display: grid; place-items: center; width: 20px; height: 20px; border-radius: 999px;
+  background: rgba(255,255,255,.08); color: var(--muted); font-style: normal; font-size: 13px; font-weight: 900;
+}
+.ai-final-result span { min-width: 0; }
+.ai-final-result small { display: block; color: var(--muted); font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.ai-final-result b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.ai-final-result em { color: var(--muted); font-size: 9.5px; font-style: normal; font-weight: 800; }
+.ai-final-result.win i { background: rgba(58,210,159,.16); color: var(--pos); }
+.ai-final-result.win em { color: var(--pos); }
+.ai-final-result.loss i { background: rgba(255,90,90,.13); color: var(--neg); }
+.ai-final-result.loss em { color: var(--neg); }
+.ai-final-result.push i { color: var(--gold); }
+@media (max-width: 420px) {
+  .ai-final-row { gap: 9px; padding-left: 9px; padding-right: 9px; }
+  .ai-final-row .lm { flex-basis: 25%; font-size: 11.5px; }
+  .ai-final-result { grid-template-columns: 20px minmax(0, 1fr); padding: 5px 6px; }
+  .ai-final-result em { grid-column: 2; margin-top: -5px; }
+}
+
 /* ==========================================================================
    BACKTESTING (v164) — the calibration chart + per-tier record on AI Picks.
    ========================================================================== */

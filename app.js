@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v239';
+const APP_VERSION = 'v240';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -5643,11 +5643,16 @@ async function paintSportBoard(tok) {
     const missing = results.filter((r) => !r.ml && !r.sp && !r.tot).length;
     const d = el('details', 'lad-fold');
     d.open = !upcoming.length;
-    const mark = (r) => !r ? 'Not logged' : `${esc(r.p || '')} · ${r.pu ? 'Push' : r.c ? 'Won' : 'Lost'}`;
+    const result = (label, r) => {
+      const state = !r ? 'empty' : r.pu ? 'push' : r.c ? 'win' : 'loss';
+      const icon = state === 'win' ? '✓' : state === 'loss' ? '×' : state === 'push' ? '=' : '—';
+      const outcome = state === 'win' ? 'Won' : state === 'loss' ? 'Lost' : state === 'push' ? 'Push' : 'Not logged';
+      return `<span class="ai-final-result ${state}"><i aria-hidden="true">${icon}</i><span><small>${label}</small><b>${r ? esc(r.p || '') : outcome}</b></span>${r ? `<em>${outcome}</em>` : ''}</span>`;
+    };
     d.innerHTML = `<summary>Finished games · saved picks only (${finals.length})</summary><p class="ai-why">${missing
       ? `${missing} game${missing === 1 ? ' has' : 's have'} no pregame snapshot in this browser. Finished games cannot be backfilled honestly. Safari, an installed home-screen app and another device each keep separate records.`
       : 'Every finished game below matched a saved pregame record on this browser.'} Legacy entries retain their original provenance; new snapshots are versioned in Results.</p>
-      ${results.map(({ row: r, ml, sp, tot }) => `<div class="lad-row"><span class="lm">${esc(matchupLabel(sport, r.g))}</span><span class="lp">Winner: ${mark(ml)}<br>Spread: ${mark(sp)}<br>Total: ${mark(tot)}</span></div>`).join('')}`;
+      ${results.map(({ row: r, ml, sp, tot }) => `<div class="lad-row ai-final-row"><span class="lm">${esc(matchupLabel(sport, r.g))}</span><span class="ai-final-results">${result('Winner', ml)}${result('Spread', sp)}${result('Total', tot)}</span></div>`).join('')}`;
     container.appendChild(d);
   }
 
