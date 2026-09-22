@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v241';
+const APP_VERSION = 'v242';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -8022,7 +8022,7 @@ async function syncLeagueOnce(sport, force) {
     const [matchup, standings, freeAgents, opponent, catranks, playoffs, season, rosters] = await Promise.all([
       soft(`${FANTASY_API}/api/fantasy/${sport}/matchup${q()}`, 60000),
       soft(`${FANTASY_API}/api/fantasy/${sport}/standings${q()}`, 60000),
-      soft(`${FANTASY_API}/api/fantasy/${sport}/freeagents${q('size=40')}`, 300000),
+      soft(`${FANTASY_API}/api/fantasy/${sport}/freeagents${q(isBb ? 'size=40' : 'size=80')}`, 300000),
       soft(`${FANTASY_API}/api/fantasy/${sport}/opponent${q()}`, 60000),
       isBb ? soft(`${FANTASY_API}/api/fantasy/${sport}/catranks${q()}`, 60000) : null,
       isBb ? soft(`${FANTASY_API}/api/fantasy/${sport}/playoffs${q('slots=6')}`, 60000) : null,
@@ -8423,11 +8423,18 @@ function fbLeagueHTML(season, standings) {
     <div class="ffp-cap">${anyOdds ? 'Playoff odds are ESPN’s own simulation, read straight from the league — not our estimate.' : 'Playoff odds appear once ESPN starts publishing them, usually a few weeks in.'}</div></div>`;
 }
 
-// --- Fantasy GM decision engine (v241) -------------------------------------
+// --- Fantasy GM decision engine (v242) -------------------------------------
 // Transparent roster heuristics, not player-value claims. ESPN's league-
 // scored production supplies the inputs; depth and replacement level decide
 // which position deserves attention first.
+//
+// ⚠️ v241 ranked free agents by raw pts/g. Quarterbacks score ~20 a week and
+// flex players ~10, so the Waiver Plan printed six QB copies and "ADD over"
+// the same bench WR every time — comparing a QB's points to a receiver's.
+// v242 takes one primary offer, then flex (RB/WR) options, and only pairs a
+// drop at the same position (or flex-for-flex).
 const FB_CORE = ['QB', 'RB', 'WR', 'TE'];
+const FB_FLEX = ['RB', 'WR'];
 const fbValue = (p) => {
   for (const raw of [p && p.avg, p && p.projAvg, p && p.projected]) {
     const v = Number(raw); if (Number.isFinite(v) && v > 0) return v;
@@ -8451,18 +8458,109 @@ function fbNeeds(roster, freeAgents) {
     return { pos, score, grade, reason };
   }).sort((a, b) => b.score - a.score);
 }
+function fbReplacement(freeAgents) {
+  const out = {};
+  FB_CORE.forEach((pos) => {
+    const fa = (freeAgents || []).filter((p) => nflBucket(p) === pos).map(fbValue).filter((v) => v > 0).sort((a, b) => b - a);
+    out[pos] = fa.length ? fa[Math.min(2, fa.length - 1)] : 0;
+  });
+  return out;
+}
+function fbWaiverScore(p, need, replacement) {
+  const value = fbValue(p);
+  const owned = Number(p.owned) || 0;
+  const surplus = value - (replacement || 0);
+  return (need ? need.score * 0.7 : 0) + surplus * 4 + value * 0.3 + Math.min(owned, 60) * 0.12 + (fbTrend(p) === 'hot' ? 8 : 0);
+}
+function fbPickWaivers(roster, freeAgents) {
+  const needs = fbNeeds(roster, freeAgents);
+  const needMap = Object.fromEntries(needs.map((n) => [n.pos, n]));
+  const replacement = fbReplacement(freeAgents);
+  const candidates = (freeAgents || []).map((p) => {
+    const pos = nflBucket(p);
+    if (!FB_CORE.includes(pos)) return null;
+    const need = needMap[pos];
+    return { p, pos, value: fbValue(p), need, flex: FB_FLEX.includes(pos), score: fbWaiverScore(p, need, replacement[pos]) };
+  }).filter(Boolean).sort((a, b) => b.score - a.score);
+
+  const plan = [];
+  const used = new Set();
+  const counts = { QB: 0, RB: 0, WR: 0, TE: 0 };
+  const take = (x) => {
+    if (!x || used.has(x.p.name)) return false;
+    if (x.pos === 'QB' && counts.QB >= 1) return false;
+    if (x.pos === 'TE' && counts.TE >= 1) return false;
+    used.add(x.p.name);
+    counts[x.pos] += 1;
+    plan.push(x);
+    return true;
+  };
+  const mixFlex = (pool) => {
+    const leftover = pool.filter((x) => !used.has(x.p.name));
+    if (!leftover.length) return null;
+    const pick = leftover[0];
+    if (pick.flex && counts.RB >= counts.WR + 2) {
+      const wr = leftover.find((x) => x.pos === 'WR');
+      if (wr && wr.score >= pick.score * 0.65) return wr;
+    }
+    if (pick.flex && counts.WR >= counts.RB + 2) {
+      const rb = leftover.find((x) => x.pos === 'RB');
+      if (rb && rb.score >= pick.score * 0.65) return rb;
+    }
+    return pick;
+  };
+
+  const bestFlex = candidates.find((x) => x.flex);
+  const bestStream = candidates.find((x) => !x.flex && x.need && x.need.score >= 30);
+  take(bestStream || bestFlex || candidates[0]);
+
+  while (plan.length < 6) {
+    const leftover = candidates.filter((x) => !used.has(x.p.name));
+    if (!leftover.length) break;
+    const flexLeft = leftover.filter((x) => x.flex);
+    const teLeft = leftover.filter((x) => x.pos === 'TE' && counts.TE < 1);
+    const pool = flexLeft.length ? flexLeft : (teLeft.length ? teLeft : leftover.filter((x) => {
+      if (x.pos === 'QB' && counts.QB >= 1) return false;
+      if (x.pos === 'TE' && counts.TE >= 1) return false;
+      return true;
+    }));
+    if (!pool.length) break;
+    if (!take(mixFlex(pool))) break;
+  }
+  return { needs, needMap, plan };
+}
+function fbPairDrop(add, drops, usedDrops) {
+  const available = (drops || []).filter((d) => !usedDrops.has(d.p.name));
+  const same = available.find((d) => d.pos === add.pos && d.value + 1 < add.value);
+  if (same) return same;
+  if (FB_FLEX.includes(add.pos)) {
+    return available
+      .filter((d) => FB_FLEX.includes(d.pos) && d.value + 1.5 < add.value)
+      .sort((a, b) => a.value - b.value)[0] || null;
+  }
+  return null;
+}
 function fbGMHTML(roster, freeAgents, leagueRosters) {
-  const needs = fbNeeds(roster, freeAgents), needMap = Object.fromEntries(needs.map((n) => [n.pos, n]));
-  const rankedFA = (freeAgents || []).map((p) => {
-    const pos = nflBucket(p), need = needMap[pos], value = fbValue(p), owned = Number(p.owned) || 0;
-    return { p, pos, value, need, score: (need ? need.score * .5 : 0) + value * 2 + Math.min(owned, 80) * .15 + (fbTrend(p) === 'hot' ? 8 : 0) };
-  }).filter((x) => FB_CORE.includes(x.pos)).sort((a, b) => b.score - a.score);
+  const { needs, needMap, plan } = fbPickWaivers(roster, freeAgents);
   const drops = (roster || []).filter((p) => isBenched(p) && !isReserve(p)).map((p) => ({ p, pos: nflBucket(p), value: fbValue(p) })).filter((x) => !['K', 'DST'].includes(x.pos)).sort((a, b) => a.value - b.value);
-  const waiverRows = rankedFA.slice(0, 6).map((x, i) => {
-    const cut = drops.find((d) => d.pos === x.pos && d.value + 1 < x.value) || drops.find((d) => d.value + 2 < x.value);
+  const usedDrops = new Set();
+  const row = (x, i, kind) => {
+    const cut = fbPairDrop(x, drops, usedDrops);
+    if (cut) usedDrops.add(cut.p.name);
     const delta = cut ? x.value - cut.value : 0;
-    return `<div class="gm-move"><div class="gm-rank">${i + 1}</div><div class="gm-main"><div><b>${esc(x.p.name)}</b> <span class="ffp-slot">${x.pos}</span>${fbMatchupBadge(x.p)}</div><div class="gm-why">${x.need && x.need.score >= 30 ? `Fills your #${needs.indexOf(x.need) + 1} need` : 'Best available value'} · ${x.value ? x.value.toFixed(1) + ' pts/g' : 'projection pending'}${x.p.owned != null ? ` · ${Math.round(x.p.owned)}% rostered` : ''}</div>${cut ? `<div class="gm-cut">ADD over ${esc(cut.p.name)}${delta ? ` · estimated +${delta.toFixed(1)} pts/g` : ''}</div>` : '<div class="gm-cut hold">Add only with an open spot; no clear cut</div>'}</div></div>`;
-  }).join('');
+    const tag = kind === 'offer' ? '<span class="gm-role">The offer</span>' : (x.flex ? '<span class="gm-role">Flex</span>' : '');
+    const why = x.need && x.need.score >= 30
+      ? `Fills your #${needs.indexOf(x.need) + 1} need`
+      : (x.flex ? 'Flex value' : 'Best available value');
+    return `<div class="gm-move${kind === 'offer' ? ' offer' : ''}"><div class="gm-rank${kind === 'offer' ? ' offer' : ''}">${i}</div><div class="gm-main"><div><b>${esc(x.p.name)}</b> <span class="ffp-slot">${x.pos}</span>${tag}${fbMatchupBadge(x.p)}</div><div class="gm-why">${why} · ${x.value ? x.value.toFixed(1) + ' pts/g' : 'projection pending'}${x.p.owned != null ? ` · ${Math.round(x.p.owned)}% rostered` : ''}</div>${cut ? `<div class="gm-cut">ADD over ${esc(cut.p.name)}${delta ? ` · estimated +${delta.toFixed(1)} pts/g` : ''}</div>` : '<div class="gm-cut hold">Add only with an open spot; no clear cut</div>'}</div></div>`;
+  };
+  let waiverRows = '';
+  if (plan.length) {
+    waiverRows = row(plan[0], 1, 'offer');
+    if (plan.length > 1) {
+      waiverRows += `<div class="gm-sub">Flex options</div>${plan.slice(1).map((x, i) => row(x, i + 2, 'flex')).join('')}`;
+    }
+  }
   const tradeLeads = [];
   (((leagueRosters || {}).teams) || []).filter((t) => !t.isMe).forEach((t) => {
     const counts = {}; (t.roster || []).forEach((p) => { const b = nflBucket(p); counts[b] = (counts[b] || 0) + 1; });
@@ -8476,7 +8574,7 @@ function fbGMHTML(roster, freeAgents, leagueRosters) {
   const trades = tradeLeads.slice(0, 8).map((x) => `<div class="gm-trade"><div><b>${esc(x.p.name)}</b> <span class="ffp-slot">${x.pos}</span></div><div class="gm-owner">${esc(x.team)} · ${x.value.toFixed(1)} pts/g</div><div class="gm-fit">${x.surplus ? '✓ Manager has depth here' : 'Targets your roster need'} · ${x.need.grade} ${x.pos} need</div></div>`).join('');
   const needRows = needs.map((n) => `<div class="gm-need ${n.grade.toLowerCase()}"><div class="gm-need-top"><b>${n.pos}</b><span>${n.grade}</span></div><div class="gm-need-track"><i style="width:${Math.max(6, n.score)}%"></i></div><div class="gm-why">${esc(n.reason)}</div></div>`).join('');
   const first = needs[0];
-  return `<div class="gm-hero"><div><div class="pp-kicker">GM COMMAND CENTER</div><h3>${first && first.score >= 15 ? `Priority: improve ${esc(first.pos)}` : 'Roster is balanced'}</h3><p>${first && first.score >= 15 ? esc(first.reason) + '. Waiver and trade lists are ranked around that need.' : 'No major hole is showing. Prioritize upside and injury insurance.'}</p></div><div class="gm-score"><b>${first ? first.score : 0}</b><span>top need</span></div></div><div class="gm-needs">${needRows}</div><div class="gm-grid"><section><h3>Waiver Plan</h3>${waiverRows || '<div class="ffp-empty"><b>No recommendations yet</b>ESPN free-agent data is not available.</div>'}<div class="ffp-cap">Rank blends positional need, league-scored production, availability and recent trend.</div></section><section><h3>Trade Targets</h3>${trades || '<div class="ffp-empty"><b>Trade market loading</b>Every league roster appears after the backend deploys and the next refresh.</div>'}<div class="ffp-cap">Conversation starters, not one-for-one values. “Depth” means that manager rosters more than the normal target at the position.</div></section></div>`;
+  return `<div class="gm-hero"><div><div class="pp-kicker">GM COMMAND CENTER</div><h3>${first && first.score >= 15 ? `Priority: improve ${esc(first.pos)}` : 'Roster is balanced'}</h3><p>${first && first.score >= 15 ? esc(first.reason) + '. Waiver and trade lists are ranked around that need.' : 'No major hole is showing. Prioritize upside and injury insurance.'}</p></div><div class="gm-score"><b>${first ? first.score : 0}</b><span>top need</span></div></div><div class="gm-needs">${needRows}</div><div class="gm-grid"><section><h3>Waiver Plan</h3>${waiverRows || '<div class="ffp-empty"><b>No recommendations yet</b>ESPN free-agent data is not available.</div>'}<div class="ffp-cap">One primary add, then flex (RB/WR) options. Drops are same-position or flex-for-flex — a quarterback is never compared to a receiver.</div></section><section><h3>Trade Targets</h3>${trades || '<div class="ffp-empty"><b>Trade market loading</b>Every league roster appears after the backend deploys and the next refresh.</div>'}<div class="ffp-cap">Conversation starters, not one-for-one values. “Depth” means that manager rosters more than the normal target at the position.</div></section></div>`;
 }
 
 async function renderFootballLive() {

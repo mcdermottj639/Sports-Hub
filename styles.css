@@ -3215,7 +3215,11 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-palette] .gm-move { display:grid; grid-template-columns:25px 1fr; gap:8px; padding:9px 0; border-top:1px solid var(--line); }
 :root[data-palette] .gm-move:first-of-type { border-top:0; }
 :root[data-palette] .gm-rank { display:grid; place-items:center; align-self:start; width:23px; height:23px; border-radius:50%; color:var(--accent); background:var(--card-2); font-size:11px; font-weight:900; }
+:root[data-palette] .gm-rank.offer { color:var(--on-ac, var(--ink)); background:var(--accent); }
 :root[data-palette] .gm-main { min-width:0; font-size:12.5px; }
+:root[data-palette] .gm-role { display:inline-block; margin-left:6px; font-size:9.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--accent); }
+:root[data-palette] .gm-sub { margin:12px 0 0; padding-top:10px; border-top:1px solid var(--line); font-size:10px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+:root[data-palette] .gm-sub + .gm-move { border-top:0; }
 :root[data-palette] .gm-why,
 :root[data-palette] .gm-owner { margin-top:3px; color:var(--muted); font-size:10.5px; line-height:1.4; }
 :root[data-palette] .gm-cut { margin-top:4px; color:var(--pos); font-size:10.5px; font-weight:800; }

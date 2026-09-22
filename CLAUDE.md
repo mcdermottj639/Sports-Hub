@@ -585,16 +585,25 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v241** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v242** (backend **b16-fantasy-gm**).
+
+- **Waiver Plan is one offer plus flex (v242):** the football GM waiver list
+  no longer ranks raw pts/g, which made every slot a quarterback copy and
+  paired each of them with the same bench WR. It now prints one primary add
+  (a QB/TE only when that position is an actual need), then RB/WR flex
+  options, mixed so the list is not five of the same position. Drops are
+  same-position or flex-for-flex — a quarterback is never compared to a
+  receiver. Football free-agent pull grows from 40 to 80 so those flex names
+  are actually in the pool. `tests/fantasy-gm.test.js` locks the composition.
 
 - **Fantasy GM command center (v241 / b16):** the live football page now leads
   with a decision layer rather than only reporting league state. It ranks QB,
   RB, WR and TE needs from real roster depth, injuries and ESPN league-scored
   production versus the available replacement level; turns the free-agent
   feed into a need-aware waiver plan with conservative add/drop suggestions;
-  and scans every actual league roster for trade leads, naming the manager and
-  flagging genuine positional surplus. Trade results are explicitly leads, not
-  one-for-one valuations. New `/api/fantasy/{sport}/rosters` reads the already
+  ⚠️ SUPERSEDED in v242 for the waiver-list ranking itself (raw pts/g stacked
+  QB copies and compared them to a WR drop); the need cards and trade-lead
+  scan remain. New `/api/fantasy/{sport}/rosters` reads the already
   cached League object and exposes no credentials. The legacy top-available
   waiver list remains below for full context.
 
