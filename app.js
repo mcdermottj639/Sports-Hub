@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v242';
+const APP_VERSION = 'v243';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -1510,10 +1510,11 @@ const setRailOff = (set) => { try { localStorage.setItem(RAIL_OFF_KEY, JSON.stri
 function paintRailLeagues(sportsToday, counts) {
   const box = $('#rail-leagues');
   if (!box) return;
-  // With one league on the card there's nothing to filter between, so the
-  // column would just be a button that hides everything — not worth the chrome.
-  if (sportsToday.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
   const off = getRailOff();
+  // A saved filter may hide today's only league. Keep its recovery button.
+  if (sportsToday.length < 2 && !sportsToday.some((sp) => off.has(sp))) {
+    box.hidden = true; box.innerHTML = ''; return;
+  }
   box.innerHTML = '';
   sportsToday.forEach((sp) => {
     const cfg = LEAGUES[sp];
@@ -1584,12 +1585,14 @@ async function renderLiveRail() {
   const wrap = $('#rail-wrap');
   rail.innerHTML = '';
   if (!shown.length) {
-    // Distinguish "no games today" from "you filtered them all out" — the
-    // second is a state the owner created and can undo from the column beside
-    // the rail (v187: the bubbles live inside it now, not on a bar of their own).
-    rail.hidden = !all.length;
-    if (wrap) wrap.hidden = !all.length;
-    if (all.length) rail.appendChild(el('div', 'lrc-none', 'All leagues hidden — tap a league beside the rail to bring its games back.'));
+    // Empty feeds and saved filters must never remove the way back to scores.
+    const failed = res.some((r) => r.status === 'rejected');
+    rail.hidden = false;
+    if (wrap) wrap.hidden = false;
+    rail.appendChild(el('div', 'lrc-none', all.length
+      ? 'All leagues hidden — tap a league beside the scores to bring its games back.'
+      : failed ? 'Scores temporarily unavailable — retrying automatically.'
+        : 'No games scheduled today. Scores update automatically.'));
     if (typeof paintRailToggle === 'function') paintRailToggle();
     return;
   }
@@ -12387,14 +12390,17 @@ try { railHidden = localStorage.getItem(RAIL_HIDE_KEY) === '1'; } catch (e) {}
 function paintRailToggle() {
   const wrap = $('#rail-wrap'), btn = $('#rail-toggle');
   const n = document.querySelectorAll('#live-rail .lrc').length;
-  // Nothing to collapse when there's nothing in it — the wrapper stays hidden
-  // and the button goes with it, exactly as the bare rail used to.
+  // Keep the control available even when filters or a failed feed leave zero
+  // cards. Counting only .lrc used to hide both the rail and its recovery UI.
   if (btn) {
-    btn.hidden = !n;
-    btn.textContent = railHidden ? `⌄ ${n} GAME${n === 1 ? '' : 'S'}` : '⌃ RAIL';
+    btn.hidden = false;
+    btn.textContent = railHidden
+      ? (n ? `⌄ ${n} GAME${n === 1 ? '' : 'S'}` : '⌄ SHOW SCORES')
+      : '⌃ SCORES';
+    btn.title = railHidden ? 'Show scores' : 'Hide scores';
     btn.setAttribute('aria-expanded', String(!railHidden));
   }
-  if (wrap) wrap.hidden = !n || railHidden;
+  if (wrap) wrap.hidden = railHidden;
 }
 $('#rail-toggle')?.addEventListener('click', () => {
   railHidden = !railHidden;

@@ -585,7 +585,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v242** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v243** (backend **b16-fantasy-gm**).
+
+- **v243 — score rail recovery:** The score toggle stays available with zero cards.
+  All-hidden filters retain their recovery controls, including on single-league
+  days. Empty schedules and failed feeds show explicit status instead of silently
+  removing scores. Saved collapse preferences remain respected. This supersedes
+  older rail behavior that hid the wrapper/toggle based only on card count.
+
 
 - **Waiver Plan is one offer plus flex (v242):** the football GM waiver list
   no longer ranks raw pts/g, which made every slot a quarterback copy and
