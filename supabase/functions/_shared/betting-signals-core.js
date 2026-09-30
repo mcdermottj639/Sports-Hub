@@ -4,7 +4,10 @@
 const RULES=[{id:'nfl_road_dog_extra_rest',version:'v1',market:'spread',side:'away',name:'Road underdog • extra rest'},{id:'nfl_divisional_under',version:'v1',market:'total',side:'under',name:'Divisional under'}];
 // A broad observational cohort, NOT additional claimed betting systems.
 const RESEARCH=['moneyline','spread','total'].flatMap(market=>(market==='total'?['over','under']:['home','away']).map(side=>({id:`nfl_research_${market}_${side}`,version:'v1',market,side,name:`${market} · ${side}`})));
-const isResearch=d=>String(d.rule_id||'').startsWith('nfl_research_');
+const researchRules=(sport='nfl')=>RESEARCH.map(r=>({...r,id:r.id.replace(/^nfl_/,`${sport}_`)}));
+const isResearch=d=>/^(nfl|cfb)_research_/.test(String(d.rule_id||''));
+const ranked=v=>Number.isInteger(number(v))&&number(v)>=1&&number(v)<=25;
+const top25=g=>ranked(g.home?.rank)||ranked(g.away?.rank);
 const number=v=>v==null||String(v).trim()===''||!Number.isFinite(Number(v))?null:Number(v);
 const american=v=>{const n=number(v);return n!=null&&Math.abs(n)>=100?n:null;};
 const time=v=>Date.parse(v);
@@ -47,7 +50,7 @@ function movement(rows,side){const sorted=[...rows].sort((a,b)=>time(a.observed_
 function grade(d,g){if(/cancel/i.test(g.status||''))return 'void';if(g.state!=='post'||g.completed!==true||/postpon|suspend|delay/i.test(g.status||'')||number(g.home?.score)==null||number(g.away?.score)==null)return 'pending';if(!['matched','unpriced_match'].includes(d.status))return 'void';let n;if(d.market==='spread')n=(d.selection_side==='home'?g.home.score-g.away.score:g.away.score-g.home.score)+d.selection_line;else if(d.market==='total')n=(g.home.score+g.away.score-d.selection_line)*(d.selection_side==='over'?1:-1);else n=(g.home.score-g.away.score)*(d.selection_side==='home'?1:-1);return n===0?'push':n>0?'win':'loss';}
 function performance(decisions,settlements=[]){const settled=new Map(settlements.map(x=>[String(x.decision_id),x]));const groups=new Map(),seen=new Set();for(const d of decisions){if(seen.has(String(d.id)))continue;seen.add(String(d.id));const key=[d.sport,d.rule_id,d.rule_version,d.decision_policy,d.model_context?.engine||'unavailable',d.inputs?.provider_id||'unknown',d.quality_flags?.includes('source_freshness_unverified')?'unverified':'verified'].join('|');if(!groups.has(key))groups.set(key,{key,rule_id:d.rule_id,rule_version:d.rule_version,engine:d.model_context?.engine||'unavailable',provider_id:d.inputs?.provider_id||'unknown',decision_policy:d.decision_policy,source_quality:d.quality_flags?.includes('source_freshness_unverified')?'unverified':'verified',decisions:0,matched:0,priced:0,unpriced:0,missing:0,missed:0,wins:0,losses:0,pushes:0,voids:0,pending:0,risk:0,units:0,roi:null,win_rate:null});const r=groups.get(key);r.decisions++;if(d.status==='insufficient_data')r.missing++;if(d.status==='missed_window')r.missed++;if(!['matched','unpriced_match'].includes(d.status))continue;r.matched++;const p=american(d.selected_price);if(p==null){r.unpriced++;continue;}r.priced++;const result=settled.get(String(d.id))?.result||d.result||'pending';if(result==='void'){r.voids++;continue;}if(!['win','loss','push'].includes(result)){r.pending++;continue;}r.risk++;if(result==='win'){r.wins++;r.units+=p>0?p/100:100/-p;}if(result==='loss'){r.losses++;r.units--;}if(result==='push')r.pushes++;r.roi=r.risk?r.units/r.risk*100:null;r.win_rate=r.wins+r.losses?r.wins/(r.wins+r.losses)*100:null;}return [...groups.values()];}
 function evaluateResearch(inputs,quotes,now=Date.now()) {
- return RESEARCH.map(r=>{
+ return researchRules(inputs.sport||'nfl').map(r=>{
   const q=quotes.find(q=>q.market===r.market)||{},flags=[...(q.quality_flags||[])];
   const line=r.market==='moneyline'?null:number(q.line);
   const price=american(q[r.side+'_price']);
@@ -55,7 +58,7 @@ function evaluateResearch(inputs,quotes,now=Date.now()) {
   if(stale)flags.push('source_stale');
   const usable=q.provider_id&&q.provider_id!=='unknown'&&!stale&&(r.market==='moneyline'||(line!=null&&(r.market!=='total'||line>0)));
   return {rule_id:r.id,rule_version:r.version,market:r.market,selection_side:r.side,selection_line:r.market==='spread'&&r.side==='away'&&line!=null?-line:line,selected_price:price,
-   status:inputs.season_type==null?'insufficient_data':+inputs.season_type!==2?'not_matched':!usable?'insufficient_data':price==null?'unpriced_match':'matched',
+   status:inputs.season_type==null?'insufficient_data':+inputs.season_type!==2?'not_matched':inputs.sport==='cfb'&&!ranked(inputs.home_rank)&&!ranked(inputs.away_rank)?'insufficient_data':!usable?'insufficient_data':price==null?'unpriced_match':'matched',
    inputs:{...inputs,research_scope:'exploratory_v1'},condition_results:[],quality_flags:flags};
  });
 }
@@ -64,11 +67,14 @@ function researchDimensions(d){
  const i=d.inputs||{},side=d.selection_side,team=['home','away'].includes(side)?side:null;
  const home=restDays(i.scheduled_start_at,i.home_previous_game_at),away=restDays(i.scheduled_start_at,i.away_previous_game_at);
  const rest=team==='home'?home:team==='away'?away:null,other=team==='home'?away:team==='away'?home:null;
- const verified=!!(i.home_division&&i.away_division&&i.division_source);
+ const cfb=d.sport==='cfb'||i.sport==='cfb';
+ const verified=cfb?!!(i.home_conference&&i.away_conference&&i.conference_source):!!(i.home_division&&i.away_division&&i.division_source);
  const line=number(d.selection_line),price=american(d.selected_price),opponent=american(i.opponent_price);
  const implied=p=>p<0?-p/(-p+100):100/(p+100);
  const category=d.market==='spread'&&line!=null?(line>0?'underdog':line<0?'favorite':'pickem'):d.market==='moneyline'&&price!=null&&opponent!=null?(implied(price)===implied(opponent)?'pickem':implied(price)<implied(opponent)?'underdog':'favorite'):null;
- return {team,category,division:verified?(i.home_division===i.away_division?'division':'nondivision'):null,rest,restAdvantage:rest==null||other==null?null:rest-other,bye:team?i[team+'_post_bye']??null:null,neutral:i.neutral??null};
+ const same=cfb?!i.home_independent&&!i.away_independent&&i.home_conference===i.away_conference:i.home_division===i.away_division;
+ const bothRanked=ranked(i.home_rank)&&ranked(i.away_rank),oneRanked=ranked(i.home_rank)||ranked(i.away_rank);
+ return {team,category,division:verified?(same?'division':'nondivision'):null,ranking:!cfb?null:bothRanked?'both':oneRanked?'mixed':null,rest,restAdvantage:rest==null||other==null?null:rest-other,bye:team?i[team+'_post_bye']??null:null,neutral:i.neutral??null};
 }
 function filterResearch(rows,f={}){
  const bounds={};for(const k of ['lineMin','lineMax'])if(f[k]!=null&&String(f[k]).trim()!==''){const n=number(f[k]);if(n==null)throw Error('Line bounds must be numbers.');bounds[k]=n;}
@@ -78,9 +84,10 @@ function filterResearch(rows,f={}){
   if(f.teamSide&&(x.team!==f.teamSide||x.neutral!==false))return false;
   if(f.totalSide&&(d.market!=='total'||d.selection_side!==f.totalSide))return false;
   if(f.division&&(x.division||'unknown')!==f.division)return false;
+  if(f.ranking&&x.ranking!==f.ranking)return false;
   if(f.rest){const match=f.rest==='advantage'?x.restAdvantage!=null&&x.restAdvantage>0:f.rest==='disadvantage'?x.restAdvantage!=null&&x.restAdvantage<0:f.rest==='equal'?x.restAdvantage===0:f.rest==='short'?x.rest!=null&&x.rest<7:f.rest==='postbye'?x.bye===true:f.rest==='unknown'?x.rest==null:false;if(!match)return false;}
   const line=number(d.selection_line);if(bounds.lineMin!=null&&(line==null||line<bounds.lineMin))return false;if(bounds.lineMax!=null&&(line==null||line>bounds.lineMax))return false;
   return true;
  });
 }
-return {RULES,RESEARCH,isResearch,evaluateResearch,researchDimensions,filterResearch,number,american,restDays,pregame,decisionWindow,intervalMinutes,normalizeOdds,evaluateRules,movement,grade,performance};});
+return {RULES,RESEARCH,researchRules,isResearch,ranked,top25,evaluateResearch,researchDimensions,filterResearch,number,american,restDays,pregame,decisionWindow,intervalMinutes,normalizeOdds,evaluateRules,movement,grade,performance};});

@@ -1,6 +1,6 @@
 import {signalsEnabled, captureSignalQuotes, signalInputs, saveSignalDecision, settleSignalGame, missedSignalWindows, reconcileSignals} from './signals.ts';
 const MODEL_VERSION = 'v239';
-const APP_VERSION = 'v246';
+const APP_VERSION = 'v247';
 const SPORTS = ['nfl', 'cfb', 'mlb'] as const;
 type Sport = typeof SPORTS[number];
 type Json = Record<string, any>;
@@ -66,7 +66,7 @@ async function scoreboard(sport:Sport, date?:string, params:Json = {}) {
   Object.entries(params).forEach(([k,v]) => q.set(k, String(v)));
   const data = await json(`${SITE}/${PATH[sport]}/scoreboard?${q}`);
   const receivedAt=new Date().toISOString();
-  return { data, games:(data.events || []).map((ev:any)=>({...event(ev),observedAt:receivedAt})) };
+  return { data, games:(data.events || []).map((ev:any)=>({...event(ev),sport,observedAt:receivedAt})) };
 }
 
 function odds(raw:any, g:any) {
@@ -235,7 +235,7 @@ Deno.serve(async(req:Request)=>{
         const games=await slate(sport);
         for(const g of games){
           let quotes:any[]=[],inputs:any=null;
-          const watch=captureSignals&&sport==='nfl';
+          const watch=captureSignals&&(sport==='nfl'||sport==='cfb');
           if(watch){
             try{signals.graded+=await settleSignalGame(db,g);signals.missed+=await missedSignalWindows(db,g);}catch(_){signalError();}
             try{quotes=await captureSignalQuotes(db,g,`ai:${run.id}`,g.observedAt);signals.written+=quotes.length;if(quotes.length)signals.last_observed_at=g.observedAt;}catch(_){signalError();}

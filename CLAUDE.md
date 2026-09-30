@@ -592,7 +592,12 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v246** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v247** (backend **b16-fantasy-gm**).
+
+- **v247 — CFB Top 25 research:** Shared collectors add ranked college games;
+  research freezes ranks and conference/rest inputs, isolates leagues, and grades
+  saved games even if rankings change later. CFB has no NFL-only fixed rules.
+  Existing cadence, RLS and prices-only ROI remain. See BETTING_SIGNALS.md.
 
 - **v246 — Broad NFL research:** All six market/side observations freeze before
   kickoff separately from the two fixed tests. Results default to Explore all

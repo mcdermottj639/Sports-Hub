@@ -1,7 +1,7 @@
 /* Read-only signals adapter. Complete bounded reads; failed pages never become results. */
 (function(root) {
   'use strict';
-  const KEY='sportshub:signals:v2', PAGE=500, MAX_PAGES=200;
+  const KEY='sportshub:signals:v3', PAGE=500, MAX_PAGES=200;
   const inflight=new Map();
   let memory={}, health={state:'idle',fetched_at:null,error:null};
   try { memory=JSON.parse(root.localStorage?.getItem(KEY)||'{}'); } catch (_) {}
@@ -56,34 +56,36 @@
   }
   const safeID=value=>{if(!/^[\w.:-]+$/.test(String(value))) throw Error('Invalid event or provider identifier.'); return String(value);};
   async function loadCurrent(sport,eventIds=[]) {
-    if(sport!=='nfl') return {state:'unsupported',quotes:[],decisions:[]};
+    if(!['nfl','cfb'].includes(sport)) return {state:'unsupported',quotes:[],decisions:[]};
     const ids=[...new Set(eventIds.map(safeID))].sort();
     if(!ids.length) return {state:'ready',quotes:[],decisions:[],complete:true};
     if(ids.length>64) throw Error('Load at most 64 events at a time.');
-    const key=`current:${ids.join(',')}`;
+    const key=`current:${sport}:${ids.join(',')}`;
     return run(key,async()=>{
-      const p={sport:'eq.nfl',event_id:`in.(${ids.join(',')})`,select:'*'};
+      const p={sport:`eq.${sport}`,event_id:`in.(${ids.join(',')})`,select:'*'};
       const [quotes,decisions,current,runs,config]=await Promise.all([
         read('betting_quote_snapshots',{...p,observed_at:`gte.${new Date(Date.now()-14*86400000).toISOString()}`,order:'observed_at.asc,id.asc'}),
         read('betting_system_decisions',{...p,order:'decided_at.asc,id.asc'}),
         read('betting_signal_current',{...p,order:'event_id.asc'}),
         read('betting_capture_runs',{select:'*',order:'started_at.desc',started_at:`gte.${new Date(Date.now()-86400000).toISOString()}`}),
         read('betting_signals_config',{id:'eq.1',select:'*',order:'id.asc'})]);
-      return {quotes,decisions,current,run:runs[0]||null,config:config[0]||null};
+      return {sport,quotes,decisions,current,run:runs[0]||null,config:config[0]||null};
     });
   }
-  async function loadHistory(eventId,market,providerId,dateRange) {
+  async function loadHistory(eventId,market,providerId,dateRange,sport='nfl') {
+    if(!['nfl','cfb'].includes(sport))throw Error('Choose NFL or CFB.');
     const dates=range(dateRange), id=safeID(eventId);
     if(!['moneyline','spread','total'].includes(market)) throw Error('Choose a supported market.');
-    const key=`history:${id}:${market}:${providerId||''}:${dates.from}:${dates.to}`;
-    return run(key,async()=>({quotes:await read('betting_quote_snapshots',{sport:'eq.nfl',event_id:`eq.${id}`,market:`eq.${market}`,...(providerId?{provider_id:`eq.${safeID(providerId)}`} : {}),and:`(observed_at.gte.${dates.from},observed_at.lt.${dates.to})`,select:'*',order:'observed_at.asc,id.asc'}),dateRange:dates}));
+    const key=`history:${sport}:${id}:${market}:${providerId||''}:${dates.from}:${dates.to}`;
+    return run(key,async()=>({quotes:await read('betting_quote_snapshots',{sport:`eq.${sport}`,event_id:`eq.${id}`,market:`eq.${market}`,...(providerId?{provider_id:`eq.${safeID(providerId)}`} : {}),and:`(observed_at.gte.${dates.from},observed_at.lt.${dates.to})`,select:'*',order:'observed_at.asc,id.asc'}),dateRange:dates}));
   }
   async function loadResults(ruleId,version,dateRange={},filters={}) {
+    const sport=filters.sport||'nfl';if(!['nfl','cfb'].includes(sport))throw Error('Choose NFL or CFB.');
     const dates=range(dateRange), key=`results:${JSON.stringify([ruleId,version,dates,filters])}`;
     return run(key,async()=>{
-      let decisions=await read('betting_system_decisions',{sport:'eq.nfl',rule_id:filters.scope==='explore'?'like.nfl_research_*':ruleId?`eq.${safeID(ruleId)}`:'not.like.nfl_research_*',...(version?{rule_version:`eq.${safeID(version)}`} : {}),...(filters.market?{market:`eq.${safeID(filters.market)}`} : {}),and:`(scheduled_start_at.gte.${dates.from},scheduled_start_at.lt.${dates.to})`,select:'*',order:'decided_at.asc,id.asc'});
-      const research=filters.scope==='explore';
-      decisions=decisions.filter(d=>String(d.rule_id||'').startsWith('nfl_research_')===research);
+      const research=sport==='cfb'||filters.scope==='explore';
+      let decisions=await read('betting_system_decisions',{sport:`eq.${sport}`,rule_id:research?`like.${sport}_research_*`:ruleId?`eq.${safeID(ruleId)}`:`not.like.${sport}_research_*`,...(version?{rule_version:`eq.${safeID(version)}`} : {}),...(filters.market?{market:`eq.${safeID(filters.market)}`} : {}),and:`(scheduled_start_at.gte.${dates.from},scheduled_start_at.lt.${dates.to})`,select:'*',order:'decided_at.asc,id.asc'});
+      decisions=decisions.filter(d=>(!d.sport||d.sport===sport)&&/^(nfl|cfb)_research_/.test(String(d.rule_id||''))===research);
       const cohorts=[...new Set(decisions.map(d=>d.model_context?.engine||d.model_context?.engine_version||'unavailable'))];
       const providers=[...new Set(decisions.map(d=>d.inputs?.provider_id||d.provider_id).filter(Boolean))];
       if(filters.provider) decisions=decisions.filter(d=>String(d.inputs?.provider_id||d.provider_id)===filters.provider);
@@ -98,7 +100,7 @@
       const settlements=[];
       for(let i=0;i<decisions.length;i+=100) settlements.push(...await read('betting_system_settlements',{decision_id:`in.(${decisions.slice(i,i+100).map(d=>safeID(d.id)).join(',')})`,select:'*',order:'decision_id.asc'}));
       const configs=await read('betting_signals_config',{id:'eq.1',select:'*',order:'id.asc'});
-      return {decisions,settlements,providers,cohorts,dateRange:dates,filters,config:configs[0]||null};
+      return {sport,decisions,settlements,providers,cohorts,dateRange:dates,filters,config:configs[0]||null};
     });
   }
   const api=Object.freeze({loadCurrent,loadHistory,loadResults,cached,status,capabilities});

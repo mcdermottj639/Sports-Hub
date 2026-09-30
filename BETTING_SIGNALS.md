@@ -1,4 +1,26 @@
-# Betting signals — NFL research (v246)
+# Betting signals — NFL and CFB Top 25 research (v247)
+
+## CFB Top 25 (v247)
+
+- The existing AI and lightweight odds workers now collect CFB games with at least
+  one ESPN scoreboard `curatedRank` from 1 through 25. All six market sides freeze
+  in the existing pregame window with `cfb_research_` IDs; the NFL fixed rules are
+  never applied to college games. Ranking source and both ranks are saved in inputs.
+- League-specific API queries, cache keys and research groups keep results separate.
+  Changing league clears incompatible condition filters. CFB has same-conference,
+  nonconference and ranked/ ranked-versus-unranked matchup filters. Independent
+  programs are not treated as sharing a conference. Unknown membership stays unknown.
+- Current-season ESPN standings provide conference membership; raw team schedules
+  provide rest and an explicit bye week when available. Missing bye data is not
+  inferred from a long gap. Entry-time ranks and membership cannot be overwritten.
+- Settlement reconciles previously saved CFB events without requiring a current
+  Top 25 ranking. Reschedules and corrections retain the same immutable/audit policy.
+- The migration only broadens the three existing sport CHECK constraints. RLS,
+  read-only public grants, retained records, credentials and cron schedules are
+  unchanged. A per-league feed failure does not prevent the other league's odds run.
+- Rollback: revert v247 worker/UI code; leave the additive schema and CFB history
+  intact. No subscription added. CFB increases source requests, observations and
+  settlement work; measure actual use before any further sport expansion.
 
 ## Broad exploration (v246)
 
