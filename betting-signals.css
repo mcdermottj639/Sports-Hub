@@ -4,3 +4,15 @@
 /* Match the approved champagne evidence cards and preserve value columns on narrow phones. */
 .bs-scope{display:flex;gap:8px;margin:14px 0}.bs-scope button{flex:1;min-width:0;min-height:44px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit;font-size:14px;font-weight:700;padding:8px;cursor:pointer}.bs-scope button[aria-pressed=true]{background:var(--accent);color:#fff}.bs-result-grid{display:grid;gap:12px}.bs-result-grid .bs-panel{margin:0;padding:14px}.bs-result-grid .bs-record{font-size:24px;margin:10px 0 6px}.bs-result-grid .bs-two{padding:10px 0}.bs-result-grid .bs-two strong{font-size:22px}.bs-advanced{border:1px solid var(--line);border-radius:8px;padding:0 10px}.bs-result-grid:empty{display:none}.bs-results form{margin-bottom:14px}@media(min-width:800px){.bs-result-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .bs-panel{background:#fff}.bs-summary{background:#faf8f2}.bs-tag{background:#eee7d7;color:#776a48}.bs-conditions dt{flex:1;min-width:0}.bs-conditions dd{flex:0 0 42%;max-width:42%;overflow-wrap:break-word}
+.sport-view-switch{display:flex;gap:6px;margin:0 0 12px}
+.sport-view-switch button{flex:1;min-height:40px;padding:8px 12px;border:1px solid #b5a66e;border-radius:8px;background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer}
+.sport-view-switch button[aria-pressed=true]{background:#b79627;color:#171914}
+.sport-view-switch button:focus-visible{outline:3px solid #b79627;outline-offset:3px}
+.sport-research-view[hidden],#nfl-games-view[hidden],#cfb-games-view[hidden]{display:none!important}
+.tab-panel[data-sport-view=research]>.ctl-row{display:none!important}
+.sport-research-view>h2{margin:8px 0}
+.sport-research-block{border:1px solid #ccc;border-radius:10px;padding:12px;margin:10px 0}
+.sport-research-block>summary{cursor:pointer;font-weight:700}
+.sport-research-block[open]>summary{margin-bottom:12px}
+.sport-research-links{border:1px solid #ccc;border-radius:10px;padding:12px;margin:12px 0}
+.sport-research-links p{margin:6px 0 10px}

@@ -60,6 +60,7 @@ test('league navigation clears stale cards before awaiting the next board', asyn
   const s = vm.createContext({ state: { aiSport: 'cfb', aiSub: 'board' }, aiViewToken: 0,
     $: (selector) => selector === '#ai-picks' ? container : null,
     LEAGUES: { cfb: { label: 'CFB' } }, esc: String,
+    signalsEnabled: () => false,
     renderAiTally: () => {}, paintSportBoard: async () => 'loaded',
   });
   const fn = source.match(/^async function paintAiView\([^]*?^}/m);

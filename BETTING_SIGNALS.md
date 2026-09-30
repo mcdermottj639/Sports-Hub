@@ -50,7 +50,7 @@
 - Rollback: revert v246 UI/worker code to v245/v244 respectively; do not delete
   immutable research rows. Fixed-test views exclude the research ID namespace.
 
-This is prospective research inside Sports Hub's existing Picks, Game Report and Results screens. Labs links to the same Results view. No historical performance is manufactured, model constants/tier thresholds are unchanged, and no rule raises confidence.
+This is prospective research inside NFL and CFB → Picks & Research. Each league includes full filters, saved entries, paper results, model picks and separate model performance. AI Picks remains the cross-sport model hub and links here; game reports also route to the correct league. Labs has no research shortcut. One shared results host moves between leagues, with independent session filters and request-token protection. No historical performance is manufactured, model constants/tier thresholds are unchanged, and no rule raises confidence.
 
 ## Data and operation
 

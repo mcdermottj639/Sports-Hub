@@ -228,7 +228,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 ## Files
 
 - `BETTING_SIGNALS.md` — v244 architecture, capture/freeze policy, research limits and rollback.
-- `cloud-signals.js`, `betting-signals-ui.js`, `betting-signals.css` — read-only NFL evidence panels.
+- `cloud-signals.js`, `betting-signals-ui.js`, `betting-signals.css` — shared read-only NFL/CFB evidence panels; full research lives under each league's Picks & Research switch, with links from AI Picks and game reports.
 - `supabase/functions/_shared/betting-signals-core.js` — identical deterministic rule math in browser/Edge/tests.
 - `supabase/functions/sports-hub-ai/signals.ts`, `sports-hub-odds/index.ts` — evidence hook and independent lightweight collector.
 - `supabase/schedule-betting-signals.sql` — Vault-backed five-minute cron installation; actual source polling adapts to kickoff.
@@ -594,7 +594,16 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v248** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v249** (backend **b16-fantasy-gm**).
+
+- **v249 — Research belongs to its league:** NFL and CFB have Games (default)
+  and Picks & Research views. Full condition filters, frozen entries, paper ROI
+  and game history are available in the league view now, alongside collapsible
+  model picks and model performance. One movable results host and shared renderer
+  retain independent league filters and prevent duplicate IDs/stale responses.
+  AI Picks keeps cross-sport forecasts/performance and links to league research;
+  Labs no longer contains betting research. Existing collectors, model constants,
+  data and refresh cadence are unchanged. CFB stays Top 25 only.
 
 ### v248 — automatic odds and honest probability coverage
 - AI Picks browser and scheduled collector reuse the tested ESPN nested-odds normalizer. Actual payout prices stay paired to their exact spread/total line.
@@ -602,7 +611,6 @@ Current version as of this writing: **v248** (backend **b16-fantasy-gm**).
 - Official evidence uses cloud results only, paginated beyond REST row limits. Snapshot metadata cannot override canonical filled prices/probabilities.
 - Results show hit rate, one-unit paper ROI and coverage, average saved model probability, and separately labeled odds-implied probability. Spread/total remain projection models without calibrated model probabilities; no new fitted constants or fabricated historical forecasts.
 - Deploy `sports-hub-ai` along with the Pages release. Check a live collector run and actual priced pending rows.
-
 
 - **v247 — CFB Top 25 research:** Shared collectors add ranked college games;
   research freezes ranks and conference/rest inputs, isolates leagues, and grades
@@ -619,6 +627,7 @@ Current version as of this writing: **v248** (backend **b16-fantasy-gm**).
   visible; charts, explanations and price comparisons expand on tap.
 
 - **v244 — Betting signals and permanent odds history:** NFL-only evidence inside
+  ⚠️ Navigation SUPERSEDED in v249: full research is in NFL/CFB, not Labs or AI Results.
   Picks, Game Report and Results, with a Labs shortcut. A lightweight Supabase odds
   job supplements the existing AI worker; snapshots and rule decisions are immutable,
   settlements audited, and actual-price ROI stays separate from model results.

@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v248';
+const APP_VERSION = 'v249';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -2818,23 +2818,67 @@ async function paintSignalDetail(id,token,focus=false,market='spread',providerId
   host.innerHTML=globalThis.SportsHubSignalsUI.systemDetailHTML({...vm,quotes:history.quotes||vm.quotes.filter(q=>q.market===market),market,providerId,side:market==='total'?'under':'away',state:history.state==='error'?'error':vm.state,error:history.error||vm.error});
   if(focus)host.scrollIntoView({block:'start',behavior:'smooth'});
 }
+// One research renderer and one live results host; each league keeps its filters.
+const sportResearchFilters = {};
+let sportResearchToken = 0;
+function researchLinksHTML(sport) {
+  return `<aside class="sport-research-links"><strong>Saved betting research</strong><p>Frozen entries, conditions and paper results live with each league. Exploratory results do not change model confidence.</p>${(sport && sport !== 'all' ? [sport] : ['nfl','cfb']).map(s=>`<button type="button" class="fan-btn" data-bs-results data-bs-sport="${s}">${s==='cfb'?'CFB Top 25':'NFL'} research →</button>`).join(' ')}</aside>`;
+}
+async function setSportView(sport, view) {
+  if (!['nfl','cfb'].includes(sport)) return;
+  const panel=document.getElementById(sport), research=view==='research';
+  panel.dataset.sportView=view;
+  document.getElementById(`${sport}-games-view`).hidden=research;
+  const target=document.getElementById(`${sport}-research-view`);
+  target.hidden=!research;
+  panel.querySelectorAll('[data-sport-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.sportView===view)));
+  if(!research) { ++sportResearchToken; return; }
+  const token=++sportResearchToken;
+  sportResearchFilters[signalFilters.sport]={...signalFilters};
+  const saved=sportResearchFilters[sport]||{sport,scope:'explore',from:signalFilters.from,to:signalFilters.to};
+  for(const k of Object.keys(signalFilters))delete signalFilters[k];
+  Object.assign(signalFilters,saved);
+  let host=document.getElementById('bs-results-host');
+  if(!host){host=el('div');host.id='bs-results-host';}
+  if(!target.dataset.ready){
+    target.innerHTML=`<h2>${sport==='cfb'?'CFB Top 25':'NFL'} Picks &amp; Research</h2><p class="muted">Model forecasts and tracked research, kept separate.</p><details class="sport-research-block"><summary>This week’s model picks</summary><div data-sport-picks><p>Loading forecasts…</p></div></details><details class="sport-research-block"><summary>Model performance</summary><div data-sport-record></div></details><div data-sport-results></div>`;
+    target.dataset.ready='true';
+  }
+  target.querySelector('[data-sport-results]').appendChild(host);
+  const record=target.querySelector('[data-sport-record]');
+  record.replaceChildren(recordPanel(tallyDetails(sport),pendingSummary(sport),sport));
+  if(signalsEnabled())paintSignalResults();
+  else host.innerHTML='<p>Saved research is unavailable right now.</p>';
+  try {
+    const sb=await scoreboard(sport);
+    if(token!==sportResearchToken)return;
+    const box=target.querySelector('[data-sport-picks]');box.innerHTML='';
+    const games=sport==='cfb'?await onlyRanked('cfb',sb?.games||[]):sb?.games||[];
+    if(token!==sportResearchToken)return;
+    if(!games.length){box.innerHTML='<p>No games available for this week.</p>';return;}
+    paintSlate(sport,games,box);enrichSlate(sport,box,games);
+  } catch (_) { if(token===sportResearchToken)target.querySelector('[data-sport-picks]').innerHTML='<p>Forecasts could not load. Saved research remains available below.</p>'; }
+}
 async function paintSignalResults() {
   const host=document.getElementById('bs-results-host'); if(!host)return;
   const token=++signalResultToken;
-  host.innerHTML=globalThis.SportsHubSignalsUI.systemResultsHTML({state:'loading',filters:signalFilters});
-  const data=await globalThis.SportsHubCloudSignals.loadResults(signalFilters.rule||null,null,{from:signalFilters.from,to:signalFilters.to},signalFilters);
+  const filters={...signalFilters};
+  host.innerHTML=globalThis.SportsHubSignalsUI.systemResultsHTML({state:'loading',filters,lockSport:true});
+  const data=await globalThis.SportsHubCloudSignals.loadResults(filters.rule||null,null,{from:filters.from,to:filters.to},filters);
   if(token!==signalResultToken || !host.isConnected)return;
-  host.innerHTML=data.config?.ui_enabled===false?'':globalThis.SportsHubSignalsUI.systemResultsHTML({...data,filters:signalFilters});
+  host.innerHTML=data.config?.ui_enabled===false?'<p>Saved research is currently disabled.</p>':globalThis.SportsHubSignalsUI.systemResultsHTML({...data,filters,lockSport:true});
 }
 document.addEventListener('click',async e=>{
+  const view=e.target.closest('button[data-sport-view]');
+  if(view){e.preventDefault();await setSportView(view.dataset.sport,view.dataset.sportView);return;}
   const scope=e.target.closest('[data-bs-scope]');
   if(scope){e.preventDefault();const from=signalFilters.from,to=signalFilters.to,sport=signalFilters.sport;for(const key of Object.keys(signalFilters))delete signalFilters[key];Object.assign(signalFilters,{sport,scope:scope.dataset.bsScope,from,to});await paintSignalResults();return;}
   const report=e.target.closest('[data-bs-report]');
   if(report){e.preventDefault();e.stopPropagation();const id=report.dataset.bsReport,sport=report.dataset.bsSport||'nfl';await openGameDetail(sport,id,signalGames.get(id),true);return;}
   if(e.target.closest('[data-bs-results]')) {
     e.preventDefault();closeModal();
-    signalFilters.sport=e.target.closest('[data-bs-results]').dataset.bsSport||signalFilters.sport||'nfl';signalFilters.scope='explore';
-    showTab('predictions');state.aiSport=signalFilters.sport;state.aiSub='record';buildAiChips();buildAiSubs();await paintAiView();
+    const sport=e.target.closest('[data-bs-results]').dataset.bsSport||signalFilters.sport||'nfl';
+    showTab(sport);await setSportView(sport,'research');
     document.getElementById('bs-results-host')?.scrollIntoView({block:'start',behavior:'smooth'});return;
   }
   if(e.target.closest('[data-bs-apply]')) {
@@ -5369,6 +5413,7 @@ async function paintAiView() {
     head.textContent = `🤖 ${scope}${when}`;
   }
   if (sub === 'board') {
+    if(signalsEnabled() && (all || ['nfl','cfb'].includes(sport))) $('#ai-guide')?.insertAdjacentHTML('beforeend',researchLinksHTML(sport));
     renderAiTally(all ? null : sport, '');
     // Do not leave the previous league's cards under the newly selected heading.
     container.innerHTML = `<div class="empty" role="status">Loading ${all ? 'all-sport' : esc(LEAGUES[sport]?.label || sport)} forecasts…</div>`;
@@ -5384,9 +5429,7 @@ async function paintAiView() {
     : modelPanel(s));
   if (signalsEnabled() && (all || ['nfl','cfb'].includes(sport))) {
     if (sub === 'record') {
-      const host = el('div'); host.id = 'bs-results-host'; container.appendChild(host);
-      if(!all&&signalFilters.sport!==sport){const from=signalFilters.from,to=signalFilters.to;for(const k of Object.keys(signalFilters))delete signalFilters[k];Object.assign(signalFilters,{sport,scope:'explore',from,to});}
-      paintSignalResults();
+      container.insertAdjacentHTML('beforeend', researchLinksHTML(sport));
     } else if (sub === 'model') container.insertAdjacentHTML('beforeend', globalThis.SportsHubSignalsUI.methodologyHTML());
   }
   applySections('predictions');
@@ -10602,13 +10645,13 @@ function buildControlRow(name) {
   if (!row) {
     row = el('div', 'ctl-row');
     row.innerHTML = '<div class="ctl-chips"></div>';
-    panel.insertBefore(row, panel.firstChild);
+    panel.insertBefore(row, panel.querySelector(':scope > .sport-view-switch')?.nextSibling || panel.firstChild);
   }
   const chips = row.querySelector('.ctl-chips');
   // Adopt whatever this tab already had: its sport chips, its hand-built nav
   // (#eagles-nav and friends) and the generated jump rail. Moving the nodes
   // keeps their ids, so every renderer that fills them by id still does.
-  panel.querySelectorAll(':scope > .controls > .chips, :scope > .fantasy-head > .chips, :scope > .chips, :scope > .eagles-nav, :scope > .jump-nav')
+  panel.querySelectorAll(':scope > .controls > .chips, :scope > .fantasy-head > .chips, :scope > .chips, :scope > .eagles-nav, :scope > #nfl-games-view > .eagles-nav, :scope > #cfb-games-view > .eagles-nav, :scope > .jump-nav')
     .forEach((n) => { if (n.parentElement !== chips) chips.appendChild(n); });
   // The collapse-all button lived only in the AI Picks markup. Every tab has
   // sections, so every tab gets the control — wireSectionToggle hides it again
@@ -12365,6 +12408,7 @@ const TAB_ENTER = {
 let currentTab = 'home';
 function showTab(name) {
   currentTab = name;
+  if(['nfl','cfb'].includes(name))setSportView(name,'games');
   if (TAB_ENTER[name]) TAB_ENTER[name]();
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => {

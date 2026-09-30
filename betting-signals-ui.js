@@ -71,7 +71,7 @@
     const cohorts=vm.cohorts||[...new Set((vm.decisions||[]).map(d=>d.model_context?.engine||d.model_context?.engine_version||'unavailable'))];
     const groups=vm.groups||core?.performance(vm.decisions||[],vm.settlements||[])||[];
     const cards=groups.length?groups.map(g=>resultCard(g)).join(''):explore?note(`Collecting ${league} observations. No saved entries match these filters yet. Entries freeze 30–60 minutes before kickoff; results follow final scores. No past results are backfilled.`):Object.entries(names).map(([rule_id])=>resultCard({rule_id})).join('');
-    const select=(key,title,choices)=>`<label>${title}<select data-bs-filter="${key}">${choices.map(([v,t])=>option(v,t,f[key])).join('')}</select></label>`;
+    const select=(key,title,choices)=>key==='sport'&&vm.lockSport?'':`<label>${title}<select data-bs-filter="${key}">${choices.map(([v,t])=>option(v,t,f[key])).join('')}</select></label>`;
     const extra=explore?`<div class="bs-filters">
       ${select('teamSide','Team location',[['','Either / totals'],['home','Home (non-neutral)'],['away','Away (non-neutral)']])}
       ${select('totalSide','Total direction',[['','Either / team markets'],['over','Over'],['under','Under']])}

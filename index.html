@@ -13,8 +13,8 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=248" />
-  <link rel="stylesheet" href="betting-signals.css?v=248" />
+  <link rel="stylesheet" href="styles.css?v=249" />
+  <link rel="stylesheet" href="betting-signals.css?v=249" />
 </head>
 <body>
   <!-- Live rail (v163): one card per in-progress game, each carrying that
@@ -99,6 +99,8 @@
     </section>
 
     <section id="nfl" class="tab-panel" role="tabpanel" aria-labelledby="tab-nfl" tabindex="0">
+      <div class="sport-view-switch" role="group" aria-label="NFL view"><button type="button" data-sport-view="games" data-sport="nfl" aria-pressed="true">Games</button><button type="button" data-sport-view="research" data-sport="nfl" aria-pressed="false">Picks &amp; Research</button></div>
+      <div id="nfl-games-view">
       <div id="nfl-hero" class="featured-card nfl-hero">Loading NFL…</div>
       <div id="nfl-nav" class="eagles-nav"></div>
       <!-- The betting board used to be its own section here; v176 folded it
@@ -111,9 +113,13 @@
       <div id="nfl-power"></div>
       <h2 class="section-title" id="nfl-sec-playoff">Playoff Picture</h2>
       <div id="nfl-playoff"></div>
+      </div>
+      <div id="nfl-research-view" class="sport-research-view" hidden></div>
     </section>
 
     <section id="cfb" class="tab-panel" role="tabpanel" aria-labelledby="tab-cfb" tabindex="0">
+      <div class="sport-view-switch" role="group" aria-label="College football view"><button type="button" data-sport-view="games" data-sport="cfb" aria-pressed="true">Games</button><button type="button" data-sport-view="research" data-sport="cfb" aria-pressed="false">Picks &amp; Research</button></div>
+      <div id="cfb-games-view">
       <div id="cfb-hero" class="featured-card cfb-hero">Loading college football…</div>
       <div id="cfb-nav" class="eagles-nav"></div>
       <!-- The betting board used to be its own section here; v176 folded it
@@ -126,6 +132,8 @@
       <div id="cfb-playoff"></div>
       <h2 class="section-title" id="cfb-sec-news">Top College Football Headlines</h2>
       <div id="cfb-news"></div>
+      </div>
+      <div id="cfb-research-view" class="sport-research-view" hidden></div>
     </section>
 
     <section id="redsox" class="tab-panel" role="tabpanel" aria-labelledby="tab-redsox" tabindex="0">
@@ -218,7 +226,6 @@
       <div class="setup-card">
         <h2>🧪 Labs</h2>
         <p class="muted">Experiments in progress — a testing ground for features that may land in the app.</p>
-        <p><button type="button" class="fan-btn" data-bs-results>📊 Betting research · saved rules &amp; results →</button></p>
         <p><a class="fan-btn" href="draft.html" style="display:inline-block;text-decoration:none">🏈 NFL Mock Draft Simulator →</a></p>
         <p><a class="fan-btn" href="trivia.html" style="display:inline-block;text-decoration:none">🧠 Sports Trivia Lab →</a></p>
         <p><a class="fan-btn" href="workout.html" style="display:inline-block;text-decoration:none">🏋️ Workout Lab (3-day split) →</a></p>
@@ -268,12 +275,12 @@
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
   <script src="supabase-config.js?v=239" defer></script>
-  <script src="cloud-ai.js?v=248" defer></script>
-  <script src="ai-model-utils.js?v=248" defer></script>
-  <script src="nfl-model.js?v=248" defer></script>
-  <script src="supabase/functions/_shared/betting-signals-core.js?v=248" defer></script>
-  <script src="cloud-signals.js?v=248" defer></script>
-  <script src="betting-signals-ui.js?v=248" defer></script>
-  <script src="app.js?v=248" defer></script>
+  <script src="cloud-ai.js?v=249" defer></script>
+  <script src="ai-model-utils.js?v=249" defer></script>
+  <script src="nfl-model.js?v=249" defer></script>
+  <script src="supabase/functions/_shared/betting-signals-core.js?v=249" defer></script>
+  <script src="cloud-signals.js?v=249" defer></script>
+  <script src="betting-signals-ui.js?v=249" defer></script>
+  <script src="app.js?v=249" defer></script>
 </body>
 </html>
