@@ -596,7 +596,9 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v259** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v260** (backend **b16-fantasy-gm**).
+
+- **v260 — Compact scan cards across the app:** Home Board and every AI Picks board/ladder/watchlist use the shared compact market summary. MLB/NBA omit unsupported spread columns; total and moneyline statuses retain their actual gates. Full market analysis is available in the game report for every modeled sport. Betting-signal previews are collapsed on cards, and news/headline/schedule/stat/fantasy summary spacing is tighter. Detail reports and input controls retain their usable sizes. Forecast locks and model calculations are unchanged.
 
 - **v259 — Honest movement and model comparisons:** Game Report labels sampled prices as Observed line movement, not sharp action. Moneyline counts track each quoted side's probability increase independently; invalid prices, equal +100/-100 prices, and favorite-only team flips do not create moves. No net change is distinct from intermediate moves. Model/market probabilities are visible, input-blocked grades are withheld, and collapsed provenance explains pitcher inputs, cached stats and unconfirmed lineups. Model weights/cohort are unchanged; no refit to another provider's single forecast. `tests/game-report.test.js` covers these paths.
 
@@ -6425,8 +6427,7 @@ rewrite.**
   in (`.chip.here`). At the bottom, **`#botbar`** states the day's model read
   and links to AI Picks.
 - **v257 compact weekly slate:** NFL/CFB use `compactMarketsHTML()` with winner, spread and total in three columns; full `marketRowsHTML()` analysis and provenance live in the game report. Scores, ranks, TV, dates and keyboard access remain visible/available. Model capture and calculations are unchanged.
-- **Every game card names all three markets** — `marketRowsHTML()` prints
-  MONEYLINE / SPREAD / TOTAL on board cards and ladder cards, heat-ramped, with a stated reason where there is no play. It reads the
+- **Compact summaries on game lists** — `compactMarketsHTML()` shows supported markets on board cards, ladders and weekly slates; `marketRowsHTML()` keeps the full breakdown inside game reports, heat-ramped, with a stated reason where there is no play. It reads the
   RAW reads (`atsR`/`totR`) that `buildBoard` carries beside the qualifying
   `ats`/`tot` — **what records is still gated on the bar.**
 - **Live/Offline mode badge** — the header badge (`#mode-badge`, set by

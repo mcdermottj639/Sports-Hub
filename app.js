@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v259';
+const APP_VERSION = 'v260';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -941,7 +941,7 @@ function gameCard(sport, g, opts = {}) {
       <span class="${cls}">${label}</span>
     </div>${row(g.away)}${row(g.home)}
     ${g.tv ? `<div class="game-tv">📺 ${esc(g.tv)}</div>` : ''}${oddsLine}${tapHint}`;
-  if (opts.compact) {
+  if (opts.compact !== false) {
     card.classList.add('slate-compact');
     const team = (t) => `${logoHTML(t)}${rankHTML(t)}<b>${esc(t.abbr || t.name || 'TBD')}</b>`;
     const scores = st === 'scheduled' ? '' : `<strong class="slate-scores">${g.away.score ?? '–'}–${g.home.score ?? '–'}</strong>`;
@@ -1330,7 +1330,7 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
 
   // Pass the game + odds so the pick block can show the spread and total
   // plays beside the moneyline rather than leaving them to look contradictory.
-  if (pred && g && ['nfl', 'cfb'].includes(sport)) {
+  if (pred && g) {
     html += '<div class="md-section-title acc-open">Model breakdown</div>' + marketRowsHTML({
       g, sport, p: pred, info: oddsInfo, linePregame: !!oddsPre, lineAt: oddsPre,
       atsR: atsRead(sport, g, pred, oddsInfo), totR: totalRead(sport, pred, oddsInfo) });
@@ -4990,15 +4990,16 @@ function moneylineValuesHTML(p, g, info) {
     }).join('')}</div><p>Needed = win rate to break even at that price. EV = hypothetical return per unit staked if the model probability is right; it is not measured ROI. Both sides are shown, including underdogs below 50%. This comparison does not create a second tracked pick.</p></details>`;
 }
 // Compact slate reads use the same raw market calculations as the full report.
-function compactMarketsHTML({ g, sport, p, info, atsR, totR }) {
-  const status = (ready) => gameState(g) !== 'scheduled' ? 'Reference'
+function compactMarketsHTML({ g, sport, p, info, atsR, totR, tier }) {
+  const status = (ready) => p.locked || gameState(g) !== 'scheduled' ? 'Locked'
     : p.blockedReasons?.length ? 'Data check' : ready ? 'Experimental' : 'Watch';
   const cell = (label, value, badge) => `<div class="slate-market"><span>${label}</span><b>${value}</b><small>${badge}</small></div>`;
   const winner = p.winner.abbr || (p.homePick ? g.home.abbr : g.away.abbr) || p.winner.name;
-  return `<div class="slate-markets" aria-label="Model leans">${
-    cell('Winner', `${esc(winner)} <strong>${p.conf}%</strong>`, status(false))}${
-    cell('Spread', atsR ? esc(atsR.label) : '—', atsR ? (atsR.pinned ? 'Model limit' : status(atsR.qualifies)) : info?.spread != null ? 'Unavailable' : 'No line')}${
-    cell('Total', totR ? `${totR.side === 'OVER' ? 'O' : 'U'}${esc(totR.line)}` : '—', totR ? (gameState(g) !== 'scheduled' ? 'Reference' : p.blockedReasons?.length || totR.broken ? 'Data check' : 'Research') : info?.ou != null ? 'No lean' : 'No line')}</div>`;
+  const spread = ATS_SPORTS.has(sport);
+  return `<div class="slate-markets${spread ? '' : ' two-markets'}" aria-label="Model leans">${ 
+    cell('Winner', `${esc(winner)} <strong>${p.conf}%</strong>`, status(!!tier && tier !== 'lean'))}${
+    spread ? cell('Spread', atsR ? esc(atsR.label) : '—', atsR ? (atsR.pinned ? 'Model limit' : status(atsR.qualifies)) : info?.spread != null ? 'Unavailable' : 'No line') : ''}${
+    cell('Total', totR ? `${totR.side === 'OVER' ? 'O' : 'U'}${esc(totR.line)}` : '—', totR ? (p.locked || gameState(g) !== 'scheduled' ? 'Locked' : p.blockedReasons?.length || totR.broken ? 'Data check' : spread ? 'Research' : status(totR.qualifies)) : p.locked ? 'Not saved' : info?.ou != null ? 'No lean' : 'No line')}</div>`;
 }
 
 function marketRowsHTML(r) {
@@ -5048,7 +5049,9 @@ function confVsMarketHTML(r) {
 }
 
 function boardCard(r, opts = {}) {
-  const { g, sport, p, info, gap, tier } = r;
+  const { g, sport, p, tier } = r;
+  const info = r.shownInfo !== undefined ? r.shownInfo : r.info;
+  const gap = r.shownGap !== undefined ? r.shownGap : r.gap;
   // A game can reach the board on its SPREAD or its TOTAL while the model is
   // with the book on the winner. Falling through to the Edge badge would have
   // called that an edge it isn't — the badge names the market that actually
@@ -5066,30 +5069,34 @@ function boardCard(r, opts = {}) {
     : null);
   const bookBits = [line ? `Book has <b>${esc(line)}</b>` : '', info?.ou != null ? `O/U ${info.ou}` : '']
     .filter(Boolean).join(' · ');
-  const why = opts.compact ? '' : (p.breakdown || []).slice(0, 2)
-    .map((b) => `${b.label} (${b.favor.split(' ').slice(-1)[0]} +${b.pct.toFixed(1)}%)`).join(' · ');
+  card.classList.add('board-compact');
+  const away = g.away.abbr || g.away.name, home = g.home.abbr || g.home.name;
+  const scores = gameState(g) === 'scheduled' ? '' : ` <span class="compact-score">${g.away.score ?? '–'}–${g.home.score ?? '–'}</span>`;
+  const shownInfo = r.shownInfo !== undefined ? r.shownInfo : info;
   card.innerHTML = `<span class="brd-rib"></span>
     <div class="brd-top"><span class="brd-tier ${meta.cls}">${meta.label}</span>
       <span class="brd-meta">${cfg.emoji} ${cfg.label} · ${esc(when)}</span></div>
-    <div class="brd-mu">${esc(g.away.name)} @ ${esc(g.home.name)}</div>
-    <div class="brd-pick"><span class="p">${esc(p.winner.name)}</span>
-      <span class="cf">${p.conf}%</span>
-      ${gap != null ? `<span class="gp">${gap >= 0 ? '+' : ''}${gap} percentage points</span>` : ''}</div>
-    <div class="ai-quality"><span>${g.neutralSite ? 'Neutral site' : 'Home field applied'}</span><span>${p.rating ? `Rating: ${esc(p.rating.src)}` : sport === 'mlb' ? 'Pitcher-aware model' : 'Separate market models'}</span><span>Experimental · not a guarantee</span></div>
-    ${p.blockedReasons?.length ? `<p class="ai-data-warning">Watch only: ${p.blockedReasons.map(esc).join(' · ')}.</p>` : ''}
-    ${bookBits ? `<div class="brd-row">${bookBits}</div>` : ''}
-    ${marketRowsHTML(r)}
-    ${why ? `<div class="brd-row">Main factors: ${why}</div>` : ''}
-    ${p.sharp ? `<div class="brd-row${p.sharp.agree ? ' sharp' : ''}">💰 ${p.sharp.handle}% of dollars vs ${p.sharp.bets}% of bets on ${esc(p.sharp.abbr)} — sharp side ${p.sharp.agree ? 'agrees' : 'disagrees'}</div>` : ''}`;
+    <div class="compact-matchup" title="${esc(g.away.name)} at ${esc(g.home.name)}">${logoHTML(g.away)}<b>${rankHTML(g.away)}${esc(away)}</b><span>at</span>${logoHTML(g.home)}<b>${rankHTML(g.home)}${esc(home)}</b>${scores}</div>
+    ${bookBits ? `<div class="compact-book">${bookBits}</div>` : ''}
+    ${compactMarketsHTML({...r,info:shownInfo,atsR:r.atsR || r.ats,totR:r.totR || r.tot})}
+    ${gap != null ? `<div class="compact-gap">Winner vs market: <b>${gap >= 0 ? '+' : ''}${gap} pp</b></div>` : ''}
+    ${p.blockedReasons?.length ? '<div class="compact-warning">Data check · see report before using this read</div>' : ''}`;
   if (['nfl','cfb'].includes(sport) && g.id && signalsEnabled()) {
     signalGames.set(String(g.id), {...g,signalSport:sport});
     const host = el('div'); host.dataset.bsSummary = String(g.id);host.dataset.bsSport=sport;
     host.innerHTML = globalThis.SportsHubSignalsUI.signalsSummaryHTML(signalVM(g.id,undefined,sport));
-    card.appendChild(host); queueSignalSummary(g.id,sport);
+    const disclosure = el('details', 'compact-signals');
+    disclosure.appendChild(el('summary', '', 'Betting signals'));
+    disclosure.appendChild(host);
+    card.appendChild(disclosure); queueSignalSummary(g.id,sport);
   }
   if (g.id) {
-    const button = el('button', 'ai-detail-button', 'Full game report · factors, line moves & splits →');
+    const button = el('button', 'ai-detail-button', 'Full game report →');
     button.type = 'button'; button.onclick = () => openGameDetail(sport, g.id, g);
+    button.setAttribute('aria-label', `Full game report: ${g.away.name} at ${g.home.name}`);
+    card.onclick = (event) => {
+      if (!event.target.closest('button,a,details,input,select')) openGameDetail(sport, g.id, g);
+    };
     card.appendChild(button);
   }
   return card;
