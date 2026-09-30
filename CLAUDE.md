@@ -101,8 +101,10 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > and invocation token live in Vault; the Edge Function's service-role key is
 > automatic and never enters git. The browser carries only the project's
 > publishable key in `supabase-config.js`: RLS and grants allow anonymous SELECT
-> and deny anonymous writes. `cloud-ai.js` merges the durable history with the
-> older device record. Capture therefore does not require opening the app.
+> and deny anonymous writes. `cloud-ai.js` reads the entire durable history in pages. Official model
+> performance uses cloud rows only; older device records remain available separately.
+> Missing prices can be filled only before kickoff at the frozen line, side and
+> provider, with a separate price observation timestamp; forecasts stay immutable. Capture therefore does not require opening the app.
 
 > ### Optional backend (`server/`) — LIVE, powers the Fantasy tab
 > The owner evolved past pure-static for ONE capability: syncing their **real
@@ -592,7 +594,15 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v247** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v248** (backend **b16-fantasy-gm**).
+
+### v248 — automatic odds and honest probability coverage
+- AI Picks browser and scheduled collector reuse the tested ESPN nested-odds normalizer. Actual payout prices stay paired to their exact spread/total line.
+- Pending unpriced cloud forecasts receive the first available same-line, same-provider pregame price without changing their selection, model probability or capture time. Settled history is never repriced from current odds.
+- Official evidence uses cloud results only, paginated beyond REST row limits. Snapshot metadata cannot override canonical filled prices/probabilities.
+- Results show hit rate, one-unit paper ROI and coverage, average saved model probability, and separately labeled odds-implied probability. Spread/total remain projection models without calibrated model probabilities; no new fitted constants or fabricated historical forecasts.
+- Deploy `sports-hub-ai` along with the Pages release. Check a live collector run and actual priced pending rows.
+
 
 - **v247 — CFB Top 25 research:** Shared collectors add ranked college games;
   research freezes ranks and conference/rest inputs, isolates leagues, and grades

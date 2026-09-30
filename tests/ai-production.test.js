@@ -8,7 +8,7 @@ const AI_MATH = require('../ai-model-utils.js');
 const NFL_FIT = require('../nfl-model.js');
 function load() {
   const storage = new Map();
-  const s = vm.createContext({ AI_MATH, NFL_FIT, Date, console,
+  const s = vm.createContext({ AI_MATH, NFL_FIT, Date, console, SportsHubSignalsCore: require('../supabase/functions/_shared/betting-signals-core.js'),
     localStorage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, String(v)) },
     clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)), logistic: (z) => 1 / (1 + Math.exp(-z)),
     esc: (x) => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'),

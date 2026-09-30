@@ -14,11 +14,12 @@
   }
   function evidence(row) {
     return {
+      ...(row.snapshot || {}),
       v: row.model_version, app: row.app_version, at: row.captured_at,
       start: row.starts_at, market: row.market, home: row.selection_home,
       price: row.price, provider: row.provider, prob: row.model_probability,
       marketProb: row.market_probability, line: row.line, proj: row.projection,
-      quality: row.quality || [], cloud: true, ...(row.snapshot || {}),
+      quality: row.quality || [], cloud: true,
     };
   }
   function legacy(row, settled) {
@@ -55,10 +56,18 @@
     if (!response.ok) throw new Error(`Cloud history ${response.status}`);
     return response.json();
   }
+  async function history() {
+    const all = [];
+    for (let offset = 0; ; offset += 500) {
+      const rows = await request(`ai_predictions?model_version=eq.v239&select=*&order=starts_at.desc,id.asc&limit=500&offset=${offset}`);
+      all.push(...rows);
+      if (rows.length < 500) return all;
+    }
+  }
   async function sync() {
     if (!cfg?.url || !cfg?.key) return cached();
     const [rows, runs] = await Promise.all([
-      request('ai_predictions?model_version=eq.v239&select=*&order=starts_at.desc&limit=2000'),
+      history(),
       request('ai_job_runs?select=*&order=started_at.desc&limit=1'),
     ]);
     const value = { at: new Date().toISOString(), rows, run: runs[0] || null };

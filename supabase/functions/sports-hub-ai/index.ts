@@ -1,6 +1,6 @@
 import {signalsEnabled, captureSignalQuotes, signalInputs, saveSignalDecision, settleSignalGame, missedSignalWindows, reconcileSignals} from './signals.ts';
 const MODEL_VERSION = 'v239';
-const APP_VERSION = 'v247';
+const APP_VERSION = 'v248';
 const SPORTS = ['nfl', 'cfb', 'mlb'] as const;
 type Sport = typeof SPORTS[number];
 type Json = Record<string, any>;
@@ -71,26 +71,13 @@ async function scoreboard(sport:Sport, date?:string, params:Json = {}) {
 
 function odds(raw:any, g:any) {
   if (!raw) return null;
-  const details = raw.details || raw.shortDetails || null;
-  const hML = american(raw.homeTeamOdds?.moneyLine), aML = american(raw.awayTeamOdds?.moneyLine);
-  let favHome:any = null, dML:any = null;
-  const favorite = typeof details === 'string' ? details.match(/([A-Za-z]{2,5})\s*([+-]\d{3,4})\b/) : null;
-  if (favorite) {
-    dML = american(favorite[2]);
-    favHome = favorite[1].toUpperCase() === String(g.home.abbr).toUpperCase() ? true
-      : favorite[1].toUpperCase() === String(g.away.abbr).toUpperCase() ? false : null;
-  }
-  let spread = number(raw.spread);
-  if (spread != null && Math.abs(spread) >= 100) spread = null;
-  if (spread == null && typeof details === 'string') {
-    if (/^(pk|pick['’]?em|even)$/i.test(details.trim())) spread = 0;
-    const m = details.match(/([A-Za-z]{2,5})\s*(-\d+(?:\.\d+)?)/);
-    if (m && Math.abs(Number(m[2])) < 100) spread = m[1].toUpperCase() === String(g.home.abbr).toUpperCase() ? Number(m[2]) : -Number(m[2]);
-  }
-  if (favHome == null && hML != null && aML != null) favHome = hML < aML;
-  return { details, hML, aML, dML, favHome, spread, ou:number(raw.overUnder ?? raw.total),
-    hSpreadPrice:american(raw.homeTeamOdds?.spreadOdds), aSpreadPrice:american(raw.awayTeamOdds?.spreadOdds),
-    overPrice:american(raw.overOdds), underPrice:american(raw.underOdds), provider:raw.provider?.name || null };
+  const [ml, sp, total] = (globalThis as any).SportsHubSignalsCore.normalizeOdds(raw, g);
+  const hML=ml.home_price,aML=ml.away_price;
+  const match=String(raw.details||'').match(/([A-Za-z]{2,5})\s*([+-]\d{3,4})\b/);
+  const fav=match?(match[1].toUpperCase()===String(g.home.abbr).toUpperCase()?true:match[1].toUpperCase()===String(g.away.abbr).toUpperCase()?false:null):null;
+  return {details:raw.details||null,hML,aML,dML:match?american(match[2]):null,favHome:hML!=null&&aML!=null?hML<aML:fav,
+    spread:sp.line,ou:total.line,hSpreadPrice:sp.home_price,aSpreadPrice:sp.away_price,
+    overPrice:total.over_price,underPrice:total.under_price,provider:ml.provider_name};
 }
 
 function parseSchedule(payload:any, teamId:string, before:string) {
@@ -208,12 +195,33 @@ function marketProb(o:any){const h=implied(o?.hML),a=implied(o?.aML);return h==n
 function pickPrice(pred:any,o:any){const direct=american(pred.home?o?.hML:o?.aML);return direct??(o?.favHome===pred.home?american(o?.dML):null);}
 function tierFor(pred:any,o:any){const m=marketProb(o);if(m==null||pred.quality.length)return {tier:null,gap:null};const pp=pred.home?pred.p:1-pred.p,mp=pred.home?m:1-m,gap=Math.round((pp-mp)*100),price=pickPrice(pred,o);if(price==null||gap<2)return {tier:null,gap};const payout=price>0?price/100:100/-price;if(pp*payout-(1-pp)<=0)return {tier:null,gap};if(price>=150&&gap>=10)return {tier:'alert',gap};return {tier:gap>=10?'best':gap>=5?'edge':'lean',gap};}
 function slateDate(g:any){const d=new Date(g.date);return d.toLocaleDateString('en-CA',{timeZone:'America/New_York'});}
-function rowBase(sport:Sport,g:any,p:any,o:any,market:string,selection:string,home:boolean|null,line:number|null,projection:number|null,price:number|null,tier:string|null){return {event_id:g.id,sport,market,model_version:MODEL_VERSION,app_version:APP_VERSION,matchup:`${g.away.abbr||g.away.name} @ ${g.home.abbr||g.home.name}`,slate_date:slateDate(g),starts_at:g.date,captured_at:new Date().toISOString(),selection,selection_home:home,confidence:market==='moneyline'?p.conf:null,tier,price,line,projection,model_probability:market==='moneyline'?(home?p.p:1-p.p):null,market_probability:marketProb(o),provider:o?.provider||null,quality:p.quality,snapshot:{odds:o,features:p.features,neutral:g.neutral,engine:'scheduled-v239'}};}
+function fairProbability(market:string,home:boolean|null,selection:string,o:any){
+  const pair=market==='moneyline'?[o?.hML,o?.aML]:market==='spread'?[o?.hSpreadPrice,o?.aSpreadPrice]:[o?.overPrice,o?.underPrice];
+  const a=implied(pair[0]),b=implied(pair[1]);if(a==null||b==null)return null;
+  return (market==='total'?selection.startsWith('OVER'):home)?a/(a+b):b/(a+b);
+}
+function rowBase(sport:Sport,g:any,p:any,o:any,market:string,selection:string,home:boolean|null,line:number|null,projection:number|null,price:number|null,tier:string|null){return {event_id:g.id,sport,market,model_version:MODEL_VERSION,app_version:APP_VERSION,matchup:`${g.away.abbr||g.away.name} @ ${g.home.abbr||g.home.name}`,slate_date:slateDate(g),starts_at:g.date,captured_at:new Date().toISOString(),selection,selection_home:home,confidence:market==='moneyline'?p.conf:null,tier,price,line,projection,model_probability:market==='moneyline'?(home?p.p:1-p.p):null,market_probability:fairProbability(market,home,selection,o),provider:o?.provider||null,quality:p.quality,snapshot:{odds:o,features:p.features,neutral:g.neutral,engine:'scheduled-v239'}};}
 function rowsFor(sport:Sport,g:any,p:any){const o=odds(g.odds,g),tt=tierFor(p,o),rows=[rowBase(sport,g,p,o,'moneyline',p.home?g.home.name:g.away.name,p.home,null,null,pickPrice(p,o),tt.tier)];if(o?.spread!=null&&ATS_EDGE_MIN[sport]!=null){const edge=p.margin+o.spread,home=edge>0;if(!p.quality.length&&Math.abs(edge)>=(ATS_EDGE_MIN[sport]||0))rows.push(rowBase(sport,g,p,o,'spread',`${home?g.home.abbr:g.away.abbr} ${(home?o.spread:-o.spread)>0?'+':''}${home?o.spread:-o.spread}`,home,o.spread,p.margin,home?o.hSpreadPrice:o.aSpreadPrice,null));}if(o?.ou!=null&&p.total!=null){const diff=p.total-o.ou,side=diff>0?'OVER':'UNDER';if(!p.quality.length&&Math.abs(diff)>=TOTAL_MIN[sport]&&Math.abs(diff)<=TOTAL_MAX[sport])rows.push(rowBase(sport,g,p,o,'total',`${side} ${o.ou}`,null,o.ou,p.total,side==='OVER'?o.overPrice:o.underPrice,Math.abs(diff)>=TOTAL_MIN[sport]*1.75?'best':'edge'));}return rows;}
 
 const SB_URL=Deno.env.get('SUPABASE_URL')!,SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 async function db(path:string,init:RequestInit={}){const response=await fetch(`${SB_URL}/rest/v1/${path}`,{...init,headers:{apikey:SERVICE,Authorization:`Bearer ${SERVICE}`,'Content-Type':'application/json',...(init.headers||{})}});if(!response.ok)throw new Error(`Database ${response.status}: ${await response.text()}`);const text=await response.text();return text?JSON.parse(text):null;}
 async function insertRows(rows:any[]){if(!rows.length)return 0;const got=await db('ai_predictions?on_conflict=event_id,market,model_version',{method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},body:JSON.stringify(rows)});return got?.length||0;}
+// Fill only missing prices, before kickoff, at the frozen selection/line/provider.
+// Never rewrite a forecast or attach a current price to an already settled game.
+async function enrichPrices(g:any){
+  if(g.state!=='pre'||Date.parse(g.date)<=Date.now())return;
+  const o=odds(g.odds,g);if(!o)return;
+  const rows=await db(`ai_predictions?event_id=eq.${encodeURIComponent(g.id)}&model_version=eq.${MODEL_VERSION}&result=eq.pending&price=is.null&select=*`);
+  for(const r of rows||[]){
+    if(Date.parse(r.starts_at)!==Date.parse(g.date)||Date.parse(g.date)<=Date.now()||!r.provider||r.provider!==o.provider)continue;
+    const price=r.market==='moneyline'?pickPrice({home:r.selection_home},o)
+      :r.market==='spread'&&r.line===o.spread?(r.selection_home?o.hSpreadPrice:o.aSpreadPrice)
+      :r.market==='total'&&r.line===o.ou?(r.selection.startsWith('OVER')?o.overPrice:o.underPrice):null;
+    if(american(price)==null)continue;
+    const at=new Date().toISOString();
+    await db(`ai_predictions?id=eq.${r.id}&price=is.null&result=eq.pending&starts_at=gt.${encodeURIComponent(at)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({price,updated_at:at,snapshot:{...r.snapshot,priceCapturedAt:at,priceSource:'espn_same_line_pregame',pricedOdds:o}})});
+  }
+}
 async function gradeGame(g:any){if(g.state!=='post'||g.home.score==null||g.away.score==null||/cancel|postpon|suspend/i.test(g.status))return 0;const rows=await db(`ai_predictions?event_id=eq.${encodeURIComponent(g.id)}&result=eq.pending&select=*`);let n=0;for(const r of rows||[]){let result='void';const hm=g.home.score-g.away.score;if(r.market==='moneyline'){if(hm!==0)result=(r.selection_home?(hm>0):(hm<0))?'win':'loss';}else if(r.market==='spread'){const v=hm+Number(r.line);result=v===0?'push':(r.selection_home?(v>0):(v<0))?'win':'loss';}else{const v=g.home.score+g.away.score-Number(r.line);result=v===0?'push':((String(r.selection).startsWith('OVER'))?(v>0):(v<0))?'win':'loss';}await db(`ai_predictions?id=eq.${r.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({result,final_home_score:g.home.score,final_away_score:g.away.score,graded_at:new Date().toISOString(),updated_at:new Date().toISOString()})});n++;}return n;}
 async function gradePending(){const pending=await db('ai_predictions?result=eq.pending&select=event_id,sport,slate_date&order=starts_at.asc&limit=1000'),groups=new Map<string,any>();for(const r of pending||[])groups.set(`${r.sport}|${String(r.slate_date).replaceAll('-','')}`,r);let n=0;for(const [key] of groups){const [sport,date]=key.split('|') as [Sport,string];try{const {games}=await scoreboard(sport,date);for(const g of games)n+=await gradeGame(g);}catch(_){}}return n;}
 async function slate(sport:Sport){if(sport==='mlb'){const today=new Date(),tomorrow=new Date(Date.now()+864e5);const sets=await Promise.all([scoreboard(sport,ymd(today)),scoreboard(sport,ymd(tomorrow))]);return sets.flatMap(x=>x.games);}let board=await scoreboard(sport);if(board.games.length&&board.games.every((g:any)=>g.state==='post')){const type=Number(board.data?.season?.type),week=Number(board.data?.week?.number),year=Number(board.data?.season?.year);if([1,2].includes(type)&&week&&year){const next=await scoreboard(sport,undefined,{week:week+1,seasontype:type,dates:year}).catch(()=>null);if(next?.games?.some((g:any)=>g.state!=='post'))board=next;}}if(sport==='cfb')board.games=board.games.filter((g:any)=>g.home.rank||g.away.rank);return board.games;}
@@ -226,7 +234,7 @@ Deno.serve(async(req:Request)=>{
   const signalError=()=>{signals.errors++;signals.error_category='signals_step_failed';};
   try{
     const recent=await db('ai_job_runs?select=id,status,started_at,details&order=started_at.desc&limit=1');
-    if(recent?.[0]&&recent[0].details?.model===MODEL_VERSION&&['running','ok','partial'].includes(recent[0].status)&&Date.now()-Date.parse(recent[0].started_at)<10*60*1000)return Response.json({ok:true,status:'rate-limited',run:recent[0].id},{status:202});
+    if(recent?.[0]&&recent[0].details?.model===MODEL_VERSION&&recent[0].details?.app===APP_VERSION&&['running','ok','partial'].includes(recent[0].status)&&Date.now()-Date.parse(recent[0].started_at)<10*60*1000)return Response.json({ok:true,status:'rate-limited',run:recent[0].id},{status:202});
     run=(await db('ai_job_runs',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({started_at:started,sports:[...SPORTS]})}))[0];
     captureSignals=await signalsEnabled(db).catch(()=>{signalError();return false;});
     graded=await gradePending();
@@ -242,6 +250,7 @@ Deno.serve(async(req:Request)=>{
           }
           if(g.state!=='pre'||g.seasonType===1||!(Date.parse(g.date)>Date.now())||/postpon|cancel|suspend|delay/i.test(g.status)){skipped++;continue;}
           const inputsPromise=watch?signalInputs(g).catch(()=>{signalError();return null;}):Promise.resolve(null);
+          await enrichPrices(g);
           let context:any={engine:'scheduled-v239',availability:'unavailable',calculated_at:null};
           try{
             const p=await predict(sport,g),calculatedAt=new Date().toISOString(),rows=rowsFor(sport,g,p);

@@ -43,7 +43,7 @@
       && !/postpon|cancel|suspend|delay/i.test(g?.statusText || '') && g?.seasonType !== 1;
   }
   function evaluate(records, version) {
-    const out = { n: 0, w: 0, l: 0, pushes: 0, priced: 0, units: 0, probabilityN: 0, brier: 0, logLoss: 0, legacy: 0 };
+    const out = { n: 0, w: 0, l: 0, pushes: 0, priced: 0, units: 0, probabilityN: 0, brier: 0, logLoss: 0, legacy: 0, probabilitySum: 0, impliedSum: 0 };
     records.forEach((r) => {
       const q = r.q;
       if (!q || (version && q.v !== version) || !(Date.parse(q.at) < Date.parse(q.start))) { out.legacy++; return; }
@@ -53,16 +53,20 @@
       const price = american(q.price);
       if (price != null) {
         out.priced++;
+        out.impliedSum += implied(price);
         out.units += r.pu ? 0 : r.c ? (price > 0 ? price / 100 : 100 / -price) : -1;
       }
       const prob = number(q.prob);
       if (!r.pu && prob != null && prob >= 0 && prob <= 1) {
         const p = Math.max(1e-6, Math.min(1 - 1e-6, prob));
         out.probabilityN++;
+        out.probabilitySum += prob;
         out.brier += (prob - r.c) ** 2;
         out.logLoss -= r.c ? Math.log(p) : Math.log(1 - p);
       }
     });
+    out.meanProbability = out.probabilityN ? out.probabilitySum / out.probabilityN : null;
+    out.meanImplied = out.priced ? out.impliedSum / out.priced : null;
     out.roi = out.priced ? out.units / out.priced : null;
     out.brier = out.probabilityN ? out.brier / out.probabilityN : null;
     out.logLoss = out.probabilityN ? out.logLoss / out.probabilityN : null;

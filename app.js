@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v247';
+const APP_VERSION = 'v248';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -1087,7 +1087,8 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
 // figure out the market favorite by name.
 function normOdds(o, homeName, awayName, homeAbbr, awayAbbr) {
   if (!o) return null;
-  const hML = AI_MATH.american(o.homeTeamOdds?.moneyLine), aML = AI_MATH.american(o.awayTeamOdds?.moneyLine);
+  const [ml, sp, total] = globalThis.SportsHubSignalsCore.normalizeOdds(o, {home:{abbr:homeAbbr},away:{abbr:awayAbbr}});
+  const hML = ml.home_price, aML = ml.away_price;
   const details = o.details ?? o.spread ?? null;
   let favName = o.homeTeamOdds?.favorite ? homeName : o.awayTeamOdds?.favorite ? awayName
     : (typeof hML === 'number' && typeof aML === 'number') ? (hML < aML ? homeName : awayName) : null;
@@ -1130,10 +1131,10 @@ function normOdds(o, homeName, awayName, homeAbbr, awayAbbr) {
     }
   }
   const has = (details != null || o.overUnder != null || o.total != null || hML != null || aML != null);
-  return has ? { details, ou: AI_MATH.number(o.overUnder ?? o.total), hML, aML, dML, spread,
-    hSpreadPrice: AI_MATH.american(o.homeTeamOdds?.spreadOdds),
-    aSpreadPrice: AI_MATH.american(o.awayTeamOdds?.spreadOdds),
-    overPrice: AI_MATH.american(o.overOdds), underPrice: AI_MATH.american(o.underOdds),
+  return has ? { details, ou: total.line, hML, aML, dML, spread: sp.line,
+    hSpreadPrice: sp.home_price,
+    aSpreadPrice: sp.away_price,
+    overPrice: total.over_price, underPrice: total.under_price,
     favHome: favName ? favName === homeName : null, favName, provider: o.provider?.name || null } : null;
 }
 const impliedP = (ml) => AI_MATH.implied(ml);
@@ -5273,16 +5274,18 @@ function aiGuideHTML(sub, sport) {
   return `<div class="ai-guide-card"><div class="ai-guide-top"><span class="ai-eyebrow">READ THE PICK, NOT JUST THE COLOR</span><span>${sport === 'all' ? 'All leagues' : esc(LEAGUES[sport]?.label || sport)} · ${APP_VERSION}</span></div>
     <div class="ai-note">${esc(cloudLine)}</div>
     <div class="ai-guide-steps"><div><b>1 · Choose the market</b><p>Winner, cover and total are three different predictions.</p></div><div><b>2 · Compare model & book</b><p>A gap is a disagreement. It does not prove an advantage.</p></div><div><b>3 · Check the evidence</b><p>Missing data means watch only. Review results before trusting a signal.</p></div></div>
-    <details><summary>Quick glossary & what gets saved</summary><div class="ai-glossary"><p><b>Moneyline:</b> pick the winner. 60% means about 6 wins in 10 similar games if calibrated, not certainty.</p><p><b>Spread:</b> the handicap. +7.5 can cover even in a loss by 7; −7.5 needs a win by 8 or more.</p><p><b>Total:</b> combined score. OVER 8.5 needs 9+ runs; UNDER needs 8 or fewer.</p><p><b>pp vs points:</b> 60% vs 55% is +5 percentage points. A projected margin of 7 vs a line of 3 is 4 scoring points.</p><p><b>Tracking:</b> first pregame observations are frozen in Supabase with version, timestamp, prices and inputs. The scheduled collector runs even when the app is closed; device-only history is merged in for continuity.</p><p><b>Experimental signals:</b> moneyline tiers require a positive model return at a real quote and two-sided market odds. Spread/total signals use projection thresholds, not calibrated cover probabilities. No market has proven profit.</p></div></details></div>`;
+    <details><summary>Quick glossary & what gets saved</summary><div class="ai-glossary"><p><b>Moneyline:</b> pick the winner. 60% means about 6 wins in 10 similar games if calibrated, not certainty.</p><p><b>Spread:</b> the handicap. +7.5 can cover even in a loss by 7; −7.5 needs a win by 8 or more.</p><p><b>Total:</b> combined score. OVER 8.5 needs 9+ runs; UNDER needs 8 or fewer.</p><p><b>pp vs points:</b> 60% vs 55% is +5 percentage points. A projected margin of 7 vs a line of 3 is 4 scoring points.</p><p><b>Tracking:</b> first pregame forecasts are frozen with version, timestamp and inputs. Missing prices may be filled before kickoff only at the same saved line and provider. The scheduled collector runs even when the app is closed; official performance uses cloud history; device-only history is retained separately.</p><p><b>Experimental signals:</b> moneyline tiers require a positive model return at a real quote and two-sided market odds. Spread/total signals use projection thresholds, not calibrated cover probabilities. No market has proven profit.</p></div></details></div>`;
 }
 function evaluationHTML(sport) {
-  const all = Object.values(getTally()).filter((r) => !sport || r.s === sport);
+  const all = Object.values(globalThis.SportsHubCloudAI?.maps()?.tally || {}).filter((r) => !sport || sport === 'all' || r.s === sport);
+  const upcoming = Object.values(globalThis.SportsHubCloudAI?.maps()?.pending || {}).filter(r => !sport || sport === 'all' || r.sport === sport);
   const markets = [['moneyline', 'Winner', (r) => !r.a && !r.t], ['spread', 'Spread', (r) => !!r.a], ['total', 'Total', (r) => !!r.t]];
-  return `<section class="ai-evidence"><div class="ai-guide-top"><b>Clean pregame evidence</b><span>Model ${AI_MODEL_VERSION}</span></div><p>New-model results are separated from legacy history. UI updates do not reset this sample. All tracked forecasts are included; this is not a betting account or an independent-game sample.</p><div class="ai-evidence-grid">${markets.map(([key, title, filter]) => {
+  return `<section class="ai-evidence"><div class="ai-guide-top"><b>Automatic model performance</b><span>Model ${AI_MODEL_VERSION}</span></div><p>Official cloud record across devices. Picks and results save automatically—even with the app closed. No manual logging. Device-only history stays separate.</p><div class="ai-evidence-grid">${markets.map(([key, title, filter]) => {
     const e = AI_MATH.evaluate(all.filter(filter), AI_MODEL_VERSION);
     const decided = e.w + e.l;
-    return `<div><b>${title}</b><strong>${e.n ? `${e.w}W · ${e.l}L · ${e.pushes}P` : 'Collecting'}</strong><div class="ai-result-track" role="img" aria-label="${e.w} wins, ${e.l} losses, ${e.pushes} pushes"><i style="width:${decided ? e.w / decided * 100 : 0}%"></i></div><p>${e.n} settled · ${e.priced} with prices<br>${e.priced ? `${e.units >= 0 ? '+' : ''}${e.units.toFixed(2)} units · ${(e.roi * 100).toFixed(1)}% paper ROI` : 'ROI unavailable — no priced results'}<br>${e.probabilityN ? `Brier ${e.brier.toFixed(3)} · log loss ${e.logLoss.toFixed(3)} · n=${e.probabilityN}` : 'Probability scoring: no eligible sample'}<br>${e.legacy} older/unverified excluded</p></div>`;
-  }).join('')}</div><small>Paper ROI risks one unit at each saved quote; pushes return the stake. No assumed −110 prices. Markets on the same game are correlated. Closing-line value is unavailable until closing quotes are captured.</small></section>`;
+    const pending = upcoming.filter(filter), pricedPending = pending.filter(r => AI_MATH.american(r.q?.price) != null);
+    return `<div><b>${title}</b><strong>${e.n ? `${e.w}W · ${e.l}L · ${e.pushes}P` : 'Collecting'}</strong><div class="ai-result-track" role="img" aria-label="${e.w} wins, ${e.l} losses, ${e.pushes} pushes"><i style="width:${decided ? e.w / decided * 100 : 0}%"></i></div><p>${e.n} settled · ${decided ? (e.w / decided * 100).toFixed(1) + '% hit rate' : 'Awaiting results'}<br>${e.priced}/${e.n} with saved odds<br>${e.priced ? `${e.units >= 0 ? '+' : ''}${e.units.toFixed(2)} units · ${(e.roi * 100).toFixed(1)}% paper ROI` : 'ROI awaiting priced results'}<br>${e.probabilityN ? `Avg model probability ${(e.meanProbability * 100).toFixed(1)}% · ${e.probabilityN} forecasts` : key === 'moneyline' ? 'Model probability not saved for this sample' : 'Model probability: not calibrated for this market'}<br>${e.priced ? `Avg odds-implied probability ${(e.meanImplied * 100).toFixed(1)}% (includes vig)` : 'Odds-implied probability awaiting saved odds'}${e.probabilityN ? `<br><small>Brier ${e.brier.toFixed(3)} · log loss ${e.logLoss.toFixed(3)}</small>` : ''}<br>${pending.length} upcoming · ${pricedPending.length} with odds<br>${e.legacy} older/unverified excluded</p></div>`;
+  }).join('')}</div><small>Hit rate is past results, not a future probability. Model and odds-implied probabilities are different. Paper ROI risks one unit at each saved quote; pushes return the stake. No assumed −110 prices. Markets on the same game are correlated. Older unpriced results remain in the record but are excluded from ROI. Closing-line value needs closing quotes.</small></section>`;
 }
 // Bumped on every view paint so an async fill (the CFB rating probe) that
 // lands after the user has moved on can't paint over the new view.

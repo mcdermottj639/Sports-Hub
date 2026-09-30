@@ -48,3 +48,9 @@ test('void cloud rows never enter records', () => {
   assert.equal(Object.keys(api.maps().tally).length, 0);
   assert.equal(Object.keys(api.maps().pending).length, 0);
 });
+
+test('snapshot cannot override canonical saved probability or filled price',()=>{
+ const api=load([{...base,market:'moneyline',selection:'Home',result:'win',model_probability:.65,snapshot:{price:null,prob:.9,v:'stale'}}]);
+ const q=api.maps().tally['game-1'].q;
+ assert.equal(q.price,-110);assert.equal(q.prob,.65);assert.equal(q.v,'v239');
+});
