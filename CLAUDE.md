@@ -594,7 +594,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v252** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v253** (backend **b16-fantasy-gm**).
 
 - **v250 — Mobile sideways-scroll guard:** Clip document-level horizontal overflow
   (hidden fallback) without disabling zoom or nested score/table scrolling. Bound
@@ -609,6 +609,9 @@ Current version as of this writing: **v252** (backend **b16-fantasy-gm**).
   AI Picks keeps cross-sport forecasts/performance and links to league research;
   Labs no longer contains betting research. Existing collectors, model constants,
   data and refresh cadence are unchanged. CFB stays Top 25 only.
+
+### v253 — Mobile bottom controls
+`mobile-chrome.js` anchors the action bar and back-to-top button to the visual viewport on scroll, browser-toolbar resize, rotation and restored pages. The dock has automatic height and safe-area padding; measured height reserves room after the content. Controls hide during pinch zoom and while a software keyboard takes most of the view. CSS retains a viewport fallback without VisualViewport. Model and collectors remain unchanged.
 
 ### v252 — Spread/total probability layer (residual-t-v1)
 `supabase/functions/_shared/market-probability.js` and its generated config are shared by the browser, collector and chronological validation script. Qualified NFL/CFB spreads and NFL/CFB/MLB totals now have **experimental** win probabilities excluding pushes, with separate push probability. The existing point forecast/selection model stays v239.
