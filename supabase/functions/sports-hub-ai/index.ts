@@ -1,8 +1,9 @@
+import {footballEvidence, researchRows} from './football-research.ts';
 import '../_shared/market-probability-config.js';
 import '../_shared/market-probability.js';
 import {signalsEnabled, captureSignalQuotes, signalInputs, saveSignalDecision, settleSignalGame, missedSignalWindows, reconcileSignals} from './signals.ts';
 const MODEL_VERSION = 'v239';
-const APP_VERSION = 'v252';
+const APP_VERSION = 'v254';
 const SPORTS = ['nfl', 'cfb', 'mlb'] as const;
 type Sport = typeof SPORTS[number];
 type Json = Record<string, any>;
@@ -98,11 +99,18 @@ function parseSchedule(payload:any, teamId:string, before:string) {
 async function profile(sport:Sport, side:any, before:string) {
   if (!side.id) return null;
   const url = `${SITE}/${PATH[sport]}/teams/${side.id}/schedule`;
-  const data = await json(url).catch(() => null), games = parseSchedule(data, side.id, before);
+  const yearNow=new Date(before).getUTCFullYear();
+  let data:any;
+  if(sport==='mlb'){
+    const [regular,post]=await Promise.all([2,3].map(type=>json(`${url}?season=${yearNow}&seasontype=${type}`).catch(()=>null)));
+    if(!regular)return null; // Do not silently substitute last season after a feed failure.
+    data=(globalThis as any).SportsHubFootballResearch.mergeSchedules(regular,post);
+  }else data=await json(url).catch(()=>null);
+  const games = parseSchedule(data, side.id, before);
   let prior:any = null, priorW = 0;
   if (games.length < 6) {
     const year = Number(data?.season?.year) || new Date(before).getUTCFullYear();
-    const old = await json(`${url}?season=${year-1}`).catch(() => null), pg = parseSchedule(old, side.id, before);
+    const old = await json(`${url}?season=${year-1}${sport==='mlb'?'&seasontype=2':''}`).catch(() => null), pg = parseSchedule(old, side.id, before);
     if (pg.length >= 8) {
       const avg = (f:(g:any)=>number) => pg.reduce((s:number,g:any) => s + f(g), 0) / pg.length;
       prior = { winPct:avg(g=>g.win?1:0), pdpg:avg(g=>g.margin), ppg:avg(g=>g.pf), papg:avg(g=>g.pa) };
@@ -205,9 +213,9 @@ function fairProbability(market:string,home:boolean|null,selection:string,o:any)
 function rowBase(sport:Sport,g:any,p:any,o:any,market:string,selection:string,home:boolean|null,line:number|null,projection:number|null,price:number|null,tier:string|null){
   const at=new Date().toISOString();
   const probability=market==='moneyline'?null:(globalThis as any).SportsHubMarketProbability.estimate({sport,market,projection,line,home,side:selection.split(' ')[0],at});
-  return {event_id:g.id,sport,market,model_version:MODEL_VERSION,app_version:APP_VERSION,matchup:`${g.away.abbr||g.away.name} @ ${g.home.abbr||g.home.name}`,slate_date:slateDate(g),starts_at:g.date,captured_at:at,selection,selection_home:home,confidence:market==='moneyline'?p.conf:null,tier,price,line,projection,model_probability:market==='moneyline'?(home?p.p:1-p.p):probability?.prob??null,market_probability:fairProbability(market,home,selection,o),provider:o?.provider||null,quality:p.quality,snapshot:{odds:o,features:p.features,neutral:g.neutral,engine:'scheduled-v239',...(probability?{probability}:{} )}};
+  return {event_id:g.id,sport,market,model_version:MODEL_VERSION,app_version:APP_VERSION,matchup:`${g.away.abbr||g.away.name} @ ${g.home.abbr||g.home.name}`,slate_date:slateDate(g),starts_at:g.date,captured_at:at,selection,selection_home:home,confidence:market==='moneyline'?p.conf:null,tier,price,line,projection,model_probability:market==='moneyline'?(home?p.p:1-p.p):probability?.prob??null,market_probability:fairProbability(market,home,selection,o),provider:o?.provider||null,quality:p.quality,snapshot:{researchOnly:market==='total'&&sport!=='mlb',historyPolicy:sport==='mlb'?'current-season-regular-plus-post-v1':null,odds:o,features:p.features,neutral:g.neutral,engine:'scheduled-v239',...(probability?{probability}:{} )}};
 }
-function rowsFor(sport:Sport,g:any,p:any){const o=odds(g.odds,g),tt=tierFor(p,o),rows=[rowBase(sport,g,p,o,'moneyline',p.home?g.home.name:g.away.name,p.home,null,null,pickPrice(p,o),tt.tier)];if(o?.spread!=null&&ATS_EDGE_MIN[sport]!=null){const edge=p.margin+o.spread,home=edge>0;if(!p.quality.length&&Math.abs(edge)>=(ATS_EDGE_MIN[sport]||0))rows.push(rowBase(sport,g,p,o,'spread',`${home?g.home.abbr:g.away.abbr} ${(home?o.spread:-o.spread)>0?'+':''}${home?o.spread:-o.spread}`,home,o.spread,p.margin,home?o.hSpreadPrice:o.aSpreadPrice,null));}if(o?.ou!=null&&p.total!=null){const diff=p.total-o.ou,side=diff>0?'OVER':'UNDER';if(!p.quality.length&&Math.abs(diff)>=TOTAL_MIN[sport]&&Math.abs(diff)<=TOTAL_MAX[sport])rows.push(rowBase(sport,g,p,o,'total',`${side} ${o.ou}`,null,o.ou,p.total,side==='OVER'?o.overPrice:o.underPrice,Math.abs(diff)>=TOTAL_MIN[sport]*1.75?'best':'edge'));}return rows;}
+function rowsFor(sport:Sport,g:any,p:any){const o=odds(g.odds,g),tt=tierFor(p,o),rows=[rowBase(sport,g,p,o,'moneyline',p.home?g.home.name:g.away.name,p.home,null,null,pickPrice(p,o),tt.tier)];if(o?.spread!=null&&ATS_EDGE_MIN[sport]!=null){const edge=p.margin+o.spread,home=edge>0;if(!p.quality.length&&Math.abs(edge)>=(ATS_EDGE_MIN[sport]||0))rows.push(rowBase(sport,g,p,o,'spread',`${home?g.home.abbr:g.away.abbr} ${(home?o.spread:-o.spread)>0?'+':''}${home?o.spread:-o.spread}`,home,o.spread,p.margin,home?o.hSpreadPrice:o.aSpreadPrice,null));}if(o?.ou!=null&&p.total!=null){const diff=p.total-o.ou,side=diff>0?'OVER':'UNDER';if(!p.quality.length&&Math.abs(diff)>=TOTAL_MIN[sport]&&Math.abs(diff)<=TOTAL_MAX[sport])rows.push(rowBase(sport,g,p,o,'total',`${side} ${o.ou}`,null,o.ou,p.total,side==='OVER'?o.overPrice:o.underPrice,sport==='mlb'?(Math.abs(diff)>=TOTAL_MIN[sport]*1.75?'best':'edge'):null));}return rows;}
 
 const SB_URL=Deno.env.get('SUPABASE_URL')!,SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 async function db(path:string,init:RequestInit={}){const response=await fetch(`${SB_URL}/rest/v1/${path}`,{...init,headers:{apikey:SERVICE,Authorization:`Bearer ${SERVICE}`,'Content-Type':'application/json',...(init.headers||{})}});if(!response.ok)throw new Error(`Database ${response.status}: ${await response.text()}`);const text=await response.text();return text?JSON.parse(text):null;}
@@ -241,8 +249,8 @@ async function enrichProbabilities(g:any){
     await db(`ai_predictions?id=eq.${r.id}&model_probability=is.null&result=eq.pending&starts_at=gt.${encodeURIComponent(at)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({model_probability:probability.prob,updated_at:at,snapshot:{...r.snapshot,probability}})});
   }
 }
-async function gradeGame(g:any){if(g.state!=='post'||g.home.score==null||g.away.score==null||/cancel|postpon|suspend/i.test(g.status))return 0;const rows=await db(`ai_predictions?event_id=eq.${encodeURIComponent(g.id)}&result=eq.pending&select=*`);let n=0;for(const r of rows||[]){let result='void';const hm=g.home.score-g.away.score;if(r.market==='moneyline'){if(hm!==0)result=(r.selection_home?(hm>0):(hm<0))?'win':'loss';}else if(r.market==='spread'){const v=hm+Number(r.line);result=v===0?'push':(r.selection_home?(v>0):(v<0))?'win':'loss';}else{const v=g.home.score+g.away.score-Number(r.line);result=v===0?'push':((String(r.selection).startsWith('OVER'))?(v>0):(v<0))?'win':'loss';}await db(`ai_predictions?id=eq.${r.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({result,final_home_score:g.home.score,final_away_score:g.away.score,graded_at:new Date().toISOString(),updated_at:new Date().toISOString()})});n++;}return n;}
-async function gradePending(){
+async function gradeGame(g:any){if(g.state!=='post'||g.home.score==null||g.away.score==null||/cancel|postpon|suspend/i.test(g.status))return 0;const rows=await db(`ai_predictions?event_id=eq.${encodeURIComponent(g.id)}&result=eq.pending&select=*`);let n=0;for(const r of rows||[]){let result='void';const hm=g.home.score-g.away.score;if(r.model_version?.startsWith('football-research-')&&Date.parse(r.starts_at)!==Date.parse(g.date)){result='void';}else if(r.market==='moneyline'){if(hm!==0)result=(r.selection_home?(hm>0):(hm<0))?'win':'loss';}else if(r.market==='spread'){const v=hm+Number(r.line);result=v===0?'push':(r.selection_home?(v>0):(v<0))?'win':'loss';}else{const v=g.home.score+g.away.score-Number(r.line);result=v===0?'push':((String(r.selection).startsWith('OVER'))?(v>0):(v<0))?'win':'loss';}await db(`ai_predictions?id=eq.${r.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({result,final_home_score:g.home.score,final_away_score:g.away.score,graded_at:new Date().toISOString(),updated_at:new Date().toISOString()})});n++;}return n;}
+async function gradePending(onPregame?:(g:any)=>Promise<void>){
   const pending=await db('ai_predictions?result=eq.pending&select=event_id,sport,slate_date&order=starts_at.asc&limit=1000');
   const groups=new Set<string>(),ids=new Set<string>();
   for(const r of pending||[]){groups.add(`${r.sport}|${String(r.slate_date).replaceAll('-','')}`);ids.add(String(r.event_id));}
@@ -253,7 +261,7 @@ async function gradePending(){
       if(!ids.has(String(g.id)))continue;
       n+=await gradeGame(g);
       // Continue observing already-saved CFB forecasts even if a team drops out of the Top 25.
-      if(g.state==='pre'){await enrichPrices(g);await enrichProbabilities(g);}
+      if(g.state==='pre'){await enrichPrices(g);await enrichProbabilities(g);if(onPregame)await onPregame(g);}
     }}catch(_){}
   }
   return n;
@@ -264,14 +272,22 @@ Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return new Response('Method not allowed',{status:405});
   const started=new Date().toISOString();let run:any=null,captured=0,graded=0,skipped=0;
   const errors:any[]=[], signals:any={status:'disabled',written:0,evaluated:0,unpriced:0,missed:0,graded:0,errors:0};
-  let captureSignals=false;
+  let captureSignals=false;const research={captured:0,errors:0,version:'football-research-v2'};
   const signalError=()=>{signals.errors++;signals.error_category='signals_step_failed';};
   try{
     const recent=await db('ai_job_runs?select=id,status,started_at,details&order=started_at.desc&limit=1');
-    if(recent?.[0]&&recent[0].details?.model===MODEL_VERSION&&recent[0].details?.app===APP_VERSION&&['running','ok','partial'].includes(recent[0].status)&&Date.now()-Date.parse(recent[0].started_at)<10*60*1000)return Response.json({ok:true,status:'rate-limited',run:recent[0].id},{status:202});
+    if(recent?.[0]&&recent[0].details?.model===MODEL_VERSION&&recent[0].details?.app===APP_VERSION&&recent[0].details?.research?.version===research.version&&['running','ok','partial'].includes(recent[0].status)&&Date.now()-Date.parse(recent[0].started_at)<10*60*1000)return Response.json({ok:true,status:'rate-limited',run:recent[0].id},{status:202});
     run=(await db('ai_job_runs',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({started_at:started,sports:[...SPORTS]})}))[0];
     captureSignals=await signalsEnabled(db).catch(()=>{signalError();return false;});
-    graded=await gradePending();
+    graded=await gradePending(async(g:any)=>{
+      if(!['nfl','cfb'].includes(g.sport)||(globalThis as any).SportsHubFootballResearch.phase(g.date,new Date().toISOString())!=='near')return;
+      try {
+        const existing=await db(`ai_predictions?event_id=eq.${encodeURIComponent(g.id)}&model_version=eq.football-research-v2-near&select=id&limit=1`);
+        if(existing?.length)return;
+        const p=await predict(g.sport,g),evidence=await footballEvidence(g.sport,g);
+        research.captured+=await insertRows(researchRows(g.sport,g,p,odds(g.odds,g),evidence,APP_VERSION));
+      }catch(_){research.errors++;}
+    });
     for(const sport of SPORTS){
       try{
         const games=await slate(sport);
@@ -283,6 +299,7 @@ Deno.serve(async(req:Request)=>{
             try{quotes=await captureSignalQuotes(db,g,`ai:${run.id}`,g.observedAt);signals.written+=quotes.length;if(quotes.length)signals.last_observed_at=g.observedAt;}catch(_){signalError();}
           }
           if(g.state!=='pre'||g.seasonType===1||!(Date.parse(g.date)>Date.now())||/postpon|cancel|suspend|delay/i.test(g.status)){skipped++;continue;}
+          const evidencePromise=sport!=='mlb'?footballEvidence(sport,g).catch(()=>null):Promise.resolve(null);
           const inputsPromise=watch?signalInputs(g).catch(()=>{signalError();return null;}):Promise.resolve(null);
           await enrichPrices(g);
           await enrichProbabilities(g);
@@ -291,11 +308,15 @@ Deno.serve(async(req:Request)=>{
             const p=await predict(sport,g),calculatedAt=new Date().toISOString(),rows=rowsFor(sport,g,p);
             // A slow forecast must not create a new pregame pick after kickoff.
             if(Date.parse(g.date)>Date.now())captured+=await insertRows(rows);else skipped++;
+            if(sport!=='mlb')try {
+              const evidence=await evidencePromise;if(!evidence)throw new Error('Football evidence unavailable');
+              research.captured+=await insertRows(researchRows(sport,g,p,odds(g.odds,g),evidence,APP_VERSION));
+            }catch(_){research.errors++;}
             const spread=rows.find((r:any)=>r.market==='spread'),total=rows.find((r:any)=>r.market==='total');
             context={engine:'scheduled-v239',availability:'available',calculated_at:calculatedAt,
               projection:{spread:p.margin,total:p.total},
               selections:{moneyline:p.home?'home':'away',spread:spread?(spread.selection_home?'home':'away'):null,total:total?(total.selection.startsWith('OVER')?'over':'under'):null},
-              qualification:{moneyline:!!rows.find((r:any)=>r.market==='moneyline'&&r.tier),spread:!!spread,total:!!total}};
+              qualification:{moneyline:!!rows.find((r:any)=>r.market==='moneyline'&&r.tier),spread:!!spread,total:!!total&&sport==='mlb'}};
           }catch(error){errors.push({sport,event:g.id,error:String(error)});}
           if(watch){
             inputs=await inputsPromise;
@@ -306,11 +327,11 @@ Deno.serve(async(req:Request)=>{
     }
     if(captureSignals)try{signals.graded+=await reconcileSignals(db);}catch(_){signalError();}
     signals.status=signals.errors?'partial':captureSignals?'ok':'disabled';
-    const status=errors.length?(captured||graded?'partial':'error'):'ok',finished=new Date().toISOString();
-    await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:finished,status,captured,graded,skipped,errors,details:{model:MODEL_VERSION,app:APP_VERSION,signals}})});
-    return Response.json({ok:status==='ok',status,captured,graded,skipped,errors,signals,run:run.id});
+    const status=(errors.length||research.errors)?(captured||graded?'partial':'error'):'ok',finished=new Date().toISOString();
+    await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:finished,status,captured,graded,skipped,errors,details:{model:MODEL_VERSION,app:APP_VERSION,signals,research}})});
+    return Response.json({ok:status==='ok',status,captured,graded,skipped,errors,signals,research,run:run.id});
   }catch(error){
-    if(run)await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:new Date().toISOString(),status:'error',captured,graded,skipped,errors:[...errors,{error:String(error)}],details:{model:MODEL_VERSION,app:APP_VERSION,signals}})}).catch(()=>{});
+    if(run)await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:new Date().toISOString(),status:'error',captured,graded,skipped,errors:[...errors,{error:String(error)}],details:{model:MODEL_VERSION,app:APP_VERSION,signals,research}})}).catch(()=>{});
     return Response.json({ok:false,error:String(error)},{status:500});
   }
 });

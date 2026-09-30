@@ -594,7 +594,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v253** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v254** (backend **b16-fantasy-gm**).
 
 - **v250 — Mobile sideways-scroll guard:** Clip document-level horizontal overflow
   (hidden fallback) without disabling zoom or nested score/table scrolling. Bound
@@ -609,6 +609,16 @@ Current version as of this writing: **v253** (backend **b16-fantasy-gm**).
   AI Picks keeps cross-sport forecasts/performance and links to league research;
   Labs no longer contains betting research. Existing collectors, model constants,
   data and refresh cadence are unchanged. CFB stays Top 25 only.
+
+### v254 — Prospective football development
+- Football totals continue to be recorded and graded, but are research-only: no best/edge tier or promoted totals board. This supersedes older totals-promotion descriptions below. Existing historical rows are not rewritten.
+- `football-research.ts` and shared `football-research-core.js` add independent `football-research-v2-early` and `football-research-v2-near` rows to `ai_predictions`. Public read-only RLS is unchanged. The official cloud record remains filtered to v239. Freeze first observation per game/market/window, including exact line, nullable side price, odds observation time, source evidence and a same-time v239 baseline. Never enrich/reprice research rows later or backfill past windows. Near = final 90 minutes, early = before that. Pending saved games remain eligible near kickoff even if a college team drops out of Top 25; rescheduled study entries grade void.
+- College research uses ESPN's working `site.web.api.espn.com/apis/fitt/v3/sports/football/college-football/powerindex?season=YEAR`. Parse category `names` against `values`; reject wrong season, future timestamps, or updates older than eight days. Candidate = FPI home minus away plus existing 3 home points (zero neutral), without an extra form term. Require BOTH ratings; otherwise mark baseline-only and exclude from paired candidate results. Do not mix tier/FPI scales. No fitted candidate probability. Schedule-adjusted custom fallback is deferred while FPI is available.
+- The initial v1 live verification records retained unknown QB sources; v2 adds the standard ESPN request headers and HTTP source diagnostics. Keep v1 as an audit cohort, excluded from the active study.
+- NFL depth-chart QB and injury-feed evidence is timestamped, season/team checked, and explicitly unconfirmed. Empty/stale feeds never imply healthy or confirmed. QB information is for review and prospective stratification; no invented automatic QB weight. Existing NFL coefficients stay unchanged.
+- `football-development.js` is available in NFL/CFB Picks & Research and the individual AI league board. Separate window/market results, baseline winner-confidence buckets, reviewed-game baseline, human and fixed 50/50 blend. One immutable pregame human review per game/window in device-local storage, with reasons and factor tags; JSON export. Human reviews do NOT sync to cloud. No claimed ROI without prices or calibrated improvement from tiny samples.
+- MLB browser and collector explicitly merge current-year regular season and postseason schedules by event ID, still excluding future games. A failed regular-season fetch returns unavailable instead of silently substituting last year. New snapshots identify `current-season-regular-plus-post-v1`; prior saved forecasts stay frozen.
+- Deploy `sports-hub-ai/index.ts`, `signals.ts`, `football-research.ts` and all imported shared JS files together with JWT verification ON. Existing 7/37-minute cron remains. Tests include FPI schema/freshness, QB unknown status, window guards, side-specific prices, human locking/grade alignment and real browser profile regression. New candidates require prospective evaluation before promotion.
 
 ### v253 — Mobile bottom controls
 `mobile-chrome.js` anchors the action bar and back-to-top button to the visual viewport on scroll, browser-toolbar resize, rotation and restored pages. The dock has automatic height and safe-area padding; measured height reserves room after the content. Controls hide during pinch zoom and while a software keyboard takes most of the view. CSS retains a viewport fallback without VisualViewport. Model and collectors remain unchanged.

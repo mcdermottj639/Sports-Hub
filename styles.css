@@ -3277,3 +3277,17 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 }
 :root.bottom-controls-hidden .botbar,
 :root.bottom-controls-hidden .to-top { visibility: hidden; pointer-events: none; }
+
+/* v254: research controls remain within the mobile viewport. */
+.football-development { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border, #555); border-radius: 12px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.football-development summary { cursor: pointer; font-weight: 700; padding: .4rem 0; }
+.football-development p { font-size: .88rem; line-height: 1.5; margin: .8rem 0; }
+.football-development .fd-scroll { overflow-x: auto; max-width: 100%; }
+.football-development table { border-collapse: collapse; font-size: .8rem; width: 100%; }
+.football-development td, .football-development th { padding: .5rem; text-align: left; border-bottom: 1px solid #555; }
+.fd-game { border-top: 1px solid #555; padding: .7rem 0; }
+.fd-game form { display: grid; gap: .7rem; min-width: 0; }
+.fd-game form > label { display: grid; gap: .3rem; }
+.fd-game input[type=number], .fd-game textarea { box-sizing: border-box; width: 100%; min-width: 0; font: inherit; padding: .6rem; }
+.fd-game fieldset { min-width: 0; display: flex; flex-wrap: wrap; gap: .7rem; }
+.football-development button { padding: .7rem; font: inherit; cursor: pointer; }

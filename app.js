@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v253';
+const APP_VERSION = 'v254';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -2141,7 +2141,14 @@ function isPreseasonEv(ev) {
 async function teamProfile(sport, teamId, beforeDate) {
   if (!teamId) return null;
   const path = LEAGUES[sport].espnPath;
-  const data = await fetchJSON(`${SITE}/${path}/teams/${teamId}/schedule`, 3 * 3600000).catch(() => null);
+  const scheduleURL = `${SITE}/${path}/teams/${teamId}/schedule`;
+  const seasonYear = new Date(beforeDate || Date.now()).getUTCFullYear();
+  let data;
+  if (sport === 'mlb') {
+    const [regular, postseason] = await Promise.all([2, 3].map(type => fetchJSON(`${scheduleURL}?season=${seasonYear}&seasontype=${type}`, 3 * 3600000).catch(() => null)));
+    if (!regular) return null;
+    data = SportsHubFootballResearch.mergeSchedules(regular, postseason);
+  } else data = await fetchJSON(scheduleURL, 3 * 3600000).catch(() => null);
   const cut = beforeDate ? new Date(beforeDate).getTime() : null;
   const parse = (payload) => {
     const out = [];
@@ -2168,7 +2175,7 @@ async function teamProfile(sport, teamId, beforeDate) {
   let prior = null, priorW = 0;
   if (beforeDate && games.length < 6) {
     const yr = Number(data?.season?.year) || new Date(beforeDate).getFullYear();
-    const pdata = await fetchJSON(`${SITE}/${path}/teams/${teamId}/schedule?season=${yr - 1}`, 6 * 3600000).catch(() => null);
+    const pdata = await fetchJSON(`${SITE}/${path}/teams/${teamId}/schedule?season=${yr - 1}${sport === 'mlb' ? '&seasontype=2' : ''}`, 6 * 3600000).catch(() => null);
     const pg = parse(pdata);
     if (pg.length >= 8) {
       const psum = (f) => pg.reduce((s, g) => s + f(g), 0) / pg.length;
@@ -2844,6 +2851,7 @@ async function setSportView(sport, view) {
     target.innerHTML=`<h2>${sport==='cfb'?'CFB Top 25':'NFL'} Picks &amp; Research</h2><p class="muted">Model forecasts and tracked research, kept separate.</p><details class="sport-research-block"><summary>This week’s model picks</summary><div data-sport-picks><p>Loading forecasts…</p></div></details><details class="sport-research-block"><summary>Model performance</summary><div data-sport-record></div></details><div data-sport-results></div>`;
     target.dataset.ready='true';
   }
+  globalThis.SportsHubFootballDevelopment?.mount(target, sport);
   target.querySelector('[data-sport-results]').appendChild(host);
   const record=target.querySelector('[data-sport-record]');
   record.replaceChildren(recordPanel(tallyDetails(sport),pendingSummary(sport),sport));
@@ -4611,7 +4619,8 @@ async function buildBoard(sport, games, opts = {}) {
         // totals disagreement is an edge like any other, and without a tier it
         // could never reach Home or be measured against the side picks.
         tot = { side: diff > 0 ? 'OVER' : 'UNDER', line: Number(info.ou), proj: p.projTotal, diff,
-                tier: Math.abs(diff) >= floor * 2 ? 'best' : 'edge' };
+                researchOnly: sport === 'nfl' || sport === 'cfb',
+                tier: sport === 'mlb' ? (Math.abs(diff) >= floor * 2 ? 'best' : 'edge') : null };
       }
     }
     // ATS (football only). `spread` is home-oriented, so the market's implied
@@ -4699,7 +4708,7 @@ function pickSnapshot(r, market) {
     : market === 'spread' ? (home ? info?.hSpreadPrice : info?.aSpreadPrice)
     : r.tot.side === 'OVER' ? info?.overPrice : info?.underPrice;
   const probability = market === 'moneyline' ? null : marketProbabilityFor(r, market);
-  return { ...(probability ? { probability } : {}), v: AI_MODEL_VERSION, app: APP_VERSION, at: new Date().toISOString(), start: g.date, market,
+  return { researchOnly: market === 'total' && ATS_SPORTS.has(sport), historyPolicy: sport === 'mlb' ? 'current-season-regular-plus-post-v1' : null, ...(probability ? { probability } : {}), v: AI_MODEL_VERSION, app: APP_VERSION, at: new Date().toISOString(), start: g.date, market,
     home, price: price ?? null, provider: info?.provider || null,
     prob: market === 'moneyline' ? (home ? p.probHome : 1 - p.probHome) : probability?.prob ?? null,
     marketProb: marketHomeProb(info),
@@ -4941,8 +4950,8 @@ function marketRowsHTML(r) {
     ar ? `<p>Projected winner: ${esc(marginWinner.abbr || marginWinner.name)} by ${Math.abs(ar.proj).toFixed(1)}. Difference: <b>${Math.abs(ar.edge).toFixed(1)} points</b> toward ${esc(ar.abbr)} covering. ${ar.pinned ? 'Projection limit reached; no signal.' : ''}</p>
       ${comparisonGraphic(ar.proj, -ar.homeSpread, '', true)}<small>Margins above are toward ${esc(g.home.abbr || 'home')}; negative means ${esc(g.away.abbr || 'away')}. ${ATS_EDGE_MIN[sport]}-point signal threshold. Probability estimates are experimental.</small>${marketProbabilityHTML(spreadProbability)}`
       : '<p>A winner forecast is not a spread pick.</p>');
-  const total = section('Total', 'How much will both teams score?', tr ? `${tr.side} ${tr.line}${totalProbability ? ` · ${(totalProbability.prob * 100).toFixed(0)}% experimental` : ''}` : p.projTotal != null && info?.ou != null ? 'No difference / no signal' : 'Waiting for a total', status(!!tr?.qualifies),
-    tr ? `<p>${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'points'} ${tr.diff > 0 ? 'above' : 'below'} the book. ${tr.broken ? '<b>Outside the sanity limit — not a signal.</b>' : ''}</p>
+  const total = section('Total', 'How much will both teams score?', tr ? `${tr.side} ${tr.line}${totalProbability ? ` · ${(totalProbability.prob * 100).toFixed(0)}% experimental` : ''}` : p.projTotal != null && info?.ou != null ? 'No difference / no signal' : 'Waiting for a total', ATS_SPORTS.has(sport) ? 'Research only' : status(!!tr?.qualifies),
+    tr ? `<p>${ATS_SPORTS.has(sport) ? 'Tracked for evaluation; not a promoted pick. ' : ''}${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'points'} ${tr.diff > 0 ? 'above' : 'below'} the book. ${tr.broken ? '<b>Outside the sanity limit — not a signal.</b>' : ''}</p>
       ${comparisonGraphic(tr.proj, tr.line, '')}<small>${TOT_EDGE_MIN[sport] ?? 1}-${sport === 'mlb' ? 'run' : 'point'} signal threshold. Probability estimates are experimental.</small>${marketProbabilityHTML(totalProbability)}`
       : '<p>No total signal without both a projection and a line.</p>');
   const provenance = r.linePregame ? `Last pregame line saved on this device${lineAtLabel(r.lineAt) ? ' · ' + lineAtLabel(r.lineAt) : ''}. The projection is computed now, not restored from a pregame snapshot.` : info?.provider ? `Odds source: ${info.provider}.` : 'Odds source unavailable.';
@@ -4972,7 +4981,7 @@ function boardCard(r, opts = {}) {
   // put the card here.
   const meta = TIER_META[tier]
     || (r.ats ? { label: '📐 SPREAD', cls: 'ats' }
-      : r.tot ? { label: r.tot.tier === 'best' ? '🔥 TOTAL' : '🎯 TOTAL', cls: 'tot' }
+      : r.tot && !r.tot.researchOnly ? { label: r.tot.tier === 'best' ? '🔥 TOTAL' : '🎯 TOTAL', cls: 'tot' }
       : { label: 'MODEL READ', cls: 't3' });
   const cfg = LEAGUES[sport];
   const card = el('div', `brd-card ${meta.cls}`);
@@ -5119,7 +5128,7 @@ function paintBotBar(rows) {
   if (b) bits.push(`${b} large-gap signal${b === 1 ? '' : 's'}`);
   if (e) bits.push(`${e} edge${e === 1 ? '' : 's'}`);
   if (l) bits.push(`${l} lean${l === 1 ? '' : 's'}`);
-  const spreads = live.filter((r) => r.ats).length, totals = live.filter((r) => r.tot).length;
+  const spreads = live.filter((r) => r.ats).length, totals = live.filter((r) => r.tot && !r.tot.researchOnly).length;
   if (spreads) bits.push(`${spreads} spread signal${spreads === 1 ? '' : 's'}`);
   if (totals) bits.push(`${totals} total signal${totals === 1 ? '' : 's'}`);
   const agree = live.filter((r) => r.p?.sharp?.agree).length;
@@ -5180,11 +5189,11 @@ async function renderHomeBoard() {
   // the moneyline plays rather than being buried a tab away.
   const spreads = live.filter((r) => r.ats).sort((a, b) => Math.abs(b.ats.edge) - Math.abs(a.ats.edge));
   // Best-bet totals first, then by how far the projection sits from the line.
-  const totals = live.filter((r) => r.tot).sort((a, b) =>
+  const totals = live.filter((r) => r.tot && !r.tot.researchOnly).sort((a, b) =>
     (b.tot.tier === 'best' ? 1 : 0) - (a.tot.tier === 'best' ? 1 : 0)
     || Math.abs(b.tot.diff) - Math.abs(a.tot.diff));
   const leans = live.filter((r) => r.tier === 'lean').length;
-  const watchOnly = live.filter((r) => r.p && !r.tier && !r.ats && !r.tot).length;
+  const watchOnly = live.filter((r) => r.p && !r.tier && !r.ats && (!r.tot || r.tot.researchOnly)).length;
 
   box.innerHTML = '';
   const head = el('div', 'brd-head');
@@ -5503,7 +5512,7 @@ async function paintOverviewBoard(tok) {
     .sort((a, b) => (b.gap ?? -1) - (a.gap ?? -1) || (b.p?.conf || 0) - (a.p?.conf || 0));
   const alerts = byTier('alert'), best = byTier('best'), edges = byTier('edge'), leans = byTier('lean');
   const ats = live.filter((r) => r.ats).sort((a, b) => Math.abs(b.ats.edge) - Math.abs(a.ats.edge));
-  const tots = live.filter((r) => r.tot).sort((a, b) =>
+  const tots = live.filter((r) => r.tot && !r.tot.researchOnly).sort((a, b) =>
     (b.tot.tier === 'best' ? 1 : 0) - (a.tot.tier === 'best' ? 1 : 0) || Math.abs(b.tot.diff) - Math.abs(a.tot.diff));
   const passes = live.filter((r) => r.p && r.info?.favName && !r.tier).length;
 
@@ -5568,7 +5577,7 @@ async function paintOverviewBoard(tok) {
   const strip = el('div', 'ai-lgstrip');
   strip.innerHTML = listed.map((c) => {
     const plays = c.rows.filter((r) => gameState(r.g) !== 'final' && (r.tier === 'alert' || r.tier === 'best' || r.tier === 'edge')).length;
-    const mkts = c.rows.filter((r) => gameState(r.g) !== 'final' && (r.ats || r.tot)).length;
+    const mkts = c.rows.filter((r) => gameState(r.g) !== 'final' && (r.ats || (r.tot && !r.tot.researchOnly))).length;
     return `<button type="button" class="ai-lgrow" data-league="${c.sport}">
       <span class="lgn">${lgLabel(c.sport)}</span>
       <span class="lgd">${WEEK_SPORTS.has(c.sport) ? `${slateN(c.sport)} game${slateN(c.sport) === 1 ? '' : 's'} this week` : `${c.n} game${c.n === 1 ? '' : 's'} today`}${plays ? ` · ${plays} play${plays === 1 ? '' : 's'}` : ''}${mkts ? ` · ${mkts} number market${mkts === 1 ? '' : 's'}` : ''}</span>
@@ -5668,6 +5677,7 @@ async function paintSportBoard(tok) {
   }
 
   container.innerHTML = '';
+  if (ATS_SPORTS.has(sport)) globalThis.SportsHubFootballDevelopment?.mount(container, sport);
   let right = 0, graded = 0;
   const upcoming = rows.filter((r) => AI_MATH.pregame(r.g));
 
@@ -5702,7 +5712,7 @@ async function paintSportBoard(tok) {
   const alerts = byTier('alert'), best = byTier('best'), edges = byTier('edge'), leans = byTier('lean');
   const passes = upcoming.filter((r) => r.p && r.info?.favName && !r.tier);
   const gradedEdges = rows.filter((r) => r.isEdge && gameState(r.g) === 'final');
-  const upTot = upcoming.filter((r) => r.tot).length;
+  const upTot = upcoming.filter((r) => r.tot && !r.tot.researchOnly).length;
   const upAts = upcoming.filter((r) => r.ats).length;
   const mlPlays = alerts.length + best.length + edges.length;
   const playCount = mlPlays + upAts + upTot;
@@ -5794,7 +5804,7 @@ async function paintSportBoard(tok) {
   // 🎯 Totals. Rendered as full cards like the other two markets — they used
   // to be one-line text rows, which quietly said "this one matters less". It
   // is the same kind of call: the model's number against the book's.
-  const totRows = marketPool.filter((r) => r.tot && !displayed.has(r.g.id)).sort((a, b) =>
+  const totRows = marketPool.filter((r) => r.tot && !r.tot.researchOnly && !displayed.has(r.g.id)).sort((a, b) =>
     (b.tot.tier === 'best' ? 1 : 0) - (a.tot.tier === 'best' ? 1 : 0)
     || Math.abs(b.tot.diff) - Math.abs(a.tot.diff));
   if (totRows.length) {
