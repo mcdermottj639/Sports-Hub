@@ -596,7 +596,11 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v269** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v270** (backend **b16-fantasy-gm**).
+
+### v270 — Visible projections beneath comparison picks
+
+- Compact NFL/CFB comparison rows show each saved projected margin beneath its spread selection; NFL totals show each projected total. Identical selections can now visibly retain different forecasts. Withheld challengers stay unavailable. Agreement still compares sides against the same saved line; calculations and data collection are unchanged.
 
 ### v269 — Automatic latest comparison
 

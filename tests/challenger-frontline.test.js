@@ -18,9 +18,9 @@ test('missing, post-kickoff and old-cohort observations never fabricate a compar
 test('results separate windows, exclude withheld and show collecting without settled prices',()=>{const html=ui().summaryHTML([...rows(),...rows('near',false)],'early');assert.match(html,/1 saved games · 1 challenger available · 0 withheld/);assert.match(html,/0 settled pairs/);assert.match(html,/current collecting · challenger collecting/);const near=ui().summaryHTML([...rows(),...rows('near',false)],'near');assert.match(near,/1 saved games · 0 challenger available · 1 withheld/);});
 test('saved source strings are escaped and exact-line comparisons are not called agreement',()=>{const r=rows();r.forEach(x=>{x.matchup='<img> @ CLE';x.projection=x.market==='total'?42:3;});const html=ui().gameHTML(r,'game');assert.ok(!html.includes('<img>'));assert.equal(ui().gameComparison(r,'game').spreadStatus,'At line');assert.equal(ui().gameComparison(r,'game').totalStatus,'At line');});
 function college(phase='early',available=true){return rows(phase,available).map(r=>({...r,sport:'cfb',matchup:'TEX @ UGA',model_version:C.versionFor('cfb')+'-'+phase,snapshot:{research:{...r.snapshot.research,evidence:{fpi:{home:22,away:23,updatedAt:'2026-09-30T20:00Z'}}}}}));}
-test('compact rows show opposing sides at the identical saved line, not projected margins',()=>{
+test('compact rows show picks at the saved line with each model projection beneath',()=>{
   const html=ui().gameHTML(rows(),'game');const summaries=[...html.matchAll(/<details class="fc-market"><summary>(.*?)<\/summary>/g)].map(x=>x[1]);
-  assert.equal(summaries.length,2);assert.match(summaries[0],/CLE -3/);assert.match(summaries[0],/PIT \+3/);assert.match(summaries[0],/Disagree/);assert.match(summaries[1],/O42/);assert.match(summaries[1],/U42/);assert.ok(!summaries.join('').includes('by 5.0'));
+  assert.equal(summaries.length,2);assert.match(summaries[0],/CLE -3/);assert.match(summaries[0],/PIT \+3/);assert.match(summaries[0],/Disagree/);assert.match(summaries[1],/O42/);assert.match(summaries[1],/U42/);assert.match(summaries[0],/Proj. CLE by 5.0/);assert.match(summaries[0],/Proj. CLE by 2.0/);assert.match(summaries[1],/Proj. 45.0/);assert.match(summaries[1],/Proj. 40.0/);
   assert.equal([...ui().gameHTML(college(),'game','cfb').matchAll(/class="fc-market"/g)].length,1);
 });
 test('withheld compact selections are blank rather than copied baseline picks',()=>{
@@ -51,4 +51,10 @@ test('latest results select one paired window per game, including withheld near 
   assert.match(html,/2 saved games · 1 challenger available · 1 withheld/);
   assert.ok(html.indexOf('data-fc-window')>html.indexOf('class="fc-results-details"'));
   assert.match(html,/data-fc-window="latest" aria-pressed="true"/);
+});
+
+test('agreeing spread picks still show opposite projected winners',()=>{
+  const r=rows();r.forEach(x=>{x.line=x.market==='spread'?2.5:x.line;x.projection=x.market==='total'?40.4:2.5;x.snapshot.research.baseline={margin:-0.8,total:43.8};});
+  const html=ui().gameHTML(r,'game');const summary=html.match(/<details class="fc-market"><summary>(.*?)<\/summary>/)[1];
+  assert.match(summary,/Agree/);assert.match(summary,/Proj. PIT by 0.8/);assert.match(summary,/Proj. CLE by 2.5/);assert.equal((summary.match(/<b>CLE \+2.5<\/b>/g)||[]).length,2);
 });

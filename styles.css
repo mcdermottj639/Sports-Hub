@@ -3457,3 +3457,9 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .fc-method[open] > summary::before { content: '−'; }
 .fc-method > summary::-webkit-details-marker { display: none; }
 .fc-method > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* v270: expose differing forecasts even when the selected bet agrees. */
+.fc-selection { display: flex; flex-direction: column; align-items: center; gap: .1rem; min-width: 0; text-align: center; }
+.fc-selection b { font-size: .79rem; }
+.fc-game .fc-selection small { font-size: .65rem; line-height: 1.25; font-weight: 400; color: var(--muted); }
+.fc-market > summary:has(.fc-selection) { padding: .4rem 0; }
