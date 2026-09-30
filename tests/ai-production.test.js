@@ -32,10 +32,12 @@ function load() {
     }
     script.runInContext(s);
   }
-  for (const name of ['statVal', 'shrinkERA', 'cfbTierFromName', 'cfbRating', 'normCdf', 'invNorm', 'projMarginFor', 'predictGame', 'normOdds', 'marketHomeProb', 'pickedPrice', 'pickTier', 'marketGap', 'atsRead', 'atsCall', 'totalRead', 'recordResult', 'recordPick', 'recordAtsPick', 'recordTotalPick', 'atsResult', 'gradePending', 'tallyStats', 'marketProbabilityFor', 'marketProbabilityHTML', 'pickSnapshot', 'commitRow', 'slateDateFor', 'savedPickForGame', 'nextWeekRequest', 'comparisonGraphic', 'moneylineValuesHTML', 'marketRowsHTML']) {
+  for (const name of ['statVal', 'shrinkERA', 'cfbTierFromName', 'cfbRating', 'normCdf', 'invNorm', 'projMarginFor', 'predictGame', 'computePregamePrediction', 'restoreForecast', 'normOdds', 'marketHomeProb', 'pickedPrice', 'pickTier', 'marketGap', 'atsRead', 'atsCall', 'totalRead', 'recordResult', 'recordPick', 'recordAtsPick', 'recordTotalPick', 'atsResult', 'gradePending', 'tallyStats', 'marketProbabilityFor', 'marketProbabilityHTML', 'pickSnapshot', 'commitRow', 'slateDateFor', 'savedPickForGame', 'nextWeekRequest', 'comparisonGraphic', 'moneylineValuesHTML', 'marketRowsHTML']) {
     const match = source.match(new RegExp(`^(?:async )?function ${name}\\([^]*?^}`, 'm'));
     assert.ok(match, name); vm.runInContext(match[0], s);
   }
+  vm.runInContext(fs.readFileSync(require.resolve('../forecast-lock.js'), 'utf8'), s);
+  vm.runInContext('let forecastRecoverySync = null;', s);
   return s;
 }
 const profile = { winPct: 0.6, pdpg: 7, form: 3, homeWP: 0.6, roadWP: 0.6, homeGP: 20, roadGP: 20, ppg: 24, papg: 20, lastDate: '2026-09-01' };

@@ -227,6 +227,8 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
 ## Files
 
+- `forecast-lock.js` — persistent pregame display snapshots (`sportshub:forecast-lock:v1`, latest 300 events within a 1 MiB UTF-16 budget), shared across model surfaces and restored after reload.
+
 - `BETTING_SIGNALS.md` — v244 architecture, capture/freeze policy, research limits and rollback.
 - `cloud-signals.js`, `betting-signals-ui.js`, `betting-signals.css` — shared read-only NFL/CFB evidence panels; full research lives under each league's Picks & Research switch, with links from AI Picks and game reports.
 - `supabase/functions/_shared/betting-signals-core.js` — identical deterministic rule math in browser/Edge/tests.
@@ -594,7 +596,9 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v257** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v258** (backend **b16-fantasy-gm**).
+
+- **v258 — Lock all modeled sports at kickoff:** `forecast-lock.js` saves the latest complete pregame display forecast with its odds and market probabilities. `predictGame()` refuses live/final recalculation, including requests crossing kickoff. It restores that snapshot or timestamp-validated cloud/device ledger evidence. Missing forecasts/projections remain unavailable. All model comparisons use saved odds after kickoff, never live prices. The display cache is separate from first-write performance history and does not rewrite results.
 
 - **v257 — Compact NFL/CFB slate cards:** Three-column winner/spread/total summaries replace nested analysis blocks. Matchups, start times, TV, ranks and live/final scores remain on the cards; tap or keyboard activation opens the full market breakdown. Sources and coverage are collapsed once above the slate. No model, capture or grading changes.
 
@@ -984,7 +988,7 @@ The live pipeline saves probability method, sample size, training cutoff and its
     not after them — because it says what every number under it *is*. That is
     the v224 lesson about sentence order, applied to the same card. The
     look-back slate has carried this banner since v199; the modal never got one.
-  - **⚠️ The read itself is untouched, deliberately.** v224 built the
+  - **⚠️ SUPERSEDED in v258: live reads are now restored, never recomputed. The read itself is untouched, deliberately.** v224 built the
     pregame-line restore precisely so a game keeps its numbers through kickoff
     and after — the owner references them. So the fix is a LABEL, not a
     removal: every row, the model total and the model margin still render.
@@ -1216,7 +1220,7 @@ The live pipeline saves probability method, sample size, training cutoff and its
     number collides, bump YOURS and re-verify against the other change; do not
     rewrite the shipped one.**
 
-- **📊 A live game keeps its PREGAME line on the card (v224)** — the owner, on
+- **⚠️ SUPERSEDED in v258: all live model displays restore pregame forecasts AND odds; no live recomputation. 📊 A live game keeps its PREGAME line on the card (v224)** — the owner, on
   the NFL slate with NE @ SEA in the 2nd quarter reading `SPREAD no line
   posted` / `TOTAL no total posted`: *"This game went live but it should still
   show the model picks vs the pregame lines here. I like to reference that

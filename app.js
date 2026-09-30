@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v257';
+const APP_VERSION = 'v258';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -754,10 +754,12 @@ function pregameOdds(sport, g) {
 // totals pick it never had — a fresh prediction of a completed game, which is
 // the v199 look-ahead rule exactly.
 function shownOdds(sport, g, live) {
-  const pre = pregameOdds(sport, g);
-  if (!pre) return { info: live, pregame: false, at: null };
-  return { info: { ...pre, provider: live?.provider ?? null }, pregame: true, at: pre.at };
+  if (globalThis.SportsHubForecastLock.eligible(g)) return { info:live, pregame:false, at:null };
+  const saved = globalThis.SportsHubForecastLock.read(sport,g);
+  // No in-game odds may replace missing pregame values.
+  return {info:saved?.odds || null,pregame:true,at:saved?.at || null};
 }
+
 const lineAtLabel = (t) => {
   if (!t) return '';
   try { return new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (_) { return ''; }
@@ -922,8 +924,8 @@ function gameCard(sport, g, opts = {}) {
   // opts.odds (Home slate): show the pregame betting line right on the card.
   // AI Picks cards skip it — they carry their own richer odds block.
   let oddsLine = '';
-  if (opts.odds && st === 'scheduled') {
-    const info = normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
+  if (opts.odds) {
+    const info = shownOdds(sport, g, normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr)).info;
     const ml = (v) => (Number(v) > 0 ? `+${v}` : `${v}`);
     let line = info?.details;
     if (!line && info && (info.hML != null || info.aML != null)) {
@@ -1046,7 +1048,7 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
     // peeked at (capped, see raceReport) before the model runs — otherwise the
     // modal would show a different confidence than the AI Picks tab for the
     // same game. It races the ESPN summary fetch, so it usually costs nothing.
-    const [data, pred, hitters] = await Promise.all([
+    let [data, pred, hitters] = await Promise.all([
       fetchJSON(`${SITE}/${path}/summary?event=${id}`, 30000),
       g && !preseason
         ? raceReport(reportP, SHARP_WAIT.modal)
@@ -1055,6 +1057,11 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
         : Promise.resolve(null),
       g && sport === 'mlb' ? Promise.all([topHitters(g.home.id), topHitters(g.away.id)]).catch(() => null) : Promise.resolve(null),
     ]);
+    const summaryState = (data.header?.competitions?.[0] || data.competitions?.[0])?.status?.type?.state;
+    if (g && ['in', 'post'].includes(summaryState) && g.state === 'pre') {
+      g = { ...g, state:summaryState };
+      pred = await restoreForecast(sport,g);
+    }
     let extra = '';
     if (preseason) {
       extra += '<div class="md-section-title acc-open">🤖 AI Pick</div><div class="ai-why">Preseason — the model sits these out. Backups play most of the snaps, so results and totals aren\'t predictive.</div>';
@@ -1084,7 +1091,7 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
         if (token !== detailToken) return; // modal moved on while we waited
         const host = document.getElementById('md-report');
         if (!host) return;
-        host.innerHTML = gameReportHTML(sport, g, pred, normOdds(rawO, g.home.name, g.away.name, g.home.abbr, g.away.abbr), report, data);
+        host.innerHTML = gameReportHTML(sport, g, pred, shownOdds(sport, g, normOdds(rawO, g.home.name, g.away.name, g.home.abbr, g.away.abbr)).info, report, data);
         makeAccordion(host, '.md-section-title', SEC_OPEN_ALL);
       }).catch(() => {
         const host = token === detailToken ? document.getElementById('md-report') : null;
@@ -1220,7 +1227,7 @@ function oddsSectionHTML(info, awayAbbr, homeAbbr, pred, sport, g, pregameAt) {
   const ml = (v) => (v == null ? '—' : (Number(v) > 0 ? `+${v}` : `${v}`));
   const at = pregameAt === true ? '' : lineAtLabel(pregameAt);
   const src = pregameAt
-    ? `<div class="ai-why" style="margin-top:2px">Last pregame line this device saw${at ? ` (${at})` : ''} — ESPN stops publishing the line at kickoff.</div>`
+    ? `<div class="ai-why" style="margin-top:2px">Locked pregame line${at ? ` (${at})` : ''} — in-game odds do not change this model read.</div>`
     : '';
   return `<div class="md-section-title acc-open">Betting Odds${pregameAt ? ' · pregame' : info.provider ? ` · ${info.provider}` : ''}</div>
     <div class="odds-grid">
@@ -1313,17 +1320,10 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
 
   const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g?.odds;
   let oddsInfo = normOdds(rawO, home.team?.displayName, away.team?.displayName, home.team?.abbreviation, away.team?.abbreviation);
-  // ⚠️ Gap-FILL here, not the wholesale replacement the slate cards do, and the
-  // difference is which feed each one reads. `pickcenter` normally keeps the
-  // closing number through a game; it is the SCOREBOARD's `odds` that goes null
-  // at kickoff. So the device snapshot only stands in when nothing usable came
-  // back at all — otherwise the modal would show a stored copy in place of the
-  // book's own close, which is strictly worse information.
   let oddsPre = null;
-  const bare = (o) => !o || (o.spread == null && o.ou == null && o.hML == null && o.aML == null && !o.details);
-  if (bare(oddsInfo)) {
-    const pre = pregameOdds(sport, g);
-    if (pre) { oddsInfo = pre; oddsPre = pre.at ?? true; }
+  if (g && !globalThis.SportsHubForecastLock.eligible(g)) {
+    oddsInfo = pred?.lockedOdds || null;
+    oddsPre = pred?.lockedAt || true;
   }
   html += oddsSectionHTML(oddsInfo, away.team?.abbreviation, home.team?.abbreviation, pred, sport, g, oddsPre);
   html += report || '';
@@ -1335,6 +1335,7 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
       g, sport, p: pred, info: oddsInfo, linePregame: !!oddsPre, lineAt: oddsPre,
       atsR: atsRead(sport, g, pred, oddsInfo), totR: totalRead(sport, pred, oddsInfo) });
   } else html += aiPickHead(pred, sport, g, oddsInfo);
+  if (!pred && g && !globalThis.SportsHubForecastLock.eligible(g)) html += '<div class="ai-note">No saved pregame forecast — model locked; no in-game recalculation.</div>';
   html += aiFactors(pred);
   html += signals;
   html += extra || '';
@@ -2435,7 +2436,30 @@ async function matchupFactor(sport, g) {
 // opts.splits (v160) = this game's DraftKings bets%/handle% row, when the
 // betting backend answered in time. Optional by design: every caller must work
 // without it, and the pick simply loses the sharp-money factor.
+let forecastRecoverySync = null;
+async function restoreForecast(sport, g) {
+  const lock = globalThis.SportsHubForecastLock;
+  let saved = lock.read(sport, g) || lock.recover(sport, g, { ...getPending(), ...getTally(), ...(globalThis.SportsHubCloudAI?.maps()?.pending || {}) });
+  if (!saved && globalThis.SportsHubCloudAI) {
+    forecastRecoverySync ||= globalThis.SportsHubCloudAI.sync().catch(() => null);
+    await forecastRecoverySync;
+    saved = lock.recover(sport, g, { ...getPending(), ...getTally(), ...(globalThis.SportsHubCloudAI?.maps()?.pending || {}) });
+  }
+  return saved ? { ...saved.prediction, locked: true, lockedAt:saved.at, lockedSource:saved.source,
+    lockedOdds:saved.odds, lockedProbabilities:saved.probabilities || {} } : null;
+}
 async function predictGame(sport, g, opts) {
+  const lock = globalThis.SportsHubForecastLock;
+  if (!lock.eligible(g)) return restoreForecast(sport, g);
+  const p = await computePregamePrediction(sport, g, opts);
+  // A request started before kickoff may finish afterward. Never capture it.
+  if (!lock.eligible(g)) return restoreForecast(sport, g);
+  const info = normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
+  const r = {g,sport,p,info,atsR:atsRead(sport,g,p,info),totR:totalRead(sport,p,info)};
+  lock.capture(sport,g,p,info,{spread:marketProbabilityFor(r,'spread'),total:marketProbabilityFor(r,'total')});
+  return p;
+}
+async function computePregamePrediction(sport, g, opts) {
   const [hf, af] = await Promise.all([teamProfile(sport, g.home.id, g.date), teamProfile(sport, g.away.id, g.date)]);
   const scale = PD_SCALE[sport] || 5;
   const w = MODEL_W[sport] || MODEL_W.default;
@@ -2722,7 +2746,7 @@ function aiPickHead(pred, sport, g, info) {
       ${pill(`${Math.abs(tot.diff).toFixed(1)} pts`, tot.diff, TOT_EDGE_MIN[sport] ?? 1)}</div>`);
   } else if (info?.ou != null) {
     rows.push(`<div class="ai-play"><span class="ai-mkt">Total</span>
-      <span class="ai-sel bb-muted">model lands exactly on ${info.ou}</span></div>`);
+      <span class="ai-sel bb-muted">${pred.projTotal == null ? 'No saved total projection' : `model lands exactly on ${info.ou}`}</span></div>`);
   }
 
   // Spell out the reconciliation whenever the spread side differs from the
@@ -2752,7 +2776,7 @@ function aiPickHead(pred, sport, g, info) {
   // the v224 lesson about where that sentence belongs. The look-back slate has
   // said this since v199; the modal never got the banner.
   const played = g && !AI_MATH.pregame(g)
-    ? '<div class="ai-why">Reference only. The game has started or is not eligible for pregame logging. This read is computed now; Results shows what was actually saved before kickoff.</div>'
+    ? '<div class="ai-why">Locked pregame forecast. Model probabilities, projections and comparison lines stay fixed after the game starts. Results retains the original performance record.</div>'
     : '';
   return `<div class="md-section-title acc-open">🤖 AI Pick</div>
     ${played}
@@ -3258,6 +3282,7 @@ function sharpSignals(g, sp, mv) {
 // total, line movement, DK money splits, and sharp signals.
 function gameReportHTML(sport, g, pred, info, report, data) {
   const parts = [];
+  if (pred?.locked) parts.push(`<div class="ai-why">Locked pregame forecast${lineAtLabel(pred.lockedAt) ? ` · saved ${esc(lineAtLabel(pred.lockedAt))}` : ''}. Model lines do not update during play.</div>`);
   const mkt = info ? marketHomeProb(info) : null;
   if (pred && pred.probHome != null) {
     const rows = [['away', 1 - pred.probHome, info?.aML], ['home', pred.probHome, info?.hML]].map(([side, p, book]) => {
@@ -4625,7 +4650,7 @@ async function buildBoard(sport, games, opts = {}) {
     predictGame(sport, g, { splits: splitsFor(report, g) }).catch(() => null)));
   const rows = playable.map((g, i) => {
     const p = preds[i];
-    const info = p ? normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr) : null;
+    const info = p?.locked ? p.lockedOdds : p ? normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr) : null;
     const gap = p && info ? marketGap(p, info) : null;
     const tier = pickTier(p, info, gap);
     let tot = null;
@@ -4716,6 +4741,7 @@ async function buildBoard(sport, games, opts = {}) {
 // and must never reach the record.
 // Immutable evidence attached to each new pick. No synthetic -110 prices.
 function marketProbabilityFor(r, market) {
+  if (r.p?.locked) return r.p.lockedProbabilities?.[market] || null;
   const read = market === 'spread' ? (r.ats || r.atsR) : (r.tot || r.totR);
   if (!read || read.qualifies === false || r.p?.thin || r.p?.blockedReasons?.length || gameState(r.g) !== 'scheduled') return null;
   return globalThis.SportsHubMarketProbability?.estimate({sport:r.sport,market,
@@ -4966,7 +4992,7 @@ function compactMarketsHTML({ g, sport, p, info, atsR, totR }) {
 
 function marketRowsHTML(r) {
   const { g, sport, p } = r;
-  if (!p) return '<div class="ai-note">Model data unavailable for this game.</div>';
+  if (!p) return `<div class="ai-note">${globalThis.SportsHubForecastLock.eligible(g) ? 'Model data unavailable for this game.' : 'No saved pregame forecast — model locked.'}</div>`;
   const info = r.shownInfo !== undefined ? r.shownInfo : r.info;
   const ar = r.atsR, tr = r.totR;
   const blocked = p.blockedReasons?.length;
@@ -4991,7 +5017,7 @@ function marketRowsHTML(r) {
     tr ? `<p>${ATS_SPORTS.has(sport) ? 'Tracked for evaluation; not a promoted pick. ' : ''}${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'points'} ${tr.diff > 0 ? 'above' : 'below'} the book. ${tr.broken ? '<b>Outside the sanity limit — not a signal.</b>' : ''}</p>
       ${comparisonGraphic(tr.proj, tr.line, '')}<small>${TOT_EDGE_MIN[sport] ?? 1}-${sport === 'mlb' ? 'run' : 'point'} signal threshold. Probability estimates are experimental.</small>${marketProbabilityHTML(totalProbability)}`
       : '<p>No total signal without both a projection and a line.</p>');
-  const provenance = r.linePregame ? `Last pregame line saved on this device${lineAtLabel(r.lineAt) ? ' · ' + lineAtLabel(r.lineAt) : ''}. The projection is computed now, not restored from a pregame snapshot.` : info?.provider ? `Odds source: ${info.provider}.` : 'Odds source unavailable.';
+  const provenance = r.linePregame ? `Saved pregame line${lineAtLabel(r.lineAt) ? ' · ' + lineAtLabel(r.lineAt) : ''}. Model and lines are locked to saved pregame evidence.` : info?.provider ? `Odds source: ${info.provider}.` : 'Odds source unavailable.';
   return `<div class="ai-market-grid">${ml}${spread}${total}</div><p class="ai-read-foot">${esc(provenance)} ${live ? 'Game started: no new pregame pick is recorded.' : 'Different markets answer different questions; winner and cover sides can differ.'}</p>`;
 }
 
@@ -10948,7 +10974,7 @@ async function enrichSlate(sport, host, games) {
 
     const markets = p ? compactMarketsHTML({ g, sport, p, info,
       atsR: atsRead(sport, g, p, info), totR: totalRead(sport, p, info) })
-      : `<div class="slate-unavailable">${g.seasonType === 1 ? 'Preseason · model sits out' : 'Model data unavailable · tap for game report'}</div>`;
+      : `<div class="slate-unavailable">${g.seasonType === 1 ? 'Preseason · model sits out' : !globalThis.SportsHubForecastLock.eligible(g) ? 'No saved pregame forecast · model locked' : 'Model data unavailable · tap for game report'}</div>`;
     const strip = el('div', 'bb-strip');
     strip.innerHTML = `${lineRow}${markets}`;
     // Sit above the "tap for game report →" hint so the hint stays last.
