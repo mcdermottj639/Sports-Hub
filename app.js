@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v258';
+const APP_VERSION = 'v259';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -2419,7 +2419,7 @@ async function matchupFactor(sport, g) {
     const [hOPS, aOPS] = await Promise.all([teamOPS(g.home.id), teamOPS(g.away.id)]);
     if (hOPS != null && aOPS != null) {
       notes.push(`Team OPS: ${ops3(hOPS)} vs ${ops3(aOPS)}`);
-      factors.push({ label: 'Lineup OPS', c: MLB_MATCH_W.ops * clamp((hOPS - aOPS) / 0.05, -2, 2), detail: `${ops3(hOPS)} vs ${ops3(aOPS)}` }); // higher OPS = home edge
+      factors.push({ label: 'Team OPS', c: MLB_MATCH_W.ops * clamp((hOPS - aOPS) / 0.05, -2, 2), detail: `${ops3(hOPS)} vs ${ops3(aOPS)}` }); // higher OPS = home edge
     }
   } else {
     const key = (lead) => {
@@ -3129,25 +3129,27 @@ function countMoves(hist) {
   const out = { ouUp: 0, ouDown: 0, homeIn: 0, awayIn: 0, spHome: 0, spAway: 0, n: h.length };
   for (let i = 1; i < h.length; i++) {
     const a = h[i - 1], b = h[i];
-    // Total: a lower number is money on the Under, a higher one the Over.
-    if (a.ou != null && b.ou != null && a.ou !== b.ou) (b.ou < a.ou ? out.ouDown++ : out.ouUp++);
-    // Moneyline: a shorter (more negative) price means money came in on that
-    // side. The two prices always move TOGETHER, so this counts a move once —
-    // reading both would score every move twice. Home is the primary signal;
-    // the away price is only consulted when ESPN sent no home number, which is
-    // routine on MLB (its scoreboard often carries no raw moneylines at all).
-    if (a.hML != null && b.hML != null && a.hML !== b.hML) (b.hML < a.hML ? out.homeIn++ : out.awayIn++);
-    else if (a.aML != null && b.aML != null && a.aML !== b.aML) (b.aML < a.aML ? out.awayIn++ : out.homeIn++);
-    // MLB path: only the favorite's price is published, so the move is read off
-    // that one number. A shorter (more negative) price = money on the favorite.
-    // Skipped when the favorite flipped between snapshots — then the two prices
-    // describe different teams and the comparison is meaningless.
-    else if (a.dML != null && b.dML != null && a.dML !== b.dML && a.fh != null && a.fh === b.fh) {
-      const towardFav = b.dML < a.dML;
-      (a.fh === towardFav ? out.homeIn++ : out.awayIn++);
+    // Count observed numeric changes, not bets or identified sharp money.
+    const ao = AI_MATH.number(a.ou), bo = AI_MATH.number(b.ou);
+    if (ao != null && bo != null && ao !== bo) (bo < ao ? out.ouDown++ : out.ouUp++);
+    // Credit only a quoted side whose implied probability actually increased.
+    // A longer home price does not prove the away quote shortened. Both can
+    // shorten when the book changes its margin; each quoted side is independent.
+    const ah = impliedP(a.hML), bh = impliedP(b.hML);
+    const aa = impliedP(a.aML), ba = impliedP(b.aML);
+    if (ah != null && bh != null && bh > ah + 1e-10) out.homeIn++;
+    if (aa != null && ba != null && ba > aa + 1e-10) out.awayIn++;
+    // Favorite-only records are usable only for the SAME identified team,
+    // and only if that team's direct quotes weren't already compared.
+    const ad = impliedP(a.dML), bd = impliedP(b.dML);
+    if (ad != null && bd != null && typeof a.fh === 'boolean' && a.fh === b.fh
+        && !(a.fh ? ah != null && bh != null : aa != null && ba != null)
+        && bd > ad + 1e-10) {
+      if (a.fh) out.homeIn++; else out.awayIn++;
     }
     // Spread is home-oriented: more negative = home laying more points.
-    if (a.sp != null && b.sp != null && a.sp !== b.sp) (b.sp < a.sp ? out.spHome++ : out.spAway++);
+    const asp = AI_MATH.number(a.sp), bsp = AI_MATH.number(b.sp);
+    if (asp != null && bsp != null && asp !== bsp) (bsp < asp ? out.spHome++ : out.spAway++);
   }
   return out;
 }
@@ -3271,7 +3273,7 @@ function sharpSignals(g, sp, mv) {
         const toward = d > 0 ? g.home : g.away, against = d > 0 ? g.away : g.home;
         const bets = sp[d > 0 ? 'away' : 'home']?.ml_bets;
         if (bets != null && bets >= 55) {
-          out.push(`🔪 Reverse line move — line moved toward ${esc(toward.abbr || toward.name)} while ${bets}% of bets sit on ${esc(against.abbr || against.name)} (classic sharp-side signal)`);
+          out.push(`🔪 Reverse line move — line moved toward ${esc(toward.abbr || toward.name)} while ${bets}% of bets sit on ${esc(against.abbr || against.name)} (observed divergence; not verified sharp money)`);
         }
       }
     }
@@ -3288,15 +3290,25 @@ function gameReportHTML(sport, g, pred, info, report, data) {
     const rows = [['away', 1 - pred.probHome, info?.aML], ['home', pred.probHome, info?.hML]].map(([side, p, book]) => {
       const team = g[side];
       const mktP = mkt != null ? (side === 'home' ? mkt : 1 - mkt) : null;
-      const grade = mktP != null ? priceGrade((p - mktP) * 100) : null;
+      const grade = mktP != null && !pred.thin && !pred.blockedReasons?.length ? priceGrade((p - mktP) * 100) : null;
       return `<div class="gr-row">
         <span class="gr-team">${logoHTML(team)}${esc(team.abbr || team.name)}</span>
-        <span class="gr-fair">${fmtML(fairML(p))}</span>
-        <span class="gr-book">${fmtML(book)}</span>
+        <span class="gr-fair">${fmtML(fairML(p))}<small class="gr-prob">${(p * 100).toFixed(1)}% model</small></span>
+        <span class="gr-book">${fmtML(book)}${mktP == null ? '' : `<small class="gr-prob">${(mktP * 100).toFixed(1)}% market</small>`}</span>
         ${grade ? `<span class="gr-grade" style="color:${gradeHue(grade)};border-color:${gradeHue(grade)}">${grade}</span>` : '<span class="gr-grade none">—</span>'}
       </div>`;
     }).join('');
     parts.push(`<div class="gr-head"><span></span><span>Model line</span><span>Book</span><span>Grade</span></div>${rows}`);
+    const modelNotes = [
+      'Sports Hub model, independent of Action. Market % removes the bookmaker margin using both quotes. Grades measure model/market disagreement, not proven betting value.',
+      ...(pred.blockedReasons || []),
+      ...(sport === 'mlb' ? [
+        'Starting-pitcher season stats and recent starts feed the model. Team OPS is a season average, not a confirmed batting lineup. Stats may be cached for up to 6 hours; bullpen and weather are not modeled.',
+        ...(pred.notes || []).filter((n) => /^(SP:|SP form|Team OPS:|Starter innings)/.test(n)),
+      ] : []),
+    ];
+    if (pred.thin || pred.blockedReasons?.length) parts.push('<div class="gr-unavail">Incomplete model inputs — grades withheld.</div>');
+    parts.push(`<details class="gr-model-notes"><summary>Model inputs &amp; limitations</summary>${modelNotes.map((n) => `<div class="ai-why">${esc(n)}</div>`).join('')}</details>`);
     if (pred.projTotal != null && info?.ou != null) {
       const lean = pred.projTotal > info.ou ? 'OVER' : pred.projTotal < info.ou ? 'UNDER' : null;
       parts.push(`<div class="gr-total">Total: model ${pred.projTotal.toFixed(1)} vs O/U ${info.ou}${lean ? ` → <b>${lean}</b>` : ''}</div>`);
@@ -3335,11 +3347,10 @@ function gameReportHTML(sport, g, pred, info, report, data) {
     if (f.ou != null && l.ou != null && f.ou !== l.ou) changes.push(`O/U ${f.ou} → ${l.ou}`);
     if (!changes.length && f.details && l.details && f.details !== l.details) changes.push(`${esc(f.details)} → ${esc(l.details)}`);
     const since = f.t ? timeAgo(new Date(f.t > 2e10 ? f.t : f.t * 1000)) : '';
-    parts.push(`<div class="gr-move">📈 ${changes.length ? changes.join(' · ') : 'No line movement yet'}
+    parts.push(`<div class="gr-move">📈 ${changes.length ? changes.join(' · ') : 'No net price/total change since first observation'}
       <span class="gr-src">${mv.src === 'server' ? `server tracking since ${since}` : `since first seen on this device (${since})`}</span></div>`);
   }
-  // 🔪 Sharp Action — how many times each side has been bet, as far as we can
-  // actually see it. Two independent sources, either of which may be absent.
+  // Observed price changes — no bettor identity or sharp-money inference. Two independent sources, either of which may be absent.
   const mh = moveHistory(sport, g, report);
   const con = bookConsensus(data);
   // ANSWERED on device (v168): ESPN lists exactly ONE sportsbook per MLB game,
@@ -3361,10 +3372,10 @@ function gameReportHTML(sport, g, pred, info, report, data) {
     if (mh) {
       const c = countMoves(mh.hist);
       if (c.ouDown || c.ouUp) rows.push(pair('Total', 'Under', c.ouDown, 'Over', c.ouUp));
-      if (c.homeIn || c.awayIn) rows.push(pair('Moneyline', g.home.abbr || 'Home', c.homeIn, g.away.abbr || 'Away', c.awayIn));
+      if (c.homeIn || c.awayIn) rows.push(pair('Moneyline — observed price shortenings', g.home.abbr || 'Home', c.homeIn, g.away.abbr || 'Away', c.awayIn));
       if (c.spHome || c.spAway) rows.push(pair('Spread', g.home.abbr || 'Home', c.spHome, g.away.abbr || 'Away', c.spAway));
-      if (!rows.length) rows.push(`<div class="ai-why">No line changes seen yet across ${c.n} check${c.n === 1 ? '' : 's'}.</div>`);
-      rows.push(`<div class="sa-note">Pre-game line only — live in-game prices are ignored. ${mh.src === 'server'
+      if (!rows.length) rows.push(`<div class="ai-why">No price shortenings or total/spread changes counted across ${c.n} check${c.n === 1 ? '' : 's'}.</div>`);
+      rows.push(`<div class="sa-note">Price changes only; not verified sharp money. Pre-game line only — live in-game prices are ignored. ${mh.src === 'server'
         ? 'Counted from the backend\'s snapshots, which only poll while it\'s awake, so this undercounts.'
         : 'Counted from what this device saw while the app was open, so this undercounts.'}</div>`);
     }
@@ -3381,7 +3392,7 @@ function gameReportHTML(sport, g, pred, info, report, data) {
         ${split.length ? split.map((b) => `<div class="sa-row"><span class="sa-txt">${b}</span></div>`).join('')
           : (!bits.length ? '<div class="ai-why">All books are on the same number right now.</div>' : '')}</div>`);
     }
-    parts.push(`<div class="gr-sub">🔪 Sharp Action — where the line keeps moving</div>${rows.join('')}`);
+    parts.push(`<div class="gr-sub">📈 Observed line movement</div>${rows.join('')}`);
   }
 
   const sp = splitsFor(report, g);

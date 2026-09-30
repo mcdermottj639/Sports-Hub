@@ -596,7 +596,9 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v258** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v259** (backend **b16-fantasy-gm**).
+
+- **v259 — Honest movement and model comparisons:** Game Report labels sampled prices as Observed line movement, not sharp action. Moneyline counts track each quoted side's probability increase independently; invalid prices, equal +100/-100 prices, and favorite-only team flips do not create moves. No net change is distinct from intermediate moves. Model/market probabilities are visible, input-blocked grades are withheld, and collapsed provenance explains pitcher inputs, cached stats and unconfirmed lineups. Model weights/cohort are unchanged; no refit to another provider's single forecast. `tests/game-report.test.js` covers these paths.
 
 - **v258 — Lock all modeled sports at kickoff:** `forecast-lock.js` saves the latest complete pregame display forecast with its odds and market probabilities. `predictGame()` refuses live/final recalculation, including requests crossing kickoff. It restores that snapshot or timestamp-validated cloud/device ledger evidence. Missing forecasts/projections remain unavailable. All model comparisons use saved odds after kickoff, never live prices. The display cache is separate from first-write performance history and does not rewrite results.
 
@@ -4777,7 +4779,7 @@ rewrite.**
     and CFB untouched, the by-sport records reflecting the survivors, and
     idempotency.
 
-- **🔪 Sharp Action — moves per side (v167, backend `b12-move-history`)** — the
+- **⚠️ SUPERSEDED in v259: this is Observed line movement, not sharp money. Each quoted side is counted only when its own price shortens; lengthening does not imply a move toward the unquoted opponent. 🔪 Sharp Action — moves per side (v167, backend `b12-move-history`)** — the
   owner sent a screenshot of a paid product showing *"Under: 6 sharp moves ·
   Over: 0"* and asked for the same read. **We cannot reproduce that**: it is
   steam detection across a dozen sportsbooks polled continuously, and this app

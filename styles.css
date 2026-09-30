@@ -3335,3 +3335,8 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-palette] .slate-unavailable { font-size: 12px; color: var(--muted); }
 :root[data-palette] .slate-compact:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 :root[data-palette] .bb-note summary { cursor: pointer; font-size: 12px; }
+
+/* Game report: distinguish probabilities from quoted prices. */
+.gr-prob { display:block; font-size:9px; font-weight:400; white-space:nowrap; color:var(--muted); }
+.gr-model-notes { margin:10px 0; font-size:12px; color:var(--muted); }
+.gr-model-notes summary { cursor:pointer; }
