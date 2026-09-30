@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v250';
+const APP_VERSION = 'v252';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -4681,15 +4681,27 @@ async function buildBoard(sport, games, opts = {}) {
 // today — those games are already final, so predicting them now is look-ahead
 // and must never reach the record.
 // Immutable evidence attached to each new pick. No synthetic -110 prices.
+function marketProbabilityFor(r, market) {
+  const read = market === 'spread' ? (r.ats || r.atsR) : (r.tot || r.totR);
+  if (!read || read.qualifies === false || r.p?.thin || r.p?.blockedReasons?.length || gameState(r.g) !== 'scheduled') return null;
+  return globalThis.SportsHubMarketProbability?.estimate({sport:r.sport,market,
+    projection:market === 'spread' ? r.p.projMargin : r.p.projTotal,
+    line:market === 'spread' ? read.homeSpread : read.line,home:read.home,side:read.side,at:new Date().toISOString()}) || null;
+}
+function marketProbabilityHTML(estimate) {
+  if (!estimate) return '<p>Probability needs a qualifying pregame forecast and enough past results.</p>';
+  return `<p><b>${(estimate.prob * 100).toFixed(1)}% model win chance</b> excluding pushes · <b>Experimental</b>${estimate.push > .001 ? `<br>${(estimate.push * 100).toFixed(1)}% estimated push chance` : ''}<br><small>${estimate.prob < .5 ? 'Past forecast errors weaken this pick. ' : ''}Based on ${estimate.n} past forecast errors; ${estimate.validationN} separate test results. Not used for pick ranking or stakes.</small></p>`;
+}
 function pickSnapshot(r, market) {
   const { p, g, info, sport } = r;
   const home = market === 'spread' ? r.ats.home : p.homePick;
   const price = market === 'moneyline' ? pickedPrice(p, info)
     : market === 'spread' ? (home ? info?.hSpreadPrice : info?.aSpreadPrice)
     : r.tot.side === 'OVER' ? info?.overPrice : info?.underPrice;
-  return { v: AI_MODEL_VERSION, app: APP_VERSION, at: new Date().toISOString(), start: g.date, market,
+  const probability = market === 'moneyline' ? null : marketProbabilityFor(r, market);
+  return { ...(probability ? { probability } : {}), v: AI_MODEL_VERSION, app: APP_VERSION, at: new Date().toISOString(), start: g.date, market,
     home, price: price ?? null, provider: info?.provider || null,
-    prob: market === 'moneyline' ? (home ? p.probHome : 1 - p.probHome) : null,
+    prob: market === 'moneyline' ? (home ? p.probHome : 1 - p.probHome) : probability?.prob ?? null,
     marketProb: marketHomeProb(info),
     line: market === 'spread' ? r.ats.homeSpread : market === 'total' ? r.tot.line : null,
     proj: market === 'spread' ? p.projMargin : market === 'total' ? p.projTotal : null,
@@ -4924,13 +4936,14 @@ function marketRowsHTML(r) {
   const ml = section('Moneyline', 'Who wins the game?', `${esc(p.winner.name)} <strong>${p.conf}%</strong>`, status(!!r.tier && r.tier !== 'lean'),
     `<p>${value ? `Price <b>${fmtML(value.price)}</b> needs ${(value.breakeven * 100).toFixed(1)}% wins to break even.` : 'No usable price for this side — value is unknown.'} ${gap != null ? `Model gap: ${gap >= 0 ? '+' : ''}${gap.toFixed(1)} percentage points vs no-vig market.` : 'Both prices are needed for a no-vig market comparison.'}</p>
     ${marketP != null ? comparisonGraphic(prob * 100, marketP * 100, '%') : ''}${moneylineValuesHTML(p, g, info)}`);
-  const spread = section('Spread', 'Who covers the handicap?', !ATS_SPORTS.has(sport) ? 'Not modeled for this league' : ar ? esc(ar.label) : 'Waiting for a usable spread', status(!!ar?.qualifies),
+  const spreadProbability = marketProbabilityFor(r, 'spread'), totalProbability = marketProbabilityFor(r, 'total');
+  const spread = section('Spread', 'Who covers the handicap?', !ATS_SPORTS.has(sport) ? 'Not modeled for this league' : ar ? `${esc(ar.label)}${spreadProbability ? ` · ${(spreadProbability.prob * 100).toFixed(0)}% experimental` : ''}` : 'Waiting for a usable spread', status(!!ar?.qualifies),
     ar ? `<p>Projected winner: ${esc(marginWinner.abbr || marginWinner.name)} by ${Math.abs(ar.proj).toFixed(1)}. Difference: <b>${Math.abs(ar.edge).toFixed(1)} points</b> toward ${esc(ar.abbr)} covering. ${ar.pinned ? 'Projection limit reached; no signal.' : ''}</p>
-      ${comparisonGraphic(ar.proj, -ar.homeSpread, '', true)}<small>Margins above are toward ${esc(g.home.abbr || 'home')}; negative means ${esc(g.away.abbr || 'away')}. ${ATS_EDGE_MIN[sport]}-point signal threshold. Cover probability and price-based EV are not calibrated.</small>`
+      ${comparisonGraphic(ar.proj, -ar.homeSpread, '', true)}<small>Margins above are toward ${esc(g.home.abbr || 'home')}; negative means ${esc(g.away.abbr || 'away')}. ${ATS_EDGE_MIN[sport]}-point signal threshold. Probability estimates are experimental.</small>${marketProbabilityHTML(spreadProbability)}`
       : '<p>A winner forecast is not a spread pick.</p>');
-  const total = section('Total', 'How much will both teams score?', tr ? `${tr.side} ${tr.line}` : p.projTotal != null && info?.ou != null ? 'No difference / no signal' : 'Waiting for a total', status(!!tr?.qualifies),
+  const total = section('Total', 'How much will both teams score?', tr ? `${tr.side} ${tr.line}${totalProbability ? ` · ${(totalProbability.prob * 100).toFixed(0)}% experimental` : ''}` : p.projTotal != null && info?.ou != null ? 'No difference / no signal' : 'Waiting for a total', status(!!tr?.qualifies),
     tr ? `<p>${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'points'} ${tr.diff > 0 ? 'above' : 'below'} the book. ${tr.broken ? '<b>Outside the sanity limit — not a signal.</b>' : ''}</p>
-      ${comparisonGraphic(tr.proj, tr.line, '')}<small>${TOT_EDGE_MIN[sport] ?? 1}-${sport === 'mlb' ? 'run' : 'point'} signal threshold. A score difference is not a win probability.</small>`
+      ${comparisonGraphic(tr.proj, tr.line, '')}<small>${TOT_EDGE_MIN[sport] ?? 1}-${sport === 'mlb' ? 'run' : 'point'} signal threshold. Probability estimates are experimental.</small>${marketProbabilityHTML(totalProbability)}`
       : '<p>No total signal without both a projection and a line.</p>');
   const provenance = r.linePregame ? `Last pregame line saved on this device${lineAtLabel(r.lineAt) ? ' · ' + lineAtLabel(r.lineAt) : ''}. The projection is computed now, not restored from a pregame snapshot.` : info?.provider ? `Odds source: ${info.provider}.` : 'Odds source unavailable.';
   return `<div class="ai-market-grid">${ml}${spread}${total}</div><p class="ai-read-foot">${esc(provenance)} ${live ? 'Game started: no new pregame pick is recorded.' : 'Different markets answer different questions; winner and cover sides can differ.'}</p>`;
@@ -5318,7 +5331,7 @@ function aiGuideHTML(sub, sport) {
   return `<div class="ai-guide-card"><div class="ai-guide-top"><span class="ai-eyebrow">READ THE PICK, NOT JUST THE COLOR</span><span>${sport === 'all' ? 'All leagues' : esc(LEAGUES[sport]?.label || sport)} · ${APP_VERSION}</span></div>
     <div class="ai-note">${esc(cloudLine)}</div>
     <div class="ai-guide-steps"><div><b>1 · Choose the market</b><p>Winner, cover and total are three different predictions.</p></div><div><b>2 · Compare model & book</b><p>A gap is a disagreement. It does not prove an advantage.</p></div><div><b>3 · Check the evidence</b><p>Missing data means watch only. Review results before trusting a signal.</p></div></div>
-    <details><summary>Quick glossary & what gets saved</summary><div class="ai-glossary"><p><b>Moneyline:</b> pick the winner. 60% means about 6 wins in 10 similar games if calibrated, not certainty.</p><p><b>Spread:</b> the handicap. +7.5 can cover even in a loss by 7; −7.5 needs a win by 8 or more.</p><p><b>Total:</b> combined score. OVER 8.5 needs 9+ runs; UNDER needs 8 or fewer.</p><p><b>pp vs points:</b> 60% vs 55% is +5 percentage points. A projected margin of 7 vs a line of 3 is 4 scoring points.</p><p><b>Tracking:</b> first pregame forecasts are frozen with version, timestamp and inputs. Missing prices may be filled before kickoff only at the same saved line and provider. The scheduled collector runs even when the app is closed; official performance uses cloud history; device-only history is retained separately.</p><p><b>Experimental signals:</b> moneyline tiers require a positive model return at a real quote and two-sided market odds. Spread/total signals use projection thresholds, not calibrated cover probabilities. No market has proven profit.</p></div></details></div>`;
+    <details><summary>Quick glossary & what gets saved</summary><div class="ai-glossary"><p><b>Moneyline:</b> pick the winner. 60% means about 6 wins in 10 similar games if calibrated, not certainty.</p><p><b>Spread:</b> the handicap. +7.5 can cover even in a loss by 7; −7.5 needs a win by 8 or more.</p><p><b>Total:</b> combined score. OVER 8.5 needs 9+ runs; UNDER needs 8 or fewer.</p><p><b>pp vs points:</b> 60% vs 55% is +5 percentage points. A projected margin of 7 vs a line of 3 is 4 scoring points.</p><p><b>Tracking:</b> first pregame forecasts are frozen with version, timestamp and inputs. Missing prices may be filled before kickoff only at the same saved line and provider. The scheduled collector runs even when the app is closed; official performance uses cloud history; device-only history is retained separately.</p><p><b>Experimental signals:</b> moneyline tiers require a positive model return at a real quote and two-sided market odds. Spread/total signals use projection thresholds. Their experimental probabilities are tracked separately and do not change signal ranking. No market has proven profit.</p></div></details></div>`;
 }
 function evaluationHTML(sport) {
   const all = Object.values(globalThis.SportsHubCloudAI?.maps()?.tally || {}).filter((r) => !sport || sport === 'all' || r.s === sport);
@@ -5328,8 +5341,10 @@ function evaluationHTML(sport) {
     const e = AI_MATH.evaluate(all.filter(filter), AI_MODEL_VERSION);
     const decided = e.w + e.l;
     const pending = upcoming.filter(filter), pricedPending = pending.filter(r => AI_MATH.american(r.q?.price) != null);
-    return `<div><b>${title}</b><strong>${e.n ? `${e.w}W · ${e.l}L · ${e.pushes}P` : 'Collecting'}</strong><div class="ai-result-track" role="img" aria-label="${e.w} wins, ${e.l} losses, ${e.pushes} pushes"><i style="width:${decided ? e.w / decided * 100 : 0}%"></i></div><p>${e.n} settled · ${decided ? (e.w / decided * 100).toFixed(1) + '% hit rate' : 'Awaiting results'}<br>${e.priced}/${e.n} with saved odds<br>${e.priced ? `${e.units >= 0 ? '+' : ''}${e.units.toFixed(2)} units · ${(e.roi * 100).toFixed(1)}% paper ROI` : 'ROI awaiting priced results'}<br>${e.probabilityN ? `Avg model probability ${(e.meanProbability * 100).toFixed(1)}% · ${e.probabilityN} forecasts` : key === 'moneyline' ? 'Model probability not saved for this sample' : 'Model probability: not calibrated for this market'}<br>${e.priced ? `Avg odds-implied probability ${(e.meanImplied * 100).toFixed(1)}% (includes vig)` : 'Odds-implied probability awaiting saved odds'}${e.probabilityN ? `<br><small>Brier ${e.brier.toFixed(3)} · log loss ${e.logLoss.toFixed(3)}</small>` : ''}<br>${pending.length} upcoming · ${pricedPending.length} with odds<br>${e.legacy} older/unverified excluded</p></div>`;
-  }).join('')}</div><small>Hit rate is past results, not a future probability. Model and odds-implied probabilities are different. Paper ROI risks one unit at each saved quote; pushes return the stake. No assumed −110 prices. Markets on the same game are correlated. Older unpriced results remain in the record but are excluded from ROI. Closing-line value needs closing quotes.</small></section>`;
+    const pendingProbs = pending.map(r => AI_MATH.number(r.q?.prob)).filter(p => p != null && p >= 0 && p <= 1);
+    const upcomingProbability = pendingProbs.length ? pendingProbs.reduce((a,b) => a+b,0) / pendingProbs.length : null;
+    return `<div><b>${title}</b><strong>${e.n ? `${e.w}W · ${e.l}L · ${e.pushes}P` : 'Collecting'}</strong><div class="ai-result-track" role="img" aria-label="${e.w} wins, ${e.l} losses, ${e.pushes} pushes"><i style="width:${decided ? e.w / decided * 100 : 0}%"></i></div><p>${e.n} settled · ${decided ? (e.w / decided * 100).toFixed(1) + '% hit rate' : 'Awaiting results'}<br>${e.priced}/${e.n} with saved odds<br>${e.priced ? `${e.units >= 0 ? '+' : ''}${e.units.toFixed(2)} units · ${(e.roi * 100).toFixed(1)}% paper ROI` : 'ROI awaiting priced results'}<br>${e.probabilityN ? `Avg model probability ${(e.meanProbability * 100).toFixed(1)}% · ${e.probabilityN} forecasts${key !== 'moneyline' ? ' · experimental, excluding pushes' : ''}` : key === 'moneyline' ? 'Model probability not saved for this sample' : 'New model probabilities awaiting settled results'}<br>${e.priced ? `Avg odds-implied probability ${(e.meanImplied * 100).toFixed(1)}% (includes vig)` : 'Odds-implied probability awaiting saved odds'}${e.probabilityN ? `<br><small>Brier ${e.brier.toFixed(3)} · log loss ${e.logLoss.toFixed(3)}</small>` : ''}<br>${pending.length} upcoming · ${pricedPending.length} with odds${upcomingProbability != null ? `<br>Avg upcoming model probability ${(upcomingProbability * 100).toFixed(1)}% · ${pendingProbs.length} forecasts${key !== 'moneyline' ? ' · experimental, excluding pushes' : ''}` : ''}<br>${e.legacy} older/unverified excluded</p></div>`;
+  }).join('')}</div><small>Spread/total percentages are experimental estimates, excluding pushes. Validation is still limited; totals have not beaten a 50/50 baseline. Hit rate is past results, not a future probability. Model and odds-implied probabilities are different. Paper ROI risks one unit at each saved quote; pushes return the stake. No assumed −110 prices. Markets on the same game are correlated. Older unpriced results remain in the record but are excluded from ROI. Closing-line value needs closing quotes.</small></section>`;
 }
 // Bumped on every view paint so an async fill (the CFB rating probe) that
 // lands after the user has moved on can't paint over the new view.

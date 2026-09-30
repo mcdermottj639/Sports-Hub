@@ -594,7 +594,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v250** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v252** (backend **b16-fantasy-gm**).
 
 - **v250 — Mobile sideways-scroll guard:** Clip document-level horizontal overflow
   (hidden fallback) without disabling zoom or nested score/table scrolling. Bound
@@ -609,6 +609,12 @@ Current version as of this writing: **v250** (backend **b16-fantasy-gm**).
   AI Picks keeps cross-sport forecasts/performance and links to league research;
   Labs no longer contains betting research. Existing collectors, model constants,
   data and refresh cadence are unchanged. CFB stays Top 25 only.
+
+### v252 — Spread/total probability layer (residual-t-v1)
+`supabase/functions/_shared/market-probability.js` and its generated config are shared by the browser, collector and chronological validation script. Qualified NFL/CFB spreads and NFL/CFB/MLB totals now have **experimental** win probabilities excluding pushes, with separate push probability. The existing point forecast/selection model stays v239.
+
+The live pipeline saves probability method, sample size, training cutoff and its own pregame timestamp, including newly estimated pending forecasts. Final history is never backfilled. These percentages do not alter recommendation ranking or stakes. Tests found totals below a 50/50 baseline and sparse football samples; do not call them calibrated. Read `docs/MARKET_PROBABILITY_VALIDATION.md` and the reproducible JSON report before refitting. `node scripts/fit-market-probability.js` rebuilds from the committed source sample; refitting is not automatic. Deploy both new shared modules with the collector and include them before app.js.
+
 
 ### v248 — automatic odds and honest probability coverage
 - AI Picks browser and scheduled collector reuse the tested ESPN nested-odds normalizer. Actual payout prices stay paired to their exact spread/total line.

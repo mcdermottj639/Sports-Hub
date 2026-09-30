@@ -1,6 +1,8 @@
+import '../_shared/market-probability-config.js';
+import '../_shared/market-probability.js';
 import {signalsEnabled, captureSignalQuotes, signalInputs, saveSignalDecision, settleSignalGame, missedSignalWindows, reconcileSignals} from './signals.ts';
 const MODEL_VERSION = 'v239';
-const APP_VERSION = 'v248';
+const APP_VERSION = 'v252';
 const SPORTS = ['nfl', 'cfb', 'mlb'] as const;
 type Sport = typeof SPORTS[number];
 type Json = Record<string, any>;
@@ -200,7 +202,11 @@ function fairProbability(market:string,home:boolean|null,selection:string,o:any)
   const a=implied(pair[0]),b=implied(pair[1]);if(a==null||b==null)return null;
   return (market==='total'?selection.startsWith('OVER'):home)?a/(a+b):b/(a+b);
 }
-function rowBase(sport:Sport,g:any,p:any,o:any,market:string,selection:string,home:boolean|null,line:number|null,projection:number|null,price:number|null,tier:string|null){return {event_id:g.id,sport,market,model_version:MODEL_VERSION,app_version:APP_VERSION,matchup:`${g.away.abbr||g.away.name} @ ${g.home.abbr||g.home.name}`,slate_date:slateDate(g),starts_at:g.date,captured_at:new Date().toISOString(),selection,selection_home:home,confidence:market==='moneyline'?p.conf:null,tier,price,line,projection,model_probability:market==='moneyline'?(home?p.p:1-p.p):null,market_probability:fairProbability(market,home,selection,o),provider:o?.provider||null,quality:p.quality,snapshot:{odds:o,features:p.features,neutral:g.neutral,engine:'scheduled-v239'}};}
+function rowBase(sport:Sport,g:any,p:any,o:any,market:string,selection:string,home:boolean|null,line:number|null,projection:number|null,price:number|null,tier:string|null){
+  const at=new Date().toISOString();
+  const probability=market==='moneyline'?null:(globalThis as any).SportsHubMarketProbability.estimate({sport,market,projection,line,home,side:selection.split(' ')[0],at});
+  return {event_id:g.id,sport,market,model_version:MODEL_VERSION,app_version:APP_VERSION,matchup:`${g.away.abbr||g.away.name} @ ${g.home.abbr||g.home.name}`,slate_date:slateDate(g),starts_at:g.date,captured_at:at,selection,selection_home:home,confidence:market==='moneyline'?p.conf:null,tier,price,line,projection,model_probability:market==='moneyline'?(home?p.p:1-p.p):probability?.prob??null,market_probability:fairProbability(market,home,selection,o),provider:o?.provider||null,quality:p.quality,snapshot:{odds:o,features:p.features,neutral:g.neutral,engine:'scheduled-v239',...(probability?{probability}:{} )}};
+}
 function rowsFor(sport:Sport,g:any,p:any){const o=odds(g.odds,g),tt=tierFor(p,o),rows=[rowBase(sport,g,p,o,'moneyline',p.home?g.home.name:g.away.name,p.home,null,null,pickPrice(p,o),tt.tier)];if(o?.spread!=null&&ATS_EDGE_MIN[sport]!=null){const edge=p.margin+o.spread,home=edge>0;if(!p.quality.length&&Math.abs(edge)>=(ATS_EDGE_MIN[sport]||0))rows.push(rowBase(sport,g,p,o,'spread',`${home?g.home.abbr:g.away.abbr} ${(home?o.spread:-o.spread)>0?'+':''}${home?o.spread:-o.spread}`,home,o.spread,p.margin,home?o.hSpreadPrice:o.aSpreadPrice,null));}if(o?.ou!=null&&p.total!=null){const diff=p.total-o.ou,side=diff>0?'OVER':'UNDER';if(!p.quality.length&&Math.abs(diff)>=TOTAL_MIN[sport]&&Math.abs(diff)<=TOTAL_MAX[sport])rows.push(rowBase(sport,g,p,o,'total',`${side} ${o.ou}`,null,o.ou,p.total,side==='OVER'?o.overPrice:o.underPrice,Math.abs(diff)>=TOTAL_MIN[sport]*1.75?'best':'edge'));}return rows;}
 
 const SB_URL=Deno.env.get('SUPABASE_URL')!,SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -222,8 +228,36 @@ async function enrichPrices(g:any){
     await db(`ai_predictions?id=eq.${r.id}&price=is.null&result=eq.pending&starts_at=gt.${encodeURIComponent(at)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({price,updated_at:at,snapshot:{...r.snapshot,priceCapturedAt:at,priceSource:'espn_same_line_pregame',pricedOdds:o}})});
   }
 }
+// Probability is a new, separately timestamped observation of the frozen forecast.
+// Only pending pregame rows may be enriched. Final history is never backfilled.
+async function enrichProbabilities(g:any){
+  if(g.state!=='pre'||Date.parse(g.date)<=Date.now())return;
+  const rows=await db(`ai_predictions?event_id=eq.${encodeURIComponent(g.id)}&model_version=eq.${MODEL_VERSION}&market=in.(spread,total)&result=eq.pending&model_probability=is.null&select=*`);
+  for(const r of rows||[]){
+    if(Date.parse(r.starts_at)!==Date.parse(g.date)||Date.parse(g.date)<=Date.now())continue;
+    const at=new Date().toISOString();
+    const probability=(globalThis as any).SportsHubMarketProbability.estimate({sport:r.sport,market:r.market,projection:r.projection,line:r.line,home:r.selection_home,side:r.selection.split(' ')[0],at});
+    if(!probability)continue;
+    await db(`ai_predictions?id=eq.${r.id}&model_probability=is.null&result=eq.pending&starts_at=gt.${encodeURIComponent(at)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({model_probability:probability.prob,updated_at:at,snapshot:{...r.snapshot,probability}})});
+  }
+}
 async function gradeGame(g:any){if(g.state!=='post'||g.home.score==null||g.away.score==null||/cancel|postpon|suspend/i.test(g.status))return 0;const rows=await db(`ai_predictions?event_id=eq.${encodeURIComponent(g.id)}&result=eq.pending&select=*`);let n=0;for(const r of rows||[]){let result='void';const hm=g.home.score-g.away.score;if(r.market==='moneyline'){if(hm!==0)result=(r.selection_home?(hm>0):(hm<0))?'win':'loss';}else if(r.market==='spread'){const v=hm+Number(r.line);result=v===0?'push':(r.selection_home?(v>0):(v<0))?'win':'loss';}else{const v=g.home.score+g.away.score-Number(r.line);result=v===0?'push':((String(r.selection).startsWith('OVER'))?(v>0):(v<0))?'win':'loss';}await db(`ai_predictions?id=eq.${r.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({result,final_home_score:g.home.score,final_away_score:g.away.score,graded_at:new Date().toISOString(),updated_at:new Date().toISOString()})});n++;}return n;}
-async function gradePending(){const pending=await db('ai_predictions?result=eq.pending&select=event_id,sport,slate_date&order=starts_at.asc&limit=1000'),groups=new Map<string,any>();for(const r of pending||[])groups.set(`${r.sport}|${String(r.slate_date).replaceAll('-','')}`,r);let n=0;for(const [key] of groups){const [sport,date]=key.split('|') as [Sport,string];try{const {games}=await scoreboard(sport,date);for(const g of games)n+=await gradeGame(g);}catch(_){}}return n;}
+async function gradePending(){
+  const pending=await db('ai_predictions?result=eq.pending&select=event_id,sport,slate_date&order=starts_at.asc&limit=1000');
+  const groups=new Set<string>(),ids=new Set<string>();
+  for(const r of pending||[]){groups.add(`${r.sport}|${String(r.slate_date).replaceAll('-','')}`);ids.add(String(r.event_id));}
+  let n=0;
+  for(const key of groups){
+    const [sport,date]=key.split('|') as [Sport,string];
+    try{const {games}=await scoreboard(sport,date);for(const g of games){
+      if(!ids.has(String(g.id)))continue;
+      n+=await gradeGame(g);
+      // Continue observing already-saved CFB forecasts even if a team drops out of the Top 25.
+      if(g.state==='pre'){await enrichPrices(g);await enrichProbabilities(g);}
+    }}catch(_){}
+  }
+  return n;
+}
 async function slate(sport:Sport){if(sport==='mlb'){const today=new Date(),tomorrow=new Date(Date.now()+864e5);const sets=await Promise.all([scoreboard(sport,ymd(today)),scoreboard(sport,ymd(tomorrow))]);return sets.flatMap(x=>x.games);}let board=await scoreboard(sport);if(board.games.length&&board.games.every((g:any)=>g.state==='post')){const type=Number(board.data?.season?.type),week=Number(board.data?.week?.number),year=Number(board.data?.season?.year);if([1,2].includes(type)&&week&&year){const next=await scoreboard(sport,undefined,{week:week+1,seasontype:type,dates:year}).catch(()=>null);if(next?.games?.some((g:any)=>g.state!=='post'))board=next;}}if(sport==='cfb')board.games=board.games.filter((g:any)=>g.home.rank||g.away.rank);return board.games;}
 
 Deno.serve(async(req:Request)=>{
@@ -251,6 +285,7 @@ Deno.serve(async(req:Request)=>{
           if(g.state!=='pre'||g.seasonType===1||!(Date.parse(g.date)>Date.now())||/postpon|cancel|suspend|delay/i.test(g.status)){skipped++;continue;}
           const inputsPromise=watch?signalInputs(g).catch(()=>{signalError();return null;}):Promise.resolve(null);
           await enrichPrices(g);
+          await enrichProbabilities(g);
           let context:any={engine:'scheduled-v239',availability:'unavailable',calculated_at:null};
           try{
             const p=await predict(sport,g),calculatedAt=new Date().toISOString(),rows=rowsFor(sport,g,p);

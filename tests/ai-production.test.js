@@ -8,7 +8,7 @@ const AI_MATH = require('../ai-model-utils.js');
 const NFL_FIT = require('../nfl-model.js');
 function load() {
   const storage = new Map();
-  const s = vm.createContext({ AI_MATH, NFL_FIT, Date, console, SportsHubSignalsCore: require('../supabase/functions/_shared/betting-signals-core.js'),
+  const s = vm.createContext({ AI_MATH, NFL_FIT, Date, console, SportsHubMarketProbability: require('../supabase/functions/_shared/market-probability.js'), SportsHubSignalsCore: require('../supabase/functions/_shared/betting-signals-core.js'),
     localStorage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, String(v)) },
     clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)), logistic: (z) => 1 / (1 + Math.exp(-z)),
     esc: (x) => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'),
@@ -32,7 +32,7 @@ function load() {
     }
     script.runInContext(s);
   }
-  for (const name of ['statVal', 'shrinkERA', 'cfbTierFromName', 'cfbRating', 'normCdf', 'invNorm', 'projMarginFor', 'predictGame', 'normOdds', 'marketHomeProb', 'pickedPrice', 'pickTier', 'marketGap', 'atsRead', 'atsCall', 'totalRead', 'recordResult', 'recordPick', 'recordAtsPick', 'recordTotalPick', 'atsResult', 'gradePending', 'tallyStats', 'pickSnapshot', 'commitRow', 'slateDateFor', 'savedPickForGame', 'nextWeekRequest', 'comparisonGraphic', 'moneylineValuesHTML', 'marketRowsHTML']) {
+  for (const name of ['statVal', 'shrinkERA', 'cfbTierFromName', 'cfbRating', 'normCdf', 'invNorm', 'projMarginFor', 'predictGame', 'normOdds', 'marketHomeProb', 'pickedPrice', 'pickTier', 'marketGap', 'atsRead', 'atsCall', 'totalRead', 'recordResult', 'recordPick', 'recordAtsPick', 'recordTotalPick', 'atsResult', 'gradePending', 'tallyStats', 'marketProbabilityFor', 'marketProbabilityHTML', 'pickSnapshot', 'commitRow', 'slateDateFor', 'savedPickForGame', 'nextWeekRequest', 'comparisonGraphic', 'moneylineValuesHTML', 'marketRowsHTML']) {
     const match = source.match(new RegExp(`^(?:async )?function ${name}\\([^]*?^}`, 'm'));
     assert.ok(match, name); vm.runInContext(match[0], s);
   }

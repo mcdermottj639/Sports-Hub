@@ -56,7 +56,9 @@
         out.impliedSum += implied(price);
         out.units += r.pu ? 0 : r.c ? (price > 0 ? price / 100 : 100 / -price) : -1;
       }
-      const prob = number(q.prob);
+      const stamped = q.probability;
+      const verifiedProbability = !stamped || (Date.parse(stamped.trainedThrough) < Date.parse(stamped.at) && Date.parse(stamped.at) < Date.parse(q.start));
+      const prob = verifiedProbability ? number(q.prob) : null;
       if (!r.pu && prob != null && prob >= 0 && prob <= 1) {
         const p = Math.max(1e-6, Math.min(1 - 1e-6, prob));
         out.probabilityN++;
