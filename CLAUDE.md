@@ -592,7 +592,11 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v244** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v245** (backend **b16-fantasy-gm**).
+
+- **v245 — Compact market cards:** Moneyline, Spread and Total share collapsed,
+  keyboard-accessible analysis panels across every league. Picks and status stay
+  visible; charts, explanations and price comparisons expand on tap.
 
 - **v244 — Betting signals and permanent odds history:** NFL-only evidence inside
   Picks, Game Report and Results, with a Labs shortcut. A lightweight Supabase odds

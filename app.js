@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v244';
+const APP_VERSION = 'v245';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -4866,7 +4866,7 @@ function marketRowsHTML(r) {
   const gap = marketP == null ? null : (prob - marketP) * 100;
   const status = (ready) => live ? 'Reference only' : blocked ? 'Data check' : ready ? 'Experimental signal' : 'Watch only';
   const marginWinner = p.projMargin >= 0 ? g.home : g.away;
-  const section = (name, question, selection, badge, body) => `<section class="ai-market-read"><div class="ai-market-title"><div><b>${name}</b><span>${question}</span></div><span class="ai-status">${badge}</span></div><div class="ai-market-selection">${selection}</div>${body}</section>`;
+  const section = (name, question, selection, badge, body) => `<section class="ai-market-read"><details class="ai-market-expand"><summary aria-label="${name}: ${esc(question)} Show analysis"><div class="ai-market-title"><b>${name}</b><span class="ai-status">${badge}</span></div><div class="ai-market-selection">${selection}</div><span class="ai-market-toggle"><span class="ai-market-show">Show analysis</span><span class="ai-market-hide">Hide analysis</span> <span aria-hidden="true">⌄</span></span></summary><div class="ai-market-analysis"><p class="ai-market-question">${question}</p>${body}</div></details></section>`;
   const ml = section('Moneyline', 'Who wins the game?', `${esc(p.winner.name)} <strong>${p.conf}%</strong>`, status(!!r.tier && r.tier !== 'lean'),
     `<p>${value ? `Price <b>${fmtML(value.price)}</b> needs ${(value.breakeven * 100).toFixed(1)}% wins to break even.` : 'No usable price for this side — value is unknown.'} ${gap != null ? `Model gap: ${gap >= 0 ? '+' : ''}${gap.toFixed(1)} percentage points vs no-vig market.` : 'Both prices are needed for a no-vig market comparison.'}</p>
     ${marketP != null ? comparisonGraphic(prob * 100, marketP * 100, '%') : ''}${moneylineValuesHTML(p, g, info)}`);

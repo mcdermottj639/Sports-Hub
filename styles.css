@@ -3143,12 +3143,12 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-palette] .ai-quality span,
 :root[data-palette] .ai-status { font-size: 10px; font-weight: 700; color: var(--muted); background: var(--card-2); border-radius: 5px; padding: 4px 6px; }
 :root[data-palette] .ai-data-warning { border-left: 3px solid var(--wm); padding: 7px 10px; color: var(--wm); font-size: 12px; line-height: 1.5; }
-:root[data-palette] .ai-market-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0 8px; }
-:root[data-palette] .ai-market-read { min-width: 0; padding: 12px; background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; }
+:root[data-palette] .ai-market-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 10px 0 6px; align-items: start; }
+:root[data-palette] .ai-market-read { min-width: 0; padding: 0; background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; }
 :root[data-palette] .ai-market-title { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 6px; }
 :root[data-palette] .ai-market-title b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
 :root[data-palette] .ai-market-title div > span { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; }
-:root[data-palette] .ai-market-selection { font-size: 15px; line-height: 1.4; font-weight: 750; margin-top: 12px; overflow-wrap: anywhere; }
+:root[data-palette] .ai-market-selection { font-size: 15px; line-height: 1.4; font-weight: 750; margin-top: 4px; overflow-wrap: anywhere; }
 :root[data-palette] .ai-market-selection strong { white-space: nowrap; color: var(--accent); }
 :root[data-palette] .ai-market-read p { font-size: 12px; line-height: 1.5; margin: 8px 0; color: var(--muted); }
 :root[data-palette] .ai-market-read small,
@@ -3233,3 +3233,16 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   :root[data-palette] .gm-hero { align-items:flex-start; }
   :root[data-palette] .gm-score { flex-basis:60px; }
 }
+
+/* Compact market summaries shared by every league and game surface. */
+:root[data-palette] .ai-market-expand > summary { display: block; list-style: none; cursor: pointer; padding: 10px 12px; }
+:root[data-palette] .ai-market-expand > summary::-webkit-details-marker { display: none; }
+:root[data-palette] .ai-market-expand > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 9px; }
+:root[data-palette] .ai-market-title { align-items: center; }
+:root[data-palette] .ai-market-toggle { display: flex; justify-content: flex-end; align-items: center; gap: 5px; font-size: 11px; line-height: 1.3; color: var(--muted); margin-top: 3px; }
+:root[data-palette] .ai-market-hide { display: none; }
+:root[data-palette] .ai-market-expand[open] .ai-market-show { display: none; }
+:root[data-palette] .ai-market-expand[open] .ai-market-hide { display: inline; }
+:root[data-palette] .ai-market-expand[open] .ai-market-toggle > span:last-child { transform: rotate(180deg); }
+:root[data-palette] .ai-market-analysis { border-top: 1px solid var(--line); padding: 0 12px 10px; }
+:root[data-palette] .ai-market-analysis .ai-market-question { font-size: 11px; margin: 8px 0 4px; }
