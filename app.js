@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v264';
+const APP_VERSION = 'v265';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -962,8 +962,8 @@ function gameCard(sport, g, opts = {}) {
   // wrong game if the slate repainted while it waited.
   if (g.id) card.dataset.gid = g.id;
   if (interactive && g.id) card.onclick = (event) => { if (!event.target.closest('details,button,a,input,select')) openGameDetail(sport, g.id, g); };
-  if (sport === 'nfl' && g.id) globalThis.SportsHubFootballDevelopment?.mountGame(card, g.id);
-  if (sport === 'nfl' && interactive && g.id) {
+  if (['nfl','cfb'].includes(sport) && g.id) globalThis.SportsHubFootballDevelopment?.mountGame(card, g.id, sport);
+  if (['nfl','cfb'].includes(sport) && interactive && g.id) {
     // Nested disclosures must remain native controls, not descendants of a button role.
     card.setAttribute('role', 'group'); card.removeAttribute('tabindex');
     const reportButton = el('button', 'ai-detail-button', 'Full game report →');
@@ -1084,7 +1084,7 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
     const slot = reportP ? '<div id="md-report"><div class="empty">📊 Loading betting report…</div></div>' : '';
     $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, slot, signalSlot);
     makeAccordion($('#modal-body'), '.md-section-title', SEC_OPEN_ALL);
-    if (sport === 'nfl') globalThis.SportsHubFootballDevelopment?.mountGame($('#md-challenger'), id);
+    if (['nfl','cfb'].includes(sport)) globalThis.SportsHubFootballDevelopment?.mountGame($('#md-challenger'), id, sport);
     if (signalSlot) paintSignalDetail(id, token, focusSignals,'spread',null,sport);
     // v183: the game is on screen — now hold the model to what it just said.
     // Deliberately NOT awaited and deliberately not token-guarded: the pick was
@@ -1346,7 +1346,7 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
       atsR: atsRead(sport, g, pred, oddsInfo), totR: totalRead(sport, pred, oddsInfo) });
   } else html += aiPickHead(pred, sport, g, oddsInfo);
   if (!pred && g && !globalThis.SportsHubForecastLock.eligible(g)) html += '<div class="ai-note">No saved pregame forecast — model locked; no in-game recalculation.</div>';
-  if (sport === 'nfl') html += '<div id="md-challenger" data-acc-boundary></div>';
+  if (['nfl','cfb'].includes(sport)) html += '<div id="md-challenger" data-acc-boundary></div>';
   html += aiFactors(pred, sport);
   html += signals;
   html += extra || '';
@@ -2913,7 +2913,7 @@ async function setSportView(sport, view) {
     target.dataset.ready='true';
   }
   globalThis.SportsHubFootballDevelopment?.mount(target, sport);
-  if (sport === 'nfl') globalThis.SportsHubFootballDevelopment?.mountSummary(target);
+  globalThis.SportsHubFootballDevelopment?.mountSummary(target, sport);
   target.querySelector('[data-sport-results]').appendChild(host);
   const record=target.querySelector('[data-sport-record]');
   record.replaceChildren(recordPanel(tallyDetails(sport),pendingSummary(sport),sport));
@@ -5100,7 +5100,7 @@ function boardCard(r, opts = {}) {
     ${compactMarketsHTML({...r,info:shownInfo,atsR:r.atsR || r.ats,totR:r.totR || r.tot})}
     ${gap != null ? `<div class="compact-gap">Winner vs market: <b>${gap >= 0 ? '+' : ''}${gap} pp</b></div>` : ''}
     ${p.blockedReasons?.length ? '<div class="compact-warning">Data check · see report before using this read</div>' : ''}`;
-  if (sport === 'nfl' && g.id) globalThis.SportsHubFootballDevelopment?.mountGame(card, g.id);
+  if (['nfl','cfb'].includes(sport) && g.id) globalThis.SportsHubFootballDevelopment?.mountGame(card, g.id, sport);
   if (['nfl','cfb'].includes(sport) && g.id && signalsEnabled()) {
     signalGames.set(String(g.id), {...g,signalSport:sport});
     const host = el('div'); host.dataset.bsSummary = String(g.id);host.dataset.bsSport=sport;
@@ -5552,7 +5552,7 @@ async function paintAiView() {
     sub === 'record' ? recordPanel(det, pend, s)
     : sub === 'backtest' ? backtestPanel(det, s)
     : modelPanel(s));
-  if (sub === 'record' && (all || sport === 'nfl')) globalThis.SportsHubFootballDevelopment?.mountSummary(container);
+  if (sub === 'record') for (const league of all ? ['cfb','nfl'] : ['nfl','cfb'].includes(sport) ? [sport] : []) globalThis.SportsHubFootballDevelopment?.mountSummary(container, league);
   if (signalsEnabled() && (all || ['nfl','cfb'].includes(sport))) {
     if (sub === 'record') {
       container.insertAdjacentHTML('beforeend', researchLinksHTML(sport));
@@ -5619,7 +5619,7 @@ async function paintOverviewBoard(tok) {
   const passes = live.filter((r) => r.p && r.info?.favName && !r.tier).length;
 
   container.innerHTML = '';
-  globalThis.SportsHubFootballDevelopment?.mountSummary(container);
+  for (const league of ['cfb','nfl']) globalThis.SportsHubFootballDevelopment?.mountSummary(container, league);
   // 🗓️ v214 — the Overview board itself stays DAILY: it is the cross-sport
   // read for today, and pricing a whole football week here would flood it and
   // cost 40 model runs on a view that records nothing. But a league with no
@@ -5781,7 +5781,7 @@ async function paintSportBoard(tok) {
 
   container.innerHTML = '';
   if (ATS_SPORTS.has(sport)) globalThis.SportsHubFootballDevelopment?.mount(container, sport);
-  if (sport === 'nfl') globalThis.SportsHubFootballDevelopment?.mountSummary(container);
+  if (['nfl','cfb'].includes(sport)) globalThis.SportsHubFootballDevelopment?.mountSummary(container, sport);
   let right = 0, graded = 0;
   const upcoming = rows.filter((r) => AI_MATH.pregame(r.g));
 
@@ -11075,6 +11075,7 @@ async function renderCFBWeek() {
   heroEl.innerHTML = `
     <h2 style="margin:0">College Football</h2><div class="muted">${esc(phase)}</div>
     <div class="muted" style="margin-top:4px;font-size:.85rem">Ranked teams only — a game shows up here (and on the Home slate) when a Top 25 team is playing in it.</div>`;
+  globalThis.SportsHubFootballDevelopment?.mountSummary(heroEl, 'cfb');
   if (setMode && games.length) setMode(true);
 
   renderCFBPlayoff();

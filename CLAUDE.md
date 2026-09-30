@@ -596,7 +596,12 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v264** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v265** (backend **b16-fantasy-gm**).
+
+### v265 — CFB front-line FPI comparison
+
+- Extends v264's front-line game/report comparisons and results summaries to CFB Top 25 and AI Picks. Current vs FPI challenger uses the existing CFB v2 immutable cohort, saved FPI margin, source time and rating-availability reasons. The latest near window stays authoritative even if withheld. NFL v3 remains separate; neither model nor collector changed.
+- CFB compares margin errors, spread W/L and common-priced spread paper ROI only. Its total is explicitly baseline-only, never presented as an independent challenger forecast, total agreement, or paired totals performance. NFL retains its independent margin and total comparisons. Shared caches and result hosts are scoped by sport.
 
 ### v264 — Front-line NFL model comparison
 
