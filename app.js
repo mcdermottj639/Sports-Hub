@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v263';
+const APP_VERSION = 'v264';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -952,6 +952,7 @@ function gameCard(sport, g, opts = {}) {
       card.setAttribute('role', 'button');
       card.setAttribute('aria-label', `${g.away.name} at ${g.home.name}: open full game report`);
       card.onkeydown = (event) => {
+        if (event.target !== card) return;
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); card.click(); }
       };
     }
@@ -960,7 +961,15 @@ function gameCard(sport, g, opts = {}) {
   // it rather than on position, so an async model read can't land on the
   // wrong game if the slate repainted while it waited.
   if (g.id) card.dataset.gid = g.id;
-  if (interactive && g.id) card.onclick = () => openGameDetail(sport, g.id, g);
+  if (interactive && g.id) card.onclick = (event) => { if (!event.target.closest('details,button,a,input,select')) openGameDetail(sport, g.id, g); };
+  if (sport === 'nfl' && g.id) globalThis.SportsHubFootballDevelopment?.mountGame(card, g.id);
+  if (sport === 'nfl' && interactive && g.id) {
+    // Nested disclosures must remain native controls, not descendants of a button role.
+    card.setAttribute('role', 'group'); card.removeAttribute('tabindex');
+    const reportButton = el('button', 'ai-detail-button', 'Full game report →');
+    reportButton.type = 'button'; reportButton.onclick = () => openGameDetail(sport, g.id, g);
+    card.appendChild(reportButton);
+  }
   return card;
 }
 
@@ -1075,6 +1084,7 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
     const slot = reportP ? '<div id="md-report"><div class="empty">📊 Loading betting report…</div></div>' : '';
     $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, slot, signalSlot);
     makeAccordion($('#modal-body'), '.md-section-title', SEC_OPEN_ALL);
+    if (sport === 'nfl') globalThis.SportsHubFootballDevelopment?.mountGame($('#md-challenger'), id);
     if (signalSlot) paintSignalDetail(id, token, focusSignals,'spread',null,sport);
     // v183: the game is on screen — now hold the model to what it just said.
     // Deliberately NOT awaited and deliberately not token-guarded: the pick was
@@ -1336,6 +1346,7 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
       atsR: atsRead(sport, g, pred, oddsInfo), totR: totalRead(sport, pred, oddsInfo) });
   } else html += aiPickHead(pred, sport, g, oddsInfo);
   if (!pred && g && !globalThis.SportsHubForecastLock.eligible(g)) html += '<div class="ai-note">No saved pregame forecast — model locked; no in-game recalculation.</div>';
+  if (sport === 'nfl') html += '<div id="md-challenger" data-acc-boundary></div>';
   html += aiFactors(pred, sport);
   html += signals;
   html += extra || '';
@@ -2799,7 +2810,7 @@ function aiFactors(pred, sport) {
   // belongs here, in the section that exists to explain the number.
   const noteRows = (pred.notes || []).map((n) => `<div class="ai-why">${esc(n)}</div>`).join('');
   return `<div class="md-section-title">Why — Factor Breakdown</div>
-    ${sport === 'nfl' ? '<div class="ai-why"><strong>Winner model inputs</strong> — record, scoring margin, home field, home/road split, recent form and rest. Small/zero contributions may be hidden. Spread uses separate weights; totals use scoring rates. QB names/stats below are context, not an adjustment. The opponent-adjusted challenger and QB availability gates are tracked separately in NFL → Picks &amp; Research → Football development.</div>' : ''}
+    ${sport === 'nfl' ? '<div class="ai-why"><strong>Winner model inputs</strong> — record, scoring margin, home field, home/road split, recent form and rest. Small/zero contributions may be hidden. Spread uses separate weights; totals use scoring rates. QB names/stats below are context, not an adjustment. See Current vs Challenger above for the separate opponent-adjusted experiment and QB availability checks.</div>' : ''}
     <div class="fac-list">${rows}</div>
     ${noteRows}
     <div class="ai-why" style="margin-top:6px">Factors above the 50% coin-flip add up to the ${pred.conf}% pick.</div>`;
@@ -2902,6 +2913,7 @@ async function setSportView(sport, view) {
     target.dataset.ready='true';
   }
   globalThis.SportsHubFootballDevelopment?.mount(target, sport);
+  if (sport === 'nfl') globalThis.SportsHubFootballDevelopment?.mountSummary(target);
   target.querySelector('[data-sport-results]').appendChild(host);
   const record=target.querySelector('[data-sport-record]');
   record.replaceChildren(recordPanel(tallyDetails(sport),pendingSummary(sport),sport));
@@ -5088,6 +5100,7 @@ function boardCard(r, opts = {}) {
     ${compactMarketsHTML({...r,info:shownInfo,atsR:r.atsR || r.ats,totR:r.totR || r.tot})}
     ${gap != null ? `<div class="compact-gap">Winner vs market: <b>${gap >= 0 ? '+' : ''}${gap} pp</b></div>` : ''}
     ${p.blockedReasons?.length ? '<div class="compact-warning">Data check · see report before using this read</div>' : ''}`;
+  if (sport === 'nfl' && g.id) globalThis.SportsHubFootballDevelopment?.mountGame(card, g.id);
   if (['nfl','cfb'].includes(sport) && g.id && signalsEnabled()) {
     signalGames.set(String(g.id), {...g,signalSport:sport});
     const host = el('div'); host.dataset.bsSummary = String(g.id);host.dataset.bsSport=sport;
@@ -5539,6 +5552,7 @@ async function paintAiView() {
     sub === 'record' ? recordPanel(det, pend, s)
     : sub === 'backtest' ? backtestPanel(det, s)
     : modelPanel(s));
+  if (sub === 'record' && (all || sport === 'nfl')) globalThis.SportsHubFootballDevelopment?.mountSummary(container);
   if (signalsEnabled() && (all || ['nfl','cfb'].includes(sport))) {
     if (sub === 'record') {
       container.insertAdjacentHTML('beforeend', researchLinksHTML(sport));
@@ -5605,6 +5619,7 @@ async function paintOverviewBoard(tok) {
   const passes = live.filter((r) => r.p && r.info?.favName && !r.tier).length;
 
   container.innerHTML = '';
+  globalThis.SportsHubFootballDevelopment?.mountSummary(container);
   // 🗓️ v214 — the Overview board itself stays DAILY: it is the cross-sport
   // read for today, and pricing a whole football week here would flood it and
   // cost 40 model runs on a view that records nothing. But a league with no
@@ -5766,6 +5781,7 @@ async function paintSportBoard(tok) {
 
   container.innerHTML = '';
   if (ATS_SPORTS.has(sport)) globalThis.SportsHubFootballDevelopment?.mount(container, sport);
+  if (sport === 'nfl') globalThis.SportsHubFootballDevelopment?.mountSummary(container);
   let right = 0, graded = 0;
   const upcoming = rows.filter((r) => AI_MATH.pregame(r.g));
 
@@ -11173,6 +11189,7 @@ async function renderNFLWeek() {
     <h2 style="margin:0">NFL</h2><div class="muted">${esc(phase)}</div>
     ${stype !== 2 && stype !== 3 && kick > 0 ? `<div class="nfl-kick">🏈 Kickoff in <b>${kick} day${kick === 1 ? '' : 's'}</b> — ${esc(kickoffLabel())}</div>` : ''}
     ${stype === 1 ? '<div class="muted" style="margin-top:4px;font-size:.85rem">Preseason results don\'t feed the AI model — backups play, nothing predictive.</div>' : ''}`;
+  globalThis.SportsHubFootballDevelopment?.mountSummary(heroEl);
   if (setMode && events.length) setMode(true);
   if (!events.length) {
     box.innerHTML = `<div class="empty">${json ? 'No games on this week\'s slate.' : 'Scoreboard unreachable right now.'}</div>`;

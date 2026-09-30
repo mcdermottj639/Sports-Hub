@@ -71,7 +71,15 @@
       return `${lo}–${Math.min(hi-1,100)}%: ${n} observations${n?`, average ${mean.toFixed(1)}%, actual ${score(group.map(r=>resultFor(r,r.snapshot.research.baseline)))}`:''}`;
     }).join('<br>');
   }
-  async function load(sport) {
+  const requests = new Map();
+  function load(sport) {
+    const old=requests.get(sport);
+    if(old&&Date.now()-old.at<60000)return old.promise;
+    const entry={at:Date.now(),promise:null};
+    entry.promise=fetchRows(sport).catch(err=>{if(requests.get(sport)===entry)requests.delete(sport);throw err;});
+    requests.set(sport,entry);return entry.promise;
+  }
+  async function fetchRows(sport) {
     const cfg=root.SPORTS_HUB_SUPABASE;if(!cfg)throw new Error('Cloud configuration unavailable.');
     let all=[];
     for(let offset=0;;offset+=500){
@@ -83,6 +91,50 @@
       if(!res.ok)throw new Error('Research records could not load.');
       const page=await res.json();all=all.concat(page.map(r=>({...r,snapshot:{odds:r.odds,oddsObservedAt:r.oddsObservedAt,research:{phase:r.phase,baseline:r.baseline,candidateAvailable:r.candidateAvailable,evidence:{qb:r.qb,candidate:r.candidate,candidateTotal:r.candidateTotal,fpi:r.fpi,efficiency:r.used==null?null:{used:r.used,expected:r.expected,mean:r.mean}}}}})));if(page.length<500)return all;
     }
+  }
+  // Front-line comparison uses one immutable pregame window for BOTH models.
+  // Never compare today's live baseline against yesterday's saved challenger.
+  function gameComparison(rows,id) {
+    const saved=rows.filter(r=>String(r.event_id)===String(id)&&r.model_version?.startsWith('football-research-nfl-v3-')&&Date.parse(r.captured_at)<Date.parse(r.starts_at));
+    const phase=saved.some(r=>r.snapshot.research.phase==='near')?'near':'early';
+    const group=saved.filter(r=>r.snapshot.research.phase===phase), row=group.find(r=>r.market==='moneyline');
+    if(!row)return null;
+    const r=row.snapshot.research,b=r.baseline,e=r.evidence,spread=group.find(x=>x.market==='spread'),total=group.find(x=>x.market==='total');
+    const available=r.candidateAvailable===true&&Number.isFinite(row.projection);
+    const cm=available?row.projection:null,ct=available?(total?.projection??e?.candidateTotal):null;
+    const direction=(value,line)=>value==null||line==null?null:Math.sign(value-line);
+    const agreement=(a,b)=>a==null||b==null?'Unavailable':a===0||b===0?'At line':a===b?'Agree':'Disagree';
+    return {row,phase,b,e,cm,ct,available,line:spread?.line,totalLine:total?.line,
+      spreadStatus:agreement(direction(b.margin,spread?.line==null?null:-spread.line),direction(cm,spread?.line==null?null:-spread.line)),
+      totalStatus:agreement(direction(b.total,total?.line),direction(ct,total?.line))};
+  }
+  function gameHTML(rows,id) {
+    const c=gameComparison(rows,id);
+    if(!c)return '<strong>Current vs Challenger <small>Experimental</small></strong><p>No saved challenger comparison for this game yet.</p>';
+    const {row,b,e,cm,ct}=c,[away,home]=row.matchup.split(' @ ');
+    const margin=v=>v==null?'Unavailable':v===0?'Even':`${escape(v>0?home:away)} by ${label(Math.abs(v))}`;
+    const status=c.available?[c.spreadStatus,c.totalStatus].includes('Disagree')?'Line disagreement':[c.spreadStatus,c.totalStatus].every(x=>x==='Agree')?'Spread/total agree':'See details':'Unavailable';
+    const qb=e?.qb?Object.entries(e.qb).map(([side,q])=>`${side}: ${q.name||'Unknown QB'} — ${q.status||'status missing'}`).join('; '):'QB evidence unavailable';
+    return `<strong>Current vs Challenger <small>Experimental · ${status}</small></strong>
+      <small>${c.phase==='near'?'Near kickoff':'Early'} · paired saved forecasts</small><div class="fc-grid"><span></span><b>Current</b><b>Challenger</b><span>Margin</span><span>${margin(b.margin)}</span><span>${margin(cm)}</span><span>Total</span><span>${label(b.total)}</span><span>${ct==null?'Unavailable':label(ct)}</span></div>
+      <details class="fc-reasons"><summary>Spread: ${c.spreadStatus} · Total: ${c.totalStatus} <span aria-hidden="true">⌄</span></summary><p>${c.phase==='near'?'Near kickoff':'Early'} paired snapshot · ${escape(time(row.captured_at))}. Both columns use this saved observation; the main model read may reflect a different pregame snapshot. No in-game recalculation.</p><p>Saved home handicap ${c.line==null?'unavailable':escape(c.line)}; total line ${c.totalLine==null?'unavailable':escape(c.totalLine)}. Agree/disagree compares sides against these same lines, not equal projected scores.</p><p>${c.available?'Challenger: opponent-adjusted team scoring per possession and projected pace.':'Withheld: '+escape(e?.candidate?.reasons?.join('; ')||'Required evidence unavailable')+'.'} Current model remains official. Challenger win probability: not calibrated.</p><p>${escape(qb)}. Depth-chart names do not confirm the starter.</p>${e?.efficiency?`<p>Coverage: ${escape(e.efficiency.used)} / ${escape(e.efficiency.expected)} completed games.</p>`:''}</details>`;
+  }
+  async function mountGame(container,id) {
+    if(!container||!id)return;
+    const host=document.createElement('section');host.className='fc-game';host.setAttribute('aria-label','Current model versus experimental challenger');
+    host.innerHTML='<strong>Current vs Challenger <small>Experimental</small></strong><p>Loading saved comparison…</p>';container.appendChild(host);
+    try{const rows=await load('nfl');if(host.isConnected)host.innerHTML=gameHTML(rows,id);}catch(_){if(host.isConnected)host.innerHTML='<strong>Current vs Challenger</strong><p>Saved comparison unavailable. Reopen this view to retry.</p>';}
+  }
+  function summaryHTML(rows,phase='early') {
+    const group=rows.filter(r=>r.snapshot.research.phase===phase),games=group.filter(r=>r.market==='moneyline'),eligible=games.filter(r=>r.snapshot.research.candidateAvailable);
+    const metric=market=>{const m=comparisonMetrics(group.filter(r=>r.market===market)),e=m.error;return `<div class="fc-result"><b>${market==='spread'?'Margin':'Total'} error</b><span>Current ${e.n?(e.baseline/e.n).toFixed(1):'—'}</span><span>Challenger ${e.n?(e.study/e.n).toFixed(1):'—'}</span><small>${e.n} settled pairs · book ${e.n?(e.market/e.n).toFixed(1):'—'} · lower is better</small></div>`;};
+    return `<strong>NFL · Current vs Challenger <small>Experimental</small></strong><div class="fc-windows" role="group" aria-label="Saved comparison window"><button type="button" data-fc-window="early" aria-pressed="${phase==='early'}">Early</button><button type="button" data-fc-window="near" aria-pressed="${phase==='near'}">Near kickoff</button></div><p>${games.length} saved games · ${eligible.length} challenger available · ${games.length-eligible.length} withheld</p>${metric('spread')}${metric('total')}<details><summary>Records, priced returns &amp; validation ⌄</summary><p>Same eligible games, same saved lines. Missing candidates excluded. No settled pairs means collecting—not 0% performance. Early and near-kickoff results are separate; small samples do not prove improvement.</p>${['spread','total'].map(market=>{const g=group.filter(r=>r.market===market&&r.snapshot.research.candidateAvailable),m=comparisonMetrics(g),roi=m.roi;return `<p><b>${market==='spread'?'Spread':'Total'}</b> · Current ${score(g.map(r=>resultFor(r,r.snapshot.research.baseline)))} · Challenger ${score(g.map(r=>r.result))}<br>Paper ROI: current ${roi.n?(100*roi.baseline/roi.n).toFixed(1)+'%':'collecting'} · challenger ${roi.n?(100*roi.study/roi.n).toFixed(1)+'%':'collecting'} (${roi.n} common-priced pairs).</p>`;}).join('')}<p>One unit risked per forecast with both exact selection prices saved. No estimated or retrofilled odds. Challenger win probability is not calibrated; the current model remains official.</p></details>`;
+  }
+  async function mountSummary(container) {
+    if(!container)return;
+    container.querySelectorAll(':scope > .fc-summary').forEach(x=>x.remove());
+    const host=document.createElement('section');host.className='fc-summary';host.innerHTML='<strong>NFL · Current vs Challenger</strong><p>Loading saved results…</p>';container.prepend(host);
+    try{const rows=await load('nfl');if(!host.isConnected)return;host.innerHTML=summaryHTML(rows);host.addEventListener('click',event=>{const button=event.target.closest('[data-fc-window]');if(button){const phase=button.dataset.fcWindow;host.innerHTML=summaryHTML(rows,phase);host.querySelector(`[data-fc-window="${phase}"]`).focus();}});}catch(_){if(host.isConnected)host.innerHTML='<strong>NFL · Current vs Challenger</strong><p>Saved results unavailable. Reopen this view to retry.</p>';}
   }
   function render(host, rows, sport) {
     const reviews=read(), latest=new Map();
@@ -119,5 +171,5 @@
     const host=document.createElement('details');host.className='football-development';host.innerHTML='<summary>Football development &amp; your review</summary><p>Loading saved experiments…</p>';container.appendChild(host);
     try{const rows=await load(sport);if(host.isConnected)render(host,rows,sport);}catch(err){if(host.isConnected)host.innerHTML=`<summary>Football development &amp; your review</summary><p>${escape(err.message)} Reopen this view to retry.</p>`;}
   }
-  root.SportsHubFootballDevelopment={mount,resultFor,score,comparisonMetrics};
+  root.SportsHubFootballDevelopment={mount,mountGame,mountSummary,gameComparison,gameHTML,summaryHTML,resultFor,score,comparisonMetrics};
 })(globalThis);

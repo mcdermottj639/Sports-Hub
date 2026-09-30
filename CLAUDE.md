@@ -596,7 +596,13 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v263** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v264** (backend **b16-fantasy-gm**).
+
+### v264 — Front-line NFL model comparison
+
+- NFL slate and AI Picks game cards now show compact Current vs Challenger margin/total columns. Game reports repeat the same comparison above Why; expandable details show saved lines, early/near timestamp, QB restrictions and coverage. Both columns are from the SAME frozen research observation, explicitly distinct from the potentially newer main pregame read. Prefer the near window, even when withheld; never silently substitute an earlier eligible candidate. No post-kickoff calculation or fabricated probabilities.
+- NFL main view, NFL Picks & Research, AI Picks overview/NFL board and Results show a visible paired-results summary, with separate Early/Near controls, eligible/withheld counts, margin/total mean absolute errors and book-line benchmark. Expanded records and flat-risk paper ROI use the existing matched-price metrics. Empty samples say collecting. Detailed methodology/human reviews remain in Football development (v263 placement is superseded for front-line comparisons).
+- Shared one-minute read cache coalesces all card and summary requests; failures are retryable. UI-only release: baseline v239, challenger NFL v3 and backend collection are unchanged.
 
 ### v263 — Isolated NFL efficiency challenger
 
