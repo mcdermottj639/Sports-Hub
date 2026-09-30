@@ -596,7 +596,11 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v268** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v269** (backend **b16-fantasy-gm**).
+
+### v269 — Automatic latest comparison
+
+- Aggregate NFL/CFB summaries default to one latest saved paired window per game: near kickoff if saved, otherwise early. Withheld near candidates remain withheld; no fallback to eligible early candidates. Latest/Early/Near kickoff filters sit inside detailed results and keep that disclosure open when switched. Collection and game-card window selection are unchanged.
 
 ### v268 — Concise expanded model comparison
 
