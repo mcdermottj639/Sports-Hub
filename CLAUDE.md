@@ -596,7 +596,12 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v265** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v266** (backend **b16-fantasy-gm**).
+
+### v266 — Integrated compact challenger rows
+
+- Supersedes the nested comparison boxes in v264/v265. Each NFL/CFB game card now has a thin-divider Model comparison footer: Current and Challenger/FPI selections at the SAME saved handicap/total, agreement badge and native expandable market rows. CFB shows spread only; NFL shows spread and total. Projected margins, total limitations, frozen timestamp, methodology and availability evidence remain inside the disclosure.
+- Football cards use one accessible report chevron in the matchup header instead of duplicate tap hints and large report buttons. Comparison disclosures do not trigger the parent report action. No forecast, price, cohort or grading changes.
 
 ### v265 — CFB front-line FPI comparison
 

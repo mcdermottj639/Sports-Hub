@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v265';
+const APP_VERSION = 'v266';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -966,9 +966,12 @@ function gameCard(sport, g, opts = {}) {
   if (['nfl','cfb'].includes(sport) && interactive && g.id) {
     // Nested disclosures must remain native controls, not descendants of a button role.
     card.setAttribute('role', 'group'); card.removeAttribute('tabindex');
-    const reportButton = el('button', 'ai-detail-button', 'Full game report →');
+    card.querySelector('.tap-hint')?.remove();
+    const reportButton = el('button', 'fc-report-link', '›');
     reportButton.type = 'button'; reportButton.onclick = () => openGameDetail(sport, g.id, g);
-    card.appendChild(reportButton);
+    reportButton.setAttribute('aria-label', `Full game report: ${g.away.name} at ${g.home.name}`);
+    const chevron = card.querySelector('.slate-chevron');
+    if (chevron) chevron.replaceWith(reportButton); else card.appendChild(reportButton);
   }
   return card;
 }
@@ -5118,6 +5121,10 @@ function boardCard(r, opts = {}) {
       if (!event.target.closest('button,a,details,input,select')) openGameDetail(sport, g.id, g);
     };
     card.appendChild(button);
+    if (['nfl','cfb'].includes(sport)) {
+      button.className = 'fc-report-link'; button.textContent = '›';
+      card.querySelector('.compact-matchup')?.appendChild(button);
+    }
   }
   return card;
 }
@@ -11019,7 +11026,7 @@ async function enrichSlate(sport, host, games) {
     const strip = el('div', 'bb-strip');
     strip.innerHTML = `${lineRow}${markets}`;
     // Sit above the "tap for game report →" hint so the hint stays last.
-    const hint = card.querySelector('.tap-hint');
+    const hint = card.querySelector('.fc-game') || card.querySelector('.tap-hint');
     if (hint) card.insertBefore(strip, hint); else card.appendChild(strip);
     if (isEdge) card.classList.add('bb-edge-card');
   });

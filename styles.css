@@ -3298,6 +3298,24 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .fc-windows button[aria-pressed=true] { background: var(--text, #171910); color: var(--card, #fff); }
 .fc-result { display: grid; grid-template-columns: .8fr 1fr 1fr; gap: .2rem .4rem; padding: .3rem 0; border-top: 1px solid var(--line, #ccc); font-variant-numeric: tabular-nums; }
 .fc-result small { grid-column: 1 / -1; }
+.fc-game { border: 0; border-top: 1px solid var(--line, #ccc); border-radius: 0; background: transparent; padding: .55rem 0 0; margin: .6rem 0 0; }
+.fc-title { display: flex; align-items: baseline; gap: .5rem; margin-bottom: .35rem; }
+.fc-title strong { font-size: .84rem; }
+.fc-columns, .fc-market > summary { display: grid; grid-template-columns: .65fr 1fr 1fr .9fr 12px; align-items: center; gap: .25rem; }
+.fc-columns { font-size: .7rem; color: var(--muted); text-align: center; }
+.fc-market > summary { list-style: none; min-height: 36px; padding: .15rem 0; font-size: .76rem; }
+.fc-market > summary::-webkit-details-marker { display: none; }
+.fc-market > summary b { text-align: center; font-size: .79rem; overflow-wrap: anywhere; }
+.fc-market-name { text-transform: uppercase; font-size: .66rem; color: var(--muted); }
+.fc-status { border-radius: 20px; padding: .18rem .3rem; text-align: center; font-size: .65rem; font-weight: 600; }
+.fc-status.agree { background: #d9efdf; color: #185c30; }
+.fc-status.disagree { background: #ffebbc; color: #754c00; }
+.fc-status.unavailable { background: #e9e9e5; color: #50504a; }
+.fc-chevron { transition: transform .15s; }
+.fc-market[open] .fc-chevron { transform: rotate(180deg); }
+.fc-explanation { padding: .4rem 0; border-top: 1px solid var(--line); }
+.fc-report-link { margin-left: auto; min-width: 36px; min-height: 36px; border: 0; background: transparent; color: inherit; padding: 0; font: inherit; font-size: 1.6rem; cursor: pointer; flex-shrink: 0; }
+.fc-market > summary:focus-visible, .fc-report-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .fd-game { border-top: 1px solid #555; padding: .7rem 0; }
 .fd-game form { display: grid; gap: .7rem; min-width: 0; }
 .fd-game form > label { display: grid; gap: .3rem; }

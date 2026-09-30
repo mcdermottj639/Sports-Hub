@@ -110,14 +110,26 @@
   }
   function gameHTML(rows,id,sport='nfl') {
     const c=gameComparison(rows,id,sport);
-    if(!c)return '<strong>Current vs Challenger <small>Experimental</small></strong><p>No saved challenger comparison for this game yet.</p>';
+    const heading='<div class="fc-title"><strong>Model comparison</strong><small>Experimental</small></div>';
+    if(!c)return heading+'<details class="fc-empty"><summary>Comparison unavailable <span aria-hidden="true">⌄</span></summary><p>No saved challenger comparison for this game yet.</p></details>';
     const {row,b,e,cm,ct}=c,[away,home]=row.matchup.split(' @ ');
     const margin=v=>v==null?'Unavailable':v===0?'Even':`${escape(v>0?home:away)} by ${label(Math.abs(v))}`;
-    const status=!c.available?'Unavailable':sport==='cfb'?'Spread: '+c.spreadStatus:[c.spreadStatus,c.totalStatus].includes('Disagree')?'Line disagreement':[c.spreadStatus,c.totalStatus].every(x=>x==='Agree')?'Spread/total agree':'See details';
+    const spread=v=>{
+      if(v==null||c.line==null)return '—';
+      const edge=v+Number(c.line);if(Math.abs(edge)<1e-9)return 'At line';
+      const h=edge>0,line=h?Number(c.line):-Number(c.line);
+      return `${escape(h?home:away)} ${line>0?'+':''}${line===0?'PK':escape(line)}`;
+    };
+    const total=v=>v==null||c.totalLine==null?'—':Math.abs(v-c.totalLine)<1e-9?'At line':`${v>c.totalLine?'O':'U'}${escape(c.totalLine)}`;
     const qb=e?.qb?Object.entries(e.qb).map(([side,q])=>`${side}: ${q.name||'Unknown QB'} — ${q.status||'status missing'}`).join('; '):'QB evidence unavailable';
-    return `<strong>Current vs ${sport==='cfb'?'FPI Challenger':'Challenger'} <small>Experimental · ${status}</small></strong>
-      <small>${c.phase==='near'?'Near kickoff':'Early'} · paired saved forecasts</small><div class="fc-grid"><span></span><b>Current</b><b>${sport==='cfb'?'FPI':'Challenger'}</b><span>Margin</span><span>${margin(b.margin)}</span><span>${margin(cm)}</span><span>Total</span><span>${label(b.total)}</span><span>${sport==='cfb'?'No separate model':ct==null?'Unavailable':label(ct)}</span></div>
-      <details class="fc-reasons"><summary>Spread: ${c.spreadStatus} · Total: ${c.totalStatus} <span aria-hidden="true">⌄</span></summary><p>${c.phase==='near'?'Near kickoff':'Early'} paired snapshot · ${escape(time(row.captured_at))}. Both columns use this saved observation; the main model read may reflect a different pregame snapshot. No in-game recalculation.</p><p>Saved home handicap ${c.line==null?'unavailable':escape(c.line)}; total line ${c.totalLine==null?'unavailable':escape(c.totalLine)}. Agree/disagree compares sides against these same lines, not equal projected scores.</p><p>${c.available?(sport==='cfb'?'FPI challenger: home minus away FPI, plus 3 points at home (zero at neutral sites). No independent total forecast.':'Challenger: opponent-adjusted team scoring per possession and projected pace.'):'Withheld: '+escape(e?.candidate?.reasons?.join('; ')||(sport==='cfb'?'One or both FPI ratings unavailable':'Required evidence unavailable'))+'.'} Current model remains official. Challenger win probability: not calibrated.</p>${sport==='cfb'?`<p>FPI: home ${label(e?.fpi?.home)} · away ${label(e?.fpi?.away)}. Source updated ${escape(time(e?.fpi?.updatedAt))}. No NFL QB gate is applied to this CFB model.</p>`:`<p>${escape(qb)}. Depth-chart names do not confirm the starter.</p>`}${e?.efficiency?`<p>Coverage: ${escape(e.efficiency.used)} / ${escape(e.efficiency.expected)} completed games.</p>`:''}</details>`;
+    const explanation=`<p><b>Current vs ${sport==='cfb'?'FPI Challenger':'Challenger'}</b> · ${c.phase==='near'?'Near kickoff':'Early'} · paired saved forecasts</p><p>Projected margin: current ${margin(b.margin)} · challenger ${margin(cm)}. Total: current ${label(b.total)} · challenger ${sport==='cfb'?'No separate model':ct==null?'Unavailable':label(ct)}.</p><p>${c.phase==='near'?'Near kickoff':'Early'} paired snapshot · ${escape(time(row.captured_at))}. Both columns use this saved observation; the main model read may reflect a different pregame snapshot. No in-game recalculation.</p><p>Saved home handicap ${c.line==null?'unavailable':escape(c.line)}; total line ${c.totalLine==null?'unavailable':escape(c.totalLine)}. Agree/disagree compares sides against these same lines, not equal projected scores.</p><p>${c.available?(sport==='cfb'?'FPI challenger: home minus away FPI, plus 3 points at home (zero at neutral sites). No independent total forecast.':'Challenger: opponent-adjusted team scoring per possession and projected pace.'):'Withheld: '+escape(e?.candidate?.reasons?.join('; ')||(sport==='cfb'?'One or both FPI ratings unavailable':'Required evidence unavailable'))+'.'} Current model remains official. Challenger win probability: not calibrated.</p>${sport==='cfb'?`<p>FPI: home ${label(e?.fpi?.home)} · away ${label(e?.fpi?.away)}. Source updated ${escape(time(e?.fpi?.updatedAt))}. No NFL QB gate is applied to this CFB model.</p>`:`<p>${escape(qb)}. Depth-chart names do not confirm the starter.</p>`}${e?.efficiency?`<p>Coverage: ${escape(e.efficiency.used)} / ${escape(e.efficiency.expected)} completed games.</p>`:''}`;
+    const marketRow=(name,current,challenger,status)=>{
+      const tone=status==='Agree'?'agree':status==='Disagree'?'disagree':'unavailable';
+      return `<details class="fc-market"><summary><span class="fc-market-name">${name}</span><b>${current}</b><b>${challenger}</b><span class="fc-status ${tone}">${status}</span><span class="fc-chevron" aria-hidden="true">⌄</span></summary><div class="fc-explanation">${explanation}</div></details>`;
+    };
+    return heading+`<div class="fc-columns" aria-hidden="true"><span></span><span>Current</span><span>${sport==='cfb'?'FPI':'Challenger'}</span><span></span><span></span></div>`+
+      marketRow('Spread',spread(b.margin),spread(cm),c.spreadStatus)+
+      (sport==='cfb'?'':marketRow('Total',total(b.total),total(ct),c.totalStatus));
   }
   async function mountGame(container,id,sport='nfl') {
     if(!container||!id)return;
