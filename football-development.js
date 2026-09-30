@@ -22,7 +22,15 @@
       const paired=group.filter(r=>r.sport==='nfl'||r.snapshot.research.candidateAvailable);
       const human=group.filter(r=>reviews[key(r)] && reviews[key(r)].sourceCapturedAt===r.captured_at);
       const saved=reviews;
-      return `<tr><td>${stage === 'near' ? 'Near kickoff' : 'Early'} · ${market}</td><td>${group.length}</td><td>${score(paired.map(r=>resultFor(r,r.snapshot.research.baseline)))}</td><td>${score(paired.map(r=>r.result))}</td><td>${score(human.map(r=>resultFor(r,saved[key(r)].baseline)))}</td><td>${score(human.map(r=>resultFor(r,saved[key(r)].human)))}</td><td>${score(human.map(r=>resultFor(r,saved[key(r)].combined)))}</td></tr>`;
+      const cells = [
+        ['Saved', group.length],
+        ['Baseline', score(paired.map(r=>resultFor(r,r.snapshot.research.baseline)))],
+        ['Study', score(paired.map(r=>r.result))],
+        ['Baseline on reviewed games', score(human.map(r=>resultFor(r,saved[key(r)].baseline)))],
+        ['Your forecast', score(human.map(r=>resultFor(r,saved[key(r)].human)))],
+        ['50/50 blend', score(human.map(r=>resultFor(r,saved[key(r)].combined)))],
+      ];
+      return `<tr><th scope="row">${stage === 'near' ? 'Near kickoff' : 'Early'} · ${market}</th>${cells.map(([name,value])=>`<td><span class="fd-cell-label" aria-hidden="true">${name}</span><span class="fd-cell-value">${value}</span></td>`).join('')}</tr>`;
     })).join('');
   }
   function confidence(rows) {

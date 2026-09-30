@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v255';
+const APP_VERSION = 'v256';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -1049,9 +1049,9 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
     } else if (g && sport === 'nfl') {
       extra += nflKeyHTML(g);
     }
-    const signalSlot = ['nfl','cfb'].includes(sport) && signalsEnabled() ? '<div id="md-signals" aria-live="polite"></div>' : '';
-    const slot = signalSlot + (reportP ? '<div id="md-report"><div class="empty">📊 Loading betting report…</div></div>' : '');
-    $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, slot);
+    const signalSlot = ['nfl','cfb'].includes(sport) && signalsEnabled() ? '<div id="md-signals" data-acc-boundary aria-live="polite"></div>' : '';
+    const slot = reportP ? '<div id="md-report"><div class="empty">📊 Loading betting report…</div></div>' : '';
+    $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, slot, signalSlot);
     makeAccordion($('#modal-body'), '.md-section-title', SEC_OPEN_ALL);
     if (signalSlot) paintSignalDetail(id, token, focusSignals,'spread',null,sport);
     // v183: the game is on screen — now hold the model to what it just said.
@@ -1078,7 +1078,7 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
     }
   } catch (_) {
     if (token !== detailToken) return;
-    $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>' + (['nfl','cfb'].includes(sport) && signalsEnabled() ? '<div id="md-signals" aria-live="polite"></div>' : '');
+    $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>' + (['nfl','cfb'].includes(sport) && signalsEnabled() ? '<div id="md-signals" data-acc-boundary aria-live="polite"></div>' : '');
     if (['nfl','cfb'].includes(sport) && signalsEnabled()) paintSignalDetail(id, token, focusSignals,'spread',null,sport);
   }
 }
@@ -1275,7 +1275,7 @@ function footballSituation(sit, comp) {
     ${last ? `<div class="sit-last">Last play: ${last}</div>` : ''}`;
 }
 
-function renderGameDetail(sport, data, pred, extra, g, report) {
+function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
   const comp = data.header?.competitions?.[0] || data.competitions?.[0] || {};
   const cs = comp.competitors || [];
   const home = cs.find((c) => c.homeAway === 'home') || cs[0] || {};
@@ -1317,6 +1317,7 @@ function renderGameDetail(sport, data, pred, extra, g, report) {
   // plays beside the moneyline rather than leaving them to look contradictory.
   html += aiPickHead(pred, sport, g, oddsInfo);
   html += aiFactors(pred);
+  html += signals;
   html += extra || '';
 
   // line score (innings / quarters)
@@ -9852,7 +9853,7 @@ function makeAccordion(container, headerSel, openCount = 0, scope = null) {
     // without this the section above them would swallow them whole: collapsing
     // "My Teams" would take The Board with it.
     const content = []; let n = h.nextElementSibling;
-    while (n && !n.matches(headerSel) && !n.querySelector(headerSel)) { content.push(n); n = n.nextElementSibling; }
+    while (n && !n.matches('[data-acc-boundary]') && !n.matches(headerSel) && !n.querySelector(headerSel)) { content.push(n); n = n.nextElementSibling; }
     h.classList.add('acc-h');
     let chev = h.querySelector('.sec-chev');
     if (!chev) {

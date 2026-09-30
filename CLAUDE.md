@@ -594,7 +594,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v255** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v256** (backend **b16-fantasy-gm**).
 
 - **v250 — Mobile sideways-scroll guard:** Clip document-level horizontal overflow
   (hidden fallback) without disabling zoom or nested score/table scrolling. Bound
@@ -609,6 +609,11 @@ Current version as of this writing: **v255** (backend **b16-fantasy-gm**).
   AI Picks keeps cross-sport forecasts/performance and links to league research;
   Labs no longer contains betting research. Existing collectors, model constants,
   data and refresh cadence are unchanged. CFB stays Top 25 only.
+
+### v256 — Game-detail order and mobile results readability
+
+- The complete Betting signals section, including View system results, appears after the AI pick and factor breakdown, immediately before NFL Key Players. It stays independent of the factor accordion. Model calculations and signal behavior are unchanged.
+- Football development comparisons use labeled market cards on phones and a scrollable table on wider screens. Records stay on one line; all original comparisons remain visible.
 
 ### v254 — Prospective football development
 - Football totals continue to be recorded and graded, but are research-only: no best/edge tier or promoted totals board. This supersedes older totals-promotion descriptions below. Existing historical rows are not rewritten.
