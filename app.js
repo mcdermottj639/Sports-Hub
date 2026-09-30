@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v245';
+const APP_VERSION = 'v246';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -2755,7 +2755,7 @@ function aiFactors(pred) {
 // v244: read-only evidence UI. No rule result enters the prediction engine.
 const signalGames = new Map(), signalData = new Map(), signalQueue = new Set();
 let signalTimer = null, signalResultToken = 0;
-const signalFilters = {from: `${new Date().getFullYear()}-09-01`, to: new Date(Date.now()+8*864e5).toISOString().slice(0,10)};
+const signalFilters = {scope:'explore',from: `${new Date().getFullYear()}-09-01`, to: new Date(Date.now()+8*864e5).toISOString().slice(0,10)};
 const signalsEnabled = () => !!(globalThis.SportsHubCloudSignals && globalThis.SportsHubSignalsUI);
 function signalVM(id, payload) {
   const data = payload || signalData.get(String(id)) || {state:'loading'};
@@ -2775,7 +2775,7 @@ function signalVM(id, payload) {
   const rules=fresh ? globalThis.SportsHubSignalsCore.evaluateRules(current.inputs,freshQuotes) : undefined;
   return {...data,sport:'nfl',eventId:String(id),
     quotes:(data.quotes||[]).filter(x=>String(x.event_id)===String(id)),
-    decisions:(data.decisions||[]).filter(x=>String(x.event_id)===String(id)),
+    decisions:(data.decisions||[]).filter(x=>String(x.event_id)===String(id)&&!globalThis.SportsHubSignalsCore.isResearch(x)),
     rules,
     current, modelContext:fresh?current.model_context:null, predictionAt:current?.model_context?.calculated_at};
 }
@@ -2821,6 +2821,8 @@ async function paintSignalResults() {
   host.innerHTML=data.config?.ui_enabled===false?'':globalThis.SportsHubSignalsUI.systemResultsHTML({...data,filters:signalFilters});
 }
 document.addEventListener('click',async e=>{
+  const scope=e.target.closest('[data-bs-scope]');
+  if(scope){e.preventDefault();const from=signalFilters.from,to=signalFilters.to;for(const key of Object.keys(signalFilters))delete signalFilters[key];Object.assign(signalFilters,{scope:scope.dataset.bsScope,from,to});await paintSignalResults();return;}
   const report=e.target.closest('[data-bs-report]');
   if(report){e.preventDefault();e.stopPropagation();const id=report.dataset.bsReport;await openGameDetail('nfl',id,signalGames.get(id),true);return;}
   if(e.target.closest('[data-bs-results]')) {

@@ -1,4 +1,32 @@
-# Betting signals — NFL observation pilot (v244)
+# Betting signals — NFL research (v246)
+
+## Broad exploration (v246)
+
+- Each scheduled freeze now saves six research observations: home/away moneyline,
+  home/away spread, over/under total. They have `nfl_research_` IDs in the existing
+  immutable decisions table. The two original fixed-rule IDs and definitions remain
+  unchanged. No backfill and no model coefficient or confidence changes.
+- Explore all games is the default Results view. Fixed-rule tests is a separate
+  view; server and client both isolate the cohorts. Returns stay separate by side,
+  market, provider, model and policy, never combined into an independent-bets total.
+- Filters include team location (non-neutral), market favorite/underdog, total
+  direction, division/nondivision, rest advantage/disadvantage/equal/short week,
+  verified post-bye, signed spread/total ranges, entry-time movement, same-market
+  model agreement and point gap. Team-specific filters exclude totals. Point-line
+  filters exclude moneylines. Missing attributes never match known categories.
+- Short week means fewer than seven New York calendar days since the prior game.
+  Post-bye requires the current game's schedule week to follow ESPN's explicit
+  `byeWeek`; long rest alone is not a bye. Price and all filter inputs freeze before
+  kickoff. Moneyline favorite classification compares both saved actual prices.
+- The AI collector's existing 30-minute cadence saves these rows with same-time
+  model context. The five-minute lightweight odds job remains odds-only and handles
+  settlement/missed-window records for both cohorts. Schedule and odds feeds are
+  reused; there is no new subscription, cron job, schema, or public write access.
+- Model moneyline agreement requires an already-qualified model pick; missing or
+  unqualified models remain unavailable. Minimum model gap is points only, never
+  moneyline probability or expected return.
+- Rollback: revert v246 UI/worker code to v245/v244 respectively; do not delete
+  immutable research rows. Fixed-test views exclude the research ID namespace.
 
 This is prospective research inside Sports Hub's existing Picks, Game Report and Results screens. Labs links to the same Results view. No historical performance is manufactured, model constants/tier thresholds are unchanged, and no rule raises confidence.
 

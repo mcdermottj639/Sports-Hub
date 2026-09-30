@@ -592,7 +592,12 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v245** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v246** (backend **b16-fantasy-gm**).
+
+- **v246 — Broad NFL research:** All six market/side observations freeze before
+  kickoff separately from the two fixed tests. Results default to Explore all
+  games, with collapsible condition filters and separate fixed-rule tests. Existing
+  Supabase workers/table security/schedules remain intact; see BETTING_SIGNALS.md.
 
 - **v245 — Compact market cards:** Moneyline, Spread and Total share collapsed,
   keyboard-accessible analysis panels across every league. Picks and status stay

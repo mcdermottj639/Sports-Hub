@@ -1,7 +1,7 @@
 /* Read-only signals adapter. Complete bounded reads; failed pages never become results. */
 (function(root) {
   'use strict';
-  const KEY='sportshub:signals:v1', PAGE=500, MAX_PAGES=200;
+  const KEY='sportshub:signals:v2', PAGE=500, MAX_PAGES=200;
   const inflight=new Map();
   let memory={}, health={state:'idle',fetched_at:null,error:null};
   try { memory=JSON.parse(root.localStorage?.getItem(KEY)||'{}'); } catch (_) {}
@@ -81,12 +81,14 @@
   async function loadResults(ruleId,version,dateRange={},filters={}) {
     const dates=range(dateRange), key=`results:${JSON.stringify([ruleId,version,dates,filters])}`;
     return run(key,async()=>{
-      let decisions=await read('betting_system_decisions',{sport:'eq.nfl',...(ruleId?{rule_id:`eq.${safeID(ruleId)}`} : {}),...(version?{rule_version:`eq.${safeID(version)}`} : {}),...(filters.market?{market:`eq.${safeID(filters.market)}`} : {}),and:`(scheduled_start_at.gte.${dates.from},scheduled_start_at.lt.${dates.to})`,select:'*',order:'decided_at.asc,id.asc'});
+      let decisions=await read('betting_system_decisions',{sport:'eq.nfl',rule_id:filters.scope==='explore'?'like.nfl_research_*':ruleId?`eq.${safeID(ruleId)}`:'not.like.nfl_research_*',...(version?{rule_version:`eq.${safeID(version)}`} : {}),...(filters.market?{market:`eq.${safeID(filters.market)}`} : {}),and:`(scheduled_start_at.gte.${dates.from},scheduled_start_at.lt.${dates.to})`,select:'*',order:'decided_at.asc,id.asc'});
+      const research=filters.scope==='explore';
+      decisions=decisions.filter(d=>String(d.rule_id||'').startsWith('nfl_research_')===research);
       const cohorts=[...new Set(decisions.map(d=>d.model_context?.engine||d.model_context?.engine_version||'unavailable'))];
       const providers=[...new Set(decisions.map(d=>d.inputs?.provider_id||d.provider_id).filter(Boolean))];
       if(filters.provider) decisions=decisions.filter(d=>String(d.inputs?.provider_id||d.provider_id)===filters.provider);
       if(filters.cohort) decisions=decisions.filter(d=>(d.model_context?.engine||d.model_context?.engine_version||'unavailable')===filters.cohort);
-      if(filters.side) decisions=decisions.filter(d=>d.market==='spread'&&typeof d.selection_line==='number'&&(filters.side==='underdog'?d.selection_line>0:d.selection_line<0));
+      if(root.SportsHubSignalsCore) decisions=root.SportsHubSignalsCore.filterResearch(decisions,filters);
       if(filters.agreement) decisions=decisions.filter(d=>{const m=d.model_context,available=m?.availability==='available'&&m?.qualification?.[d.market]&&m?.selections?.[d.market];const value=!available?'unavailable':m.selections[d.market]===d.selection_side?'agrees':'disagrees';return value===filters.agreement;});
       if(filters.movement) decisions=decisions.filter(d=>{const v=d.inputs?.observed_line_movement;return filters.movement==='unavailable'?!Number.isFinite(v):Number.isFinite(v)&&(filters.movement==='up'?v>0:filters.movement==='down'?v<0:filters.movement==='unchanged'?v===0:false);});
       if(filters.minGap!==undefined&&filters.minGap!==null&&String(filters.minGap).trim()!=='') {

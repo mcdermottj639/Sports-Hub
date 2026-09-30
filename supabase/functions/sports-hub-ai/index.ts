@@ -1,6 +1,6 @@
 import {signalsEnabled, captureSignalQuotes, signalInputs, saveSignalDecision, settleSignalGame, missedSignalWindows, reconcileSignals} from './signals.ts';
 const MODEL_VERSION = 'v239';
-const APP_VERSION = 'v244';
+const APP_VERSION = 'v246';
 const SPORTS = ['nfl', 'cfb', 'mlb'] as const;
 type Sport = typeof SPORTS[number];
 type Json = Record<string, any>;
@@ -250,8 +250,8 @@ Deno.serve(async(req:Request)=>{
             const spread=rows.find((r:any)=>r.market==='spread'),total=rows.find((r:any)=>r.market==='total');
             context={engine:'scheduled-v239',availability:'available',calculated_at:calculatedAt,
               projection:{spread:p.margin,total:p.total},
-              selections:{spread:spread?(spread.selection_home?'home':'away'):null,total:total?(total.selection.startsWith('OVER')?'over':'under'):null},
-              qualification:{spread:!!spread,total:!!total}};
+              selections:{moneyline:p.home?'home':'away',spread:spread?(spread.selection_home?'home':'away'):null,total:total?(total.selection.startsWith('OVER')?'over':'under'):null},
+              qualification:{moneyline:!!rows.find((r:any)=>r.market==='moneyline'&&r.tier),spread:!!spread,total:!!total}};
           }catch(error){errors.push({sport,event:g.id,error:String(error)});}
           if(watch){
             inputs=await inputsPromise;
