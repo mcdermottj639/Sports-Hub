@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v256';
+const APP_VERSION = 'v257';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -939,6 +939,21 @@ function gameCard(sport, g, opts = {}) {
       <span class="${cls}">${label}</span>
     </div>${row(g.away)}${row(g.home)}
     ${g.tv ? `<div class="game-tv">📺 ${esc(g.tv)}</div>` : ''}${oddsLine}${tapHint}`;
+  if (opts.compact) {
+    card.classList.add('slate-compact');
+    const team = (t) => `${logoHTML(t)}${rankHTML(t)}<b>${esc(t.abbr || t.name || 'TBD')}</b>`;
+    const scores = st === 'scheduled' ? '' : `<strong class="slate-scores">${g.away.score ?? '–'}–${g.home.score ?? '–'}</strong>`;
+    card.innerHTML = `<div class="slate-matchup">${team(g.away)}<span class="slate-at">at</span>${team(g.home)}${scores}<span class="slate-chevron" aria-hidden="true">›</span></div>
+      <div class="slate-time ${st === 'live' ? 'live' : ''}">${esc(label)}${g.tv ? ` · ${esc(g.tv)}` : ''}</div>${oddsLine}${tapHint}`;
+    if (interactive && g.id) {
+      card.tabIndex = 0;
+      card.setAttribute('role', 'button');
+      card.setAttribute('aria-label', `${g.away.name} at ${g.home.name}: open full game report`);
+      card.onkeydown = (event) => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); card.click(); }
+      };
+    }
+  }
   // The id lets a later pass find its own card again — enrichSlate matches on
   // it rather than on position, so an async model read can't land on the
   // wrong game if the slate repainted while it waited.
@@ -1315,7 +1330,11 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
 
   // Pass the game + odds so the pick block can show the spread and total
   // plays beside the moneyline rather than leaving them to look contradictory.
-  html += aiPickHead(pred, sport, g, oddsInfo);
+  if (pred && g && ['nfl', 'cfb'].includes(sport)) {
+    html += '<div class="md-section-title acc-open">Model breakdown</div>' + marketRowsHTML({
+      g, sport, p: pred, info: oddsInfo, linePregame: !!oddsPre, lineAt: oddsPre,
+      atsR: atsRead(sport, g, pred, oddsInfo), totR: totalRead(sport, pred, oddsInfo) });
+  } else html += aiPickHead(pred, sport, g, oddsInfo);
   html += aiFactors(pred);
   html += signals;
   html += extra || '';
@@ -4933,6 +4952,18 @@ function moneylineValuesHTML(p, g, info) {
       return `<div role="row"><span role="cell">${esc(team.abbr || team.name)}</span><span role="cell">${fmtML(v?.price)}</span><span role="cell">${(prob * 100).toFixed(1)}% / ${v ? (v.breakeven * 100).toFixed(1) + '%' : '—'}</span><span role="cell">${v ? (v.ev >= 0 ? '+' : '') + (v.ev * 100).toFixed(1) + '%' : '—'}</span></div>`;
     }).join('')}</div><p>Needed = win rate to break even at that price. EV = hypothetical return per unit staked if the model probability is right; it is not measured ROI. Both sides are shown, including underdogs below 50%. This comparison does not create a second tracked pick.</p></details>`;
 }
+// Compact slate reads use the same raw market calculations as the full report.
+function compactMarketsHTML({ g, sport, p, info, atsR, totR }) {
+  const status = (ready) => gameState(g) !== 'scheduled' ? 'Reference'
+    : p.blockedReasons?.length ? 'Data check' : ready ? 'Experimental' : 'Watch';
+  const cell = (label, value, badge) => `<div class="slate-market"><span>${label}</span><b>${value}</b><small>${badge}</small></div>`;
+  const winner = p.winner.abbr || (p.homePick ? g.home.abbr : g.away.abbr) || p.winner.name;
+  return `<div class="slate-markets" aria-label="Model leans">${
+    cell('Winner', `${esc(winner)} <strong>${p.conf}%</strong>`, status(false))}${
+    cell('Spread', atsR ? esc(atsR.label) : '—', atsR ? (atsR.pinned ? 'Model limit' : status(atsR.qualifies)) : info?.spread != null ? 'Unavailable' : 'No line')}${
+    cell('Total', totR ? `${totR.side === 'OVER' ? 'O' : 'U'}${esc(totR.line)}` : '—', totR ? (gameState(g) !== 'scheduled' ? 'Reference' : p.blockedReasons?.length || totR.broken ? 'Data check' : 'Research') : info?.ou != null ? 'No lean' : 'No line')}</div>`;
+}
+
 function marketRowsHTML(r) {
   const { g, sport, p } = r;
   if (!p) return '<div class="ai-note">Model data unavailable for this game.</div>';
@@ -10832,7 +10863,7 @@ function paintSlate(sport, games, box) {
     const grid = el('div', 'games-grid');
     day.games
       .sort((a, b) => Date.parse(a.date) - Date.parse(b.date))
-      .forEach((g) => grid.appendChild(gameCard(sport, g, { odds: true })));
+      .forEach((g) => grid.appendChild(gameCard(sport, g, { odds: true, compact: true })));
     box.appendChild(grid);
   });
 }
@@ -10915,25 +10946,11 @@ async function enrichSlate(sport, host, games) {
       if (bits) lineRow = `<div class="bb-line">📊 ${esc(bits)}${tag}</div>`;
     }
 
-    let modelTxt;
-    if (g.seasonType === 1) modelTxt = '<span class="bb-muted">🤖 Preseason — the model sits these out</span>';
-    else if (!p) modelTxt = '<span class="bb-muted">🤖 Not enough game data yet</span>';
-    else {
-      const gapTag = gap == null ? ''
-        : `<span class="bb-gap${isEdge ? ' edge' : ''}">${gap > 0 ? '+' : ''}${gap} vs market</span>`;
-      const tot = p.projTotal != null && info?.ou != null
-        ? ` · total ${p.projTotal.toFixed(1)} vs ${info.ou}` : '';
-      modelTxt = `🤖 <b>${esc(p.winner.name)}</b> ${p.conf}%${tot} ${gapTag}`;
-    }
-    const sharpRows = sharpSignals(g, sp, null).map((t) => `<div class="bb-sharp">${t}</div>`).join('');
-    // v187: the same three-market block the board cards carry. The slate is
-    // where a week is actually read, and a strip that named only the winner
-    // made the spread and the total look like they hadn't been priced.
-    const markets = p ? marketRowsHTML({ g, sport, p, info, gap,
-      shownInfo: info, shownGap: gap, linePregame: shown.pregame, lineAt: shown.at,
-      atsR: atsRead(sport, g, p, info), totR: totalRead(sport, p, info) }) : '';
-    const strip = el('div', 'bb-strip' + (isEdge ? ' edge' : ''));
-    strip.innerHTML = `${lineRow}<div class="bb-model">${modelTxt}</div>${markets}${sharpRows}`;
+    const markets = p ? compactMarketsHTML({ g, sport, p, info,
+      atsR: atsRead(sport, g, p, info), totR: totalRead(sport, p, info) })
+      : `<div class="slate-unavailable">${g.seasonType === 1 ? 'Preseason · model sits out' : 'Model data unavailable · tap for game report'}</div>`;
+    const strip = el('div', 'bb-strip');
+    strip.innerHTML = `${lineRow}${markets}`;
     // Sit above the "tap for game report →" hint so the hint stays last.
     const hint = card.querySelector('.tap-hint');
     if (hint) card.insertBefore(strip, hint); else card.appendChild(strip);
@@ -10953,7 +10970,7 @@ async function enrichSlate(sport, host, games) {
   const capNote = open.length > slate.length
     ? ` Model read shown on the first ${slate.length} of ${open.length} games with a line — tap any other card for its own report.`
     : '';
-  note.innerHTML = `Lines are ESPN's. ${esc(moneyNote)} ${edges ? `⚡ = the model disagrees with the book by 5+ points (${edges} today).` : 'No model-vs-book edges on this slate.'}${esc(capNote)} For fun — not betting advice.`;
+  note.innerHTML = `<details><summary>Model leans · sources & coverage</summary>Lines are ESPN's. ${esc(moneyNote)} ${edges ? `⚡ = the model disagrees with the book by 5+ points (${edges} today).` : 'No model-vs-book edges on this slate.'}${esc(capNote)} For fun — not betting advice.</details>`;
 }
 
 // =========================== College football tab =========================

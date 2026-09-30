@@ -3310,3 +3310,28 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   .fd-cell-label { display: block; flex: 1; min-width: 0; color: var(--muted); overflow-wrap: normal; }
   .fd-cell-value { flex: 0 0 auto; text-align: right; font-weight: 700; }
 }
+
+/* v257: scanning cards on the NFL/CFB weekly slate; details live in the report. */
+:root[data-palette] .game-card.slate-compact { padding: 12px 14px; min-width: 0; }
+:root[data-palette] .slate-matchup { display: flex; align-items: center; gap: 6px; font-size: 17px; line-height: 1.3; }
+:root[data-palette] .slate-matchup .logo { width: 23px; height: 23px; flex-shrink: 0; }
+:root[data-palette] .slate-matchup b { min-width: 0; overflow-wrap: anywhere; }
+:root[data-palette] .slate-at { color: var(--muted); font-size: 12px; }
+:root[data-palette] .slate-chevron { margin-left: auto; font-size: 24px; }
+:root[data-palette] .slate-scores { margin-left: auto; white-space: nowrap; font-size: 16px; }
+:root[data-palette] .slate-time { color: var(--muted); font-size: 12px; margin-top: 5px; }
+:root[data-palette] .slate-time.live { color: var(--live); }
+:root[data-palette] .slate-compact .game-odds,
+:root[data-palette] .slate-compact .bb-line { font-size: 12px; margin-top: 3px; font-weight: 500; }
+:root[data-palette] .slate-compact .bb-strip { padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--line); }
+:root[data-palette] .slate-markets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+:root[data-palette] .slate-market { display: flex; flex-direction: column; gap: 5px; text-align: center; min-width: 0; padding: 0 5px; }
+:root[data-palette] .slate-market + .slate-market { border-left: 1px solid var(--line); }
+:root[data-palette] .slate-market > span { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+:root[data-palette] .slate-market > b { font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+:root[data-palette] .slate-market strong { color: var(--accent); }
+:root[data-palette] .slate-market small { font-size: 11px; line-height: 1.4; border-radius: 5px; background: var(--card-2); color: var(--muted); padding: 2px 0; overflow-wrap: anywhere; }
+:root[data-palette] .slate-compact .tap-hint { font-size: 11px; margin-top: 9px; }
+:root[data-palette] .slate-unavailable { font-size: 12px; color: var(--muted); }
+:root[data-palette] .slate-compact:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+:root[data-palette] .bb-note summary { cursor: pointer; font-size: 12px; }

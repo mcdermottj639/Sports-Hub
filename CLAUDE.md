@@ -594,7 +594,9 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v256** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v257** (backend **b16-fantasy-gm**).
+
+- **v257 — Compact NFL/CFB slate cards:** Three-column winner/spread/total summaries replace nested analysis blocks. Matchups, start times, TV, ranks and live/final scores remain on the cards; tap or keyboard activation opens the full market breakdown. Sources and coverage are collapsed once above the slate. No model, capture or grading changes.
 
 - **v250 — Mobile sideways-scroll guard:** Clip document-level horizontal overflow
   (hidden fallback) without disabling zoom or nested score/table scrolling. Bound
@@ -3756,7 +3758,7 @@ The live pipeline saves probability method, sample size, training cutoff and its
     exactly how a tab goes missing. It's a 5×2 grid on a phone and 9-across on
     a desktop, and a grid can't cut off. The live pip moved to the label since
     the icon it hung off is gone.
-  - **Every card names all three markets, every time.** `marketRowsHTML()`
+  - **⚠️ SUPERSEDED in v257 for NFL/CFB weekly slates: compact summaries replace full blocks. Every card names all three markets, every time.** `marketRowsHTML()`
     prints MONEYLINE / SPREAD / TOTAL on board cards, ladder cards and the
     NFL/CFB slate strips, with the heat ramp on each edge and an explicit
     reason where there's no play ("no line posted", "model tops out near 33.9",
@@ -6416,9 +6418,9 @@ rewrite.**
   single full-bleed bar. `wireScrollSpy()` flags the section you are actually
   in (`.chip.here`). At the bottom, **`#botbar`** states the day's model read
   and links to AI Picks.
+- **v257 compact weekly slate:** NFL/CFB use `compactMarketsHTML()` with winner, spread and total in three columns; full `marketRowsHTML()` analysis and provenance live in the game report. Scores, ranks, TV, dates and keyboard access remain visible/available. Model capture and calculations are unchanged.
 - **Every game card names all three markets** — `marketRowsHTML()` prints
-  MONEYLINE / SPREAD / TOTAL on board cards, ladder cards and the NFL/CFB slate
-  strips, heat-ramped, with a stated reason where there is no play. It reads the
+  MONEYLINE / SPREAD / TOTAL on board cards and ladder cards, heat-ramped, with a stated reason where there is no play. It reads the
   RAW reads (`atsR`/`totR`) that `buildBoard` carries beside the qualifying
   `ats`/`tot` — **what records is still gated on the bar.**
 - **Live/Offline mode badge** — the header badge (`#mode-badge`, set by
