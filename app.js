@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v254';
+const APP_VERSION = 'v255';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -2763,7 +2763,7 @@ function aiFactors(pred) {
 // v244: read-only evidence UI. No rule result enters the prediction engine.
 const signalGames = new Map(), signalData = new Map(), signalQueue = new Set();
 let signalTimer = null, signalResultToken = 0;
-const signalFilters = {sport:'nfl',scope:'explore',from: `${new Date().getFullYear()}-09-01`, to: new Date(Date.now()+8*864e5).toISOString().slice(0,10)};
+const signalFilters = {sport:'nfl',scope:'explore'};
 const signalsEnabled = () => !!(globalThis.SportsHubCloudSignals && globalThis.SportsHubSignalsUI);
 function signalVM(id, payload, requestedSport) {
   let data = payload || signalData.get(String(id)) || {state:'loading'};
@@ -2872,9 +2872,14 @@ async function paintSignalResults() {
   const token=++signalResultToken;
   const filters={...signalFilters};
   host.innerHTML=globalThis.SportsHubSignalsUI.systemResultsHTML({state:'loading',filters,lockSport:true});
-  const data=await globalThis.SportsHubCloudSignals.loadResults(filters.rule||null,null,{from:filters.from,to:filters.to},filters);
+  let data;
+  try {
+    data=await globalThis.SportsHubCloudSignals.loadResults(filters.rule||null,null,{from:filters.from,to:filters.to},filters);
+  } catch(err) {
+    data={state:'error',error:err.message||'Could not load saved research. Please retry.'};
+  }
   if(token!==signalResultToken || !host.isConnected)return;
-  host.innerHTML=data.config?.ui_enabled===false?'<p>Saved research is currently disabled.</p>':globalThis.SportsHubSignalsUI.systemResultsHTML({...data,filters,lockSport:true});
+  host.innerHTML=data.config?.ui_enabled===false?'<p>Saved research is currently disabled.</p>':globalThis.SportsHubSignalsUI.systemResultsHTML({...data,filters:data.filters||filters,lockSport:true});
 }
 document.addEventListener('click',async e=>{
   const view=e.target.closest('button[data-sport-view]');
@@ -2890,7 +2895,7 @@ document.addEventListener('click',async e=>{
     document.getElementById('bs-results-host')?.scrollIntoView({block:'start',behavior:'smooth'});return;
   }
   if(e.target.closest('[data-bs-apply]')) {
-    e.preventDefault();document.querySelectorAll('#bs-results-host [data-bs-filter]').forEach(input=>signalFilters[input.dataset.bsFilter]=input.value);
+    e.preventDefault();const form=e.target.closest('[data-bs-filters]');if(form&&!form.reportValidity())return;document.querySelectorAll('#bs-results-host [data-bs-filter]').forEach(input=>signalFilters[input.dataset.bsFilter]=input.value);
     await paintSignalResults();
   }
 });

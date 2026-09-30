@@ -1,7 +1,7 @@
 /* Read-only signals adapter. Complete bounded reads; failed pages never become results. */
 (function(root) {
   'use strict';
-  const KEY='sportshub:signals:v3', PAGE=500, MAX_PAGES=200;
+  const KEY='sportshub:signals:v4', PAGE=500, MAX_PAGES=200;
   const inflight=new Map();
   let memory={}, health={state:'idle',fetched_at:null,error:null};
   try { memory=JSON.parse(root.localStorage?.getItem(KEY)||'{}'); } catch (_) {}
@@ -16,21 +16,21 @@
     if(typeof value.to==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value.to)) end.setUTCDate(end.getUTCDate()+1);
     return {from:start.toISOString(),to:end.toISOString()};
   }
-  async function read(table,params) {
+  async function read(table,params,one=false) {
     const config=cfg();
     if(!config.url||!config.key) throw Error('Signals connection is not configured.');
     const rows=[];
     for(let page=0;page<MAX_PAGES;page++) {
-      const query=new URLSearchParams({...params,limit:String(PAGE),offset:String(page*PAGE)});
+      const query=new URLSearchParams({...params,limit:String(one?1:PAGE),offset:String(page*PAGE)});
       const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),15000);
-      let response;
-      try { response=await root.fetch(`${config.url}/rest/v1/${table}?${query}`,{headers:{apikey:config.key,Authorization:`Bearer ${config.key}`},cache:'no-store',signal:controller.signal}); }
+      let response, batch;
+      try { response=await root.fetch(`${config.url}/rest/v1/${table}?${query}`,{headers:{apikey:config.key,Authorization:`Bearer ${config.key}`},cache:'no-store',signal:controller.signal});
+        if(!response.ok) throw Error(`Signals data unavailable (${response.status}).`);
+        batch=await response.json(); }
       finally { clearTimeout(timeout); }
-      if(!response.ok) throw Error(`Signals data unavailable (${response.status}).`);
-      const batch=await response.json();
       if(!Array.isArray(batch)) throw Error('Signals response was not a row list.');
       rows.push(...batch);
-      if(batch.length<PAGE) return rows;
+      if(one||batch.length<PAGE) return rows;
     }
     throw Error('This range is too large to load completely. Choose a shorter date range.');
   }
@@ -41,8 +41,10 @@
   }
   async function perform(key,task) {
     health={...health,state:'loading',error:null};
+    let timer;
     try {
-      const result={...await task(),fetched_at:new Date().toISOString(),state:'ready',complete:true,capabilities};
+      const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Results took too long to load. Please retry or choose a shorter range.')),45000);});
+      const result={...await Promise.race([task(),timeout]),fetched_at:new Date().toISOString(),state:'ready',complete:true,capabilities};
       memory[key]=result;
       // Keep a small complete cache. Results are never truncated to fit storage.
       const keys=Object.keys(memory); while(keys.length>12) delete memory[keys.shift()];
@@ -51,8 +53,8 @@
       return result;
     } catch(err) {
       health={...health,state:'error',error:err.message};
-      return {...(memory[key]||{}),state:'error',error:err.message,cached:!!memory[key],complete:!!memory[key],capabilities};
-    }
+      return {...(memory[key]||{}),state:'error',error:err.message,availableRange:err.availableRange,cached:!!memory[key],complete:!!memory[key],capabilities};
+    } finally { clearTimeout(timer); }
   }
   const safeID=value=>{if(!/^[\w.:-]+$/.test(String(value))) throw Error('Invalid event or provider identifier.'); return String(value);};
   async function loadCurrent(sport,eventIds=[]) {
@@ -81,9 +83,22 @@
   }
   async function loadResults(ruleId,version,dateRange={},filters={}) {
     const sport=filters.sport||'nfl';if(!['nfl','cfb'].includes(sport))throw Error('Choose NFL or CFB.');
-    const dates=range(dateRange), key=`results:${JSON.stringify([ruleId,version,dates,filters])}`;
+    const key=`results:${JSON.stringify([ruleId,version,dateRange,filters])}`;
     return run(key,async()=>{
       const research=sport==='cfb'||filters.scope==='explore';
+      const scope={sport:`eq.${sport}`,rule_id:research?`like.${sport}_research_*`:`not.like.${sport}_research_*`,select:'scheduled_start_at'};
+      const [first,last]=await Promise.all([
+        read('betting_system_decisions',{...scope,order:'scheduled_start_at.asc'},true),
+        read('betting_system_decisions',{...scope,order:'scheduled_start_at.desc'},true)]);
+      const availableRange={from:first[0]?.scheduled_start_at?.slice(0,10)||null,to:last[0]?.scheduled_start_at?.slice(0,10)||null};
+      let dates;
+      try {
+        const to=dateRange.to||availableRange.to||new Date().toISOString().slice(0,10);
+        const earliest=new Date(Date.parse(to)-369*86400000).toISOString().slice(0,10);
+        const from=dateRange.from||(availableRange.from&&availableRange.from>earliest?availableRange.from:earliest);
+        dates=range({from,to});
+        if(availableRange.from&&(from<availableRange.from||to>availableRange.to)) throw Error(`Choose saved game dates between ${availableRange.from} and ${availableRange.to}.`);
+      } catch(err) { err.availableRange=availableRange; throw err; }
       let decisions=await read('betting_system_decisions',{sport:`eq.${sport}`,rule_id:research?`like.${sport}_research_*`:ruleId?`eq.${safeID(ruleId)}`:`not.like.${sport}_research_*`,...(version?{rule_version:`eq.${safeID(version)}`} : {}),...(filters.market?{market:`eq.${safeID(filters.market)}`} : {}),and:`(scheduled_start_at.gte.${dates.from},scheduled_start_at.lt.${dates.to})`,select:'*',order:'decided_at.asc,id.asc'});
       decisions=decisions.filter(d=>(!d.sport||d.sport===sport)&&/^(nfl|cfb)_research_/.test(String(d.rule_id||''))===research);
       const cohorts=[...new Set(decisions.map(d=>d.model_context?.engine||d.model_context?.engine_version||'unavailable'))];
@@ -100,7 +115,7 @@
       const settlements=[];
       for(let i=0;i<decisions.length;i+=100) settlements.push(...await read('betting_system_settlements',{decision_id:`in.(${decisions.slice(i,i+100).map(d=>safeID(d.id)).join(',')})`,select:'*',order:'decision_id.asc'}));
       const configs=await read('betting_signals_config',{id:'eq.1',select:'*',order:'id.asc'});
-      return {sport,decisions,settlements,providers,cohorts,dateRange:dates,filters,config:configs[0]||null};
+      return {sport,decisions,settlements,providers,cohorts,availableRange,dateRange:dates,filters:{...filters,from:dates.from.slice(0,10),to:new Date(Date.parse(dates.to)-1).toISOString().slice(0,10)},config:configs[0]||null};
     });
   }
   const api=Object.freeze({loadCurrent,loadHistory,loadResults,cached,status,capabilities});
