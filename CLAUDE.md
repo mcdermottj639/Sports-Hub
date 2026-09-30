@@ -596,7 +596,11 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v266** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v267** (backend **b16-fantasy-gm**).
+
+### v267 — Compact league comparison summary
+
+- NFL and CFB aggregate challenger summaries now use an integrated divider, compact gold window selector and three aligned saved/available/withheld counts. Results and validation remain in one native disclosure; pending pairs display Collecting results. League hero headings appear before the comparison. AI Picks shares the same renderer. No forecast, cohort, odds or grading changes.
 
 ### v266 — Integrated compact challenger rows
 

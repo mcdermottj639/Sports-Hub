@@ -38,3 +38,9 @@ test('league cohorts remain isolated and unavailable near FPI does not fall back
   const r=[...college(),...college('near',false)];const c=ui().gameComparison(r,'game','cfb');assert.equal(c.phase,'near');assert.equal(c.available,false);assert.match(ui().gameHTML(r,'game','cfb'),/One or both FPI ratings unavailable/);
   assert.match(ui().summaryHTML([...college(),...rows().map(x=>({...x,sport:'nfl'}))],'early','cfb'),/1 saved games/);
 });
+
+test('compact summary distinguishes pending results from settled pairs',()=>{
+  const pending=ui().summaryHTML(rows());assert.match(pending,/Collecting results/);assert.match(pending,/Awaiting settled games/);
+  const settled=rows().map(r=>({...r,result:'win',final_home_score:24,final_away_score:20}));
+  const html=ui().summaryHTML(settled);assert.match(html,/1 settled pairs/);assert.ok(!html.includes('Awaiting settled games'));assert.match(html,/Current 1.0/);assert.match(html,/Challenger 2.0/);
+});

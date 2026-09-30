@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v266';
+const APP_VERSION = 'v267';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -11082,7 +11082,7 @@ async function renderCFBWeek() {
   heroEl.innerHTML = `
     <h2 style="margin:0">College Football</h2><div class="muted">${esc(phase)}</div>
     <div class="muted" style="margin-top:4px;font-size:.85rem">Ranked teams only — a game shows up here (and on the Home slate) when a Top 25 team is playing in it.</div>`;
-  globalThis.SportsHubFootballDevelopment?.mountSummary(heroEl, 'cfb');
+  globalThis.SportsHubFootballDevelopment?.mountSummary(heroEl, 'cfb', 'append');
   if (setMode && games.length) setMode(true);
 
   renderCFBPlayoff();
@@ -11197,7 +11197,7 @@ async function renderNFLWeek() {
     <h2 style="margin:0">NFL</h2><div class="muted">${esc(phase)}</div>
     ${stype !== 2 && stype !== 3 && kick > 0 ? `<div class="nfl-kick">🏈 Kickoff in <b>${kick} day${kick === 1 ? '' : 's'}</b> — ${esc(kickoffLabel())}</div>` : ''}
     ${stype === 1 ? '<div class="muted" style="margin-top:4px;font-size:.85rem">Preseason results don\'t feed the AI model — backups play, nothing predictive.</div>' : ''}`;
-  globalThis.SportsHubFootballDevelopment?.mountSummary(heroEl);
+  globalThis.SportsHubFootballDevelopment?.mountSummary(heroEl, 'nfl', 'append');
   if (setMode && events.length) setMode(true);
   if (!events.length) {
     box.innerHTML = `<div class="empty">${json ? 'No games on this week\'s slate.' : 'Scoreboard unreachable right now.'}</div>`;

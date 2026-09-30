@@ -3298,6 +3298,26 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .fc-windows button[aria-pressed=true] { background: var(--text, #171910); color: var(--card, #fff); }
 .fc-result { display: grid; grid-template-columns: .8fr 1fr 1fr; gap: .2rem .4rem; padding: .3rem 0; border-top: 1px solid var(--line, #ccc); font-variant-numeric: tabular-nums; }
 .fc-result small { grid-column: 1 / -1; }
+/* Compact league comparison: shared by NFL, CFB and AI Picks. */
+.fc-summary { border: 0; border-top: 1px solid var(--line, #ccc); border-radius: 0; background: transparent; padding: .8rem 0 0; margin: .8rem 0 0; }
+.fc-summary-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .2rem .5rem; }
+.fc-summary-heading strong { font-size: .86rem; }
+.fc-summary-heading small { font-size: .65rem; border-radius: 20px; padding: .15rem .45rem; background: var(--bg); }
+.fc-summary .fc-windows { display: inline-flex; border: 1px solid var(--line, #ccc); border-radius: 24px; padding: 3px; gap: 2px; margin-top: .65rem; }
+.fc-summary .fc-windows button { min-height: 36px; padding: .3rem .85rem; border: 0; border-radius: 20px; font-size: .75rem; font-weight: 600; }
+.fc-summary .fc-windows button[aria-pressed=true] { background: var(--accent, #b49629); color: #171910; }
+.fc-counts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin: .75rem 0; text-align: center; font-variant-numeric: tabular-nums; }
+.fc-counts > div { display: flex; flex-direction: column-reverse; gap: .1rem; }
+.fc-counts > div + div { border-left: 1px solid var(--line, #ccc); }
+.fc-counts dt { color: var(--muted); font-size: .69rem; }
+.fc-counts dd { margin: 0; font-size: 1.2rem; font-weight: 750; line-height: 1.2; }
+.fc-results-details { border-top: 1px solid var(--line, #ccc); }
+.fc-results-details > summary { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: 44px; list-style: none; font-weight: 600; }
+.fc-results-details > summary::-webkit-details-marker { display: none; }
+.fc-results-details > summary small { display: block; font-size: .67rem; font-weight: 400; }
+.fc-results-link { flex-shrink: 0; font-size: .7rem; color: var(--muted); }
+.fc-results-details[open] .fc-chevron { display: inline-block; transform: rotate(180deg); }
+.fc-summary button:focus-visible, .fc-results-details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .fc-game { border: 0; border-top: 1px solid var(--line, #ccc); border-radius: 0; background: transparent; padding: .55rem 0 0; margin: .6rem 0 0; }
 .fc-title { display: flex; align-items: baseline; gap: .5rem; margin-bottom: .35rem; }
 .fc-title strong { font-size: .84rem; }
