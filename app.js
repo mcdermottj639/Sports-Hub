@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v261';
+const APP_VERSION = 'v262';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -2849,10 +2849,15 @@ function queueSignalSummary(id,sport='nfl') {
     }
   },40);
 }
+function renderSignalDetail(host, vm) {
+  const open = new Set([...host.querySelectorAll('details[data-bs-disclosure][open]')].map(el => el.dataset.bsDisclosure));
+  host.innerHTML = globalThis.SportsHubSignalsUI.systemDetailHTML(vm);
+  host.querySelectorAll('details[data-bs-disclosure]').forEach(el => { el.open = open.has(el.dataset.bsDisclosure); });
+}
 async function paintSignalDetail(id,token,focus=false,market='spread',providerId=null,sport='nfl') {
   let host=document.getElementById('md-signals');
   if(!host || token!==detailToken)return;
-  host.innerHTML=globalThis.SportsHubSignalsUI.systemDetailHTML({...signalVM(id,undefined,sport),market});
+  renderSignalDetail(host,{...signalVM(id,undefined,sport),market});
   if(focus)host.scrollIntoView({block:'start',behavior:'smooth'});
   const data=await globalThis.SportsHubCloudSignals.loadCurrent(sport,[id]);
   if(token!==detailToken)return;
@@ -2866,7 +2871,7 @@ async function paintSignalDetail(id,token,focus=false,market='spread',providerId
   const history=await globalThis.SportsHubCloudSignals.loadHistory(id,market,null,{from:new Date(+end-370*864e5).toISOString(),to:end.toISOString()},sport);
   if(token!==detailToken)return;
   host.dataset.bsEvent=String(id);host.dataset.bsMarket=market;host.dataset.bsSport=sport;
-  host.innerHTML=globalThis.SportsHubSignalsUI.systemDetailHTML({...vm,quotes:history.quotes||vm.quotes.filter(q=>q.market===market),market,providerId,side:market==='total'?'under':'away',state:history.state==='error'?'error':vm.state,error:history.error||vm.error});
+  renderSignalDetail(host,{...vm,quotes:history.quotes||vm.quotes.filter(q=>q.market===market),market,providerId,side:market==='total'?'under':'away',state:history.state==='error'?'error':vm.state,error:history.error||vm.error});
   if(focus)host.scrollIntoView({block:'start',behavior:'smooth'});
 }
 // One research renderer and one live results host; each league keeps its filters.

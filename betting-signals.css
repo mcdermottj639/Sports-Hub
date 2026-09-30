@@ -22,3 +22,19 @@
 .bs-filters input[type=date]{display:block;appearance:none;-webkit-appearance:none;min-inline-size:0}
 .bs-filters input[type=date]::-webkit-date-and-time-value{min-width:0;text-align:left}
 .bs-table-wrap{min-width:0;max-width:100%;overscroll-behavior-x:contain}
+
+/* Game-detail scan rows: evidence remains available without filling the screen. */
+.bs-detail details.bs-disclosure{padding:0;margin:8px 0;border-radius:10px}
+.bs-detail .bs-disclosure>summary{padding:11px 12px;gap:12px;min-height:44px;box-sizing:border-box;text-decoration:none;list-style:none;justify-content:space-between}
+.bs-disclosure>summary::-webkit-details-marker{display:none}
+.bs-scan-copy{display:grid;gap:4px;min-width:0}
+.bs-scan-copy>strong{font-size:15px;line-height:1.3}
+.bs-scan-meta{font-size:12px;line-height:1.4;color:var(--muted)}
+.bs-chevron{flex:none;font-size:25px;line-height:1;color:var(--muted);transition:transform .15s}
+.bs-disclosure[open]>summary .bs-chevron{transform:rotate(90deg)}
+.bs-expanded{border-top:1px solid var(--line);padding:0 12px 10px}
+.bs-expanded .bs-conditions{margin:4px 0 10px}
+.bs-expanded .bs-conditions>div{padding:9px 0;gap:12px}
+.bs-expanded .bs-conditions dt,.bs-expanded .bs-conditions dd{font-size:13px;line-height:1.4}
+.bs-detail .bs-heading h3{font-size:20px}
+@media(prefers-reduced-motion:reduce){.bs-chevron{transition:none}}
