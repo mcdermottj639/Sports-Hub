@@ -596,7 +596,9 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v260** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v261** (backend **b16-fantasy-gm**).
+
+- **v261 — Compact game-report markets:** Model breakdown uses short native expandable rows with the selection, status and chevron. Unsupported spread rows are omitted. Full market calculations, source notes and experimental probabilities remain inside the disclosures; moneyline status uses the same tier gate as the board when no tier is supplied.
 
 - **v260 — Compact scan cards across the app:** Home Board and every AI Picks board/ladder/watchlist use the shared compact market summary. MLB/NBA omit unsupported spread columns; total and moneyline statuses retain their actual gates. Full market analysis is available in the game report for every modeled sport. Betting-signal previews are collapsed on cards, and news/headline/schedule/stat/fantasy summary spacing is tighter. Detail reports and input controls retain their usable sizes. Forecast locks and model calculations are unchanged.
 

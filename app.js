@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v260';
+const APP_VERSION = 'v261';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -5008,29 +5008,30 @@ function marketRowsHTML(r) {
   const info = r.shownInfo !== undefined ? r.shownInfo : r.info;
   const ar = r.atsR, tr = r.totR;
   const blocked = p.blockedReasons?.length;
-  const live = gameState(g) !== 'scheduled';
+  const live = !!p.locked || gameState(g) !== 'scheduled';
   const prob = p.homePick ? p.probHome : 1 - p.probHome;
   const noVig = marketHomeProb(info);
   const marketP = noVig == null ? null : p.homePick ? noVig : 1 - noVig;
   const value = AI_MATH.value(prob, pickedPrice(p, info));
   const gap = marketP == null ? null : (prob - marketP) * 100;
-  const status = (ready) => live ? 'Reference only' : blocked ? 'Data check' : ready ? 'Experimental signal' : 'Watch only';
+  const status = (ready) => live ? 'Locked' : blocked ? 'Data check' : ready ? 'Experimental' : 'Watch';
   const marginWinner = p.projMargin >= 0 ? g.home : g.away;
-  const section = (name, question, selection, badge, body) => `<section class="ai-market-read"><details class="ai-market-expand"><summary aria-label="${name}: ${esc(question)} Show analysis"><div class="ai-market-title"><b>${name}</b><span class="ai-status">${badge}</span></div><div class="ai-market-selection">${selection}</div><span class="ai-market-toggle"><span class="ai-market-show">Show analysis</span><span class="ai-market-hide">Hide analysis</span> <span aria-hidden="true">⌄</span></span></summary><div class="ai-market-analysis"><p class="ai-market-question">${question}</p>${body}</div></details></section>`;
-  const ml = section('Moneyline', 'Who wins the game?', `${esc(p.winner.name)} <strong>${p.conf}%</strong>`, status(!!r.tier && r.tier !== 'lean'),
-    `<p>${value ? `Price <b>${fmtML(value.price)}</b> needs ${(value.breakeven * 100).toFixed(1)}% wins to break even.` : 'No usable price for this side — value is unknown.'} ${gap != null ? `Model gap: ${gap >= 0 ? '+' : ''}${gap.toFixed(1)} percentage points vs no-vig market.` : 'Both prices are needed for a no-vig market comparison.'}</p>
+  const tier = r.tier ?? pickTier(p, info, marketGap(p, info));
+  const section = (name, question, selection, badge, body) => `<section class="ai-market-read"><details class="ai-market-expand"><summary aria-label="${name}: ${esc(question)} Show analysis"><div class="market-row-main"><b class="market-row-label">${name}</b><div class="ai-market-selection">${selection}</div></div><span class="ai-status">${badge}</span><span class="market-row-chevron" aria-hidden="true">⌄</span></summary><div class="ai-market-analysis"><p class="ai-market-question">${question}</p>${body}</div></details></section>`;
+  const ml = section('Moneyline', 'Who wins the game?', `${esc(p.winner.abbr || (p.homePick ? g.home.abbr : g.away.abbr) || p.winner.name)} <strong>${p.conf}%</strong>`, status(!!tier && tier !== 'lean'),
+    `<p><b>${esc(p.winner.name)}</b>. ${value ? `Price <b>${fmtML(value.price)}</b> needs ${(value.breakeven * 100).toFixed(1)}% wins to break even.` : 'No usable price for this side — value is unknown.'} ${gap != null ? `Model gap: ${gap >= 0 ? '+' : ''}${gap.toFixed(1)} percentage points vs no-vig market.` : 'Both prices are needed for a no-vig market comparison.'}</p>
     ${marketP != null ? comparisonGraphic(prob * 100, marketP * 100, '%') : ''}${moneylineValuesHTML(p, g, info)}`);
   const spreadProbability = marketProbabilityFor(r, 'spread'), totalProbability = marketProbabilityFor(r, 'total');
   const spread = section('Spread', 'Who covers the handicap?', !ATS_SPORTS.has(sport) ? 'Not modeled for this league' : ar ? `${esc(ar.label)}${spreadProbability ? ` · ${(spreadProbability.prob * 100).toFixed(0)}% experimental` : ''}` : 'Waiting for a usable spread', status(!!ar?.qualifies),
     ar ? `<p>Projected winner: ${esc(marginWinner.abbr || marginWinner.name)} by ${Math.abs(ar.proj).toFixed(1)}. Difference: <b>${Math.abs(ar.edge).toFixed(1)} points</b> toward ${esc(ar.abbr)} covering. ${ar.pinned ? 'Projection limit reached; no signal.' : ''}</p>
       ${comparisonGraphic(ar.proj, -ar.homeSpread, '', true)}<small>Margins above are toward ${esc(g.home.abbr || 'home')}; negative means ${esc(g.away.abbr || 'away')}. ${ATS_EDGE_MIN[sport]}-point signal threshold. Probability estimates are experimental.</small>${marketProbabilityHTML(spreadProbability)}`
       : '<p>A winner forecast is not a spread pick.</p>');
-  const total = section('Total', 'How much will both teams score?', tr ? `${tr.side} ${tr.line}${totalProbability ? ` · ${(totalProbability.prob * 100).toFixed(0)}% experimental` : ''}` : p.projTotal != null && info?.ou != null ? 'No difference / no signal' : 'Waiting for a total', ATS_SPORTS.has(sport) ? 'Research only' : status(!!tr?.qualifies),
+  const total = section('Total', 'How much will both teams score?', tr ? `${tr.side} ${tr.line}${totalProbability ? ` · ${(totalProbability.prob * 100).toFixed(0)}% experimental` : ''}` : p.projTotal != null && info?.ou != null ? 'No difference / no signal' : 'Waiting for a total', live ? 'Locked' : blocked || tr?.broken ? 'Data check' : ATS_SPORTS.has(sport) ? 'Research' : status(!!tr?.qualifies),
     tr ? `<p>${ATS_SPORTS.has(sport) ? 'Tracked for evaluation; not a promoted pick. ' : ''}${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'points'} ${tr.diff > 0 ? 'above' : 'below'} the book. ${tr.broken ? '<b>Outside the sanity limit — not a signal.</b>' : ''}</p>
       ${comparisonGraphic(tr.proj, tr.line, '')}<small>${TOT_EDGE_MIN[sport] ?? 1}-${sport === 'mlb' ? 'run' : 'point'} signal threshold. Probability estimates are experimental.</small>${marketProbabilityHTML(totalProbability)}`
       : '<p>No total signal without both a projection and a line.</p>');
   const provenance = r.linePregame ? `Saved pregame line${lineAtLabel(r.lineAt) ? ' · ' + lineAtLabel(r.lineAt) : ''}. Model and lines are locked to saved pregame evidence.` : info?.provider ? `Odds source: ${info.provider}.` : 'Odds source unavailable.';
-  return `<div class="ai-market-grid">${ml}${spread}${total}</div><p class="ai-read-foot">${esc(provenance)} ${live ? 'Game started: no new pregame pick is recorded.' : 'Different markets answer different questions; winner and cover sides can differ.'}</p>`;
+  return `<div class="ai-market-grid compact-market-rows">${ml}${ATS_SPORTS.has(sport) ? spread : ''}${total}</div><p class="ai-read-foot">${esc(provenance)} ${live ? 'Game started: no new pregame pick is recorded.' : 'Different markets answer different questions; winner and cover sides can differ.'}</p>`;
 }
 
 // The model's confidence against the market's own implied number for the same
