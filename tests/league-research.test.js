@@ -2,6 +2,16 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync(require.resolve('../app.js'),'utf8');
 const ui=require('../betting-signals-ui.js');
+test('mobile overflow guard preserves zoom and nested scrolling',()=>{
+ const css=fs.readFileSync(require.resolve('../styles.css'),'utf8');
+ const research=fs.readFileSync(require.resolve('../betting-signals.css'),'utf8');
+ assert.match(css,/html, body \{ max-width: 100%; overflow-x: hidden; \}/);
+ assert.match(css,/html, body \{ overflow-x: clip; \}/);
+ assert.match(research,/input\[type=date\].*min-inline-size:0/);
+ assert.match(research,/\.bs-table-wrap\{overflow:auto/);
+ const html=fs.readFileSync(require.resolve('../index.html'),'utf8');
+ assert.doesNotMatch(html,/user-scalable=no|maximum-scale=1/);
+});
 test('embedded research locks league without removing deep filters',()=>{
  for(const sport of ['nfl','cfb']){
   const html=ui.systemResultsHTML({filters:{sport,scope:'explore'},lockSport:true});

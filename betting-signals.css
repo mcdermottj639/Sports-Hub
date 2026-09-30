@@ -16,3 +16,9 @@
 .sport-research-block[open]>summary{margin-bottom:12px}
 .sport-research-links{border:1px solid #ccc;border-radius:10px;padding:12px;margin:12px 0}
 .sport-research-links p{margin:6px 0 10px}
+.sport-research-view,.bs-results,.bs-filters{min-width:0;max-width:100%}
+.bs-filters input,.bs-filters select{max-width:100%}
+/* Safari date controls must shrink to their grid cell, not their native width. */
+.bs-filters input[type=date]{display:block;appearance:none;-webkit-appearance:none;min-inline-size:0}
+.bs-filters input[type=date]::-webkit-date-and-time-value{min-width:0;text-align:left}
+.bs-table-wrap{min-width:0;max-width:100%;overscroll-behavior-x:contain}

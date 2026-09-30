@@ -594,7 +594,12 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v249** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v250** (backend **b16-fantasy-gm**).
+
+- **v250 — Mobile sideways-scroll guard:** Clip document-level horizontal overflow
+  (hidden fallback) without disabling zoom or nested score/table scrolling. Bound
+  research controls to their grid cells, including Safari native date inputs.
+  No research, model, data or navigation changes.
 
 - **v249 — Research belongs to its league:** NFL and CFB have Games (default)
   and Picks & Research views. Full condition filters, frozen entries, paper ROI
