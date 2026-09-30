@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v262';
+const APP_VERSION = 'v263';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -1336,7 +1336,7 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
       atsR: atsRead(sport, g, pred, oddsInfo), totR: totalRead(sport, pred, oddsInfo) });
   } else html += aiPickHead(pred, sport, g, oddsInfo);
   if (!pred && g && !globalThis.SportsHubForecastLock.eligible(g)) html += '<div class="ai-note">No saved pregame forecast — model locked; no in-game recalculation.</div>';
-  html += aiFactors(pred);
+  html += aiFactors(pred, sport);
   html += signals;
   html += extra || '';
 
@@ -2786,7 +2786,7 @@ function aiPickHead(pred, sport, g, info) {
     ${pred.blockedReasons?.length ? `<div class="ai-data-warning">Watch only: ${pred.blockedReasons.map(esc).join(' · ')}</div>` : ''}
     ${pred.thin ? '<div class="ai-why">Not enough games played yet for full analysis.</div>' : ''}`;
 }
-function aiFactors(pred) {
+function aiFactors(pred, sport) {
   if (!pred || !pred.breakdown.length) return '';
   const rows = pred.breakdown.map((b) =>
     `<div class="fac-row"><span class="fac-l">${b.label}</span><span class="fac-d">${b.detail}</span><span class="fac-p">${b.favor.split(' ').slice(-1)[0]} +${b.pct.toFixed(1)}%</span></div>`).join('');
@@ -2799,6 +2799,7 @@ function aiFactors(pred) {
   // belongs here, in the section that exists to explain the number.
   const noteRows = (pred.notes || []).map((n) => `<div class="ai-why">${esc(n)}</div>`).join('');
   return `<div class="md-section-title">Why — Factor Breakdown</div>
+    ${sport === 'nfl' ? '<div class="ai-why"><strong>Winner model inputs</strong> — record, scoring margin, home field, home/road split, recent form and rest. Small/zero contributions may be hidden. Spread uses separate weights; totals use scoring rates. QB names/stats below are context, not an adjustment. The opponent-adjusted challenger and QB availability gates are tracked separately in NFL → Picks &amp; Research → Football development.</div>' : ''}
     <div class="fac-list">${rows}</div>
     ${noteRows}
     <div class="ai-why" style="margin-top:6px">Factors above the 50% coin-flip add up to the ${pred.conf}% pick.</div>`;

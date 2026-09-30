@@ -2,6 +2,7 @@
 (function (root) {
   'use strict';
   const VERSION = 'football-research-v2';
+  const versionFor = sport => sport === 'nfl' ? 'football-research-nfl-v3' : VERSION;
   const finite = v => v != null && String(v).trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
   function phase(start, at) {
     const minutes = (Date.parse(start) - Date.parse(at)) / 60000;
@@ -68,7 +69,7 @@
     // 50/50 blend is a fixed research policy, not a fitted improvement.
     return { eventId: row.event_id, stage: row.snapshot.research.phase, sourceCapturedAt: row.captured_at, at, startsAt: row.starts_at, baseline: { ...base }, human: { margin, total }, combined: { margin: (margin + base.margin) / 2, total: (total + base.total) / 2 }, reason, factors: (input.factors || []).filter(x => ['QB','Line play','Schedule','Tempo','Coaching'].includes(x)), policy: 'equal-blend-v1' };
   }
-  const api = { VERSION, phase, fpi, collegeMargin, quarterback, mergeSchedules, grade, humanReview };
+  const api = { VERSION, versionFor, phase, fpi, collegeMargin, quarterback, mergeSchedules, grade, humanReview };
   root.SportsHubFootballResearch = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);
