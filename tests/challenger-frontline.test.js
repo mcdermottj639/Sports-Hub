@@ -19,12 +19,12 @@ test('results separate windows, exclude withheld and show collecting without set
 test('saved source strings are escaped and exact-line comparisons are not called agreement',()=>{const r=rows();r.forEach(x=>{x.matchup='<img> @ CLE';x.projection=x.market==='total'?42:3;});const html=ui().gameHTML(r,'game');assert.ok(!html.includes('<img>'));assert.equal(ui().gameComparison(r,'game').spreadStatus,'At line');assert.equal(ui().gameComparison(r,'game').totalStatus,'At line');});
 function college(phase='early',available=true){return rows(phase,available).map(r=>({...r,sport:'cfb',matchup:'TEX @ UGA',model_version:C.versionFor('cfb')+'-'+phase,snapshot:{research:{...r.snapshot.research,evidence:{fpi:{home:22,away:23,updatedAt:'2026-09-30T20:00Z'}}}}}));}
 test('compact rows show opposing sides at the identical saved line, not projected margins',()=>{
-  const html=ui().gameHTML(rows(),'game');const summaries=[...html.matchAll(/<summary>(.*?)<\/summary>/g)].map(x=>x[1]);
+  const html=ui().gameHTML(rows(),'game');const summaries=[...html.matchAll(/<details class="fc-market"><summary>(.*?)<\/summary>/g)].map(x=>x[1]);
   assert.equal(summaries.length,2);assert.match(summaries[0],/CLE -3/);assert.match(summaries[0],/PIT \+3/);assert.match(summaries[0],/Disagree/);assert.match(summaries[1],/O42/);assert.match(summaries[1],/U42/);assert.ok(!summaries.join('').includes('by 5.0'));
   assert.equal([...ui().gameHTML(college(),'game','cfb').matchAll(/class="fc-market"/g)].length,1);
 });
 test('withheld compact selections are blank rather than copied baseline picks',()=>{
-  const html=ui().gameHTML(rows('early',false),'game');const summaries=[...html.matchAll(/<summary>(.*?)<\/summary>/g)].map(x=>x[1]);assert.ok(summaries.every(x=>x.includes('<b>—</b>')&&x.includes('Unavailable')));
+  const html=ui().gameHTML(rows('early',false),'game');const summaries=[...html.matchAll(/<details class="fc-market"><summary>(.*?)<\/summary>/g)].map(x=>x[1]);assert.ok(summaries.every(x=>x.includes('<b>—</b>')&&x.includes('Unavailable')));
 });
 test('CFB shows FPI margin but never an independent total or NFL QB explanation',()=>{
   const c=ui().gameComparison(college(),'game','cfb');assert.equal(c.cm,2);assert.equal(c.ct,null);assert.equal(c.totalStatus,'Baseline only');

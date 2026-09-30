@@ -596,7 +596,11 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v267** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v268** (backend **b16-fantasy-gm**).
+
+### v268 — Concise expanded model comparison
+
+- NFL/CFB expanded comparison rows show a compact Current/Challenger projection table, short saved timestamp and experimental status. Saved-line explanations, methodology, source coverage and QB evidence remain under a closed Model details disclosure. CFB totals remain explicitly without a separate challenger. Model calculations and saved records are unchanged.
 
 ### v267 — Compact league comparison summary
 
