@@ -1,5 +1,6 @@
+import {signalsEnabled, captureSignalQuotes, signalInputs, saveSignalDecision, settleSignalGame, missedSignalWindows, reconcileSignals} from './signals.ts';
 const MODEL_VERSION = 'v239';
-const APP_VERSION = 'v239';
+const APP_VERSION = 'v244';
 const SPORTS = ['nfl', 'cfb', 'mlb'] as const;
 type Sport = typeof SPORTS[number];
 type Json = Record<string, any>;
@@ -54,7 +55,7 @@ function event(ev:any) {
   const a = sides.find((x:any) => x.homeAway === 'away') || sides[1] || {};
   const st = ev.status?.type || c.status?.type || {};
   return { id:String(ev.id), date:ev.date, state:st.state, status:st.shortDetail || st.detail || '',
-    seasonType:Number(ev.season?.type ?? c.season?.type) || null, neutral:c.neutralSite === true,
+    seasonType:Number(ev.season?.type ?? c.season?.type) || null, season:ev.season?.year, completed:st.completed===true, neutral:c.neutralSite === true,
     home:team(h), away:team(a), odds:c.odds?.[0] || null };
 }
 
@@ -64,7 +65,8 @@ async function scoreboard(sport:Sport, date?:string, params:Json = {}) {
   if (date) q.set('dates', date);
   Object.entries(params).forEach(([k,v]) => q.set(k, String(v)));
   const data = await json(`${SITE}/${PATH[sport]}/scoreboard?${q}`);
-  return { data, games:(data.events || []).map(event) };
+  const receivedAt=new Date().toISOString();
+  return { data, games:(data.events || []).map((ev:any)=>({...event(ev),observedAt:receivedAt})) };
 }
 
 function odds(raw:any, g:any) {
@@ -218,8 +220,53 @@ async function slate(sport:Sport){if(sport==='mlb'){const today=new Date(),tomor
 
 Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return new Response('Method not allowed',{status:405});
-  const started=new Date().toISOString();let run:any=null,captured=0,graded=0,skipped=0;const errors:any[]=[];
-  try{const recent=await db('ai_job_runs?select=id,status,started_at,details&order=started_at.desc&limit=1');if(recent?.[0]&&recent[0].details?.model===MODEL_VERSION&&['running','ok','partial'].includes(recent[0].status)&&Date.now()-Date.parse(recent[0].started_at)<10*60*1000)return Response.json({ok:true,status:'rate-limited',run:recent[0].id},{status:202});run=(await db('ai_job_runs',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({started_at:started,sports:[...SPORTS]})}))[0];graded=await gradePending();for(const sport of SPORTS){try{const games=await slate(sport);for(const g of games){if(g.state!=='pre'||g.seasonType===1||!(Date.parse(g.date)>Date.now())||/postpon|cancel|suspend|delay/i.test(g.status)){skipped++;continue;}try{const p=await predict(sport,g),rows=rowsFor(sport,g,p);captured+=await insertRows(rows);}catch(error){errors.push({sport,event:g.id,error:String(error)});}}}catch(error){errors.push({sport,error:String(error)});}}
-    const status=errors.length?(captured||graded?'partial':'error'):'ok',finished=new Date().toISOString();await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:finished,status,captured,graded,skipped,errors,details:{model:MODEL_VERSION,app:APP_VERSION}})});return Response.json({ok:status==='ok',status,captured,graded,skipped,errors,run:run.id});
-  }catch(error){if(run)await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:new Date().toISOString(),status:'error',captured,graded,skipped,errors:[...errors,{error:String(error)}]})}).catch(()=>{});return Response.json({ok:false,error:String(error)},{status:500});}
+  const started=new Date().toISOString();let run:any=null,captured=0,graded=0,skipped=0;
+  const errors:any[]=[], signals:any={status:'disabled',written:0,evaluated:0,unpriced:0,missed:0,graded:0,errors:0};
+  let captureSignals=false;
+  const signalError=()=>{signals.errors++;signals.error_category='signals_step_failed';};
+  try{
+    const recent=await db('ai_job_runs?select=id,status,started_at,details&order=started_at.desc&limit=1');
+    if(recent?.[0]&&recent[0].details?.model===MODEL_VERSION&&['running','ok','partial'].includes(recent[0].status)&&Date.now()-Date.parse(recent[0].started_at)<10*60*1000)return Response.json({ok:true,status:'rate-limited',run:recent[0].id},{status:202});
+    run=(await db('ai_job_runs',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({started_at:started,sports:[...SPORTS]})}))[0];
+    captureSignals=await signalsEnabled(db).catch(()=>{signalError();return false;});
+    graded=await gradePending();
+    for(const sport of SPORTS){
+      try{
+        const games=await slate(sport);
+        for(const g of games){
+          let quotes:any[]=[],inputs:any=null;
+          const watch=captureSignals&&sport==='nfl';
+          if(watch){
+            try{signals.graded+=await settleSignalGame(db,g);signals.missed+=await missedSignalWindows(db,g);}catch(_){signalError();}
+            try{quotes=await captureSignalQuotes(db,g,`ai:${run.id}`,g.observedAt);signals.written+=quotes.length;if(quotes.length)signals.last_observed_at=g.observedAt;}catch(_){signalError();}
+          }
+          if(g.state!=='pre'||g.seasonType===1||!(Date.parse(g.date)>Date.now())||/postpon|cancel|suspend|delay/i.test(g.status)){skipped++;continue;}
+          const inputsPromise=watch?signalInputs(g).catch(()=>{signalError();return null;}):Promise.resolve(null);
+          let context:any={engine:'scheduled-v239',availability:'unavailable',calculated_at:null};
+          try{
+            const p=await predict(sport,g),calculatedAt=new Date().toISOString(),rows=rowsFor(sport,g,p);
+            // A slow forecast must not create a new pregame pick after kickoff.
+            if(Date.parse(g.date)>Date.now())captured+=await insertRows(rows);else skipped++;
+            const spread=rows.find((r:any)=>r.market==='spread'),total=rows.find((r:any)=>r.market==='total');
+            context={engine:'scheduled-v239',availability:'available',calculated_at:calculatedAt,
+              projection:{spread:p.margin,total:p.total},
+              selections:{spread:spread?(spread.selection_home?'home':'away'):null,total:total?(total.selection.startsWith('OVER')?'over':'under'):null},
+              qualification:{spread:!!spread,total:!!total}};
+          }catch(error){errors.push({sport,event:g.id,error:String(error)});}
+          if(watch){
+            inputs=await inputsPromise;
+            if(inputs)try{const out=await saveSignalDecision(db,g,quotes,inputs,context);signals.evaluated+=out.evaluated;signals.unpriced+=out.unpriced;}catch(_){signalError();}
+          }
+        }
+      }catch(error){errors.push({sport,error:String(error)});}
+    }
+    if(captureSignals)try{signals.graded+=await reconcileSignals(db);}catch(_){signalError();}
+    signals.status=signals.errors?'partial':captureSignals?'ok':'disabled';
+    const status=errors.length?(captured||graded?'partial':'error'):'ok',finished=new Date().toISOString();
+    await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:finished,status,captured,graded,skipped,errors,details:{model:MODEL_VERSION,app:APP_VERSION,signals}})});
+    return Response.json({ok:status==='ok',status,captured,graded,skipped,errors,signals,run:run.id});
+  }catch(error){
+    if(run)await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:new Date().toISOString(),status:'error',captured,graded,skipped,errors:[...errors,{error:String(error)}],details:{model:MODEL_VERSION,app:APP_VERSION,signals}})}).catch(()=>{});
+    return Response.json({ok:false,error:String(error)},{status:500});
+  }
 });

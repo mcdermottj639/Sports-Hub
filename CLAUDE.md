@@ -95,7 +95,8 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > Function invoked by pg_cron at minutes 7 and 37 every hour. It reads ESPN,
 > saves immutable first pregame NFL/Top-25-CFB/MLB observations in
 > `public.ai_predictions`, grades finals, and audits each run in
-> `public.ai_job_runs`. The first verified run on 15 Sep 2026 completed in 15s
+> `public.ai_job_runs`. v244 adds an independent `sports-hub-odds` job and
+> normalized permanent NFL history; see `BETTING_SIGNALS.md`. The first verified run on 15 Sep 2026 completed in 15s
 > and inserted 99 market rows with zero post-kickoff observations. Project URL
 > and invocation token live in Vault; the Edge Function's service-role key is
 > automatic and never enters git. The browser carries only the project's
@@ -223,6 +224,12 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 - Don't create PRs unless explicitly asked.
 
 ## Files
+
+- `BETTING_SIGNALS.md` — v244 architecture, capture/freeze policy, research limits and rollback.
+- `cloud-signals.js`, `betting-signals-ui.js`, `betting-signals.css` — read-only NFL evidence panels.
+- `supabase/functions/_shared/betting-signals-core.js` — identical deterministic rule math in browser/Edge/tests.
+- `supabase/functions/sports-hub-ai/signals.ts`, `sports-hub-odds/index.ts` — evidence hook and independent lightweight collector.
+- `supabase/schedule-betting-signals.sql` — Vault-backed five-minute cron installation; actual source polling adapts to kickoff.
 
 - `index.html` — single page, all tabs/sections. Asset URLs carry `?v=N` cache-busting.
   Holds `#rail-wrap` (v187 — the rail plus the league-filter column, above the
@@ -585,7 +592,15 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v243** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v244** (backend **b16-fantasy-gm**).
+
+- **v244 — Betting signals and permanent odds history:** NFL-only evidence inside
+  Picks, Game Report and Results, with a Labs shortcut. A lightweight Supabase odds
+  job supplements the existing AI worker; snapshots and rule decisions are immutable,
+  settlements audited, and actual-price ROI stays separate from model results.
+  No model constant changes, paid feed or Railway subscription. Details and rollback:
+  `BETTING_SIGNALS.md`. Current cards recompute rule matches from fresh saved quotes.
+
 
 - **v243 — score rail recovery:** The score toggle stays available with zero cards.
   All-hidden filters retain their recovery controls, including on single-league
@@ -6902,6 +6917,8 @@ rewrite.**
 
 ## localStorage keys
 
+- `sportshub:signals:v1` — bounded complete read-only evidence response cache; durable source is Supabase. Failed partial queries never replace complete cached results.
+
 - `sportshub:cloud-ai:v1` — last successful read-only Supabase response
   (`ai_predictions` plus newest `ai_job_runs` row). It is a display/offline
   cache, not the source of truth; the durable record is in Supabase and the
@@ -7001,6 +7018,8 @@ rewrite.**
   first-seen, latest, and (v167) a bounded **`hist`** of every observed change
   with the numeric spread, which is what the 🔪 Sharp Action move counts are
   built from. Only today's key is kept; older days are purged on write.
+  **v244:** permanent NFL observations now also live in Supabase; this local cache
+  remains the legacy display fallback and does not power the new research results.
   **v224 gave it a second job**: ESPN's scoreboard drops `odds` at kickoff, so
   once a game has started its card falls back to the **last pregame snapshot**
   here for the spread, total and moneylines (`lineRec` → `pregameOdds` →

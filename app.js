@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v243';
+const APP_VERSION = 'v244';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -1011,7 +1011,7 @@ async function openNewsSummary(a, backFn) {
 // it's landing in a modal the user has since closed or replaced.
 let detailToken = 0;
 
-async function openGameDetail(sport, id, g) {
+async function openGameDetail(sport, id, g, focusSignals = false) {
   modal().classList.remove('hidden');
   $('#modal-body').innerHTML = '<div class="empty">Loading live stats…</div>';
   const token = ++detailToken;
@@ -1049,9 +1049,11 @@ async function openGameDetail(sport, id, g) {
     } else if (g && sport === 'nfl') {
       extra += nflKeyHTML(g);
     }
-    const slot = reportP ? '<div id="md-report"><div class="empty">📊 Loading betting report…</div></div>' : '';
+    const signalSlot = sport === 'nfl' && signalsEnabled() ? '<div id="md-signals" aria-live="polite"></div>' : '';
+    const slot = signalSlot + (reportP ? '<div id="md-report"><div class="empty">📊 Loading betting report…</div></div>' : '');
     $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, slot);
     makeAccordion($('#modal-body'), '.md-section-title', SEC_OPEN_ALL);
+    if (signalSlot) paintSignalDetail(id, token, focusSignals);
     // v183: the game is on screen — now hold the model to what it just said.
     // Deliberately NOT awaited and deliberately not token-guarded: the pick was
     // computed and shown, so it counts whether or not the modal is still open
@@ -1075,7 +1077,9 @@ async function openGameDetail(sport, id, g) {
       });
     }
   } catch (_) {
-    $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>';
+    if (token !== detailToken) return;
+    $('#modal-body').innerHTML = '<div class="empty">Live stats aren’t available for this game right now.</div>' + (sport === 'nfl' && signalsEnabled() ? '<div id="md-signals" aria-live="polite"></div>' : '');
+    if (sport === 'nfl' && signalsEnabled()) paintSignalDetail(id, token, focusSignals);
   }
 }
 
@@ -2747,6 +2751,99 @@ function aiFactors(pred) {
     ${noteRows}
     <div class="ai-why" style="margin-top:6px">Factors above the 50% coin-flip add up to the ${pred.conf}% pick.</div>`;
 }
+
+// v244: read-only evidence UI. No rule result enters the prediction engine.
+const signalGames = new Map(), signalData = new Map(), signalQueue = new Set();
+let signalTimer = null, signalResultToken = 0;
+const signalFilters = {from: `${new Date().getFullYear()}-09-01`, to: new Date(Date.now()+8*864e5).toISOString().slice(0,10)};
+const signalsEnabled = () => !!(globalThis.SportsHubCloudSignals && globalThis.SportsHubSignalsUI);
+function signalVM(id, payload) {
+  const data = payload || signalData.get(String(id)) || {state:'loading'};
+  const current = (data.current || []).find(x => String(x.event_id) === String(id));
+  const game = signalGames.get(String(id));
+  const fresh = current && Date.now()-Date.parse(current.observed_at) <= 45*60000
+    && (!(data.quotes||[]).length || (data.quotes||[]).filter(q=>String(q.event_id)===String(id)).every(q=>Date.parse(q.observed_at)<=Date.parse(current.observed_at)||q.schedule_instance===current.schedule_instance))
+    && Date.parse(current.scheduled_start_at)>Date.now() && (!game || gameState(game)==='scheduled');
+  const quotes=(data.quotes||[]).filter(q=>String(q.event_id)===String(id));
+  const latestByMarket=new Map();
+  for(const q of quotes) {
+    if(current && q.schedule_instance!==current.schedule_instance)continue;
+    const prev=latestByMarket.get(q.market);
+    if(!prev || Date.parse(q.observed_at)>Date.parse(prev.observed_at))latestByMarket.set(q.market,q);
+  }
+  const freshQuotes=[...latestByMarket.values()].filter(q=>Date.now()-Date.parse(q.observed_at)<=45*60000);
+  const rules=fresh ? globalThis.SportsHubSignalsCore.evaluateRules(current.inputs,freshQuotes) : undefined;
+  return {...data,sport:'nfl',eventId:String(id),
+    quotes:(data.quotes||[]).filter(x=>String(x.event_id)===String(id)),
+    decisions:(data.decisions||[]).filter(x=>String(x.event_id)===String(id)),
+    rules,
+    current, modelContext:fresh?current.model_context:null, predictionAt:current?.model_context?.calculated_at};
+}
+function queueSignalSummary(id) {
+  signalQueue.add(String(id)); clearTimeout(signalTimer);
+  signalTimer=setTimeout(async()=>{
+    const ids=[...signalQueue]; signalQueue.clear();
+    try {
+      const data=await globalThis.SportsHubCloudSignals.loadCurrent('nfl',ids);
+      for(const id of ids) signalData.set(id,data);
+      document.querySelectorAll('[data-bs-summary]').forEach(host=>{
+        if(ids.includes(host.dataset.bsSummary)) host.innerHTML=data.config?.ui_enabled===false?'':globalThis.SportsHubSignalsUI.signalsSummaryHTML(signalVM(host.dataset.bsSummary));
+      });
+    } catch (_) { /* Existing picks remain fully usable if evidence is unavailable. */ }
+  },40);
+}
+async function paintSignalDetail(id,token,focus=false,market='spread',providerId=null) {
+  let host=document.getElementById('md-signals');
+  if(!host || token!==detailToken)return;
+  host.innerHTML=globalThis.SportsHubSignalsUI.systemDetailHTML({...signalVM(id),market});
+  if(focus)host.scrollIntoView({block:'start',behavior:'smooth'});
+  const data=await globalThis.SportsHubCloudSignals.loadCurrent('nfl',[id]);
+  if(token!==detailToken)return;
+  signalData.set(String(id),data);
+  host=document.getElementById('md-signals'); if(!host)return;
+  if(data.config?.ui_enabled===false){host.innerHTML='';return;}
+  const vm=signalVM(id,data);
+  // Load the event's full season observations, including games outside the current two-week window.
+  const start=vm.current?.scheduled_start_at||vm.decisions[0]?.scheduled_start_at;
+  const end=start?new Date(Date.parse(start)+864e5):new Date(Date.now()+864e5);
+  const history=await globalThis.SportsHubCloudSignals.loadHistory(id,market,null,{from:new Date(+end-370*864e5).toISOString(),to:end.toISOString()});
+  if(token!==detailToken)return;
+  host.dataset.bsEvent=String(id);host.dataset.bsMarket=market;
+  host.innerHTML=globalThis.SportsHubSignalsUI.systemDetailHTML({...vm,quotes:history.quotes||vm.quotes.filter(q=>q.market===market),market,providerId,side:market==='total'?'under':'away',state:history.state==='error'?'error':vm.state,error:history.error||vm.error});
+  if(focus)host.scrollIntoView({block:'start',behavior:'smooth'});
+}
+async function paintSignalResults() {
+  const host=document.getElementById('bs-results-host'); if(!host)return;
+  const token=++signalResultToken;
+  host.innerHTML=globalThis.SportsHubSignalsUI.systemResultsHTML({state:'loading',filters:signalFilters});
+  const data=await globalThis.SportsHubCloudSignals.loadResults(signalFilters.rule||null,null,{from:signalFilters.from,to:signalFilters.to},signalFilters);
+  if(token!==signalResultToken || !host.isConnected)return;
+  host.innerHTML=data.config?.ui_enabled===false?'':globalThis.SportsHubSignalsUI.systemResultsHTML({...data,filters:signalFilters});
+}
+document.addEventListener('click',async e=>{
+  const report=e.target.closest('[data-bs-report]');
+  if(report){e.preventDefault();e.stopPropagation();const id=report.dataset.bsReport;await openGameDetail('nfl',id,signalGames.get(id),true);return;}
+  if(e.target.closest('[data-bs-results]')) {
+    e.preventDefault();closeModal();
+    showTab('predictions');state.aiSport='nfl';state.aiSub='record';buildAiChips();buildAiSubs();await paintAiView();
+    document.getElementById('bs-results-host')?.scrollIntoView({block:'start',behavior:'smooth'});return;
+  }
+  if(e.target.closest('[data-bs-apply]')) {
+    e.preventDefault();document.querySelectorAll('#bs-results-host [data-bs-filter]').forEach(input=>signalFilters[input.dataset.bsFilter]=input.value);
+    await paintSignalResults();
+  }
+});
+document.addEventListener('submit',e=>{
+  if(e.target.matches('[data-bs-filters]')) { e.preventDefault();e.target.querySelector('[data-bs-apply]')?.click(); }
+});
+document.addEventListener('change',e=>{
+  if(e.target.matches('[data-bs-history]')) {
+    const host=e.target.closest('#md-signals');if(!host)return;
+    const market=host.querySelector('[data-bs-history=market]')?.value||'spread';
+    const provider=e.target.dataset.bsHistory==='market'?null:host.querySelector('[data-bs-history=provider]')?.value||null;
+    paintSignalDetail(host.dataset.bsEvent,detailToken,false,market,provider);
+  }
+});
 
 // --- Game Report (betting intel: model vs market, line moves, DK splits) ----
 // The backend bundles VSiN's DraftKings splits + its own ESPN line snapshots;
@@ -4834,6 +4931,12 @@ function boardCard(r, opts = {}) {
     ${marketRowsHTML(r)}
     ${why ? `<div class="brd-row">Main factors: ${why}</div>` : ''}
     ${p.sharp ? `<div class="brd-row${p.sharp.agree ? ' sharp' : ''}">💰 ${p.sharp.handle}% of dollars vs ${p.sharp.bets}% of bets on ${esc(p.sharp.abbr)} — sharp side ${p.sharp.agree ? 'agrees' : 'disagrees'}</div>` : ''}`;
+  if (sport === 'nfl' && g.id && signalsEnabled()) {
+    signalGames.set(String(g.id), g);
+    const host = el('div'); host.dataset.bsSummary = String(g.id);
+    host.innerHTML = globalThis.SportsHubSignalsUI.signalsSummaryHTML(signalVM(g.id));
+    card.appendChild(host); queueSignalSummary(g.id);
+  }
   if (g.id) {
     const button = el('button', 'ai-detail-button', 'Full game report · factors, line moves & splits →');
     button.type = 'button'; button.onclick = () => openGameDetail(sport, g.id, g);
@@ -5267,6 +5370,12 @@ async function paintAiView() {
     sub === 'record' ? recordPanel(det, pend, s)
     : sub === 'backtest' ? backtestPanel(det, s)
     : modelPanel(s));
+  if (signalsEnabled() && (all || sport === 'nfl')) {
+    if (sub === 'record') {
+      const host = el('div'); host.id = 'bs-results-host'; container.appendChild(host);
+      paintSignalResults();
+    } else if (sub === 'model') container.insertAdjacentHTML('beforeend', globalThis.SportsHubSignalsUI.methodologyHTML());
+  }
   applySections('predictions');
   injectJumpNav('predictions');
 }
