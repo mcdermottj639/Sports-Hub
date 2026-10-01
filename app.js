@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v270';
+const APP_VERSION = 'v271';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -8344,7 +8344,7 @@ async function syncLeagueOnce(sport, force) {
     [data, matchup, standings, freeAgents, opponent, catranks, playoffs, season, rosters].forEach((d) => {
       if (isStale(d) && d.__at && (!at || d.__at < at)) at = d.__at;
     });
-    const built = { team: data.team, record: data.record, rosterFull: data.roster || [], live: !!data.live, matchup, standings, freeAgents, opponent, catranks, playoffs, season, rosters, syncedAt: at || Date.now() };
+    const built = { team: data.team, record: data.record, rosterFull: data.roster || [], rules: data.rules || null, live: !!data.live, matchup, standings, freeAgents, opponent, catranks, playoffs, season, rosters, syncedAt: at || Date.now() };
     fanState.league[sport] = built;
     saveLeagueSnap(sport, built);
     return true;
@@ -8738,7 +8738,7 @@ function fbLeagueHTML(season, standings) {
 // v242 takes one primary offer, then flex (RB/WR) options, and only pairs a
 // drop at the same position (or flex-for-flex).
 const FB_CORE = ['QB', 'RB', 'WR', 'TE'];
-const FB_FLEX = ['RB', 'WR'];
+const FB_FLEX = ['RB', 'WR', 'TE'];
 const fbValue = (p) => {
   for (const raw of [p && p.avg, p && p.projAvg, p && p.projected]) {
     const v = Number(raw); if (Number.isFinite(v) && v > 0) return v;
@@ -8746,26 +8746,71 @@ const fbValue = (p) => {
   const w = fbWeeks(p).map((r) => r.pts).filter(Number.isFinite);
   return w.length ? w.reduce((a, v) => a + v, 0) / w.length : 0;
 };
-function fbNeeds(roster, freeAgents) {
-  const target = { QB: 2, RB: 4, WR: 5, TE: 2 };
+function fbRules(rules) {
+  const raw = rules && rules.lineupSlotCounts;
+  const counts = raw || { 0: 1, 2: 2, 4: 2, 6: 1, 23: 1, 20: 7 };
+  const n = (id) => Math.max(0, Math.floor(Number(counts[id]) || 0));
+  const targets = { QB: n(0), RB: n(2), WR: n(4), TE: n(6) };
+  const flex = [];
+  [[3, ['RB', 'WR']], [5, ['WR', 'TE']], [7, ['QB', 'RB', 'WR', 'TE']], [23, FB_FLEX]].forEach(([id, positions]) => {
+    for (let i = 0; i < n(id); i++) flex.push(positions);
+  });
+  const eligible = [...new Set(flex.flat())];
+  // Bench allocation is a transparent heuristic constrained to actual bench
+  // capacity; QB depth is not automatically a need in a one-QB league.
+  const bench = n(20), weights = { QB: targets.QB > 1 ? 1 : 0, RB: targets.RB, WR: targets.WR, TE: targets.TE * .5 };
+  flex.forEach((positions) => positions.forEach((pos) => { weights[pos] += 1 / positions.length; }));
+  const sum = Object.values(weights).reduce((a, v) => a + v, 0);
+  const allocation = FB_CORE.map((pos) => ({ pos, exact: sum ? bench * weights[pos] / sum : 0 }));
+  allocation.forEach((x) => { x.n = Math.floor(x.exact); });
+  let left = bench - allocation.reduce((a, x) => a + x.n, 0);
+  allocation.sort((a, b) => (b.exact - b.n) - (a.exact - a.n)).forEach((x) => { if (left > 0 && sum) { x.n++; left--; } });
+  allocation.forEach((x) => { targets[x.pos] += x.n; });
+  // Allocate shared starter capacity once, toward RB/WR depth when eligible.
+  flex.forEach((positions) => {
+    const pos = positions.slice().sort((a, b) => targets[a] - targets[b]).find((p) => p === 'RB' || p === 'WR') || positions[0];
+    targets[pos]++;
+  });
+  return { targets, flex: eligible, verified: !!raw, bench };
+}
+function fbUnavailable(p) {
+  return /^(IR|OUT|O|SUSPENDED|SUSPENSION|PUP|DOUBTFUL)$/i.test((p && p.injuryStatus) || '');
+}
+function fbNeeds(roster, freeAgents, rules) {
+  const target = fbRules(rules).targets;
   return FB_CORE.map((pos) => {
     const mine = (roster || []).filter((p) => nflBucket(p) === pos && !isReserve(p));
-    const vals = mine.map(fbValue).filter((v) => v > 0).sort((a, b) => b - a);
-    const fa = (freeAgents || []).filter((p) => nflBucket(p) === pos).map(fbValue).filter((v) => v > 0).sort((a, b) => b - a);
+    const vals = mine.filter((p) => !fbUnavailable(p)).map(fbValue).filter((v) => v > 0).sort((a, b) => b - a);
+    const fa = (freeAgents || []).filter((p) => nflBucket(p) === pos && !fbUnavailable(p)).map(fbValue).filter((v) => v > 0).sort((a, b) => b - a);
     const replacement = fa.length ? fa[Math.min(2, fa.length - 1)] : 0;
     const starter = vals[0] || 0, depthGap = Math.max(0, target[pos] - mine.length);
-    const qualityGap = replacement > 0 && starter > 0 ? Math.max(0, (replacement - starter) / replacement) : (starter ? 0 : .7);
-    const injury = mine.filter((p) => p.injuryStatus && !/ACTIVE|NORMAL/i.test(p.injuryStatus)).length;
+    const qualityGap = target[pos] === 0 ? 0 : replacement > 0 && starter > 0 ? Math.max(0, (replacement - starter) / replacement) : (starter ? 0 : .7);
+    const injury = mine.filter(fbUnavailable).length;
     const score = Math.min(100, Math.round(depthGap * 18 + qualityGap * 55 + injury * 12));
     const grade = score >= 55 ? 'Critical' : score >= 30 ? 'Need' : score >= 15 ? 'Watch' : 'Strong';
-    const reason = !mine.length ? `No active ${pos}` : depthGap ? `${mine.length} rostered; target ${target[pos]}` : injury ? `${injury} injury flag${injury === 1 ? '' : 's'}` : starter && replacement ? `${starter.toFixed(1)} best avg vs ${replacement.toFixed(1)} replacement` : `${mine.length} rostered`;
-    return { pos, score, grade, reason };
+    const reason = !mine.length && target[pos] ? `No active ${pos}` : depthGap ? `${mine.length} rostered; depth target ${target[pos]}` : injury ? `${injury} unavailable` : starter && replacement ? `${starter.toFixed(1)} comparison value vs ${replacement.toFixed(1)} replacement` : `${mine.length} rostered`;
+    return { pos, score, grade, reason, target: target[pos] };
   }).sort((a, b) => b.score - a.score);
 }
+function fbValueLabel(p) {
+  if (Number(p.avg) > 0) return `${Number(p.avg).toFixed(1)} season pts/g`;
+  if (Number(p.projAvg) > 0) return `${Number(p.projAvg).toFixed(1)} projected pts/g`;
+  if (Number(p.projected) > 0) return `${Number(p.projected).toFixed(1)} weekly projection`;
+  return fbValue(p) ? `${fbValue(p).toFixed(1)} past pts/g` : 'Scoring unavailable';
+}
+function fbAcquisitionLabel(p) {
+  if (p.acquisitionState === 'free_agent') return 'Free agent';
+  if (p.acquisitionState !== 'waivers') return 'Availability timing unconfirmed';
+  const time = p.waiverClearsAt && new Date(p.waiverClearsAt);
+  return time && Number.isFinite(time.getTime())
+    ? `On waivers · clears ${time.toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} ET`
+    : 'On waivers · clearing time unavailable';
+}
+
 function fbReplacement(freeAgents) {
   const out = {};
   FB_CORE.forEach((pos) => {
-    const fa = (freeAgents || []).filter((p) => nflBucket(p) === pos).map(fbValue).filter((v) => v > 0).sort((a, b) => b - a);
+    const fa = (freeAgents || []).filter((p) => nflBucket(p) === pos && !fbUnavailable(p)).map(fbValue).filter((v) => v > 0).sort((a, b) => b - a);
     out[pos] = fa.length ? fa[Math.min(2, fa.length - 1)] : 0;
   });
   return out;
@@ -8776,15 +8821,16 @@ function fbWaiverScore(p, need, replacement) {
   const surplus = value - (replacement || 0);
   return (need ? need.score * 0.7 : 0) + surplus * 4 + value * 0.3 + Math.min(owned, 60) * 0.12 + (fbTrend(p) === 'hot' ? 8 : 0);
 }
-function fbPickWaivers(roster, freeAgents) {
-  const needs = fbNeeds(roster, freeAgents);
+function fbPickWaivers(roster, freeAgents, rules) {
+  const config = fbRules(rules);
+  const needs = fbNeeds(roster, freeAgents, rules);
   const needMap = Object.fromEntries(needs.map((n) => [n.pos, n]));
   const replacement = fbReplacement(freeAgents);
   const candidates = (freeAgents || []).map((p) => {
     const pos = nflBucket(p);
-    if (!FB_CORE.includes(pos)) return null;
+    if (!FB_CORE.includes(pos) || fbUnavailable(p) || isReserve(p)) return null;
     const need = needMap[pos];
-    return { p, pos, value: fbValue(p), need, flex: FB_FLEX.includes(pos), score: fbWaiverScore(p, need, replacement[pos]) };
+    return { p, pos, value: fbValue(p), need, flex: config.flex.includes(pos), score: fbWaiverScore(p, need, replacement[pos]) };
   }).filter(Boolean).sort((a, b) => b.score - a.score);
 
   const plan = [];
@@ -8833,30 +8879,39 @@ function fbPickWaivers(roster, freeAgents) {
   }
   return { needs, needMap, plan };
 }
-function fbPairDrop(add, drops, usedDrops) {
+function fbCanReplace(roster, drop, add, rules) {
+  const counts = (rules && rules.lineupSlotCounts) || { 0: 1, 2: 2, 4: 2, 6: 1 };
+  const minimum = { QB: Number(counts[0]) || 0, RB: Number(counts[2]) || 0, WR: Number(counts[4]) || 0, TE: Number(counts[6]) || 0 };
+  const pos = nflBucket(drop);
+  if (pos === nflBucket(add)) return true;
+  return roster.filter((p) => p !== drop && nflBucket(p) === pos && !isReserve(p) && !fbUnavailable(p)).length >= (minimum[pos] || 0);
+}
+function fbPairDrop(add, drops, usedDrops, rules) {
+  const flex = fbRules(rules).flex;
   const available = (drops || []).filter((d) => !usedDrops.has(d.p.name));
   const same = available.find((d) => d.pos === add.pos && d.value + 1 < add.value);
   if (same) return same;
-  if (FB_FLEX.includes(add.pos)) {
+  if (flex.includes(add.pos)) {
     return available
-      .filter((d) => FB_FLEX.includes(d.pos) && d.value + 1.5 < add.value)
+      .filter((d) => flex.includes(d.pos) && d.value + 1.5 < add.value)
       .sort((a, b) => a.value - b.value)[0] || null;
   }
   return null;
 }
-function fbGMHTML(roster, freeAgents, leagueRosters) {
-  const { needs, needMap, plan } = fbPickWaivers(roster, freeAgents);
+function fbGMHTML(roster, freeAgents, leagueRosters, rules) {
+  const config = fbRules(rules);
+  const { needs, needMap, plan } = fbPickWaivers(roster, freeAgents, rules);
   const drops = (roster || []).filter((p) => isBenched(p) && !isReserve(p)).map((p) => ({ p, pos: nflBucket(p), value: fbValue(p) })).filter((x) => !['K', 'DST'].includes(x.pos)).sort((a, b) => a.value - b.value);
   const usedDrops = new Set();
   const row = (x, i, kind) => {
-    const cut = fbPairDrop(x, drops, usedDrops);
+    const cut = fbPairDrop(x, drops.filter((d) => fbCanReplace(roster, d.p, x.p, rules)), usedDrops, rules);
     if (cut) usedDrops.add(cut.p.name);
-    const delta = cut ? x.value - cut.value : 0;
+    const delta = cut && Number(x.p.avg) > 0 && Number(cut.p.avg) > 0 ? Number(x.p.avg) - Number(cut.p.avg) : 0;
     const tag = kind === 'offer' ? '<span class="gm-role">The offer</span>' : (x.flex ? '<span class="gm-role">Flex</span>' : '');
     const why = x.need && x.need.score >= 30
       ? `Fills your #${needs.indexOf(x.need) + 1} need`
       : (x.flex ? 'Flex value' : 'Best available value');
-    return `<div class="gm-move${kind === 'offer' ? ' offer' : ''}"><div class="gm-rank${kind === 'offer' ? ' offer' : ''}">${i}</div><div class="gm-main"><div><b>${esc(x.p.name)}</b> <span class="ffp-slot">${x.pos}</span>${tag}${fbMatchupBadge(x.p)}</div><div class="gm-why">${why} · ${x.value ? x.value.toFixed(1) + ' pts/g' : 'projection pending'}${x.p.owned != null ? ` · ${Math.round(x.p.owned)}% rostered` : ''}</div>${cut ? `<div class="gm-cut">ADD over ${esc(cut.p.name)}${delta ? ` · estimated +${delta.toFixed(1)} pts/g` : ''}</div>` : '<div class="gm-cut hold">Add only with an open spot; no clear cut</div>'}</div></div>`;
+    return `<div class="gm-move${kind === 'offer' ? ' offer' : ''}"><div class="gm-rank${kind === 'offer' ? ' offer' : ''}">${i}</div><div class="gm-main"><div><b>${esc(x.p.name)}</b> <span class="ffp-slot">${x.pos}</span>${tag}${fbMatchupBadge(x.p)}</div><div class="gm-why">${why} · ${esc(fbValueLabel(x.p))}${x.p.owned != null ? ` · ${Math.round(x.p.owned)}% ESPN-wide rostered` : ''}</div><div class="gm-why">${esc(fbAcquisitionLabel(x.p))}</div>${cut ? `<div class="gm-cut">Consider replacing ${esc(cut.p.name)}${delta ? ` · past average +${delta.toFixed(1)} pts/g` : ''}</div>` : '<div class="gm-cut hold">Add only with an open spot; no clear cut</div>'}</div></div>`;
   };
   let waiverRows = '';
   if (plan.length) {
@@ -8867,18 +8922,20 @@ function fbGMHTML(roster, freeAgents, leagueRosters) {
   }
   const tradeLeads = [];
   (((leagueRosters || {}).teams) || []).filter((t) => !t.isMe).forEach((t) => {
-    const counts = {}; (t.roster || []).forEach((p) => { const b = nflBucket(p); counts[b] = (counts[b] || 0) + 1; });
+    const counts = {}; (t.roster || []).filter((p) => !isReserve(p) && !fbUnavailable(p)).forEach((p) => { const b = nflBucket(p); counts[b] = (counts[b] || 0) + 1; });
+    const partnerNeeds = fbNeeds(t.roster || [], freeAgents, rules);
+    const returnFit = partnerNeeds.find((n) => n.score >= 15 && roster.filter((p) => nflBucket(p) === n.pos && !isReserve(p) && !fbUnavailable(p)).length > config.targets[n.pos]);
     (t.roster || []).forEach((p) => {
-      const pos = nflBucket(p), need = needMap[pos], value = fbValue(p); if (!need || need.score < 15 || !value || isReserve(p)) return;
-      const surplus = (counts[pos] || 0) > ({ QB: 2, RB: 4, WR: 5, TE: 2 }[pos] || 99);
-      tradeLeads.push({ p, pos, value, team: t.team, need, surplus, score: need.score + value * 2 + (surplus ? 18 : 0) });
+      const pos = nflBucket(p), need = needMap[pos], value = fbValue(p); if (!need || need.score < 15 || !value || isReserve(p) || fbUnavailable(p)) return;
+      const surplus = (counts[pos] || 0) > (config.targets[pos] ?? 99);
+      tradeLeads.push({ p, pos, value, team: t.team, need, surplus, returnFit: returnFit && returnFit.pos, score: need.score + value * 2 + (surplus ? 18 : 0) + (returnFit ? 20 : 0) });
     });
   });
   tradeLeads.sort((a, b) => b.score - a.score);
-  const trades = tradeLeads.slice(0, 8).map((x) => `<div class="gm-trade"><div><b>${esc(x.p.name)}</b> <span class="ffp-slot">${x.pos}</span></div><div class="gm-owner">${esc(x.team)} · ${x.value.toFixed(1)} pts/g</div><div class="gm-fit">${x.surplus ? '✓ Manager has depth here' : 'Targets your roster need'} · ${x.need.grade} ${x.pos} need</div></div>`).join('');
+  const trades = tradeLeads.slice(0, 8).map((x) => `<div class="gm-trade"><div><b>${esc(x.p.name)}</b> <span class="ffp-slot">${x.pos}</span></div><div class="gm-owner">${esc(x.team)} · ${esc(fbValueLabel(x.p))}</div><div class="gm-fit">${x.surplus ? '✓ Manager has depth here' : 'Targets your roster need'} · ${x.need.grade} ${x.pos} need. ${x.returnFit ? `They need ${esc(x.returnFit)}; you have depth to discuss` : 'No clear matching surplus on your roster'}</div></div>`).join('');
   const needRows = needs.map((n) => `<div class="gm-need ${n.grade.toLowerCase()}"><div class="gm-need-top"><b>${n.pos}</b><span>${n.grade}</span></div><div class="gm-need-track"><i style="width:${Math.max(6, n.score)}%"></i></div><div class="gm-why">${esc(n.reason)}</div></div>`).join('');
   const first = needs[0];
-  return `<div class="gm-hero"><div><div class="pp-kicker">GM COMMAND CENTER</div><h3>${first && first.score >= 15 ? `Priority: improve ${esc(first.pos)}` : 'Roster is balanced'}</h3><p>${first && first.score >= 15 ? esc(first.reason) + '. Waiver and trade lists are ranked around that need.' : 'No major hole is showing. Prioritize upside and injury insurance.'}</p></div><div class="gm-score"><b>${first ? first.score : 0}</b><span>top need</span></div></div><div class="gm-needs">${needRows}</div><div class="gm-grid"><section><h3>Waiver Plan</h3>${waiverRows || '<div class="ffp-empty"><b>No recommendations yet</b>ESPN free-agent data is not available.</div>'}<div class="ffp-cap">One primary add, then flex (RB/WR) options. Drops are same-position or flex-for-flex — a quarterback is never compared to a receiver.</div></section><section><h3>Trade Targets</h3>${trades || '<div class="ffp-empty"><b>Trade market loading</b>Every league roster appears after the backend deploys and the next refresh.</div>'}<div class="ffp-cap">Conversation starters, not one-for-one values. “Depth” means that manager rosters more than the normal target at the position.</div></section></div>`;
+  return `<div class="gm-hero"><div><div class="pp-kicker">GM COMMAND CENTER</div><h3>${first && first.score >= 15 ? `Priority: improve ${esc(first.pos)}` : 'Roster is balanced'}</h3><p>${first && first.score >= 15 ? esc(first.reason) + '. Waiver and trade lists are ranked around that need.' : 'No major hole is showing. Prioritize upside and injury insurance.'}</p></div><div class="gm-score"><b>${first ? first.score : 0}</b><span>top need</span></div></div><div class="gm-needs">${needRows}</div><div class="gm-grid"><section><h3>Waiver Plan</h3>${waiverRows || '<div class="ffp-empty"><b>No recommendations yet</b>ESPN free-agent data is not available.</div>'}<div class="ffp-cap">One primary add, then league-eligible flex options. Past scoring differences are not projected lineup gains.</div></section><section><h3>Trade Targets</h3>${trades || '<div class="ffp-empty"><b>Trade market loading</b>Every league roster appears after the backend deploys and the next refresh.</div>'}<div class="ffp-cap">Conversation starters, not one-for-one values. Depth targets allocate your league’s bench spots; they are guidelines, not roster requirements. ${config.verified ? 'ESPN roster rules loaded.' : 'Standard roster assumptions until league rules load.'}</div></section></div>`;
 }
 
 async function renderFootballLive() {
@@ -9048,7 +9105,7 @@ async function renderFootballLive() {
   const waiverHTML = fas.length
     ? `<div class="ffp-card">${fas.slice(0, 12).map((p) => `<div class="ffp-prow"><div class="ffp-prow-l1"><span class="ffp-slot">${esc(p.pos || '')}</span><span class="ffp-pname">${esc(p.name)}</span>${fbMatchupBadge(p)}</div><div class="ffp-prow-l2"><span class="ffp-meta">${esc(p.proTeam || '')}${p.owned != null ? ' · ' + Math.round(p.owned) + '% rostered' : ''}</span>${fbSpark(fbWeeks(p).map((w) => w.pts), 'hot')}<span class="ffp-pts proj">${fpts(p.projected) != null ? fpts(p.projected) : '–'}</span></div></div>`).join('')}<div class="ffp-cap">Top available by ESPN projection. Waivers run Wed &amp; Sun 11 PM ET.</div></div>`
     : `<div class="ffp-card"><div class="ffp-empty"><b>Waiver wire empty</b>Available players appear after the next sync.</div></div>`;
-  const gmHTML = fbGMHTML(full, fas, L.rosters);
+  const gmHTML = fbGMHTML(full, fas, L.rosters, L.rules);
 
   box.innerHTML = `
     <div class="setup-card pp-hero">

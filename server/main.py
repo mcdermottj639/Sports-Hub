@@ -32,7 +32,7 @@ from espn_api.baseball import League as BaseballLeague
 
 # Bump on backend changes so /api/health reveals which build Railway is running.
 # (Lets us confirm a deploy actually landed instead of guessing.)
-SERVER_VERSION = "b16-fantasy-gm"
+SERVER_VERSION = "b17-fantasy-league-rules"
 
 app = FastAPI(title="Sports-Hub Fantasy API", version="0.1.0")
 
@@ -173,6 +173,7 @@ def player_dict(p) -> dict:
     lineup_slot = getattr(p, "lineupSlot", "") or ""
     is_pitcher, pos, status = _derive(eligible, lineup_slot)
     return {
+        "id": str(getattr(p, "playerId", "") or ""),
         "name": getattr(p, "name", ""),
         "pos": pos,                                      # derived display position
         "isPitcher": is_pitcher,
@@ -278,6 +279,36 @@ def _box_lineup(league, team):
     return []
 
 
+def football_rules(league):
+    """Read exact slot IDs, avoiding espn-api's positional zip mapping."""
+    if hasattr(league, "_hub_rules"):
+        return league._hub_rules
+    try:
+        raw = league.espn_request.league_get(params={"view": "mSettings"})
+        counts = (raw.get("settings", {}).get("rosterSettings", {})
+                  .get("lineupSlotCounts"))
+        rules = {"lineupSlotCounts": counts, "source": "ESPN"} if counts else None
+    except Exception:
+        rules = None
+    league._hub_rules = rules
+    return rules
+
+
+def acquisition_fields(row):
+    """Keep acquisition metadata separate from injury and lineup status."""
+    from datetime import datetime, timezone
+    pool = row.get("playerPoolEntry", row)
+    state = {"FREEAGENT": "free_agent", "WAIVERS": "waivers"}.get(pool.get("status"))
+    clears = None
+    stamp = pool.get("waiverProcessDate")
+    if state == "waivers" and isinstance(stamp, (int, float)) and stamp > 0:
+        try:
+            clears = datetime.fromtimestamp(stamp / 1000, timezone.utc).isoformat()
+        except (ValueError, OverflowError, OSError):
+            pass
+    return {"acquisitionState": state, "waiverClearsAt": clears}
+
+
 @app.get("/api/fantasy/{sport}/roster")
 def roster(sport: str):
     """Your real roster for the sport, grouped enough for the UI to render."""
@@ -298,6 +329,7 @@ def roster(sport: str):
         # than showing an unexplained dash next to every player.
         "live": bool(players) and players is not getattr(team, "roster", None),
         "roster": [player_dict(p) for p in players],
+        "rules": football_rules(league) if sport == "football" else None,
     }
 
 
@@ -433,7 +465,26 @@ def free_agents(sport: str, size: int = 40):
     """Top available players (free agents/waivers), most-owned first."""
     league = get_league(sport)
     try:
-        fas = league.free_agents(size=min(size, 100))
+        if sport == "football":
+            # Same query as pinned espn-api 0.46.0, retaining fields its Player drops.
+            from espn_api.football.box_player import BoxPlayer
+            week = league.current_week
+            filters = {"players": {
+                "filterStatus": {"value": ["FREEAGENT", "WAIVERS"]},
+                "filterSlotIds": {"value": []}, "limit": max(1, min(size, 100)),
+                "sortPercOwned": {"sortPriority": 1, "sortAsc": False},
+                "sortDraftRanks": {"sortPriority": 100, "sortAsc": True, "value": "STANDARD"}}}
+            raw = league.espn_request.league_get(
+                params={"view": "kona_player_info", "scoringPeriodId": week},
+                headers={"x-fantasy-filter": _json.dumps(filters)})
+            schedule = league._get_pro_schedule(week)
+            ratings = league._get_positional_ratings(week)
+            players = []
+            for row in raw.get("players", []):
+                player = BoxPlayer(row, schedule, ratings, week, league.year)
+                players.append({**player_dict(player), **acquisition_fields(row)})
+            return {"sport": sport, "players": players}
+        fas = league.free_agents(size=max(1, min(size, 100)))
     except Exception as e:
         raise HTTPException(502, f"Could not load free agents: {e}")
     return {"sport": sport, "players": [player_dict(p) for p in fas]}

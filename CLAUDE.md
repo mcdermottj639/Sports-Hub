@@ -596,7 +596,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
 ```
 
-Current version as of this writing: **v270** (backend **b16-fantasy-gm**).
+Current version as of this writing: **v271** (backend **b17-fantasy-league-rules**).
+
+### v271 — League-aware fantasy recommendations
+
+- Football roster responses carry exact ESPN lineup slot counts, cached with the League snapshot. The free-agent endpoint preserves provider acquisition status and waiver clearing timestamps from the same player query (espn-api 0.46.0 drops these fields). Unknown fields remain unavailable; no guessed waiver dates.
+- GM depth targets allocate actual starting and bench capacity, with disclosed standard assumptions if settings are unavailable. League-eligible flex includes TE; cross-position cuts preserve required position coverage. Unavailable players are excluded from pickup candidates.
+- Past scoring averages and projections are labeled separately; past-average differences are not projected lineup gains. Trade leads check the other manager’s needs against the user's surplus and disclose when no complementary fit exists. These are conversation starters, not trade valuations.
+- Backend remains on the existing Render service; Flaim is a read-only audit source in ChatGPT, not a new runtime dependency. Verify `/api/health` reports `b17-fantasy-league-rules` after deployment. Tests: `node --test tests/fantasy-gm.test.js` and `python tests/test_fantasy_metadata.py`.
 
 ### v270 — Visible projections beneath comparison picks
 
@@ -730,7 +737,7 @@ The live pipeline saves probability method, sample size, training cutoff and its
   older rail behavior that hid the wrapper/toggle based only on card count.
 
 
-- **Waiver Plan is one offer plus flex (v242):** the football GM waiver list
+- **Waiver Plan is one offer plus flex (v242):** ⚠️ SUPERSEDED in v271 for flex eligibility (now league-derived, including TE), depth targets, and scoring labels. the football GM waiver list
   no longer ranks raw pts/g, which made every slot a quarterback copy and
   paired each of them with the same bench WR. It now prints one primary add
   (a QB/TE only when that position is an actual need), then RB/WR flex
@@ -746,7 +753,7 @@ The live pipeline saves probability method, sample size, training cutoff and its
   feed into a need-aware waiver plan with conservative add/drop suggestions;
   ⚠️ SUPERSEDED in v242 for the waiver-list ranking itself (raw pts/g stacked
   QB copies and compared them to a WR drop); the need cards and trade-lead
-  scan remain. New `/api/fantasy/{sport}/rosters` reads the already
+  scan are superseded in v271 by league-aware targets and reciprocal trade-fit checks. New `/api/fantasy/{sport}/rosters` reads the already
   cached League object and exposes no credentials. The legacy top-available
   waiver list remains below for full context.
 
