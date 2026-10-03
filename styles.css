@@ -3463,9 +3463,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .fc-selection b { font-size: .79rem; }
 .fc-game .fc-selection small { font-size: .65rem; line-height: 1.25; font-weight: 400; color: var(--muted); }
 .fc-market > summary:has(.fc-selection) { padding: .4rem 0; }
-/* Live NFL evidence is on the main model card; QB details take one tap. */
-.board-compact > .nf-detail { border-top: 1px solid var(--border, #d8e0d9); padding-top: .65rem; }
-.board-compact > .nf-detail > details > summary { min-height: 44px; box-sizing: border-box; }
+/* NFL football evidence stays inside the existing compact disclosures. */
 .nf-detail, .nf-validation, .nf-scouting { margin: .65rem 0; max-width: 100%; min-width: 0; }
 .nf-detail summary, .nf-validation > summary, .nf-scouting > summary { cursor: pointer; font-weight: 700; padding: .65rem 0; }
 .nf-drivers { list-style: none; padding: 0; margin: .45rem 0; }

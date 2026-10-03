@@ -101,10 +101,8 @@ immediately by the game radar before stats and decision cards.
 Model forecasts put the game ladder immediately after a compact play count;
 guidance, challenger summaries and tracking notes share a closed-by-default
 Board details disclosure. Game-specific cautions and past-slate notices stay visible.
-NFL main model cards show Football read directly below their live picks, with
-QB, personnel & conditions one tap away on the card. This uses the evidence
-attached to that forecast, not an older comparison snapshot. Previous model
-stays separately collapsed; its historical context remains available there.
+Football read and QB, personnel & conditions remain inside the collapsed
+model comparison, restoring the compact main cards from v278.
 
 Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
@@ -618,9 +616,17 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v279** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v280** (backend **b17-fantasy-league-rules**).
+
+### v280 — Restore compact NFL cards
+
+Revert the v279 main-card football context placement at the owner's request.
+Football read and QB details remain in the existing comparison disclosure.
+Model calculations, saved forecasts and backend behavior are unchanged.
 
 ### v279 — Football context on the main model cards
+
+⚠️ SUPERSEDED in v280: main-card placement reverted to v278.
 
 Football read and the QB/personnel/conditions disclosure now appear directly
 on NFL model cards under the live picks. They use `p.football`, including its
@@ -634,7 +640,7 @@ closed and checks layout at 320, 390 and 1280px. No live data writes.
 
 ### v278 — Live formula first, previous model tucked away
 
-⚠️ EXTENDED in v279: live football context is now also directly accessible on
+⚠️ SUPERSEDED in v280 (v278 layout restored). EXTENDED in v279: live football context is now also directly accessible on
 the main cards; only historical comparisons remain under Previous model.
 
 NFL per-game comparisons and comparison records now start collapsed behind a

@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v279';
+const APP_VERSION = 'v280';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -5122,8 +5122,7 @@ function boardCard(r, opts = {}) {
     ${sport === 'nfl' && p.modelVersion === globalThis.SportsHubNFLLive?.VERSION ? '<div class="ai-read-foot"><b>Live football model</b></div>' : ''}
     ${compactMarketsHTML({...r,info:shownInfo,atsR:r.atsR || r.ats,totR:r.totR || r.tot})}
     ${gap != null ? `<div class="compact-gap">Winner vs market: <b>${gap >= 0 ? '+' : ''}${gap} pp</b></div>` : ''}
-    ${p.blockedReasons?.length ? '<div class="compact-warning">Data check · see report before using this read</div>' : ''}
-    ${sport === 'nfl' && p.football ? (globalThis.SportsHubNFLFootballUI?.detail(p.football) || '') : ''}`;
+    ${p.blockedReasons?.length ? '<div class="compact-warning">Data check · see report before using this read</div>' : ''}`;
   if (['nfl','cfb'].includes(sport) && g.id) globalThis.SportsHubFootballDevelopment?.mountGame(card, g.id, sport);
   if (['nfl','cfb'].includes(sport) && g.id && signalsEnabled()) {
     signalGames.set(String(g.id), {...g,signalSport:sport});
