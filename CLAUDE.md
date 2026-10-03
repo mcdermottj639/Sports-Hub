@@ -87,12 +87,15 @@ build step or framework — shipped from this repo via **GitHub Pages**. Two
 scoped services sit behind it: Render for private fantasy-league sync and
 Supabase for durable, scheduled AI-pick capture and grading.
 
-The v272 experience complements score/news apps with a daily brief, model
+The experience complements score/news apps with a daily brief, model
 forecasts and results, research, league-aware fantasy decisions, and a personal
 watchlist. Desktop uses a sidebar; mobile uses Today / Models / Research /
 Fantasy / More. More groups every existing destination by purpose, and global
 search finds features, current games and saved notes. News/team/golf content
 remains available in News & scores and the dedicated team pages.
+
+The v273 clubhouse finish uses Eagles green, cream and lime, condensed display
+type, full-width layouts, and ESPN crests throughout matchups and team links.
 
 Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
@@ -253,7 +256,8 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   More directory, game bookmarks and local notes. Loads before app.js; init
   runs after app declarations. Uses existing collectors, math and adapters.
 - `desk.css` — final visual layer after styles.css and betting-signals.css.
-  Mint/white content, dark teal desktop sidebar, responsive dock; SVG icon
+  Eagles-green hero panels, cream/white content, lime accents, team crests,
+  dark teal desktop sidebar and responsive dock; SVG icon
   sizing is scoped to desk components so existing analytical charts retain
   their dimensions. No theme switch or frontend build step.
 - `app.js` (~12,000 lines) — main application logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
@@ -603,7 +607,19 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v272** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v273** (backend **b17-fantasy-league-rules**).
+
+### v273 — Clubhouse visual identity
+
+- Adds Eagles-green hero panels, lime accents, condensed sports typography,
+  tighter page gutters and stronger card surfaces. All main sections inherit
+  the new finish; desktop uses available width and wide radars use two columns.
+- ESPN team logos now appear in the page banner, Eagles/Red Sox sidebar links,
+  team tiles, game radar, current saved-game cards and richer favorite-team
+  cards. Matchup logos come from the existing feed. Favorite crests use ESPN's
+  team-logo assets; unavailable images fall back to team abbreviations.
+- Favorite-team cards use the already-loaded schedule for matchup context;
+  no additional scoring source, projection, collection or storage changes.
 
 ### v272 — A personal sports decision workspace
 

@@ -296,3 +296,159 @@ html { scroll-padding-top:90px; }
   .desk-watch-card textarea { font-size:16px; }
   .desk-research-intro p,.desk-external p { font-size:12px; }
 }
+
+/* v273 — clubhouse: team crests, field geometry and a bolder sports identity. */
+:root[data-palette="champagne"] {
+  --gr:#eef1e9;--sf2:#e7ede5;--ac:#006353;--ac6:#004c45;--ac7:#003b36;
+  --desk-line:#d5ddd1;--desk-sidebar:212px;--barRGB:238,241,233;
+  --grad:linear-gradient(125deg,#005c51,#002d2b);
+  --club-lime:#d6f66a;--club-dark:#073632;
+}
+:root[data-palette] body.desk-shell { background:radial-gradient(ellipse at 100% 0,#dce7d2 0,transparent 55%),var(--gr); }
+:root[data-palette] .desk-shell .topbar { padding:0 26px;height:68px;background:#f6f7f1; }
+.desk-wordmark { font-weight:900!important;letter-spacing:-1.1px;font-size:25px!important; }
+.desk-brand-symbol { background:var(--club-lime);color:var(--club-dark);box-shadow:3px 3px 0 var(--club-dark);border-radius:9px; }
+.desk-brand-symbol span { color:var(--club-dark); }
+:root[data-palette] .desk-shell nav.tabs { background:radial-gradient(ellipse at 0 100%,#185349,transparent 70%),#062c2a;border-right:1px solid #1f4a41; }
+:root[data-palette] .desk-shell nav.tabs button.active { background:var(--club-lime);color:#193327;box-shadow:inset 3px 0 0 #fff6; }
+.desk-sidebar-title { color:#bbd885; }
+.desk-sidebar-bottom { border-top:1px solid #ffffff20;margin-top:auto; }
+.desk-page-heading { position:relative;isolation:isolate;overflow:hidden;min-height:190px;max-width:none;margin:20px 26px 22px calc(var(--desk-sidebar) + 26px);padding:27px 30px;border:1px solid #144d42;border-radius:17px;background:radial-gradient(ellipse at 70% 40%,#186453,transparent 60%),#063b36;color:#fff;box-shadow:0 7px 0 #d4dfcf;align-items:flex-start; }
+.desk-page-heading::before { content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:repeating-linear-gradient(105deg,transparent 0 100px,#ffffff04 100px 102px); }
+.desk-page-heading::after { content:'';position:absolute;width:340px;height:340px;right:-75px;top:-160px;z-index:-1;border:1px solid #cbe68d30;border-radius:50%;box-shadow:0 0 0 45px #d6f66a08,0 0 0 90px #d6f66a05;pointer-events:none; }
+.desk-page-heading>div:first-child { width:100%; }
+.desk-page-heading .desk-eyebrow { color:var(--club-lime);font-size:10px;letter-spacing:.16em;margin:0 0 12px; }
+.desk-edition { padding-left:15px;margin-left:15px;border-left:1px solid #90b38a;color:#bfd3c6;font-size:8px;letter-spacing:.09em; }
+.desk-page-heading h1 { font-family:'Barlow Condensed','Archivo',sans-serif;text-transform:uppercase;font-size:54px;font-weight:800;letter-spacing:-.7px;line-height:.95;max-width:65%; }
+.desk-page-heading #desk-page-desc { color:#d3e2d8;font-size:13px;margin:13px 0 0;max-width:62%;line-height:1.6; }
+.desk-heading-side { position:absolute;right:26px;bottom:18px;color:#c8dcce;font-size:10px; }
+.desk-page-heading .desk-refresh { background:#ffffff10;color:#e9f3dd;border:1px solid #ffffff30;min-height:32px;padding:6px 9px; }
+.desk-heading-art { position:absolute;right:35px;top:15px;display:flex;align-items:center;gap:9px;transform:rotate(-7deg); }
+.desk-hero-crest { padding:12px!important;width:106px;height:106px;border:1px solid #d8e8c947;border-radius:22px;background:linear-gradient(130deg,#fafcef,#e5efd5);box-shadow:0 12px 20px #001a2560;transform:rotate(-5deg); }
+.desk-crest-redsox { transform:translateY(17px) rotate(14deg);background:linear-gradient(125deg,#fdf7ed,#ebddd7); }
+.desk-team-mark { position:relative;display:inline-grid;place-items:center;flex-shrink:0;vertical-align:middle;width:38px;height:38px;border-radius:10px;background:#f1f4ec;color:#415949;overflow:hidden; }
+.desk-team-mark>span { font-size:11px;font-weight:800;letter-spacing:.03em; }
+.desk-team-mark img { position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:3px;background:inherit; }
+.desk-hero-crest .desk-team-mark { width:100%;height:100%;background:transparent;border-radius:0;overflow:visible; }
+.desk-hero-crest .desk-team-mark img { padding:0;filter:drop-shadow(0 4px 1px #002d2820); }
+.desk-team-mark:has(img:not([hidden]))>span { visibility:hidden; }
+:root[data-palette] .desk-shell nav.tabs .ic { width:25px; }
+:root[data-palette] .desk-shell nav.tabs .desk-team-mark { width:26px;height:26px;background:#edf4e7; border-radius:6px; }
+:root[data-palette] .desk-shell main { max-width:none;padding:0 26px 35px;margin-left:var(--desk-sidebar); }
+.desk-intro-strip { padding-bottom:12px;margin-bottom:16px;border-color:#c6d6c2; }
+.desk-stats { gap:12px;margin-bottom:20px; }
+.desk-stat { position:relative;padding:16px 18px;border-color:#cbd7c4;border-radius:11px;background:linear-gradient(115deg,#fff,#f7faef);box-shadow:0 3px 0 #d8e1d0; }
+.desk-stat::after { content:'';position:absolute;left:18px;top:0;width:27px;height:3px;background:#007361;border-radius:0 0 3px 3px; }
+.desk-stat:nth-child(2)::after { background:#799c17; }.desk-stat:nth-child(3)::after { background:#c68e27; }.desk-stat:nth-child(4)::after { background:#a7253c; }
+.desk-stat>strong { font-family:'Barlow Condensed',sans-serif;font-size:42px;font-weight:800;letter-spacing:-.8px;margin:5px 0; }
+.desk-card { border-radius:13px;box-shadow:0 3px 0 #d9e1d04d;padding:20px; }
+.desk-home-grid { grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr);gap:18px; }
+.desk-main-column,.desk-side-column { gap:18px; }
+.desk-card h2,.desk-section-heading h2,.desk-explore-lead h2 { font-family:'Barlow Condensed','Archivo',sans-serif;font-size:27px;letter-spacing:0;text-transform:uppercase;font-weight:700; }
+.desk-card .desk-eyebrow { color:#5b754b; }
+.desk-focus-card { background:linear-gradient(150deg,#fff 55%,#eef5e3);border-top:4px solid #0a6954; }
+.desk-round-mark { background:var(--club-lime);color:#153e30;transform:rotate(-12deg);border-radius:9px; }
+.desk-focus-row { padding:14px 0;border-color:#dce6d4; }
+.desk-focus-icon { color:#005c4f;background:#e1efd3;border-radius:8px; }
+.desk-results-card { background:linear-gradient(155deg,#fdfef7,#eaf0df);border-color:#c5d4b8; }
+.desk-mini-badge { background:#224f3f;color:#e4f6c5;border:0;padding:6px 8px;font-size:8px; }
+.desk-result strong { font-family:'Barlow Condensed','Archivo',sans-serif;font-size:24px;font-weight:700;letter-spacing:.2px; }
+.desk-filter-row button[aria-pressed=true] { background:#103f36;color:#efffc8; }
+.desk-game { padding:5px 0;border-bottom:1px solid #dde4d6; }
+.desk-game-main { padding:11px 0; }
+.desk-sport { background:#eef3e6;color:#3c624b;padding:3px 5px;border-radius:4px;font-size:9px;min-width:30px;text-align:center; }
+.desk-matchup { display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;margin-top:10px; }
+.desk-match-team { display:flex;align-items:center;gap:9px;min-width:0; }
+.desk-match-team>span:not(.desk-team-mark) { min-width:0;flex:1; }
+.desk-match-team b { display:block;font-family:'Barlow Condensed','Archivo',sans-serif;font-size:24px;line-height:1.05;letter-spacing:.3px; }
+.desk-match-team small { display:block;font-size:10px;font-weight:400;color:var(--gy);line-height:1.4;margin-top:4px; }
+.desk-match-team>strong { font-family:'Barlow Condensed',sans-serif;font-size:26px; }
+.desk-match-team .desk-team-mark { width:44px;height:44px;background:#f7f9f3;border:1px solid #e1e8da; }
+.desk-game-context { margin-top:9px;gap:13px; }
+.desk-save[aria-pressed=true] { background:#d7eeaa;color:#245131; }
+.desk-research-promo { border-radius:13px;background:linear-gradient(130deg,#073731,#16674b);border:1px solid #155f45;box-shadow:0 4px 0 #cbd9be; }
+.desk-research-promo .desk-eyebrow { color:var(--club-lime);font-size:9px; }
+.desk-research-promo h2 { font-family:'Barlow Condensed','Archivo',sans-serif;text-transform:uppercase;font-size:37px;line-height:1.05;letter-spacing:0; }
+.desk-research-promo button { background:var(--club-lime);color:#183a29;font-weight:800; }
+.desk-promo-lines i { background:#d6f66a40; }.desk-promo-lines i:last-child { background:var(--club-lime); }
+.desk-follow-card { padding:17px!important;background:#e4eadb;border:1px solid #c9d7c0; }
+.desk-follow-card>.desk-eyebrow { margin-bottom:13px; }
+:root[data-palette] .desk-shell .desk-follow-card .desk-club-card { position:relative;display:flex;width:100%;min-height:145px;margin:0 0 12px;padding:19px 15px!important;border:1px solid #ffffff2b;border-radius:11px;overflow:hidden;background:linear-gradient(120deg,#004f48,#032d2b);color:#fff;text-align:left;gap:14px; }
+:root[data-palette] .desk-shell .desk-follow-card .desk-club-redsox { margin-bottom:0;background:linear-gradient(120deg,#802f38,#3e1726); }
+.desk-club-card::after { content:'';position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(-35deg,transparent 0 70px,#ffffff05 70px 72px); }
+.desk-club-card .desk-team-mark { width:65px;height:65px;background:#f4f6e8;border-radius:12px;transform:rotate(-8deg);box-shadow:3px 5px 0 #001b2930; }
+.desk-club-card>span:nth-child(2) { position:relative;z-index:1;min-width:0;flex:1; }
+.desk-follow-card .desk-club-card b { font-family:'Barlow Condensed','Archivo',sans-serif;font-size:30px;text-transform:uppercase;line-height:1.05;margin:6px 0 8px; }
+.desk-follow-card .desk-club-card small { font-size:9px;color:#d9e8b9;letter-spacing:.05em;line-height:1.5;margin:0; }
+.desk-follow-card .desk-club-card>span>span { display:block;font-size:11px;font-weight:500;line-height:1.5;margin-bottom:4px; }
+.desk-club-card>svg { width:17px;align-self:flex-end;color:#dcf49e; }
+.desk-watch-crests { display:flex;gap:10px;align-items:center;margin-bottom:18px; }
+.desk-watch-crests .desk-team-mark { width:54px;height:54px; }.desk-watch-crests>span:not(.desk-team-mark) { font-size:10px;color:var(--mu); }
+.desk-watch-card { border-top:4px solid #4e7a45;background:linear-gradient(130deg,#fff,#f4f7ef); }
+.desk-explore-section>h2 { font-family:'Barlow Condensed','Archivo',sans-serif;font-size:24px;text-transform:uppercase; }
+.desk-tile { background:linear-gradient(145deg,#fff,#f2f6e9);border-color:#cedbc3;border-radius:11px;gap:10px;padding:20px; }
+.desk-tile-icon { background:#e0eccb;color:#23503a; }
+.desk-team-tile { overflow:hidden; }.desk-team-tile .desk-tile-icon { width:65px;height:65px;background:none; }
+.desk-team-tile .desk-team-mark { width:65px;height:65px;background:none; }
+.desk-tile-eagles { border-top:4px solid #00665e; }.desk-tile-redsox { border-top:4px solid #a32439;background:linear-gradient(145deg,#fff,#f2e4e1); }
+.desk-team-tile>b { font-family:'Barlow Condensed','Archivo',sans-serif;font-size:25px;text-transform:uppercase; }
+:root[data-palette] .desk-shell .section-title,:root[data-palette] .desk-shell .lad-sec { font-family:'Barlow Condensed','Archivo',sans-serif;font-size:20px;letter-spacing:.2px; }
+:root[data-palette] .desk-shell .game-card,:root[data-palette] .desk-shell .brd-card,:root[data-palette] .desk-shell .lad-card { box-shadow:0 2px 0 #cfdbc560;border-color:#d2ddc9; }
+:root[data-palette] .desk-shell .compact-matchup img,:root[data-palette] .desk-shell .slate-compact .team-logo { width:30px;height:30px;object-fit:contain; }
+:root[data-palette] .desk-shell .ctl-row { background:#e4ebdc;border:1px solid #d4dfca;border-radius:10px;padding:10px;margin-bottom:18px; }
+@media(min-width:1500px) {
+  .desk-home-grid { grid-template-columns:minmax(0,2fr) minmax(330px,1fr); }
+  #desk-agenda { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px; }
+  #desk-agenda>.desk-inline-note,#desk-agenda>.desk-empty,#desk-agenda>.desk-show-more { grid-column:1/-1; }
+}
+@media(max-width:1100px) and (min-width:761px) {
+  .desk-home-grid { grid-template-columns:1fr; }
+  .desk-side-column { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .desk-follow-card { grid-column:1/-1; }
+  #desk-follow-teams { display:grid;grid-template-columns:1fr 1fr;gap:14px; }
+  :root[data-palette] .desk-shell .desk-follow-card .desk-club-card { margin:0; }
+}
+@media(max-width:760px) {
+  :root[data-palette="champagne"] { --desk-sidebar:0px; }
+  :root[data-palette] .desk-shell .topbar { height:64px;padding:0 17px; }
+  .desk-wordmark { font-size:23px!important; }
+  .desk-brand-symbol { width:31px;height:31px;box-shadow:2px 2px 0 var(--club-dark); }
+  .desk-page-heading { min-height:181px;margin:14px 13px 20px;padding:20px 17px 39px;border-radius:13px;gap:0; }
+  .desk-page-heading h1 { font-size:43px;max-width:67%;line-height:.94;letter-spacing:-.5px; }
+  .desk-page-heading .desk-eyebrow { font-size:8px;letter-spacing:.13em;margin-bottom:11px; }
+  .desk-edition { display:none; }
+  .desk-page-heading #desk-page-desc { font-size:11px;max-width:62%;margin-top:10px;line-height:1.5; }
+  .desk-heading-art { right:14px;top:27px;width:105px;display:block;transform:rotate(-7deg); }
+  .desk-hero-crest { width:71px;height:71px;padding:8px!important;border-radius:15px; }
+  .desk-crest-redsox { position:absolute;right:-2px;top:50px;transform:rotate(14deg); }
+  .desk-heading-side { bottom:10px;right:13px;padding:0; }
+  .desk-page-heading .desk-refresh { min-height:27px;padding:4px 7px;font-size:0!important;border:0;background:#ffffff10; }
+  .desk-page-heading .desk-refresh svg { width:16px;height:16px; }
+  :root[data-palette] .desk-shell main { padding:0 13px calc(94px + env(safe-area-inset-bottom,0px));margin-left:0; }
+  .desk-intro-strip { margin-bottom:13px;padding-bottom:10px;font-size:10px; }
+  .desk-stats { gap:9px;margin-bottom:18px; }
+  .desk-stat { padding:12px;gap:4px 8px; }.desk-stat::after { left:12px;width:22px; }
+  .desk-stat>strong { font-size:31px; }.desk-stat>span { font-size:10px; }
+  .desk-card { padding:17px; }.desk-card h2 { font-size:26px; }
+  .desk-home-grid { grid-template-columns:minmax(0,1fr);gap:17px; }
+  .desk-main-column,.desk-side-column { display:contents; }
+  .desk-focus-row b { font-size:13px; }.desk-focus-row p { font-size:12px; }
+  .desk-matchup { gap:7px; }.desk-match-team { gap:7px; }
+  .desk-match-team .desk-team-mark { width:35px;height:35px;border-radius:8px; }
+  .desk-match-team b { font-size:23px; }.desk-match-team small { display:none; }
+  .desk-match-team>strong { font-size:21px; }
+  .desk-game .desk-save { min-width:31px;width:31px; }
+  .desk-game { gap:6px; }.desk-game-meta { font-size:10px; }
+  .desk-game-context { gap:10px;font-size:10px; }.desk-versus { padding:0;font-size:9px; }
+  .desk-filter-row { gap:3px; }.desk-filter-row button { padding:7px 10px; }
+  .desk-tile { padding:16px; }.desk-team-tile .desk-tile-icon,.desk-team-tile .desk-team-mark { width:55px;height:55px; }
+  :root[data-palette] .desk-shell #botbar { border-top:1px solid #c2d2b7;background:#fbfdf5;border-radius:15px 15px 0 0;box-shadow:0 -4px 16px #153d3010; }
+  .desk-mobile-dock button.active { background:#dff2b1;color:#264c2d; }
+  :root[data-palette] .desk-shell .desk-follow-card .desk-club-card { min-height:127px; }
+}
+@media(max-width:355px) {
+  .desk-page-heading h1 { font-size:36px;max-width:63%; }
+  .desk-heading-art { right:10px;top:39px;width:90px; }.desk-hero-crest { width:61px;height:61px; }
+  .desk-crest-redsox { top:44px; }.desk-match-team .desk-team-mark { width:28px;height:28px; }
+  .desk-match-team { gap:4px; }.desk-match-team b { font-size:21px; }.desk-filter-row button { padding:7px 8px;font-size:10px; }
+}

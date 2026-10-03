@@ -26,8 +26,25 @@
     refresh: '<path d="M20 8a9 9 0 1 0 0 8M20 3v5h-5"/>',
   };
   function icon(name) { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.explore}</svg>`; }
+  const CLUBS = {
+    eagles:{name:'Philadelphia Eagles',short:'Eagles',abbr:'PHI',sport:'nfl',logo:'https://a.espncdn.com/i/teamlogos/nfl/500/phi.png'},
+    redsox:{name:'Boston Red Sox',short:'Red Sox',abbr:'BOS',sport:'mlb',logo:'https://a.espncdn.com/i/teamlogos/mlb/500/bos.png'},
+  };
+  function teamMark(team,cls='') {
+    const logo = typeof team?.logo==='string' && /^https:\/\/[^\s]+$/i.test(team.logo) ? team.logo : '';
+    return `<span class="desk-team-mark ${cls}" aria-hidden="true"><span>${escape(team?.abbr || String(team?.name||'').slice(0,3))}</span>${logo?`<img src="${escape(logo)}" alt="" loading="lazy" decoding="async" data-team-logo />`:''}</span>`;
+  }
+  function paintClubs() {
+    const host=$d('desk-follow-teams');if(!host)return;
+    host.innerHTML=Object.entries(CLUBS).map(([path,team])=>{
+      const game=C.agenda(games,[],team.sport).find(x=>[x.g.home.name,x.g.away.name].includes(team.name));
+      const g=game?.g, opponent=g && (g.home.name===team.name?g.away:g.home);
+      const context=g ? `${g.state==='in'?'Live · ':g.state==='post'?'Final · ':''}${team.abbr} ${g.home.name===team.name?'vs':'at'} ${opponent.abbr||opponent.name}` : `${team.name} · ${LEAGUES[team.sport].label}`;
+      return `<button type="button" class="desk-club-card desk-club-${path}" data-desk-route="${path}">${teamMark(team)}<span><small>${path==='eagles'?'GO BIRDS':'FENWAY FAITHFUL'}</small><b>${team.short}</b><span>${escape(context)}</span><small>${g?escape(dateText(g.date)):'News, roster & season'}</small></span>${icon('arrow')}</button>`;
+    }).join('');
+  }
   const meta = {
-    home: ['Your daily brief', 'The signal. Without the noise.'],
+    home: ['Your game. Your edge.', 'Your daily brief. Every angle. All yours.'],
     predictions: ['Model board', 'Forecasts, prices and a record you can inspect.'],
     research: ['Research desk', 'Follow the evidence. Find what holds up.'],
     fantasy: ['Fantasy HQ', 'Your matchup, your needs, your next move.'],
@@ -136,6 +153,8 @@
     $d('desk-page-title').focus({preventScroll:true});
     document.querySelectorAll('[data-desk-refresh]').forEach(b => { b.hidden = ['explore','labs','about'].includes(name); b.setAttribute('aria-label', `Refresh ${m[0]}`); });
     document.body.dataset.deskPanel = name;
+    const art=$d('desk-heading-art');
+    if(art) art.innerHTML=(CLUBS[name]?[name]:['eagles','redsox']).map(path=>`<button type="button" class="desk-hero-crest desk-crest-${path}" data-desk-route="${path}" aria-label="Open ${CLUBS[path].name}">${teamMark(CLUBS[path])}</button>`).join('');
     if (!routing) {
       const hash = C.hashFor(currentRoute);
       if (location.hash !== hash) history[opts.replace ? 'replaceState' : 'pushState'](null,'',hash);
@@ -183,7 +202,7 @@
       // Keep the last known schedule for an unavailable league and disclose it.
       games = [...next,...games.filter(x=>errors.includes(x.sport.toUpperCase()))]; agendaErrors = errors; agendaLoaded = true; agendaAt = Date.now();
       setMode(errors.length < sports.length);
-      paintAgenda(); paintWatchlist(); paintBrief();
+      paintAgenda(); paintWatchlist(); paintBrief();paintClubs();
     })().finally(() => { agendaPending = null; });
     return agendaPending;
   }
@@ -201,7 +220,7 @@
       const row = document.createElement('div'); row.className = 'desk-game';
       const status = gameState(g), started = status !== 'scheduled';
       const tag = status === 'live' ? (g.statusText || 'Live') : status === 'final' ? 'Final' : dateText(g.date);
-      row.innerHTML = `<button type="button" class="desk-game-main" data-desk-game="${escape(sport+':'+g.id)}" aria-label="Open ${escape(g.away.name)} at ${escape(g.home.name)} game report"><span class="desk-game-meta"><span class="desk-sport">${escape(LEAGUES[sport].label)}</span><span class="${status==='live'?'desk-live':''}">${escape(tag)}</span></span><span class="desk-matchup"><span>${escape(g.away.abbr || g.away.name)} <span class="desk-versus">at</span> ${escape(g.home.abbr || g.home.name)}</span>${started ? `<b>${escape(g.away.score ?? '–')} <span class="desk-versus">–</span> ${escape(g.home.score ?? '–')}</b>` : ''}</span>${gameContext(sport,g)}</button>`;
+      row.innerHTML = `<button type="button" class="desk-game-main" data-desk-game="${escape(sport+':'+g.id)}" aria-label="Open ${escape(g.away.name)} at ${escape(g.home.name)} game report"><span class="desk-game-meta"><span class="desk-sport">${escape(LEAGUES[sport].label)}</span><span class="${status==='live'?'desk-live':''}">${escape(tag)}</span></span><span class="desk-matchup"><span class="desk-match-team">${teamMark(g.away)}<span><b>${escape(g.away.abbr || g.away.name)}</b><small>${escape(g.away.name)}</small></span>${started?`<strong>${escape(g.away.score??'–')}</strong>`:''}</span><span class="desk-versus">${started?'–':'at'}</span><span class="desk-match-team">${teamMark(g.home)}<span><b>${escape(g.home.abbr || g.home.name)}</b><small>${escape(g.home.name)}</small></span>${started?`<strong>${escape(g.home.score??'–')}</strong>`:''}</span></span>${gameContext(sport,g)}</button>`;
       addWatchControl(row,sport,g); host.appendChild(row);
     });
     if (list.length > agendaLimit) host.insertAdjacentHTML('beforeend',`<button class="desk-show-more" type="button" data-agenda-more>Show ${Math.min(12,list.length-agendaLimit)} more games <span>(${list.length} in this view)</span></button>`);
@@ -241,7 +260,7 @@
     paintWatchButtons();
   }
   async function renderHome() {
-    paintBrief(); paintAgenda();
+    paintBrief(); paintAgenda();paintClubs();
     if (!boardPending && Date.now()-boardAt > 60000) {
       boardPending = renderHomeBoard().then(() => { boardAt=Date.now(); }).catch(() => {
         $d('home-board').innerHTML='<div class="desk-empty">The model board could not refresh. Your saved results are still available.</div>';
@@ -260,6 +279,7 @@
       const current=games.find(x=>C.key(x.sport,x.g.id)===C.key(item.sport,item.id));
       const status=current ? gameState(current.g) : null;
       card.innerHTML=`<div class="desk-watch-head"><div><span class="desk-eyebrow">${escape(LEAGUES[item.sport].label)} · ${escape(dateText(item.date,true))}</span><h3>${escape(item.away)} <span>at</span> ${escape(item.home)}</h3>${status && status!=='scheduled' ? `<p>${escape(current.g.away.score??'–')} – ${escape(current.g.home.score??'–')} · ${escape(current.g.statusText || status)}</p>`:''}</div><button type="button" class="desk-remove" data-watch-remove="${escape(C.key(item.sport,item.id))}" aria-label="Remove ${escape(item.away+' at '+item.home)} from watchlist">Remove</button></div><label class="desk-note-label" for="note-${item.sport}-${item.id}">Your note <span data-note-status>Saved on this device</span></label><textarea id="note-${item.sport}-${item.id}" data-watch-note="${escape(C.key(item.sport,item.id))}" maxlength="800" rows="2" placeholder="What are you watching for?">${escape(item.note)}</textarea><button type="button" class="desk-link" data-desk-game="${escape(C.key(item.sport,item.id))}">Open game report ${icon('arrow')}</button>`;
+      if(current){const marks=document.createElement('div');marks.className='desk-watch-crests';marks.innerHTML=teamMark(current.g.away)+`<span>vs</span>`+teamMark(current.g.home);card.prepend(marks);}
       host.appendChild(card);
     });
   }
@@ -268,7 +288,7 @@
     const host=$d('desk-research-comparisons');
     if (!host.dataset.ready) { host.dataset.ready='1'; ['nfl','cfb'].forEach(s=>root.SportsHubFootballDevelopment?.mountSummary(host,s,'append')); }
   }
-  function tile(path,title,desc,i) { return `<button type="button" class="desk-tile" data-desk-route="${path}"><span class="desk-tile-icon">${icon(i)}</span><b>${title}</b><p>${desc}</p><span class="desk-tile-arrow">${icon('arrow')}</span></button>`; }
+  function tile(path,title,desc,i) { return `<button type="button" class="desk-tile${CLUBS[path]?' desk-team-tile desk-tile-'+path:''}" data-desk-route="${path}"><span class="desk-tile-icon">${CLUBS[path]?teamMark(CLUBS[path]):icon(i)}</span><b>${title}</b><p>${desc}</p><span class="desk-tile-arrow">${icon('arrow')}</span></button>`; }
   function renderExplore() {
     const host=$d('desk-explore-grid');
     const groups = [
@@ -323,6 +343,9 @@
   }
   function init() {
     document.querySelectorAll('[data-desk-icon]').forEach(n=>n.innerHTML=icon(n.dataset.deskIcon));
+    Object.entries(CLUBS).forEach(([path,club])=>{const node=document.querySelector(`#tab-${path} .ic`);if(node)node.innerHTML=teamMark(club);});
+    // Keep an abbreviation if a feed logo is missing or cannot load.
+    document.addEventListener('error',e=>{if(e.target.matches?.('img[data-team-logo]'))e.target.hidden=true;},true);
     renderExplore();paintBrief();paintWatchButtons();
     document.addEventListener('click',e=>{
       const route=e.target.closest('[data-desk-route]'); if(route){navigate(route.dataset.deskRoute);return;}
