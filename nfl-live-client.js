@@ -20,6 +20,11 @@
     })();games.set(key,entry);return entry.data;
   }
   async function predict(g){try{return root.SportsHubNFLLive.browser(await load(g),g);}catch(_){return null;}}
-  function reason(g){return games.get(`${g.id}:${g.date}`)?.evidence?.candidate?.reasons?.join('; ')||'Required football evidence unavailable';}
+  function reason(g){
+    const e=games.get(`${g.id}:${g.date}`)?.evidence;
+    const reasons=e?.candidate?.reasons?.join('; ')||'Required football evidence unavailable';
+    const restricted=Object.values(e?.qb||{}).some(q=>/out|doubtful|questionable|reserve|suspend|pup/i.test(q.status||''));
+    return reasons+(restricted?' · Waiting for a starting-QB update. The depth chart has not resolved who will play; backup projections remain conditional.':'');
+  }
   root.SportsHubNFLLiveClient=Object.freeze({load,predict,reason});
 })(globalThis);

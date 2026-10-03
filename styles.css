@@ -3485,3 +3485,9 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .nf-observation small { display: block; font-size: .75rem; }
 .nf-observation a { display: inline-block; padding: .4rem 0; }
 @media(max-width:480px) { .nf-factors { grid-template-columns: 1fr; } .nf-scouting input,.nf-scouting select,.nf-scouting textarea { font-size: 16px; } }
+
+/* Previous NFL model is an optional reference beneath the live forecast. */
+.fc-game:empty, .fc-summary:empty { display:none; }
+.fc-previous > summary { color:var(--muted, #626258); font-size:.73rem; font-weight:400; min-height:32px; display:list-item; align-content:center; }
+.fc-previous > summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.fc-previous[open] > summary { margin-bottom:.5rem; }

@@ -614,7 +614,16 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v277** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v278** (backend **b17-fantasy-league-rules**).
+
+### v278 — Live formula first, previous model tucked away
+
+NFL per-game comparisons and comparison records now start collapsed behind a
+muted Previous model disclosure. Missing comparison snapshots render no empty
+comparison panel. Live forecasts remain primary; CFB presentation is unchanged.
+Restricted-QB messages explain that the depth chart has not resolved who will
+play and backup forecasts are conditional. No eligibility gates or coefficients
+changed, and saved comparison observations remain intact.
 
 ### v277 — Stop mobile page-edge stretching
 

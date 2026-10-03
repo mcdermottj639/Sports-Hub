@@ -110,7 +110,7 @@
       spreadStatus:agreement(direction(b.margin,spread?.line==null?null:-spread.line),direction(cm,spread?.line==null?null:-spread.line)),
       totalStatus:sport==='cfb'?'Baseline only':agreement(direction(b.total,total?.line),direction(ct,total?.line))};
   }
-  function gameHTML(rows,id,sport='nfl') {
+  function comparisonHTML(rows,id,sport='nfl') {
     const c=gameComparison(rows,id,sport);
     const heading=`<div class="fc-title"><strong>Model comparison</strong><small>${sport==='nfl'?'Previous vs live':'Experimental'}</small></div>`;
     if(!c)return heading+'<details class="fc-empty"><summary>Comparison unavailable <span aria-hidden="true">⌄</span></summary><p>No saved challenger comparison for this game yet.</p></details>';
@@ -133,11 +133,16 @@
       marketRow('Spread',spread(b.margin),spread(cm),c.spreadStatus,margin(b.margin),cm==null?null:margin(cm))+
       (sport==='cfb'?'':marketRow('Total',total(b.total),total(ct),c.totalStatus,label(b.total),ct==null?null:label(ct)));
   }
+  function gameHTML(rows,id,sport='nfl') {
+    if(sport!=='nfl')return comparisonHTML(rows,id,sport);
+    if(!gameComparison(rows,id,sport))return '';
+    return `<details class="fc-previous"><summary>Previous model</summary><p class="fc-snapshot">Saved comparison snapshot; the forecast above uses our live formula.</p>${comparisonHTML(rows,id,sport)}</details>`;
+  }
   async function mountGame(container,id,sport='nfl') {
     if(!container||!id)return;
     const host=document.createElement('section');host.className='fc-game';host.setAttribute('aria-label',sport==='nfl'?'Previous model versus live football engine':'Current model versus experimental challenger');
-    host.innerHTML=`<strong>${previous(sport)} vs ${contender(sport)}</strong><p>Loading saved comparison…</p>`;container.appendChild(host);
-    try{const rows=await load(sport);if(host.isConnected)host.innerHTML=gameHTML(rows,id,sport);}catch(_){if(host.isConnected)host.innerHTML=`<strong>${previous(sport)} vs ${contender(sport)}</strong><p>Saved comparison unavailable. Reopen this view to retry.</p>`;}
+    host.innerHTML=sport==='nfl'?'':`<strong>${previous(sport)} vs ${contender(sport)}</strong><p>Loading saved comparison…</p>`;container.appendChild(host);
+    try{const rows=await load(sport);if(host.isConnected)host.innerHTML=gameHTML(rows,id,sport);}catch(_){if(host.isConnected)host.innerHTML=sport==='nfl'?'':`<strong>${previous(sport)} vs ${contender(sport)}</strong><p>Saved comparison unavailable. Reopen this view to retry.</p>`;}
   }
   function summaryHTML(rows,phase='latest',sport='nfl',archive=false) {
     const league=rows.filter(r=>!r.sport||r.sport===sport),near=new Set(league.filter(r=>r.market==='moneyline'&&r.snapshot.research.phase==='near').map(r=>r.event_id));
@@ -146,11 +151,15 @@
     const settled=comparisonMetrics(group.filter(r=>r.market==='spread')).error.n;
     return (sport==='nfl'&&!archive?(root.SportsHubNFLFootballUI?.validation(rows)||''):'')+`<div class="fc-summary-heading"><strong>${sport==='cfb'?'CFB · Current vs FPI':(archive?'NFL · Archived v3 comparison':'NFL · Previous vs live engine')}</strong><small>Comparison</small></div><dl class="fc-counts" aria-label="${games.length} saved games · ${eligible.length} challenger available · ${games.length-eligible.length} withheld"><div><dt>Saved</dt><dd>${games.length}</dd></div><div><dt>Available</dt><dd>${eligible.length}</dd></div><div><dt>Withheld</dt><dd>${games.length-eligible.length}</dd></div></dl><details class="fc-results-details"><summary><span>${settled?`${settled} settled pairs`:'Collecting results'}<small>${settled?'Compare model performance':'Awaiting settled games'}</small></span><span class="fc-results-link">View results <span class="fc-chevron" aria-hidden="true">⌄</span></span></summary><div class="fc-windows" role="group" aria-label="Saved comparison window"><button type="button" data-fc-window="latest" aria-pressed="${phase==='latest'}">Latest</button><button type="button" data-fc-window="early" aria-pressed="${phase==='early'}">Early</button><button type="button" data-fc-window="near" aria-pressed="${phase==='near'}">Near kickoff</button></div><p>${phase==='latest'?'Latest saved window per game; near kickoff when available, otherwise early.':phase==='near'?'Near-kickoff snapshots only.':'Early snapshots only.'}</p>${metric('spread')}${sport==='cfb'?'<p>Totals: baseline only — no independent CFB totals challenger.</p>':metric('total')}<p>Same eligible games, same saved lines. Missing candidates excluded. No settled pairs means collecting—not 0% performance. Each game is counted once in the selected view; small samples do not prove improvement.</p>${(sport==='cfb'?['spread']:['spread','total']).map(market=>{const g=group.filter(r=>r.market===market&&r.snapshot.research.candidateAvailable),m=comparisonMetrics(g),roi=m.roi;return `<p><b>${market==='spread'?'Spread':'Total'}</b> · ${previous(sport)} ${score(g.map(r=>resultFor(r,r.snapshot.research.baseline)))} · ${archive?'Archived challenger':contender(sport)} ${score(g.map(r=>r.result))}<br>Paper ROI: ${previous(sport).toLowerCase()} ${roi.n?(100*roi.baseline/roi.n).toFixed(1)+'%':'collecting'} · ${archive?'archived challenger':contender(sport).toLowerCase()} ${roi.n?(100*roi.study/roi.n).toFixed(1)+'%':'collecting'} (${roi.n} common-priced pairs).</p>`;}).join('')}<p>One unit risked per forecast with both exact selection prices saved. No estimated or retrofilled odds. ${sport==='nfl'?'The football engine is live by owner choice; prospective accuracy is still being measured against the previous model. This comparison includes observations saved before promotion.':'Challenger win probability is not calibrated on prospective results; the current model remains official.'}</p></details>`;
   }
+  function summaryPanel(rows,phase,sport) {
+    const html=summaryHTML(rows,phase,sport);
+    return sport==='nfl'?`<details class="fc-previous"><summary>Previous model · comparison record</summary>${html}</details>`:html;
+  }
   async function mountSummary(container,sport='nfl',placement='prepend') {
     if(!container)return;
     container.querySelectorAll(`:scope > .fc-summary[data-sport="${sport}"]`).forEach(x=>x.remove());
-    const host=document.createElement('section');host.className='fc-summary';host.dataset.sport=sport;host.innerHTML=`<strong>${sport==='cfb'?'CFB · Current vs FPI Challenger':'NFL · Previous vs live engine'}</strong><p>Loading saved results…</p>`;container[placement==='append'?'appendChild':'prepend'](host);
-    try{const rows=await load(sport);if(!host.isConnected)return;host.innerHTML=summaryHTML(rows,'latest',sport);host.addEventListener('click',event=>{const button=event.target.closest('[data-fc-window]');if(button){const phase=button.dataset.fcWindow;host.innerHTML=summaryHTML(rows,phase,sport);host.querySelector('.fc-results-details').open=true;host.querySelector(`[data-fc-window="${phase}"]`).focus();}});}catch(_){if(host.isConnected)host.innerHTML=`<strong>${sport==='cfb'?'CFB':'NFL'} · ${previous(sport)} vs ${contender(sport)}</strong><p>Saved results unavailable. Reopen this view to retry.</p>`;}
+    const host=document.createElement('section');host.className='fc-summary';host.dataset.sport=sport;host.innerHTML=sport==='nfl'?'':`<strong>CFB · Current vs FPI Challenger</strong><p>Loading saved results…</p>`;container[placement==='append'?'appendChild':'prepend'](host);
+    try{const rows=await load(sport);if(!host.isConnected)return;host.innerHTML=summaryPanel(rows,'latest',sport);host.addEventListener('click',event=>{const button=event.target.closest('[data-fc-window]');if(button){const phase=button.dataset.fcWindow;host.innerHTML=summaryPanel(rows,phase,sport);const previousPanel=host.querySelector('.fc-previous');if(previousPanel)previousPanel.open=true;host.querySelector('.fc-results-details').open=true;host.querySelector(`[data-fc-window="${phase}"]`).focus();}});}catch(_){if(host.isConnected)host.innerHTML=sport==='nfl'?'':`<strong>CFB · Current vs Challenger</strong><p>Saved results unavailable. Reopen this view to retry.</p>`;}
   }
   function render(host, rows, sport) {
     const reviews=read(), latest=new Map();
