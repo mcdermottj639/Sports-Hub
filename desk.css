@@ -8,7 +8,9 @@
   --grad:linear-gradient(135deg,#176f62,#124f48); --glow:0 5px 18px #146d6014;
   --desk-line:#e0e8e6; --desk-radius:16px; --desk-sidebar:222px;
 }
-html { scroll-padding-top:90px; }
+/* Stop elastic page-edge gaps without replacing the native document scroll. */
+html { scroll-padding-top:90px; overscroll-behavior-y:none; }
+body.desk-shell { overscroll-behavior-y:none; }
 :root[data-palette] body.desk-shell { background:var(--gr); color:var(--ink); font-family:'Archivo',system-ui,sans-serif; margin:0; min-height:100vh; overflow-x:clip; }
 .desk-shell *, .desk-shell *::before, .desk-shell *::after { box-sizing:border-box; }
 .desk-shell button, .desk-shell input, .desk-shell textarea, .desk-shell select { font:inherit; }

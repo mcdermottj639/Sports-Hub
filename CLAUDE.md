@@ -614,7 +614,15 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v276** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v277** (backend **b17-fantasy-league-rules**).
+
+### v277 — Stop mobile page-edge stretching
+
+`desk.css` disables vertical document overscroll. `mobile-chrome.js` adds a
+single-touch boundary guard for iOS webviews: outward drags at the document
+edges cannot expose blank space. Native page scrolling, nested scroll panels,
+horizontal swipes and pinch zoom remain available. The existing visual-viewport
+bottom-control positioning and keyboard handling are retained.
 
 ### v276 — Promote the football engine to live NFL
 
