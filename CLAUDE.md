@@ -96,6 +96,11 @@ remains available in News & scores and the dedicated team pages.
 
 The v273 clubhouse finish uses Eagles green, cream and lime, condensed display
 type, full-width layouts, and ESPN crests throughout matchups and team links.
+Today puts the Eagles/Red Sox links inside the clubhouse banner, followed
+immediately by the game radar before stats and decision cards.
+Model forecasts put the game ladder immediately after a compact play count;
+guidance, challenger summaries and tracking notes share a closed-by-default
+Board details disclosure. Game-specific cautions and past-slate notices stay visible.
 
 Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
@@ -607,7 +612,21 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v273** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v274** (backend **b17-fantasy-league-rules**).
+
+### v274 — Teams first, games next
+
+- Moves the existing Eagles and Red Sox cards into the Today page’s “Your
+  clubhouse” banner, with the game radar directly below it. Stats, focus,
+  results and research follow; all existing behavior and data scopes remain.
+- The team cards are no longer repeated at the bottom. Other pages retain
+  their existing team links and navigation.
+- Model forecasts consolidate the guide, saved-research links, challenger
+  summaries, development reviews and tracking/record notes in one native
+  Board details disclosure, closed on entry. Play counts and mobile view tabs
+  are compact; the mobile model banner is shorter. Game-specific evidence,
+  experimental labels, missing-line warnings and past-date notices remain
+  with their games. No model, logging, grading or Results behavior changes.
 
 ### v273 — Clubhouse visual identity
 

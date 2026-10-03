@@ -452,3 +452,45 @@ html { scroll-padding-top:90px; }
   .desk-crest-redsox { top:44px; }.desk-match-team .desk-team-mark { width:28px;height:28px; }
   .desk-match-team { gap:4px; }.desk-match-team b { font-size:21px; }.desk-filter-row button { padding:7px 8px;font-size:10px; }
 }
+
+/* v274 — teams and games first; optional model context stays one tap away. */
+.desk-board-details { margin:10px 0 14px;border:1px solid var(--desk-line);border-radius:9px;background:#f7faf1; }
+.desk-board-details>summary { padding:12px 14px;color:var(--ac);font-size:12px;font-weight:700;cursor:pointer; }
+.desk-board-details>summary>span { font-size:10px;font-weight:400;color:var(--gy);margin-left:8px; }
+#desk-model-notes { padding:0 14px 14px; }
+#desk-model-notes .desk-model-guide { margin-top:8px; }
+:root[data-palette] .desk-shell #ai-picks>.ai-plays { display:flex;flex-direction:row;align-items:center;flex-wrap:wrap;gap:5px 8px;padding:10px 12px;margin:0 0 12px; }
+:root[data-palette] .desk-shell #ai-picks>.ai-plays i { width:100%;margin-left:0;font-size:10px; }
+@media(max-width:760px) {
+  :root[data-palette] .desk-shell #ai-sub { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px; }
+  :root[data-palette] .desk-shell #ai-sub button { padding:8px 3px;min-height:38px;font-size:10px; }
+  body[data-desk-panel="predictions"] .desk-page-heading { min-height:125px;padding-top:17px;padding-bottom:17px; }
+  body[data-desk-panel="predictions"] .desk-page-heading h1 { font-size:36px; }
+  body[data-desk-panel="predictions"] .desk-heading-art { top:20px;width:85px; }
+  body[data-desk-panel="predictions"] .desk-hero-crest { width:51px;height:51px;padding:5px!important; }
+  body[data-desk-panel="predictions"] .desk-crest-redsox { top:35px; }
+}
+.desk-clubhouse-teams { display:none; }
+.desk-agenda-card { margin-bottom:20px; }
+body[data-desk-panel="home"] .desk-page-heading { display:block; }
+body[data-desk-panel="home"] .desk-heading-art { display:none; }
+body[data-desk-panel="home"] .desk-heading-side { top:18px;bottom:auto; }
+body[data-desk-panel="home"] .desk-clubhouse-teams { display:block;padding:0!important;margin-top:20px;background:none;border:0; }
+body[data-desk-panel="home"] #desk-follow-teams { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px; }
+:root[data-palette] .desk-shell .desk-clubhouse-teams .desk-club-card { margin:0; }
+@media(min-width:1101px) {
+  .desk-agenda-card #desk-agenda { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px; }
+  .desk-agenda-card #desk-agenda>.desk-inline-note,.desk-agenda-card #desk-agenda>.desk-empty,.desk-agenda-card #desk-agenda>.desk-show-more { grid-column:1/-1; }
+}
+@media(max-width:760px) {
+  body[data-desk-panel="home"] .desk-page-heading { padding-bottom:17px; }
+  body[data-desk-panel="home"] .desk-page-heading h1 { max-width:90%;font-size:36px; }
+  body[data-desk-panel="home"] .desk-page-heading #desk-page-desc { max-width:100%; }
+  body[data-desk-panel="home"] .desk-heading-side { top:10px; }
+  body[data-desk-panel="home"] #desk-follow-teams { gap:9px; }
+  :root[data-palette] .desk-shell .desk-clubhouse-teams .desk-club-card { display:block;min-height:0;padding:12px!important; }
+  .desk-clubhouse-teams .desk-club-card .desk-team-mark { width:39px;height:39px;margin-bottom:8px; }
+  .desk-clubhouse-teams .desk-club-card b { font-size:25px; }
+  .desk-clubhouse-teams .desk-club-card>span:nth-child(2)>small:first-child { display:none; }
+  .desk-clubhouse-teams .desk-club-card>svg { display:none; }
+}

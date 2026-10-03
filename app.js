@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v273';
+const APP_VERSION = 'v274';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -5536,9 +5536,9 @@ async function paintAiView() {
   const sport = state.aiSport, sub = state.aiSub || 'board';
   const all = sport === 'all';
   const guide = $('#ai-guide');
-  if (guide) guide.innerHTML = aiGuideHTML(sub, sport);
+  if (guide) guide.innerHTML = sub === 'board' ? `<details class="desk-board-details"><summary>Board details <span>Guide · research · tracking</span></summary><div id="desk-model-notes"><p class="ai-why">${esc(AI_BLURB.board)}</p>${aiGuideHTML(sub, sport)}</div></details>` : '';
   const blurb = $('#ai-blurb');
-  if (blurb) blurb.textContent = AI_BLURB[sub] || '';
+  if (blurb) { blurb.textContent = AI_BLURB[sub] || ''; blurb.hidden = sub === 'board'; }
   const head = $('#ai-head');
   if (head) {
     const scope = all ? '🌐 Everything' : `${LEAGUES[sport]?.emoji || ''} ${LEAGUES[sport]?.label || sport}`;
@@ -5551,7 +5551,7 @@ async function paintAiView() {
     head.textContent = `🤖 ${scope}${when}`;
   }
   if (sub === 'board') {
-    if(signalsEnabled() && (all || ['nfl','cfb'].includes(sport))) $('#ai-guide')?.insertAdjacentHTML('beforeend',researchLinksHTML(sport));
+    if(signalsEnabled() && (all || ['nfl','cfb'].includes(sport))) $('#desk-model-notes')?.insertAdjacentHTML('beforeend',researchLinksHTML(sport));
     renderAiTally(all ? null : sport, '');
     // Do not leave the previous league's cards under the newly selected heading.
     container.innerHTML = `<div class="empty" role="status">Loading ${all ? 'all-sport' : esc(LEAGUES[sport]?.label || sport)} forecasts…</div>`;
@@ -5632,7 +5632,8 @@ async function paintOverviewBoard(tok) {
   const passes = live.filter((r) => r.p && r.info?.favName && !r.tier).length;
 
   container.innerHTML = '';
-  for (const league of ['cfb','nfl']) globalThis.SportsHubFootballDevelopment?.mountSummary(container, league);
+  const notes = $('#desk-model-notes') || container;
+  for (const league of ['cfb','nfl']) globalThis.SportsHubFootballDevelopment?.mountSummary(notes, league);
   // 🗓️ v214 — the Overview board itself stays DAILY: it is the cross-sport
   // read for today, and pricing a whole football week here would flood it and
   // cost 40 model runs on a view that records nothing. But a league with no
@@ -5652,7 +5653,7 @@ async function paintOverviewBoard(tok) {
   if (!played.length) {
     container.appendChild(el('div', 'ai-note', `📭 Nothing on today. ${listed.filter((c) => WEEK_SPORTS.has(c.sport) && slateN(c.sport)).map((c) => `${lgLabel(c.sport)} has ${slateN(c.sport)} game${slateN(c.sport) === 1 ? '' : 's'} on this week's slate`).join(' · ') || 'Open a league below for its board.'} — tap it below.`));
   }
-  container.appendChild(el('div', 'brd-note', boardNote()));
+  notes.appendChild(el('div', 'brd-note', boardNote()));
   // 🚨 ONE card per game, exactly as Home's board does it (v187). Every card
   // names all three markets, so a game with a moneyline tier AND a spread play
   // would otherwise be drawn twice — the two-near-identical-lists problem this
@@ -5793,8 +5794,9 @@ async function paintSportBoard(tok) {
   }
 
   container.innerHTML = '';
-  if (ATS_SPORTS.has(sport)) globalThis.SportsHubFootballDevelopment?.mount(container, sport);
-  if (['nfl','cfb'].includes(sport)) globalThis.SportsHubFootballDevelopment?.mountSummary(container, sport);
+  const notes = $('#desk-model-notes') || container;
+  if (ATS_SPORTS.has(sport)) globalThis.SportsHubFootballDevelopment?.mount(notes, sport);
+  if (['nfl','cfb'].includes(sport)) globalThis.SportsHubFootballDevelopment?.mountSummary(notes, sport);
   let right = 0, graded = 0;
   const upcoming = rows.filter((r) => AI_MATH.pregame(r.g));
 
@@ -5840,7 +5842,7 @@ async function paintSportBoard(tok) {
   if (upcoming.length) {
     const pending = getPending(), gradedNow = getTally();
     const logged = upcoming.filter((r) => pending[r.g.id] || gradedNow[r.g.id]).length;
-    container.appendChild(el('div', 'ai-note',
+    notes.appendChild(el('div', 'ai-note',
       `📥 Pregame winner snapshots saved for ${logged} of ${upcoming.length} upcoming game${upcoming.length === 1 ? '' : 's'} on this browser. Spread and total snapshots save only when their posted line produces a qualifying signal.`));
   }
   // Say which day this is and why, so a slate of finished games can't be
@@ -5855,10 +5857,10 @@ async function paintSportBoard(tok) {
   const sharpRows = rows.filter((r) => r.p?.sharp);
   if (sharpRows.length) {
     const monitor = sport === 'nfl' ? 'tracked (monitor only; not applied) on' : 'folded into';
-    container.appendChild(el('div', 'ai-note',
+    notes.appendChild(el('div', 'ai-note',
       `💰 Sharp money ${monitor} ${sharpRows.length} of ${rows.length} pick${rows.length === 1 ? '' : 's'} — DraftKings dollars vs tickets (via VSiN).`));
   } else if (BETTING_SPORTS.has(sport) && !report) {
-    container.appendChild(el('div', 'ai-note',
+    notes.appendChild(el('div', 'ai-note',
       '💰 Sharp-money splits unavailable right now (betting backend asleep or down) — these picks are model-only.'));
   }
   renderTally(graded ? `${weekMode ? 'this week' : isToday ? 'today' : aiDateLabel(dateStr)} ${right}-${graded - right}` : '');
@@ -5881,7 +5883,7 @@ async function paintSportBoard(tok) {
     });
   };
   if (alerts.length || best.length || edges.length) {
-    container.appendChild(el('div', 'brd-note', boardNote()));
+    notes.appendChild(el('div', 'brd-note', boardNote()));
     // 🚨 Red alerts lead the ladder — the owner's rule. They are a strict
     // subset of what used to be 'best', so nothing is lost from that section.
     section('alert', alerts);

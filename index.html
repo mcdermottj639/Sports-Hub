@@ -13,9 +13,9 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=273" />
-  <link rel="stylesheet" href="betting-signals.css?v=273" />
-  <link rel="stylesheet" href="desk.css?v=273" />
+  <link rel="stylesheet" href="styles.css?v=274" />
+  <link rel="stylesheet" href="betting-signals.css?v=274" />
+  <link rel="stylesheet" href="desk.css?v=274" />
 </head>
 <body class="desk-shell">
   <a class="desk-skip" href="#main-content">Skip to content</a>
@@ -69,23 +69,23 @@
   </nav>
 
   <div class="desk-page-heading">
-    <div><p class="desk-eyebrow">JACK’S CLUBHOUSE <span class="desk-edition">PERSONAL EDITION</span></p><h1 id="desk-page-title">Your game. Your edge.</h1><p id="desk-page-desc">Your daily brief. Every angle. All yours.</p></div>
+    <div><p class="desk-eyebrow">JACK’S CLUBHOUSE <span class="desk-edition">PERSONAL EDITION</span></p><h1 id="desk-page-title">Your clubhouse</h1><p id="desk-page-desc">Your daily brief. Every angle. All yours.</p></div>
+    <section class="desk-follow-card desk-clubhouse-teams" aria-label="Your teams"><div id="desk-follow-teams"></div></section>
     <div id="desk-heading-art" class="desk-heading-art" aria-label="Your teams"></div><div class="desk-heading-side"><span id="desk-date"></span><button type="button" class="desk-refresh" data-desk-refresh><span data-desk-icon="refresh"></span>Refresh</button></div>
   </div>
   <main id="main-content" tabindex="-1">
     <section id="home" class="tab-panel active" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
+      <section class="desk-card desk-agenda-card"><div class="desk-card-heading"><div><p class="desk-eyebrow">ON YOUR RADAR</p><h2>The games ahead</h2></div><button type="button" class="desk-link" data-desk-route="watchlist">Watchlist <span data-desk-icon="arrow"></span></button></div><p class="desk-caption desk-agenda-scope">NFL &amp; CFB this week · MLB &amp; NBA today · times are local</p><div class="desk-filter-row" id="desk-agenda-filters" role="group" aria-label="Filter game radar"></div><div id="desk-agenda"><div class="desk-empty" role="status">Loading your game radar…</div></div></section>
       <div class="desk-intro-strip"><span class="desk-status" id="desk-capture">Checking saved history</span><span>Models. Decisions. Your game.</span></div>
       <div class="desk-stats" id="desk-stats"></div>
       <div class="desk-home-grid">
         <div class="desk-main-column">
           <section class="desk-card desk-focus-card"><div class="desk-card-heading"><div><p class="desk-eyebrow">THE SHORTLIST</p><h2>Where to focus</h2></div><span class="desk-round-mark">↗</span></div><div id="desk-focus"></div></section>
-          <section class="desk-card"><div class="desk-card-heading"><div><p class="desk-eyebrow">ON YOUR RADAR</p><h2>The games ahead</h2></div><button type="button" class="desk-link" data-desk-route="watchlist">Watchlist <span data-desk-icon="arrow"></span></button></div><p class="desk-caption desk-agenda-scope">NFL &amp; CFB this week · MLB &amp; NBA today · times are local</p><div class="desk-filter-row" id="desk-agenda-filters" role="group" aria-label="Filter game radar"></div><div id="desk-agenda"><div class="desk-empty" role="status">Loading your game radar…</div></div></section>
           <details class="desk-card desk-board-fold" id="desk-board-fold"><summary><span><span class="desk-eyebrow">TODAY’S MODEL WATCHLIST</span><b>Where the model sees a gap</b></span><span>Explore <span aria-hidden="true">⌄</span></span></summary><p class="desk-caption">One card per game. These are experimental signals, with the same frozen forecasts as the full board.</p><div id="home-board"></div><button type="button" class="desk-link" data-desk-route="models/all/picks">Open the full model board <span data-desk-icon="arrow"></span></button></details>
         </div>
         <aside class="desk-side-column">
           <section class="desk-card desk-results-card"><div class="desk-card-heading"><div><p class="desk-eyebrow">KEEPING SCORE</p><h2>The model’s record</h2></div><span class="desk-mini-badge">OFFICIAL</span></div><div id="desk-results"></div><button type="button" class="desk-link" data-desk-route="models/all/results">All results &amp; evidence <span data-desk-icon="arrow"></span></button></section>
           <section class="desk-research-promo"><p class="desk-eyebrow">THE RESEARCH ROOM</p><h2>Question the model.</h2><p>Does the challenger improve the forecast? Your saved research puts both on the same field.</p><button type="button" data-desk-route="research">Open research desk <span data-desk-icon="arrow"></span></button><div class="desk-promo-lines" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></section>
-          <section class="desk-card desk-follow-card"><p class="desk-eyebrow">YOUR COLORS. YOUR TEAMS.</p><div id="desk-follow-teams"></div></section>
         </aside>
       </div>
       <p class="desk-data-note" id="desk-data-note"></p>
@@ -322,20 +322,20 @@
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
   <script src="supabase-config.js?v=239" defer></script>
-  <script src="cloud-ai.js?v=273" defer></script>
-  <script src="ai-model-utils.js?v=273" defer></script>
-  <script src="nfl-model.js?v=273" defer></script>
-  <script src="supabase/functions/_shared/betting-signals-core.js?v=273" defer></script>
-  <script src="cloud-signals.js?v=273" defer></script>
-  <script src="betting-signals-ui.js?v=273" defer></script>
-  <script src="supabase/functions/_shared/market-probability-config.js?v=273" defer></script>
-  <script src="supabase/functions/_shared/market-probability.js?v=273" defer></script>
-  <script src="mobile-chrome.js?v=273" defer></script>
-  <script src="supabase/functions/_shared/football-research-core.js?v=273" defer></script>
-  <script src="football-development.js?v=273" defer></script>
-  <script src="forecast-lock.js?v=273" defer></script>
-  <script src="desk-core.js?v=273" defer></script>
-  <script src="desk.js?v=273" defer></script>
-  <script src="app.js?v=273" defer></script>
+  <script src="cloud-ai.js?v=274" defer></script>
+  <script src="ai-model-utils.js?v=274" defer></script>
+  <script src="nfl-model.js?v=274" defer></script>
+  <script src="supabase/functions/_shared/betting-signals-core.js?v=274" defer></script>
+  <script src="cloud-signals.js?v=274" defer></script>
+  <script src="betting-signals-ui.js?v=274" defer></script>
+  <script src="supabase/functions/_shared/market-probability-config.js?v=274" defer></script>
+  <script src="supabase/functions/_shared/market-probability.js?v=274" defer></script>
+  <script src="mobile-chrome.js?v=274" defer></script>
+  <script src="supabase/functions/_shared/football-research-core.js?v=274" defer></script>
+  <script src="football-development.js?v=274" defer></script>
+  <script src="forecast-lock.js?v=274" defer></script>
+  <script src="desk-core.js?v=274" defer></script>
+  <script src="desk.js?v=274" defer></script>
+  <script src="app.js?v=274" defer></script>
 </body>
 </html>

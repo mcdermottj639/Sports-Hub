@@ -44,7 +44,7 @@
     }).join('');
   }
   const meta = {
-    home: ['Your game. Your edge.', 'Your daily brief. Every angle. All yours.'],
+    home: ['Your clubhouse', 'Your daily brief. Every angle. All yours.'],
     predictions: ['Model board', 'Forecasts, prices and a record you can inspect.'],
     research: ['Research desk', 'Follow the evidence. Find what holds up.'],
     fantasy: ['Fantasy HQ', 'Your matchup, your needs, your next move.'],
