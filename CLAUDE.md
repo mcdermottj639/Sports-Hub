@@ -80,12 +80,19 @@ Guidance for Claude (and humans) working on this repo. Read this first.
 
 ## What this is
 
-**Sports-Hub** is a personal, multi-sport web app for the owner (a Philadelphia
+**Sports-Hub** is a personal sports decision workspace for the owner (a Philadelphia
 Eagles superfan; also follows Red Sox, NFL, **college football (Top 25)**, MLB,
 NBA, and golf). The UI is a **static browser app** — HTML/CSS/vanilla JS, no
 build step or framework — shipped from this repo via **GitHub Pages**. Two
 scoped services sit behind it: Render for private fantasy-league sync and
 Supabase for durable, scheduled AI-pick capture and grading.
+
+The v272 experience complements score/news apps with a daily brief, model
+forecasts and results, research, league-aware fantasy decisions, and a personal
+watchlist. Desktop uses a sidebar; mobile uses Today / Models / Research /
+Fantasy / More. More groups every existing destination by purpose, and global
+search finds features, current games and saved notes. News/team/golf content
+remains available in News & scores and the dedicated team pages.
 
 Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
@@ -206,15 +213,15 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 - **No frontend build step and no secret in browser code.** GitHub Pages remains
   static. A Supabase publishable key is intentionally public and read-only under
   RLS; service-role keys, Vault values and fantasy cookies never enter git.
-- **Deploys from the `main` branch** via GitHub Pages (root). The owner has
-  explicitly authorized pushing to `main`. Also keep the feature branch
-  `claude/sports-app-ideas-130q0f` in sync (fast-forward it to main and push both).
+- **Deploys from the `main` branch** via GitHub Pages (root). Publish only to
+  the destination authorized in the current request; do not update an old
+  companion feature branch as part of a merge-to-main request.
 - **⚠️ Standing rule — SHIP TO LIVE BY DEFAULT.** When a change is complete and
   syntax-checks pass, push it straight to `main` so it goes live on the app — do
   NOT stop at a feature branch and do NOT ask first. The owner wants to see every
   finished change on their phone without having to request a deploy. If you did
   your work on a session/feature branch, fast-forward `main` to it and push `main`
-  (and sync `claude/sports-app-ideas-130q0f`) as the final step of the task. Only
+  as the final step of the task. Only
   hold back from `main` if the owner explicitly says not to ship, or the change is
   knowingly broken/incomplete.
 - **Data source = ESPN's free public feeds only.** ESPN endpoints send permissive
@@ -235,11 +242,20 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 - `supabase/functions/sports-hub-ai/signals.ts`, `sports-hub-odds/index.ts` — evidence hook and independent lightweight collector.
 - `supabase/schedule-betting-signals.sql` — Vault-backed five-minute cron installation; actual source polling adapts to kickoff.
 
-- `index.html` — single page, all tabs/sections. Asset URLs carry `?v=N` cache-busting.
-  Holds `#rail-wrap` (v187 — the rail plus the league-filter column, above the
-  masthead), the ten-tab grid (5×2 on a phone — v218's 🎯 Pick'em filled the
-  orphan cell the nine left), `#home-board` (🎲 The Board, between My Teams
-  and ⛳ Golf) and `#botbar` (the persistent model-read bar).
+- `index.html` — single page, all destinations. Asset URLs carry `?v=N`
+  cache-busting. `#tabs` is the desktop sidebar; `#botbar` is the five-button
+  mobile navigation. `#rail-wrap` holds the optional score rail (closed by
+  default, existing device preference respected). `#home-board` remains under
+  a remembered disclosure on Today. The former home content lives in `#pulse`.
+- `desk-core.js` — dependency-free route, bookmark, saved-history summary,
+  game-radar and search utilities, tested by `tests/desk-core.test.js`.
+- `desk.js` — app navigation, brief, research landing, search dialog, grouped
+  More directory, game bookmarks and local notes. Loads before app.js; init
+  runs after app declarations. Uses existing collectors, math and adapters.
+- `desk.css` — final visual layer after styles.css and betting-signals.css.
+  Mint/white content, dark teal desktop sidebar, responsive dock; SVG icon
+  sizing is scoped to desk components so existing analytical charts retain
+  their dimensions. No theme switch or frontend build step.
 - `app.js` (~12,000 lines) — main application logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
 - `nfl-model.js` — dependency-free v231 NFL moneyline/spread/totals arithmetic.
   It is loaded before `app.js` and required directly by the Node tests, so the
@@ -259,7 +275,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 - `docs/AI_PICKS_V232_AUDIT.md` — findings, evidence schema and validation limits.
 - `tests/nfl-model.test.js` — focused Node tests for the fitted arithmetic and
   the production moneyline value-tier gate.
-- `styles.css` — all styling, in NINE layers, and **order matters**: (1) the
+- `styles.css` — legacy component styling, in NINE layers, and **order matters**: (1) the
   original dark `:root` vars and components; (2) the `:root[data-theme="light"]`
   "Editorial / Premium" block, which un-hardcodes the dark-only values (white
   hairline borders, dark gradients, chips, tracks); (3) the **token layer**
@@ -272,7 +288,8 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   v217 entry) and (9) the **`.pk-` Pick'em layer** (v218 — the ATS pool tab,
   plus the one rule that makes `hidden` work on a `.ctl-row`; extended in v221
   by the `.pk-imp-` import panel and the `.pk-caut` bronze note tone), all
-  keyed on `:root[data-palette]`.
+  keyed on `:root[data-palette]`. The final `desk.css` layer overrides the shell
+  and shared component finish; edit that layer for the current main-app design.
   ⚠️ **`el.hidden = true` does NOT hide an element the palette layer gives a
   `display` to.** `[hidden] { display: none }` is the UA sheet at (0,1,0) and
   `:root[data-palette] .ctl-row { display: flex }` is (0,2,0), so the layer
@@ -294,32 +311,23 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
     token mapping, alpha ramp, semantic ramp, heat classes and spacing scale
     are all still live. Its radius-0 list, card borders and flat fills are
     DEAD — editing them does nothing. Change form in the flow layer.
-  - **ONE palette — Champagne. There is no dark mode (v219).** `<html>` carries
-    `data-palette="champagne" data-theme="light"` **statically in the markup**;
-    nothing at runtime can change either, the Onyx token block is deleted, the
-    masthead toggle is gone and no code reads the OS `prefers-color-scheme`.
-    The one block is 14 colours plus a `--base` ink triple that generates the
-    alpha ramp `--l07 … --l4`, plus four the flow layer needs: **`--acRGB`**
-    (accent as an rgb triple, so every tint derives from one place),
-    **`--grad`** (the plated fill — the metal is the DOUBLE highlight; one flat
-    stop reads as mustard), **`--on-ac`** (type ON an accent fill) and
-    **`--glow`**.
+  - **One light palette.** HTML retains `data-palette="champagne"` and
+    `data-theme="light"` as legacy component hooks. `desk.css` supplies the
+    current mint/white ground, dark teal navigation, green accent and white
+    text on accent fills. There is no runtime theme switch.
   - ⚠️ **`:root { color-scheme: light }` is load-bearing and easy to miss.** It
     is the last place the OS could still reach the page: without it a phone set
     to dark renders form controls, text selection and scrollbars dark on a
     cream ground, which reads as a bug. Every `<input>` on the Pick'em tab
     depends on it.
-  - ⚠️ **Accent fills take DARK type.** White on gold is ~1.9:1 and unreadable;
-    `--on-ac` is dark ink and measures **7.8:1** on both grounds. Never write
-    `color:#fff` on an accent fill.
-  - ⚠️ **`--wm` is a muted bronze-taupe, not amber.** Gold occupies the amber
-    slot, so a C grade or a "vs market" tag tinted amber reads as a brand
-    element. Semantic good/bad (`--pos`/`--neg`) is unchanged.
+  - **Accent contrast:** Sports Hub's final desk layer uses white text on
+    dark green (`--on-ac:#fff`). Standalone Tools retain their own palettes.
+    Use semantic color variables when extending shared components.
   - The layer re-points the app's OWN variables (`--bg`, `--card`, `--card-2`,
     `--text`, `--muted`, `--silver`, `--accent`, `--live`, `--gold`, `--line`,
     `--eagles-green`, `--radius`) at the tokens, which is why components written
     against the vars recolour for free. **Keep doing that** — a new component
-    that hardcodes a hex will be wrong in one of the two palettes.
+    that hardcodes a color can conflict with the final desk layer.
   - ⚠️ **`data-theme="light"` is still REQUIRED, and deleting it would turn the
     app dark.** Layer 1 is the original DARK theme and layer 2
     (`:root[data-theme="light"]`) is what un-hardcodes it — so light mode is
@@ -587,16 +595,48 @@ claim a deployment is live merely because the branch update succeeded.
 3. `node --check app.js` (plus every touched standalone JS file and `sw.js` if
    touched), then `node --test tests/*.test.js`. The model suite begins in v231;
    syntax plus all relevant tests are the gate.
-4. Commit, `git push -u origin main`, then fast-forward + push `claude/sports-app-ideas-130q0f`.
+4. Commit and publish the authorized changes to `main`; verify its new remote
+   head. Do not update companion branches. Check the Pages build before saying
+   the change is live.
 5. The version shows in a header badge so the user can confirm what they're running.
 
-Commit message footer (always):
-```
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_016mJ14XQi9xzznM5kmhshq1
-```
+Commit messages describe the change. Do not add a model identifier or a stale
+session attribution.
 
-Current version as of this writing: **v271** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v272** (backend **b17-fantasy-league-rules**).
+
+### v272 — A personal sports decision workspace
+
+- Replaces the crowded top tab grid and model-read bottom bar with a desktop
+  sidebar and a five-destination phone dock. Today separates upcoming games,
+  forecast counts, pending grades, official market records and personal saves.
+  Missing history is shown as unavailable, not a zero-game assertion.
+- Adds global keyboard-accessible search (Cmd/Ctrl+K or /), hash routes with
+  Back/Forward and reload support, and fantasy section links that open the
+  requested accordion after async league rendering. Long pages start compact
+  and section choices survive relaunches. `#pk=` import links retain
+  their existing handling. Existing collapse and detailed data views remain.
+- Adds a bounded 80-game watchlist with 800-character per-game notes, shared
+  across same-origin tabs, retained offline, and undo for removal. These are
+  browser-local reminders, never logged bets. Storage failure is disclosed;
+  adding a game never evicts a saved note. Saving does not alter forecasts.
+- Radar reuses ESPN week/day feeds and annotates actual saved pregame markets
+  and TV information. Unavailable feeds retain their last known schedule with
+  a notice. A bookmark outside the current slate resolves the real summary;
+  it never invents a completed state. Game reports also offer bookmarks and
+  protect against an older request replacing a newer report.
+- Research provides distinct entry points for situational systems and
+  experimental model challengers. Today and Models use the same versioned
+  cloud-only official record; price coverage remains explicit. Results leads
+  with official market cards, expandable probability evidence and a separate
+  full-history/device disclosure; experimental comparisons live in Research. No model
+  coefficients, evaluation cohort, scheduled capture, odds freeze, fantasy
+  league settings, Pick'em data or external-app URLs change.
+- Refresh updates the current destination and saved-history status. New
+  pure-function tests cover routing, watchlist boundaries, missing data,
+  market deduplication, radar ordering and search. Browser verification covers
+  phone/tablet/desktop navigation, note persistence, search, history and
+  layout. GitHub Pages, Render and existing collection services remain.
 
 ### v271 — League-aware fantasy recommendations
 
@@ -1637,7 +1677,7 @@ The live pipeline saves probability method, sample size, training cutoff and its
   reasoning above is still why they had to be built, and the "no session can
   write to the owner's device" half is still true — the owner does the paste.
 
-- **🌞 Dark mode REMOVED — one ground, and nothing can change it (v219)** — the
+- **🌞 Dark mode REMOVED — one ground, and nothing can change it (v219)** — ⚠️ SUPERSEDED in v272 for Sports Hub colors only: desk.css supplies the mint/white ground; the light-only rule remains. the
   owner: *"Remove dark mode completely it's a waste of time I never use it."*
   Gone, not merely defaulted off.
   - **What was deleted:** the Onyx token block, the masthead LIGHT/DARK toggle,
@@ -1700,7 +1740,7 @@ The live pipeline saves probability method, sample size, training cutoff and its
     existing. **When a palette is deleted, the suites that loop over palettes
     are part of the change.**
 
-- **🎯 Pick'em — the owner's ATS pool, tracked against the model (v218)** —
+- **🎯 Pick'em — the owner's ATS pool, tracked against the model (v218)** — ⚠️ SUPERSEDED in v272 for navigation only: the ten-tab grid is replaced; Pick’em functionality remains.
   the owner: *"Im in a nfl pick em league with my friends where u pick every
   game ats. 2 key games which are worth double and score mnf tiebreaker. How
   can we add this to the app so I can see my stats as I go and cross reference
@@ -1800,7 +1840,7 @@ The live pipeline saves probability method, sample size, training cutoff and its
     the slate loads.**
 
 - **👻 The white shape under the ⌃ RAIL button — the chrome bars were 96%
-  transparent (v217)** — the owner, twice: a screenshot of a white rounded
+  transparent (v217)** — ⚠️ SUPERSEDED in v272 for layout: the bottom bar now carries navigation; opaque backgrounds remain. The owner, twice: a screenshot of a white rounded
   shape hanging below the masthead's ⌃ RAIL button, then *"Nvm it's still
   there u need to fix it… only stays for like 10 seconds but it's annoying."*
   - **What was wrong.** `.topbar`, `nav.tabs` and `#botbar` were each
@@ -2176,7 +2216,7 @@ The live pipeline saves probability method, sample size, training cutoff and its
     the legacy namespace reclaimed. The v210 suite (23), v211 (20), v209 (14),
     v207 (27), Labs (7) and the power lab (142) all still pass — 250 total.
 
-- **🗂️ Every card on every page starts expanded (v211)** — the owner:
+- **🗂️ Every card on every page starts expanded (v211)** — ⚠️ SUPERSEDED in v272: the redesign uses compact page defaults and preserves section choices across launches. The earlier request was:
   *"Start with every card on every page expanded instead of collapsed."* This
   reverses v166's collapse-by-default; both entries above now carry markers.
   - **Two lines of behaviour, and the second is the one that makes it real.**
@@ -3790,7 +3830,7 @@ The live pipeline saves probability method, sample size, training cutoff and its
     all four palettes. `node --check` clean.
 
 - **🎨 Four palettes, three bars of chrome, and all three markets on every card
-  (v187)** — the feel-and-function pass from the Claude Design handoff. The
+  (v187)** — ⚠️ SUPERSEDED in v272: desktop sidebar, five-button mobile navigation and personal brief replace the old shell. The following records the earlier design. The feel-and-function pass from the Claude Design handoff. The
   owner's brief was explicit: *"i dont want u changing the content, i want u
   improving the feel and functionality."* So every tab, section, heading and
   string is where it was; what changed is the form and the mechanics.
@@ -4359,7 +4399,7 @@ The live pipeline saves probability method, sample size, training cutoff and its
       taps stick while the app is open and the next launch starts clean.
       **Fantasy, AI Picks and the team tabs keep their choices across
       restarts** — only these two reset.
-    - ⚠️ **SUPERSEDED in v211: the reset now applies to EVERY tab**
+    - ⚠️ **SUPERSEDED again in v272: no launch reset; compact defaults and persistent preferences. Previously superseded in v211: the reset applies to EVERY tab**
       (`SEC_RESET_ALL`), because the owner asked the whole app to start
       expanded. The within-a-visit reasoning above is exactly why it is still a
       launch-time reset and not a per-render one, so it carried over intact —
@@ -6415,10 +6455,11 @@ rewrite.**
   again — and must not record games that are not today's; see the v214 entry.
 - `LEAGUES` — per-sport config (label, emoji, espnPath, `fav` favorite teams, type).
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
-- Tabs: Home, Eagles, **🏈 NFL** (league-wide lens, v145), **🎓 CFB** (college
-  football, Top 25 only, v161), **Red Sox**, AI Picks, Fantasy, **🎯 Pick'em**
-  (the owner's ATS pool, v218), **Labs**, About. `showTab()` +
-  `renderers{}` map drive rendering.
+- Navigation: Today, Models, Research, Fantasy and More on mobile; desktop
+  adds direct links to Watchlist, Pick’em, Eagles, Red Sox, NFL, CFB, News &
+  scores, Tools, and About. `showTab()` / `renderers` still own rendering.
+  `SportsHubDesk` owns URL routing. The requested model sport/subview is applied
+  after `TAB_ENTER`, so explicit deep links survive the normal entry reset.
   - **`TAB_ENTER` (v216) — anything that must happen once per tab OPENING goes
     here, never in a renderer.** 🚨 `renderers[currentTab]()` has TWO callers:
     `showTab`, which is a real entry, and v210's stale-while-revalidate repaint,
@@ -6434,7 +6475,7 @@ rewrite.**
   Draft** rendered into `#labs-mock`; its
   renderer is a no-op since the content is static + launched on demand.) (**Scores** and **Standings** tabs were
   removed in v78 — the owner gets those better elsewhere; Home is now the daily
-  full-slate overview. In v79 the Home slate was made view-only; **v89 reversed
+  daily decision brief in v272. In v79 the Home slate was made view-only; **v89 reversed
   that** — cards open the detail modal again, since the modal now leads with
   the Game Report the owner wants one tap away.)
 - **`sportsDate()`** — "today" doesn't roll to the next day until **4 AM ET**, so
@@ -6443,52 +6484,25 @@ rewrite.**
 - UX rules the owner cares about: scannable views with **tap-to-expand**
   accordions (`makeAccordion`); jump-nav chip rows that **wrap** (all visible, no
   horizontal scroll); compact rows; `–` for not-yet-played scores.
-- **The shell, as of v187–v189** — this is the current description; the v163 /
-  v166 / v172 / v175 changelog entries describe the shell that came BEFORE it
-  and carry superseded markers. Three bars above the content, not five:
-  1. **`#rail-wrap`** — the whole day's games. `#rail-leagues` is a narrow
-     league-filter COLUMN on its left (not a bar underneath); `#live-rail` holds
-     the cards. A scheduled/final card stacks (184px); only a LIVE card is two
-     columns (232px) because only it draws a diamond or a field. Each card
-     carries the model's tier badge + pick, read from `MODEL_TODAY` — which The
-     Board fills, so the rail costs no extra model run and no extra ESPN call.
-     Folds via the ⌃ RAIL header button (`sportshub:railhidden`), which
-     re-asserts after every repaint so the 30s refresh can't re-open it.
-  2. **The masthead** — brand · version · rail fold · the LIVE/OFFLINE badge.
-     (The palette cycler was removed in v219 with dark mode. ⚠️ `theme-color`
-     moved to the markup with it — `applyPalette` used to overwrite that meta
-     with the palette's ground, so the tag carries `#f3f1ec` now; leaving it at
-     the old `#004c54` would have quietly turned the iOS status bar Eagles
-     green.)
-     - ⚠️ **It stands on its OWN opaque ground and declares no filter** (v217,
-       layer 8): all three chrome bars — masthead, `nav.tabs` and `#botbar` —
-       paint `rgba(var(--barRGB), 1)`, a per-palette token that is the page
-       ground with the 4% ink they used to get from `rgba(var(--base), .04)`
-       baked flat. **Do not put `backdrop-filter` back on them.** Until v217
-       they were ~96% transparent and legible only while the filter was
-       working, which is what produced the white rounded ghost under the ⌃ RAIL
-       button at launch — see the v217 entry. **The layout was never the
-       cause**: a sweep measured the bar in 48 states (2 palettes × 6 widths
-       from 320px × rail shown/hidden × stale note on/off) and again across all
-       nine tabs, and found nothing crossing its edges. Don't re-run that
-       sweep.
-  3. **`nav.tabs`** — a GRID of all nine tabs (5×2 on a phone, 9 across above
-     700px), text labels, no icons, live pip on `.lb`. It cannot cut off.
-  Then, inside each tab panel, **one `.ctl-row`** built by `buildControlRow()`:
-  the tab's sport chips, its jump rail and the collapse-all `.sec-all` share a
-  single full-bleed bar. `wireScrollSpy()` flags the section you are actually
-  in (`.chip.here`). At the bottom, **`#botbar`** states the day's model read
-  and links to AI Picks.
+- **Shell v272:** `desk.css` is the final visual layer. Desktop has a fixed
+  vertical sidebar and a fluid content workspace; below 761px the sidebar is
+  hidden and the five-button mobile dock uses the existing `mobile-chrome.js`
+  visual-viewport positioning. Header search is a native modal dialog; Escape
+  closes it and returns focus. Navigation updates the page title and heading
+  focus. The score rail remains optional and remembers the device preference.
+  Use opaque backgrounds without backdrop filters on fixed navigation.
+  Existing `.ctl-row`, jump links and collapse-all controls remain in detailed
+  model, fantasy, league and team views; they are not injected into the new
+  Today, Research, Watchlist or More landing pages.
 - **v257 compact weekly slate:** NFL/CFB use `compactMarketsHTML()` with winner, spread and total in three columns; full `marketRowsHTML()` analysis and provenance live in the game report. Scores, ranks, TV, dates and keyboard access remain visible/available. Model capture and calculations are unchanged.
 - **Compact summaries on game lists** — `compactMarketsHTML()` shows supported markets on board cards, ladders and weekly slates; `marketRowsHTML()` keeps the full breakdown inside game reports, heat-ramped, with a stated reason where there is no play. It reads the
   RAW reads (`atsR`/`totR`) that `buildBoard` carries beside the qualifying
   `ats`/`tot` — **what records is still gated on the bar.**
-- **Live/Offline mode badge** — the header badge (`#mode-badge`, set by
-  `setMode`) reads **LIVE** when ESPN fetches succeed and **OFFLINE** when they
-  all fail, in which case the app renders the hardcoded `DEMO` fixtures so it
-  never looks broken. (The badge keeps the `.badge.demo` class in the offline
-  state — the class name predates the label.) `setMode(true)` is called from
-  `renderHome` once any feed loads.
+- **Live/Offline mode badge** — describes whether the ESPN feeds answered.
+  The new radar and news page never substitute demo scores. Unavailable feeds
+  show a notice with a retry, and cached records remain available. Cloud
+  collection health is displayed independently on Today; it is not inferred
+  from the ESPN badge.
 
 ## Features built (high level)
 
@@ -6499,40 +6513,24 @@ rewrite.**
   labeled as a new chronological backtest. Existing modal/trend/export tools
   remain reachable. Responsive styling is appended after the existing layers.
 
-- **Home** — the app's front door. The day's scores are NOT on this tab any
-  more (v166): they live in the **rail** pinned above the masthead — with the
-  league filter bubbles as a column INSIDE it since v187, not a bar under it.
-  Order: My Teams → **🎲 The Board** (v164: the
-  model's best plays against the book across every in-season sport — moneyline,
-  spread and totals — with its own record stated in the header) → ⛳ Golf
-  (**SHELVED v193, season over** — see below) → Top Headlines. Top Headlines
-  (numbered story strip, **up to 10** as of v111, from in-season leagues' lead
-  stories — leads first, then up to 5 more per league, deduped; tap → in-app
-  summary popup — headlines stay tappable; the strip stays a horizontal scroll on
-  desktop too via fixed-width `.hl-card`), My Teams featured card, then Today's
-  Games grouped by league (jump-nav chips), each league's slate sorted live →
-  upcoming → finished (`STATE_ORDER`; changed v93 — finals now sink to the
-  bottom); leagues with a live game get a 🔴 flag on their
-  chip/heading. **The game cards are TAPPABLE again (v89, reversing v79's
-  view-only):** `gameCard(sport, g, {odds:true})` — tap opens the game modal,
-  which leads with the 📊 Game Report (see AI Picks v88 note). Cards still show
-  the quick-scan info: score/time, the **📺 TV channel** (`tvFor()` reads
-  `geoBroadcasts`/`broadcasts` in `normEvent`, stored as `g.tv`), and — v85 —
-  the **📊 pregame betting line** (`.game-odds` in `gameCard`, gated on the
-  `odds` option + scheduled games only: spread/ML via `normOdds` + O/U; falls
-  back to raw moneylines when ESPN sends no `details` string; NOT on the WC
-  bracket cards, and AI Picks cards keep their own odds block). The golf card
-  stays view-only and shows a compact
-  **view-only top-5 leaderboard** inline (no modal). (The old cross-league "Live"
-  section was removed in v68; the Scores-tab ⚡ Model-edge badges that briefly
-  lived here in v78 were dropped in v79 to keep the slate a clean scan — edges
-  still live on the AI Picks tab.) (A **🏆 World Cup Bracket** lived below Today's
-  Games from v82 until the 2026 Cup ended; **v125 removed it and the entire soccer
-  league** — the bracket, its `#home-wc`/`renderWCBracket`/`WC_ROUNDS`/`.wc-*`
-  code, the soccer live-situation panel, and every soccer branch in the model /
-  odds constants. Soccer here only ever meant the World Cup, so nothing
-  soccer-related remains. Re-add a `soccer` entry to `LEAGUES` if a future
-  competition should be tracked.)
+- **Today** — personal brief with distinct upcoming-game/forecast counts,
+  saved-price coverage, forecasts awaiting grading, a watchlist count, fantasy
+  starter warnings when a league snapshot is available, an NFL/Top-25/MLB/NBA
+  radar, and official model records separated by market. The existing model
+  watchlist is retained in a remembered disclosure. Team shortcuts link to
+  Eagles and Red Sox; scores can be opened from the header.
+- **Research** — links to the existing NFL/CFB systems and paired challenger
+  summaries, plus model results, calibration and methodology. It never combines
+  system returns with model records or claims a challenger is the official model.
+- **Watchlist** — save games from Today, board cards or game reports. Notes
+  persist on the browser and are searchable. Removal is undoable. Bookmarks
+  do not record bets, and a feed refresh never replaces a note being edited.
+- **More** — grouped directory for decisions, followed sports and deeper tools;
+  links to League History stay external. Search also supports fantasy GM,
+  lineup and season deep links.
+- **News & scores** — the former Home headlines, team snapshot and seasonal
+  PGA leaderboard. The existing headline summaries and detailed game reports
+  remain accessible. No new source or subscription is required.
 - **Red Sox tab** (⚾, v114) — an MLB deep-dive mirroring the Eagles tab
   (`renderRedSox` + `renderRedSox*` sub-renderers; `REDSOX={teamId:2}`, ESPN MLB
   id for BOS): hero (record/standing/next game, ⚾ watermark via
@@ -7044,6 +7042,11 @@ rewrite.**
 
 ## localStorage keys
 
+- `sportshub:desk:watch:v1` — up to 80 sport/event bookmarks with an optional
+  800-character note, saved time and schedule labels. Device-only; not a bet
+  ledger or forecast store. Invalid or duplicate entries are normalized.
+- `sportshub:desk:board-open` — remembered model-watchlist disclosure on Today.
+
 - `sportshub:signals:v1` — bounded complete read-only evidence response cache; durable source is Supabase. Failed partial queries never replace complete cached results.
 
 - `sportshub:cloud-ai:v1` — last successful read-only Supabase response
@@ -7175,14 +7178,11 @@ rewrite.**
 - `sportshub:fparticles` — last good FantasyPros article list (`{at, items}`), so
   the 📰 Fantasy Advice section paints instantly and still shows something when
   the backend is asleep.
-- `sportshub:secs` — per-section collapse state (`{"<tab>|<heading>": 1|0}`,
-  1 = open); an absent key means "use the tab's default", which since **v211 is
-  EXPANDED on every tab**. **The whole key is now cleared at every launch**
-  (`SEC_RESET_ALL`, widening v177's nfl/cfb-only reset), so the app always
-  starts fully expanded and a stale collapse can never survive an upgrade.
-  ⚠️ It is still written and read **within** a visit — that is what keeps a
-  collapse from popping back open through the constant repaints on Fantasy and
-  the team tabs — so the key is not dead, just short-lived.
+- `sportshub:secs` — per-section collapse choices keyed by stable heading or
+  explicit section ID. v272 retains these across launches; long pages default
+  to their first one or two sections open. Jump navigation opens its target;
+  Expand all remains available. No startup reset.
+
 - `sportshub:railoff` — leagues the user has filtered OUT of the top rail
   (array of sport keys). Only the hidden ones are stored, so a league you've
   never touched — including one whose season starts next week — shows by default.
@@ -7190,7 +7190,7 @@ rewrite.**
   mode was removed. Nothing reads or writes them, so a device that saved
   `'onyx'` cannot resurrect a palette whose tokens no longer exist — asserted
   by test. Left on devices, harmless, like `sportshub:sharp`.
-- `sportshub:railhidden` — `'1'` when the owner has folded the top rail (v187).
+- `sportshub:railhidden` — absence defaults to closed in v272; explicit `0` stays open.  `'1'` when the owner has folded the top rail (v187).
   Re-asserted after every rail repaint, so the 30s refresh can't re-open it.
 - `sportshub:sharp` — **DEAD as of v192.** Held the 💰 sharp-money toggle's
   state; the toggle is gone and the sharp read always shows. Nothing reads this

@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v271';
+const APP_VERSION = 'v272';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -1074,6 +1074,7 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
       g = { ...g, state:summaryState };
       pred = await restoreForecast(sport,g);
     }
+    if (token !== detailToken) return;
     let extra = '';
     if (preseason) {
       extra += '<div class="md-section-title acc-open">🤖 AI Pick</div><div class="ai-why">Preseason — the model sits these out. Backups play most of the snaps, so results and totals aren\'t predictive.</div>';
@@ -1086,6 +1087,12 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
     const signalSlot = ['nfl','cfb'].includes(sport) && signalsEnabled() ? '<div id="md-signals" data-acc-boundary aria-live="polite"></div>' : '';
     const slot = reportP ? '<div id="md-report"><div class="empty">📊 Loading betting report…</div></div>' : '';
     $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, slot, signalSlot);
+    if (g) {
+      const actions = el('div', 'desk-report-actions');
+      actions.innerHTML = '<span>Keep this game on your radar</span>';
+      globalThis.SportsHubDesk?.addWatchControl(actions,sport,g);
+      $('#modal-body').prepend(actions);
+    }
     makeAccordion($('#modal-body'), '.md-section-title', SEC_OPEN_ALL);
     if (['nfl','cfb'].includes(sport)) globalThis.SportsHubFootballDevelopment?.mountGame($('#md-challenger'), id, sport);
     if (signalSlot) paintSignalDetail(id, token, focusSignals,'spread',null,sport);
@@ -1675,14 +1682,16 @@ function startLiveRail() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) run(); });
 }
 
-async function renderHome() {
+async function renderHome() { return globalThis.SportsHubDesk.renderHome(); }
+
+async function renderPulse() {
   const sports = sortedSports({ teamOnly: true }); // in-season first
   const results = await Promise.allSettled(sports.map((s) => getGames(s, ymd(sportsDate()))));
   const games = {};
   let anyOK = false;
   results.forEach((r, i) => {
     if (r.status === 'fulfilled') { games[sports[i]] = r.value; anyOK = true; }
-    else { games[sports[i]] = DEMO[sports[i]] || []; }
+    else { games[sports[i]] = []; }
   });
   setMode(anyOK);
 
@@ -1703,20 +1712,13 @@ async function renderHome() {
     html += `<div class="featured-game"><div><strong>${esc(fg.away.name)}</strong> ${fg.away.score ?? ''} @ <strong>${esc(fg.home.name)}</strong> ${fg.home.score ?? ''}</div>
       <span class="status ${s === 'live' ? 'live' : s === 'final' ? 'final' : ''}">${lbl}</span></div>`;
   } else {
-    html += `<div class="muted">No game today. See the full slate below.</div>`;
+    html += `<div class="muted">No game in the available feed today. Open the Eagles page for the schedule.</div>`;
   }
   html += '</div>';
   $('#featured').innerHTML = html;
   renderGolfHome();
   renderHomeHeadline();
-  // The board runs the model over every in-season slate, so it's deliberately
-  // NOT awaited — the scores paint first and the board fills in behind them.
-  renderHomeBoard().then(() => { applySections('home'); injectJumpNav('home'); }).catch((e) => {
-    console.error(e);
-    const box = $('#home-board');
-    if (box) box.innerHTML = '<h2 class="section-title">🎲 The Board</h2>'
-      + '<div class="ai-note">Couldn\'t price today\'s slate just now — the games below still work.</div>';
-  });
+
 }
 
 // Top 3 sports headlines up top, numbered 1-2-3 so they scan left to right.
@@ -1795,7 +1797,7 @@ async function renderGolfHome() {
     ${top || '<div class="muted">Leaderboard unavailable.</div>'}`;
   box.appendChild(head);
   box.appendChild(card);
-  applySections('home');
+  applySections('pulse');
 }
 
 // --- SCORES ---------------------------------------------------------------
@@ -2895,10 +2897,11 @@ let sportResearchToken = 0;
 function researchLinksHTML(sport) {
   return `<aside class="sport-research-links"><strong>Saved betting research</strong><p>Frozen entries, conditions and paper results live with each league. Exploratory results do not change model confidence.</p>${(sport && sport !== 'all' ? [sport] : ['nfl','cfb']).map(s=>`<button type="button" class="fan-btn" data-bs-results data-bs-sport="${s}">${s==='cfb'?'CFB Top 25':'NFL'} research →</button>`).join(' ')}</aside>`;
 }
-async function setSportView(sport, view) {
+async function setSportView(sport, view, syncRoute = true) {
   if (!['nfl','cfb'].includes(sport)) return;
   const panel=document.getElementById(sport), research=view==='research';
   panel.dataset.sportView=view;
+  if(syncRoute)globalThis.SportsHubDesk?.syncResearch(sport,view);
   document.getElementById(`${sport}-games-view`).hidden=research;
   const target=document.getElementById(`${sport}-research-view`);
   target.hidden=!research;
@@ -4178,8 +4181,9 @@ function historyLinks(sport) {
 // the panel to one league; null is the cumulative view.
 function recordPanel(det, pend, sport) {
   const box = el('div');
+  const official = el('div', 'desk-official-results');
   const ts = tallyStats(sport);
-  box.insertAdjacentHTML('beforeend', evaluationHTML(sport));
+  official.insertAdjacentHTML('beforeend', evaluationHTML(sport));
 
   // ---- the stat strip ----
   // 🚨 SIX tiles, not five. Five wrap 3+2 on a 390px phone and the orphan row
@@ -4326,7 +4330,11 @@ function recordPanel(det, pend, sport) {
       ? `No finished ${lgLabel(sport)} games in the record yet${pend.total ? ` — ${pend.total} logged and waiting on final scores (see 📥 above)` : ''}.`
       : 'Nothing graded yet. Picks are logged automatically and grade themselves once the games finish.', ';padding-top:4px'));
   }
-  return box;
+  const archive = document.createElement('details');
+  archive.className = 'desk-history-details';
+  archive.innerHTML = '<summary>Full history &amp; device records<span>All-time totals, confidence buckets, pending picks and individual results</span></summary><p class="desk-caption">This combines cloud and device history, including older versions and unverified entries. It can differ from the official current-model record above.</p>';
+  archive.appendChild(box); official.appendChild(archive);
+  return official;
 }
 
 // ================== 🧠 The Model card (v213) ==============================
@@ -5126,6 +5134,7 @@ function boardCard(r, opts = {}) {
       card.querySelector('.compact-matchup')?.appendChild(button);
     }
   }
+  globalThis.SportsHubDesk?.addWatchControl(card, sport, g);
   return card;
 }
 
@@ -5431,7 +5440,7 @@ async function aiRecentFor(sport) {
 // Now: level 1 picks the league (or 🌐 Overview = everything), level 2 picks
 // the question. Nothing was dropped — every element of the old tab is on one
 // of the four sub-tabs, and the Board sub-tab is the old ladder untouched.
-const AI_SUBS = [['board', '📋 Picks'], ['record', '📈 Results'], ['backtest', '🧪 Calibration'], ['model', '🧠 How it works']];
+const AI_SUBS = [['board', 'Forecasts'], ['record', 'Results'], ['backtest', 'Calibration'], ['model', 'How it works']];
 const AI_BLURB = {
   board: 'Start with the market, compare the numbers, then check the data. Larger gaps are not guarantees.',
   record: 'What happened to saved picks — winner, spread and total records stay separate. Historical results below include earlier model versions.',
@@ -5445,23 +5454,24 @@ function aiGuideHTML(sub, sport) {
   const cloudLine = run
     ? `☁️ Automatic capture ${run.status === 'ok' ? 'is healthy' : `last reported ${run.status}`} · last run ${timeAgo(Date.parse(run.finished_at || run.started_at))}. You do not need to open the app to save future picks.`
     : '☁️ Automatic cloud capture is starting. The page still keeps its device history while the first scheduled run arrives.';
-  return `<div class="ai-guide-card"><div class="ai-guide-top"><span class="ai-eyebrow">READ THE PICK, NOT JUST THE COLOR</span><span>${sport === 'all' ? 'All leagues' : esc(LEAGUES[sport]?.label || sport)} · ${APP_VERSION}</span></div>
+  return `<details class="desk-model-guide"><summary>How to read this board <span>Markets, evidence &amp; saved forecasts</span></summary><div class="ai-guide-card"><div class="ai-guide-top"><span class="ai-eyebrow">READ THE PICK, NOT JUST THE COLOR</span><span>${sport === 'all' ? 'All leagues' : esc(LEAGUES[sport]?.label || sport)} · ${APP_VERSION}</span></div>
     <div class="ai-note">${esc(cloudLine)}</div>
     <div class="ai-guide-steps"><div><b>1 · Choose the market</b><p>Winner, cover and total are three different predictions.</p></div><div><b>2 · Compare model & book</b><p>A gap is a disagreement. It does not prove an advantage.</p></div><div><b>3 · Check the evidence</b><p>Missing data means watch only. Review results before trusting a signal.</p></div></div>
-    <details><summary>Quick glossary & what gets saved</summary><div class="ai-glossary"><p><b>Moneyline:</b> pick the winner. 60% means about 6 wins in 10 similar games if calibrated, not certainty.</p><p><b>Spread:</b> the handicap. +7.5 can cover even in a loss by 7; −7.5 needs a win by 8 or more.</p><p><b>Total:</b> combined score. OVER 8.5 needs 9+ runs; UNDER needs 8 or fewer.</p><p><b>pp vs points:</b> 60% vs 55% is +5 percentage points. A projected margin of 7 vs a line of 3 is 4 scoring points.</p><p><b>Tracking:</b> first pregame forecasts are frozen with version, timestamp and inputs. Missing prices may be filled before kickoff only at the same saved line and provider. The scheduled collector runs even when the app is closed; official performance uses cloud history; device-only history is retained separately.</p><p><b>Experimental signals:</b> moneyline tiers require a positive model return at a real quote and two-sided market odds. Spread/total signals use projection thresholds. Their experimental probabilities are tracked separately and do not change signal ranking. No market has proven profit.</p></div></details></div>`;
+    <details><summary>Quick glossary & what gets saved</summary><div class="ai-glossary"><p><b>Moneyline:</b> pick the winner. 60% means about 6 wins in 10 similar games if calibrated, not certainty.</p><p><b>Spread:</b> the handicap. +7.5 can cover even in a loss by 7; −7.5 needs a win by 8 or more.</p><p><b>Total:</b> combined score. OVER 8.5 needs 9+ runs; UNDER needs 8 or fewer.</p><p><b>pp vs points:</b> 60% vs 55% is +5 percentage points. A projected margin of 7 vs a line of 3 is 4 scoring points.</p><p><b>Tracking:</b> first pregame forecasts are frozen with version, timestamp and inputs. Missing prices may be filled before kickoff only at the same saved line and provider. The scheduled collector runs even when the app is closed; official performance uses cloud history; device-only history is retained separately.</p><p><b>Experimental signals:</b> moneyline tiers require a positive model return at a real quote and two-sided market odds. Spread/total signals use projection thresholds. Their experimental probabilities are tracked separately and do not change signal ranking. No market has proven profit.</p></div></details></div></details>`;
 }
 function evaluationHTML(sport) {
   const all = Object.values(globalThis.SportsHubCloudAI?.maps()?.tally || {}).filter((r) => !sport || sport === 'all' || r.s === sport);
   const upcoming = Object.values(globalThis.SportsHubCloudAI?.maps()?.pending || {}).filter(r => !sport || sport === 'all' || r.sport === sport);
   const markets = [['moneyline', 'Winner', (r) => !r.a && !r.t], ['spread', 'Spread', (r) => !!r.a], ['total', 'Total', (r) => !!r.t]];
-  return `<section class="ai-evidence"><div class="ai-guide-top"><b>Automatic model performance</b><span>Model ${AI_MODEL_VERSION}</span></div><p>Official cloud record across devices. Picks and results save automatically—even with the app closed. No manual logging. Device-only history stays separate.</p><div class="ai-evidence-grid">${markets.map(([key, title, filter]) => {
+  return `<section class="ai-evidence"><div class="ai-guide-top"><b>Official model record</b><span>Current model · ${AI_MODEL_VERSION}</span></div><p>Automatically saved before the game. Results and prices stay tied to that forecast.</p><div class="ai-evidence-grid">${markets.map(([key, title, filter]) => {
     const e = AI_MATH.evaluate(all.filter(filter), AI_MODEL_VERSION);
     const decided = e.w + e.l;
     const pending = upcoming.filter(filter), pricedPending = pending.filter(r => AI_MATH.american(r.q?.price) != null);
     const pendingProbs = pending.map(r => AI_MATH.number(r.q?.prob)).filter(p => p != null && p >= 0 && p <= 1);
     const upcomingProbability = pendingProbs.length ? pendingProbs.reduce((a,b) => a+b,0) / pendingProbs.length : null;
-    return `<div><b>${title}</b><strong>${e.n ? `${e.w}W · ${e.l}L · ${e.pushes}P` : 'Collecting'}</strong><div class="ai-result-track" role="img" aria-label="${e.w} wins, ${e.l} losses, ${e.pushes} pushes"><i style="width:${decided ? e.w / decided * 100 : 0}%"></i></div><p>${e.n} settled · ${decided ? (e.w / decided * 100).toFixed(1) + '% hit rate' : 'Awaiting results'}<br>${e.priced}/${e.n} with saved odds<br>${e.priced ? `${e.units >= 0 ? '+' : ''}${e.units.toFixed(2)} units · ${(e.roi * 100).toFixed(1)}% paper ROI` : 'ROI awaiting priced results'}<br>${e.probabilityN ? `Avg model probability ${(e.meanProbability * 100).toFixed(1)}% · ${e.probabilityN} forecasts${key !== 'moneyline' ? ' · experimental, excluding pushes' : ''}` : key === 'moneyline' ? 'Model probability not saved for this sample' : 'New model probabilities awaiting settled results'}<br>${e.priced ? `Avg odds-implied probability ${(e.meanImplied * 100).toFixed(1)}% (includes vig)` : 'Odds-implied probability awaiting saved odds'}${e.probabilityN ? `<br><small>Brier ${e.brier.toFixed(3)} · log loss ${e.logLoss.toFixed(3)}</small>` : ''}<br>${pending.length} upcoming · ${pricedPending.length} with odds${upcomingProbability != null ? `<br>Avg upcoming model probability ${(upcomingProbability * 100).toFixed(1)}% · ${pendingProbs.length} forecasts${key !== 'moneyline' ? ' · experimental, excluding pushes' : ''}` : ''}<br>${e.legacy} older/unverified excluded</p></div>`;
-  }).join('')}</div><small>Spread/total percentages are experimental estimates, excluding pushes. Validation is still limited; totals have not beaten a 50/50 baseline. Hit rate is past results, not a future probability. Model and odds-implied probabilities are different. Paper ROI risks one unit at each saved quote; pushes return the stake. No assumed −110 prices. Markets on the same game are correlated. Older unpriced results remain in the record but are excluded from ROI. Closing-line value needs closing quotes.</small></section>`;
+    const notStarted = pending.filter(r => Date.parse(r.q?.start) > Date.now()).length;
+    return `<div class="desk-evidence-market"><div class="desk-evidence-heading"><b>${title}</b><span>${e.n} settled</span></div><strong>${e.n ? `${e.w}W · ${e.l}L${e.pushes ? ` · ${e.pushes}P` : ''}` : 'Collecting'}</strong><div class="ai-result-track" role="img" aria-label="${e.w} wins, ${e.l} losses, ${e.pushes} pushes"><i style="width:${decided ? e.w / decided * 100 : 0}%"></i></div><div class="desk-return"><b>${e.priced ? `${e.roi>=0?'+':''}${(e.roi*100).toFixed(1)}%` : '—'}</b><span>${e.priced?'paper ROI':'ROI awaiting prices'}</span></div><p>${e.priced}/${e.n} results with saved odds${e.priced ? ` · ${e.units >= 0 ? '+' : ''}${e.units.toFixed(2)} units` : ''}<br>${decided ? (e.w / decided * 100).toFixed(1) + '% hit rate' : 'Awaiting results'} · ${notStarted} upcoming · ${pending.length-notStarted} awaiting grading</p><details class="desk-probability-details"><summary>Probability &amp; evidence</summary><p>${e.probabilityN ? `Avg model probability ${(e.meanProbability * 100).toFixed(1)}% · ${e.probabilityN} forecasts${key !== 'moneyline' ? ' · experimental, excluding pushes' : ''}` : key === 'moneyline' ? 'Model probability not saved for this sample' : 'New model probabilities awaiting settled results'}<br>${e.priced ? `Avg odds-implied probability ${(e.meanImplied * 100).toFixed(1)}% (includes vig)` : 'Odds-implied probability awaiting saved odds'}${e.probabilityN ? `<br><small>Brier ${e.brier.toFixed(3)} · log loss ${e.logLoss.toFixed(3)}</small>` : ''}<br>${pending.length} pending · ${pricedPending.length} with odds${upcomingProbability != null ? `<br>Avg pending model probability ${(upcomingProbability * 100).toFixed(1)}% · ${pendingProbs.length} forecasts${key !== 'moneyline' ? ' · experimental, excluding pushes' : ''}` : ''}<br>${e.legacy} older/unverified excluded</p></details></div>`;
+  }).join('')}</div><p class="desk-evidence-caption">Paper ROI risks one unit at each saved quote; unpriced results stay outside ROI. Football totals remain research only.</p><details class="desk-probability-details"><summary>How to read these results</summary><p>Official cloud record across devices. Picks and results save automatically—even with the app closed. No manual logging. Device-only history stays separate.</p><p>Spread/total percentages are experimental estimates, excluding pushes. Validation is still limited; totals have not beaten a 50/50 baseline. Hit rate is past results, not a future probability. Model and odds-implied probabilities are different. Pushes return the stake. No assumed −110 prices. Markets on the same game are correlated. Older unpriced results remain in the record but are excluded from ROI. Closing-line value needs closing quotes.</p></details></section>`;
 }
 // Bumped on every view paint so an async fill (the CFB rating probe) that
 // lands after the user has moved on can't paint over the new view.
@@ -5471,9 +5481,9 @@ function setAiSport(s) {
   // A chip tap is a decision, and nothing overrides it while you are on the
   // tab — the Overview reset happens on ENTRY (renderPredictions), not here.
   state.aiSport = s; state.aiDate = null;
-  buildAiChips(); paintAiView();
+  buildAiChips(); paintAiView(); globalThis.SportsHubDesk?.syncAI();
 }
-function setAiSub(t) { state.aiSub = t; buildAiSubs(); paintAiView(); }
+function setAiSub(t) { state.aiSub = t; buildAiSubs(); paintAiView(); globalThis.SportsHubDesk?.syncAI(); }
 
 function buildAiChips() {
   const box = $('#ai-sport');
@@ -5506,18 +5516,14 @@ function buildAiSubs() {
 // The header line: the record for whatever scope is on screen, so it can never
 // claim an all-sport number while a single league is being read.
 function renderAiTally(sport, todayTxt) {
-  const ts = tallyStats(sport);
-  const parts = [];
-  // 🚨 Under THIN_N a percentage is noise dressed as precision — "1-0 (100%)"
-  // reads like a finding. This line was all-sport before v213 and therefore
-  // rarely thin; scoped to one league it is thin constantly.
-  if (ts.n) parts.push(`ML ${ts.w}-${ts.l}${ts.n >= THIN_N ? ` (${Math.round((ts.w / ts.n) * 100)}%)` : ''}`);
-  if (ts.en) parts.push(`ML edges ${ts.eh}-${ts.el}`);
-  if (ts.an) parts.push(`ATS ${ts.aw}-${ts.al}`);
-  if (ts.tn) parts.push(`totals ${ts.tw}-${ts.tl}`);
+  const rows = Object.values(globalThis.SportsHubCloudAI?.maps()?.tally || {}).filter(r => !sport || r.s === sport);
+  const parts = [['Winner', r => !r.a && !r.t], ['Spread', r => !!r.a], ['Total', r => !!r.t]].map(([name, filter]) => {
+    const e = AI_MATH.evaluate(rows.filter(filter), AI_MODEL_VERSION);
+    return e.n ? `${name} ${e.w}–${e.l}${e.pushes ? `–${e.pushes}P` : ''}` : null;
+  }).filter(Boolean);
   if (todayTxt) parts.push(todayTxt);
   const box = $('#ai-score');
-  if (box) box.textContent = parts.join(' · ') || 'No graded picks yet — the record starts building from the first finished game.';
+  if (box) box.textContent = parts.length ? `Official record · ${parts.join(' · ')}` : 'Official results are collecting';
 }
 
 // Paint whichever view is selected. Record / Backtest / Model read ONLY
@@ -5559,7 +5565,7 @@ async function paintAiView() {
     sub === 'record' ? recordPanel(det, pend, s)
     : sub === 'backtest' ? backtestPanel(det, s)
     : modelPanel(s));
-  if (sub === 'record') for (const league of all ? ['cfb','nfl'] : ['nfl','cfb'].includes(sport) ? [sport] : []) globalThis.SportsHubFootballDevelopment?.mountSummary(container, league);
+  if (sub === 'record' && (all || ['nfl','cfb'].includes(sport))) container.insertAdjacentHTML('beforeend', '<div class="desk-record-research"><b>Want to test a different model?</b><span>Matched current vs challenger results live in Research.</span><button type="button" class="desk-link" data-desk-route="research">Compare models →</button></div>');
   if (signalsEnabled() && (all || ['nfl','cfb'].includes(sport))) {
     if (sub === 'record') {
       container.insertAdjacentHTML('beforeend', researchLinksHTML(sport));
@@ -8347,6 +8353,7 @@ async function syncLeagueOnce(sport, force) {
     const built = { team: data.team, record: data.record, rosterFull: data.roster || [], rules: data.rules || null, live: !!data.live, matchup, standings, freeAgents, opponent, catranks, playoffs, season, rosters, syncedAt: at || Date.now() };
     fanState.league[sport] = built;
     saveLeagueSnap(sport, built);
+    window.dispatchEvent(new CustomEvent('sportshub:league-updated'));
     return true;
   } catch (_) { return false; }
 }
@@ -9114,24 +9121,24 @@ async function renderFootballLive() {
       <div class="muted" style="margin-top:4px;font-size:11px">${esc(synced)}${synced ? ' · ' : ''}<span id="fbl-top-resync" role="button" tabindex="0" style="text-decoration:underline;cursor:pointer">🔄 Refresh from ESPN</span></div>
     </div>
     ${stripHTML}
-    <h2 class="section-title">What Should I Do?</h2>
+    <h2 class="section-title" id="desk-fantasy-gm">What Should I Do?</h2>
     ${gmHTML}
-    <h2 class="section-title">This Week</h2>
+    <h2 class="section-title" id="desk-fantasy-matchup">This Week</h2>
     ${matchupHTML}
     ${alertHTML}
-    <h2 class="section-title">Start / Sit</h2>
+    <h2 class="section-title" id="desk-fantasy-lineup">Start / Sit</h2>
     ${startSitHTML}
-    <h2 class="section-title">My Roster</h2>
+    <h2 class="section-title" id="desk-fantasy-roster">My Roster</h2>
     ${rosterHTML}
     <h2 class="section-title">Roster Shape</h2>
     ${fbDepthHTML(full)}
-    <h2 class="section-title">Scoring by Week</h2>
+    <h2 class="section-title" id="desk-fantasy-season">Scoring by Week</h2>
     ${fbWeeklyHTML(season)}
     <h2 class="section-title">Luck &amp; All-Play</h2>
     ${fbLuckHTML(season)}
     <h2 class="section-title">League</h2>
     ${fbLeagueHTML(season, L.standings)}
-    <h2 class="section-title">Waiver Wire</h2>
+    <h2 class="section-title" id="desk-fantasy-waivers">Waiver Wire</h2>
     ${waiverHTML}
     <div style="margin-top:14px"><button id="fbl-prep" class="fan-btn ghost">🏈 Draft board &amp; prep tools →</button></div>`;
 
@@ -9147,6 +9154,7 @@ async function renderFootballLive() {
   if (pp) pp.onclick = () => { fanState.footballView = 'prep'; renderFantasy(); };
   injectJumpNav('fantasy');
   applySections('fantasy');
+  window.dispatchEvent(new CustomEvent('sportshub:fantasy-rendered'));
 }
 
 // Format a category value (ERA/WHIP → 2dp, rate stats → .XXX, counting → int).
@@ -9959,37 +9967,14 @@ function secKey(scope, h) {
   c.querySelectorAll('.sec-chev, button, select, .chips').forEach((n) => n.remove());
   return `${scope}|${(c.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60)}`;
 }
-// How many sections a tab leaves open when the user has expressed no
-// preference. v210: the owner asked for "every card on every page expanded
-// instead of collapsed", so the default is now EVERYTHING — `Infinity` reads
-// straight through `idx < openCount` in makeAccordion.
-//
-// ⚠️ This reverses v166, which opened only each tab's first section. The map
-// is kept (rather than deleted) so a future tab can opt back out with a number
-// without reintroducing the concept; today nothing does.
-const SEC_OPEN_DEFAULT = {};
+// v272: long pages start with the most useful sections open. Existing saved
+// choices win, and jump links open a requested section before scrolling.
+const SEC_OPEN_DEFAULT = { eagles:2, redsox:2, nfl:1, cfb:1, fantasy:2, pulse:1, predictions:1, labs:1 };
 const SEC_OPEN_ALL = Infinity;
 
-// Tabs that go BACK to that default on every app launch. v177 did this for the
-// NFL and CFB tabs only; v210 extends it to EVERY tab, because the owner asked
-// the app to START expanded and a saved state beats the default by design —
-// that's what makes a collapse survive a repaint. Without the reset, every
-// section they had ever collapsed would stay collapsed forever and the new
-// default would look like it hadn't taken.
-//
-// ⚠️ Doing it this way rather than migrating `sportshub:secs` once is what
-// makes "start expanded" mean it EVERY launch instead of just the next one.
-// It also means there is no stale state to migrate — the old v166-era keys
-// simply stop mattering.
-//
-// Persistence still does a real job WITHIN a visit, which is why the reset is
-// at launch and not on every render: these tabs repaint constantly (async
-// news, the power board, the playoff picture landing at different times) and a
-// section that re-opened itself mid-scroll would be worse than the drift v177
-// was fixing. So a tap sticks while the app is open; the next launch starts
-// expanded again.
-const SEC_RESET_ALL = true;
-const SEC_RESET_ON_LOAD = ['nfl', 'cfb'];   // kept for reference; SEC_RESET_ALL supersedes it
+// Saved section choices now survive reloads. Do not clear them on startup.
+const SEC_RESET_ALL = false;
+const SEC_RESET_ON_LOAD = []; // v272: the owner's open/closed choices survive relaunches.
 function resetTabSections() {
   try {
     if (SEC_RESET_ALL) { localStorage.removeItem(SECS_KEY); return; }
@@ -10820,7 +10805,7 @@ function setMode(live) {
     if (st) st.textContent = '';
   } else {
     b.textContent = 'OFFLINE'; b.className = 'badge demo';
-    if (st) st.textContent = 'Status: could not reach ESPN — showing sample data.';
+    if (st) st.textContent = 'Status: could not reach ESPN — saved records remain available; live feeds can be retried.';
   }
 }
 
@@ -10904,6 +10889,7 @@ function wireScrollSpy() {
 }
 
 function injectJumpNav(name) {
+  if (['home','research','watchlist','explore'].includes(name)) return;
   const panel = document.getElementById(name);
   if (!panel) return;
   buildControlRow(name);
@@ -11360,7 +11346,7 @@ function renderAbout() {
   const b = $('#dc-clear');
   if (b && !b.dataset.wired) {
     b.dataset.wired = '1';
-    b.onclick = () => { dcClear(); cache.clear(); b.textContent = '✅ Cleared'; renderAbout(); setTimeout(() => { b.textContent = '🗑️ Clear saved data'; }, 2000); };
+    b.onclick = () => { dcClear(); cache.clear(); b.textContent = '✅ Cleared'; renderAbout(); setTimeout(() => { b.textContent = 'Clear feed cache'; }, 2000); };
   }
 }
 /* ==========================================================================
@@ -12560,7 +12546,7 @@ function pkExpFallback(txt) {
   ta.value = txt; ta.select();
 }
 
-const renderers = { home: renderHome, eagles: renderEagles, nfl: renderNFL, cfb: renderCFB, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, pickem: renderPickem, labs: () => {}, about: renderAbout };
+const renderers = { home: renderHome, pulse: renderPulse, research: () => globalThis.SportsHubDesk.renderResearch(), watchlist: () => globalThis.SportsHubDesk.renderWatchlist(), explore: () => globalThis.SportsHubDesk.renderExplore(), eagles: renderEagles, nfl: renderNFL, cfb: renderCFB, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, pickem: renderPickem, labs: () => {}, about: renderAbout };
 
 /* Per-tab ENTRY hooks (v216).
    🚨 A RENDERER IS NOT AN ENTRY SIGNAL, and assuming it was is what broke the
@@ -12587,10 +12573,16 @@ const TAB_ENTER = {
   pickem() { pkState.week = pkState.curWeek; },
 };
 let currentTab = 'home';
-function showTab(name) {
+function showTab(name, options = {}) {
+  if (!renderers[name]) return;
   currentTab = name;
-  if(['nfl','cfb'].includes(name))setSportView(name,'games');
   if (TAB_ENTER[name]) TAB_ENTER[name]();
+  if (name === 'predictions') {
+    if (options.aiSport) state.aiSport = options.aiSport;
+    if (options.aiSub) state.aiSub = options.aiSub;
+  }
+  if(['nfl','cfb'].includes(name))setSportView(name,options.sportView || 'games',false);
+  globalThis.SportsHubDesk?.onTab(name,options);
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => {
     const on = b.dataset.tab === name;
@@ -12598,7 +12590,7 @@ function showTab(name) {
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
   Promise.resolve(renderers[name]())
-    .then(() => { injectJumpNav(name); applySections(name); paintStaleNote(); })
+    .then(() => { injectJumpNav(name); applySections(name); paintStaleNote(); globalThis.SportsHubDesk?.focusSection(); })
     .catch((e) => console.error(e));
 }
 
@@ -12685,7 +12677,7 @@ wheelScrollsSideways('.tabs, .live-rail, .rail-leagues');
 // span, not the button — resolve to the button before reading its dataset.
 $('#tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-tab]');
-  if (btn) showTab(btn.dataset.tab);
+  if (btn) { showTab(btn.dataset.tab); window.scrollTo({top:0,behavior:'instant'}); }
 });
 
 // default the sport selectors to whatever's in season right now
@@ -12732,8 +12724,8 @@ if (verEl) verEl.textContent = APP_VERSION;
 // it's ~99px of the ~224px above the content, so it gets a switch — collapsed
 // it still says how many games it's holding, which is the part you'd miss.
 const RAIL_HIDE_KEY = 'sportshub:railhidden';
-let railHidden = false;
-try { railHidden = localStorage.getItem(RAIL_HIDE_KEY) === '1'; } catch (e) {}
+let railHidden = true;
+try { railHidden = localStorage.getItem(RAIL_HIDE_KEY) !== '0'; } catch (e) {}
 function paintRailToggle() {
   const wrap = $('#rail-wrap'), btn = $('#rail-toggle');
   const n = document.querySelectorAll('#live-rail .lrc').length;
@@ -12787,10 +12779,11 @@ if (toTop) {
 /* 🔗 A `#pk=` link opens straight onto Pick'em, on the week the link names.
    Read BEFORE the first showTab so the hash is gone by the time anything
    paints — and so a reload cannot re-offer an import already dealt with. */
+globalThis.SportsHubDesk.init();
 if (pkReadLink()) {
   if (pkPendingLink?.week) pkState.week = pkPendingLink.week;
   showTab('pickem');
-} else showTab('home');
+} else if (!globalThis.SportsHubDesk.restoreRoute()) showTab('home',{replace:true});
 
 // The live rail is chrome, not a tab — it starts here and refreshes itself on
 // a timer (paused while the page is hidden) so it stays current no matter
@@ -12818,7 +12811,7 @@ gradePending();
 // blocking the rest of the app or making capture depend on this page being open.
 globalThis.SportsHubCloudAI?.sync?.().then(() => {
   if (currentTab === 'predictions') paintAiView().catch(() => {});
-}).catch((e) => console.warn('[cloud-ai] read failed; using cached/device history', e));
+}).catch((e) => { console.warn('[cloud-ai] read failed; using cached/device history', e); window.dispatchEvent(new CustomEvent('sportshub:cloud-error')); });
 
 // 🚨 v200 — start the betting backend waking NOW, not when something first
 // needs it. Render's free tier sleeps after ~15 min idle and takes 30-60s to

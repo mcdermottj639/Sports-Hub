@@ -3,20 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#f3f1ec" />
+  <meta name="theme-color" content="#f7f9f9" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Sports-Hub" />
   <title>Sports-Hub</title>
-  <meta name="description" content="Personal multi-sport hub — a daily overview of NFL, college football, NBA and MLB, plus AI picks." />
+  <meta name="description" content="Your personal sports desk: saved models, real results, fantasy decisions, research, and the games you care about." />
   <link rel="icon" type="image/png" href="favicon.png?v=9" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=9" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=271" />
-  <link rel="stylesheet" href="betting-signals.css?v=271" />
+  <link rel="stylesheet" href="styles.css?v=272" />
+  <link rel="stylesheet" href="betting-signals.css?v=272" />
+  <link rel="stylesheet" href="desk.css?v=272" />
 </head>
-<body>
+<body class="desk-shell">
+  <a class="desk-skip" href="#main-content">Skip to content</a>
+  <header class="topbar">
+    <button class="desk-wordmark" type="button" data-desk-route="today" aria-label="Sports Hub home"><span class="desk-brand-symbol">s<span>h</span></span><span>sports hub<span class="desk-brand-dot">.</span></span></button>
+    <span class="desk-breadcrumb" id="desk-breadcrumb">Today</span>
+    <div class="head-right">
+      <button class="desk-search-trigger" type="button" data-desk-search aria-label="Search Sports Hub"><span data-desk-icon="search"></span><span class="desk-search-label">Find anything</span><kbd>⌘ K</kbd></button>
+      <button id="rail-toggle" class="hd-btn" type="button" title="Show or hide scores">Scores</button>
+      <div id="mode-badge" class="badge">…</div>
+    </div>
+  </header>
+
   <!-- Live rail (v163): one card per in-progress game, each carrying that
        sport's own gamecast (bases/count/outs, field position + down, clock).
        Rendered by renderLiveRail(); stays hidden entirely when nothing is
@@ -31,41 +43,70 @@
     <div id="live-rail" class="live-rail" hidden aria-label="Today's games"></div>
   </div>
 
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-mark">🦅</span>
-      <h1>Sports-Hub</h1>
-      <span id="app-version" class="version"></span>
-    </div>
-    <div class="head-right">
-      <button id="rail-toggle" class="hd-btn" type="button" title="Show or hide scores">⌃ SCORES</button>
-      <div id="mode-badge" class="badge">…</div>
-    </div>
-  </header>
 
   <!-- v210: shown only while a view is painted from the on-device cache and
        the fresh copy is still on its way. Removed the moment it lands. -->
   <div id="stale-note" class="stale-note" hidden></div>
 
-  <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
-    <button id="tab-home" data-tab="home" class="active" role="tab" aria-selected="true" aria-controls="home"><span class="ic" aria-hidden="true">🏠</span><span class="lb">Home</span></button>
-    <button id="tab-eagles" data-tab="eagles" role="tab" aria-selected="false" aria-controls="eagles"><span class="ic" aria-hidden="true">🦅</span><span class="lb">Eagles</span></button>
-    <button id="tab-nfl" data-tab="nfl" role="tab" aria-selected="false" aria-controls="nfl"><span class="ic" aria-hidden="true">🏈</span><span class="lb">NFL</span></button>
-    <button id="tab-cfb" data-tab="cfb" role="tab" aria-selected="false" aria-controls="cfb"><span class="ic" aria-hidden="true">🎓</span><span class="lb">CFB</span></button>
-    <button id="tab-redsox" data-tab="redsox" role="tab" aria-selected="false" aria-controls="redsox"><span class="ic" aria-hidden="true">⚾</span><span class="lb">Red Sox</span></button>
-    <button id="tab-predictions" data-tab="predictions" role="tab" aria-selected="false" aria-controls="predictions"><span class="ic" aria-hidden="true">🤖</span><span class="lb">AI Picks</span></button>
-    <button id="tab-fantasy" data-tab="fantasy" role="tab" aria-selected="false" aria-controls="fantasy"><span class="ic" aria-hidden="true">🏆</span><span class="lb">Fantasy</span></button>
-    <button id="tab-pickem" data-tab="pickem" role="tab" aria-selected="false" aria-controls="pickem"><span class="ic" aria-hidden="true">🎯</span><span class="lb">Pick'em</span></button>
-    <button id="tab-labs" data-tab="labs" role="tab" aria-selected="false" aria-controls="labs"><span class="ic" aria-hidden="true">🧪</span><span class="lb">Labs</span></button>
-    <button id="tab-about" data-tab="about" role="tab" aria-selected="false" aria-controls="about"><span class="ic" aria-hidden="true">ℹ️</span><span class="lb">About</span></button>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Sports Hub sections" aria-orientation="vertical">
+    <div class="desk-sidebar-title">YOUR DESK</div>
+    <button id="tab-home" data-tab="home" class="active" role="tab" aria-selected="true" aria-controls="home"><span class="ic" data-desk-icon="home" aria-hidden="true"></span><span class="lb">Today</span></button>
+    <button id="tab-predictions" data-tab="predictions" class="" role="tab" aria-selected="false" aria-controls="predictions"><span class="ic" data-desk-icon="predictions" aria-hidden="true"></span><span class="lb">Models</span></button>
+    <button id="tab-research" data-tab="research" class="" role="tab" aria-selected="false" aria-controls="research"><span class="ic" data-desk-icon="research" aria-hidden="true"></span><span class="lb">Research</span></button>
+    <button id="tab-fantasy" data-tab="fantasy" class="" role="tab" aria-selected="false" aria-controls="fantasy"><span class="ic" data-desk-icon="fantasy" aria-hidden="true"></span><span class="lb">Fantasy</span></button>
+    <button id="tab-watchlist" data-tab="watchlist" class="" role="tab" aria-selected="false" aria-controls="watchlist"><span class="ic" data-desk-icon="watchlist" aria-hidden="true"></span><span class="lb">Watchlist</span><span class="desk-nav-count" data-watch-count>0</span></button>
+    <button id="tab-pickem" data-tab="pickem" class="" role="tab" aria-selected="false" aria-controls="pickem"><span class="ic" data-desk-icon="pickem" aria-hidden="true"></span><span class="lb">Pick’em</span></button>
+    <button id="tab-explore" data-tab="explore" class="" role="tab" aria-selected="false" aria-controls="explore"><span class="ic" data-desk-icon="explore" aria-hidden="true"></span><span class="lb">More</span></button>
+    <div class="desk-sidebar-title desk-follow-title">FOLLOWING</div>
+    <button id="tab-eagles" data-tab="eagles" class="" role="tab" aria-selected="false" aria-controls="eagles"><span class="ic" data-desk-icon="eagles" aria-hidden="true"></span><span class="lb">Eagles</span></button>
+    <button id="tab-redsox" data-tab="redsox" class="" role="tab" aria-selected="false" aria-controls="redsox"><span class="ic" data-desk-icon="redsox" aria-hidden="true"></span><span class="lb">Red Sox</span></button>
+    <button id="tab-nfl" data-tab="nfl" class="" role="tab" aria-selected="false" aria-controls="nfl"><span class="ic" data-desk-icon="nfl" aria-hidden="true"></span><span class="lb">NFL</span></button>
+    <button id="tab-cfb" data-tab="cfb" class="" role="tab" aria-selected="false" aria-controls="cfb"><span class="ic" data-desk-icon="cfb" aria-hidden="true"></span><span class="lb">College football</span></button>
+    <button id="tab-pulse" data-tab="pulse" class="" role="tab" aria-selected="false" aria-controls="pulse"><span class="ic" data-desk-icon="pulse" aria-hidden="true"></span><span class="lb">News & scores</span></button>
+    <button id="tab-labs" data-tab="labs" class="" role="tab" aria-selected="false" aria-controls="labs"><span class="ic" data-desk-icon="labs" aria-hidden="true"></span><span class="lb">Tools</span></button>
+    <button id="tab-about" data-tab="about" class="" role="tab" aria-selected="false" aria-controls="about"><span class="ic" data-desk-icon="about" aria-hidden="true"></span><span class="lb">About & data</span></button>
+    <div class="desk-sidebar-bottom"><span class="desk-sidebar-monogram">JM</span><div><b>Jack’s Sports Hub</b><small>Personal edition <span id="app-version"></span></small></div></div>
   </nav>
 
-  <main>
+  <div class="desk-page-heading">
+    <div><p class="desk-eyebrow">SPORTS, ON YOUR TERMS</p><h1 id="desk-page-title">Your daily brief</h1><p id="desk-page-desc">The signal. Without the noise.</p></div>
+    <div class="desk-heading-side"><span id="desk-date"></span><button type="button" class="desk-refresh" data-desk-refresh><span data-desk-icon="refresh"></span>Refresh</button></div>
+  </div>
+  <main id="main-content" tabindex="-1">
     <section id="home" class="tab-panel active" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
+      <div class="desk-intro-strip"><span class="desk-status" id="desk-capture">Checking saved history</span><span>Models. Decisions. Your game.</span></div>
+      <div class="desk-stats" id="desk-stats"></div>
+      <div class="desk-home-grid">
+        <div class="desk-main-column">
+          <section class="desk-card desk-focus-card"><div class="desk-card-heading"><div><p class="desk-eyebrow">THE SHORTLIST</p><h2>Where to focus</h2></div><span class="desk-round-mark">↗</span></div><div id="desk-focus"></div></section>
+          <section class="desk-card"><div class="desk-card-heading"><div><p class="desk-eyebrow">ON YOUR RADAR</p><h2>The games ahead</h2></div><button type="button" class="desk-link" data-desk-route="watchlist">Watchlist <span data-desk-icon="arrow"></span></button></div><p class="desk-caption desk-agenda-scope">NFL &amp; CFB this week · MLB &amp; NBA today · times are local</p><div class="desk-filter-row" id="desk-agenda-filters" role="group" aria-label="Filter game radar"></div><div id="desk-agenda"><div class="desk-empty" role="status">Loading your game radar…</div></div></section>
+          <details class="desk-card desk-board-fold" id="desk-board-fold"><summary><span><span class="desk-eyebrow">TODAY’S MODEL WATCHLIST</span><b>Where the model sees a gap</b></span><span>Explore <span aria-hidden="true">⌄</span></span></summary><p class="desk-caption">One card per game. These are experimental signals, with the same frozen forecasts as the full board.</p><div id="home-board"></div><button type="button" class="desk-link" data-desk-route="models/all/picks">Open the full model board <span data-desk-icon="arrow"></span></button></details>
+        </div>
+        <aside class="desk-side-column">
+          <section class="desk-card desk-results-card"><div class="desk-card-heading"><div><p class="desk-eyebrow">KEEPING SCORE</p><h2>The model’s record</h2></div><span class="desk-mini-badge">OFFICIAL</span></div><div id="desk-results"></div><button type="button" class="desk-link" data-desk-route="models/all/results">All results &amp; evidence <span data-desk-icon="arrow"></span></button></section>
+          <section class="desk-research-promo"><p class="desk-eyebrow">THE NEXT ADVANTAGE</p><h2>Question the model.</h2><p>Does the challenger improve the forecast? Your saved research puts both on the same field.</p><button type="button" data-desk-route="research">Open research desk <span data-desk-icon="arrow"></span></button><div class="desk-promo-lines" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></section>
+          <section class="desk-card desk-follow-card"><p class="desk-eyebrow">YOUR CORNER OF THE GAME</p><button type="button" data-desk-route="eagles"><span class="desk-team-dot eagles-dot">PHI</span><span><b>Philadelphia Eagles</b><small>Schedule, depth &amp; outlook</small></span><span data-desk-icon="arrow"></span></button><button type="button" data-desk-route="redsox"><span class="desk-team-dot sox-dot">BOS</span><span><b>Boston Red Sox</b><small>Roster, news &amp; season</small></span><span data-desk-icon="arrow"></span></button></section>
+        </aside>
+      </div>
+      <p class="desk-data-note" id="desk-data-note"></p>
+    </section>
+
+    <section id="research" class="tab-panel" role="tabpanel" aria-labelledby="tab-research" tabindex="0">
+      <div class="desk-research-intro"><span class="desk-eyebrow">TWO QUESTIONS. TWO CLEAR PATHS.</span><h2>Is there an edge?<br>Is the model getting better?</h2><p>Saved betting systems test a condition against the market. Challenger studies test a different forecast against the official model. Their results stay separate.</p></div>
+      <div class="desk-research-paths">
+        <article class="desk-card"><span class="desk-step">01 / SYSTEMS</span><h2>Test the situation</h2><p>Explore NFL and Top 25 conditions, saved lines, settled results and paper returns. History starts when collection began.</p><div class="desk-action-pair"><button type="button" class="desk-primary" data-desk-route="nfl/research">NFL research <span data-desk-icon="arrow"></span></button><button type="button" class="desk-secondary" data-desk-route="cfb/research">College research <span data-desk-icon="arrow"></span></button></div></article>
+        <article class="desk-card"><span class="desk-step">02 / MODEL DEVELOPMENT</span><h2>Test the forecast</h2><p>Compare the official model with experimental NFL and college candidates on the same saved games. Projections and actual market selections are different measures.</p><p class="desk-caption">Official = recorded model performance. Challenger = experimental alternative. Neither changes the other’s record.</p></article>
+      </div>
+      <div class="desk-section-heading"><h2>Current vs challenger</h2><span>Matched games. Saved lines.</span></div><div id="desk-research-comparisons" class="desk-comparison-grid"></div>
+      <div class="desk-method-links"><button type="button" data-desk-route="models/all/results"><span data-desk-icon="predictions"></span><b>Official results</b><small>Wins, losses, saved prices &amp; ROI</small></button><button type="button" data-desk-route="models/all/calibration"><span data-desk-icon="research"></span><b>Calibration</b><small>How probabilities compare with outcomes</small></button><button type="button" data-desk-route="models/all/method"><span data-desk-icon="about"></span><b>How it works</b><small>Inputs, calculations &amp; limitations</small></button></div>
+    </section>
+    <section id="watchlist" class="tab-panel" role="tabpanel" aria-labelledby="tab-watchlist" tabindex="0"><div class="desk-watch-info"><p>Saved games and notes stay on this browser. Bookmarks are personal reminders; they do not log a bet or alter the model record.</p><button type="button" class="desk-link" data-desk-route="today">Find games <span data-desk-icon="arrow"></span></button></div><div id="desk-watch-items" class="desk-watch-grid"></div></section>
+    <section id="explore" class="tab-panel" role="tabpanel" aria-labelledby="tab-explore" tabindex="0"><div class="desk-explore-lead"><h2>What would you like to do?</h2><button type="button" class="desk-secondary" data-desk-search><span data-desk-icon="search"></span>Search the whole hub</button></div><div id="desk-explore-grid"></div><div class="desk-external"><div><b>The league’s shared home</b><p>History, rankings, the Oracle and parlay live in your separate league app.</p></div><a href="https://mcdermottj639.github.io/League-History/" target="_blank" rel="noopener">Open League History ↗</a></div></section>
+    <section id="pulse" class="tab-panel" role="tabpanel" aria-labelledby="tab-pulse" tabindex="0">
       <div id="home-headline"></div>
       <h2 class="section-title acc-open" style="margin-top:6px">My Teams</h2>
       <div id="featured" class="featured-card">Loading your teams…</div>
-      <div id="home-board"></div>
+
       <!-- Today's Games moved to the rail at the top of the screen (v166).
            Golf stays here: it's a leaderboard, not a game card, so it never
            belonged in a rail of scores. SHELVED as of v193 (season over) —
@@ -181,7 +222,7 @@
 
     <section id="fantasy" class="tab-panel" role="tabpanel" aria-labelledby="tab-fantasy" tabindex="0">
       <div class="fantasy-head">
-        <h2 class="section-title no-acc" style="margin-top:0">Fantasy Tracker</h2>
+        <h2 class="section-title no-acc" style="margin-top:0">Your league</h2>
         <div id="fantasy-sport" class="chips"></div>
       </div>
       <!-- 📜 League History MOVED to mcdermottj639/League-History (Sep 2026).
@@ -241,15 +282,14 @@
     <section id="about" class="tab-panel" role="tabpanel" aria-labelledby="tab-about" tabindex="0">
       <div class="setup-card">
         <h2>About Sports-Hub</h2>
-        <p>A personal hub for <strong>NFL 🦅, college football (Top 25), NBA and MLB</strong> — a daily overview of every game, an Eagles deep-dive, an AI prediction game, and fantasy tracking, all in your browser.</p>
-        <p class="muted">Live data comes from ESPN’s free public sports feed, fetched directly in your browser. No login, no API key, nothing to configure.</p>
+        <p>Your personal sports desk for <strong>models, research, fantasy and the games you care about</strong>. Use it alongside your favorite sports apps: follow the scores there, find your next decision here.</p>
+        <p class="muted">Live data comes from ESPN’s free public sports feed, fetched directly in your browser. Fantasy league data comes through your existing private league connection. Saved model predictions and results come from automatic cloud collection.</p>
         <h3>Make it yours</h3>
-        <p>Edit the <code>LEAGUES</code> block near the top of <code>app.js</code> to change favorite teams or add a league.</p>
+        <p>Bookmark games on Today and Models, then add personal notes in your Watchlist. Search at the top of any page to jump to a tool, league or game.</p>
         <h3>Saved data</h3>
-        <p class="muted">Every load is kept on this device so the app opens on your last
-          data instead of a spinner, then refreshes behind it. Nothing leaves your phone.</p>
+        <p class="muted">Recent feed responses are cached on this device, then refreshed when online. Watchlist notes and pool picks are also device-local. Official model records are stored in the shared cloud history. Clearing the feed cache does not delete your notes, picks or model results.</p>
         <div id="dc-status" class="muted"></div>
-        <button id="dc-clear" class="fan-btn ghost" type="button">🗑️ Clear saved data</button>
+        <button id="dc-clear" class="fan-btn ghost" type="button">Clear feed cache</button>
         <div id="about-status" class="muted"></div>
       </div>
     </section>
@@ -259,10 +299,17 @@
 
   <!-- v187: a persistent one-line read of where the model stands today, and the
        one tap to the tab that shows its work. Filled by paintBotBar(). -->
-  <div id="botbar" class="botbar">
-    <span id="bb-read" class="bb-read">Reading today’s board…</span>
-    <button id="bb-go" class="bb-go" type="button">AI PICKS →</button>
-  </div>
+  <nav id="botbar" class="botbar desk-mobile-dock" aria-label="Main navigation">
+    <span id="bb-read" class="desk-sr-only"></span>
+    <button type="button" data-desk-route="today" data-desk-group="home"><span data-desk-icon="home"></span><span>Today</span></button>
+    <button type="button" data-desk-route="models/all/picks" data-desk-group="predictions"><span data-desk-icon="predictions"></span><span>Models</span></button>
+    <button type="button" data-desk-route="research" data-desk-group="research"><span data-desk-icon="research"></span><span>Research</span></button>
+    <button type="button" data-desk-route="fantasy" data-desk-group="fantasy"><span data-desk-icon="fantasy"></span><span>Fantasy</span></button>
+    <button type="button" data-desk-route="more" data-desk-group="explore"><span data-desk-icon="explore"></span><span>More</span></button>
+  </nav>
+
+  <dialog id="desk-search-dialog" class="desk-search-dialog" aria-labelledby="desk-search-title"><div class="desk-search-head"><label for="desk-search-input" id="desk-search-title">Find anything in Sports Hub</label><button type="button" data-search-close aria-label="Close search">×</button></div><div class="desk-search-field"><span data-desk-icon="search"></span><input id="desk-search-input" type="search" placeholder="Try waivers, NFL, results, a team…" autocomplete="off" /></div><div class="desk-search-meta"><span id="desk-search-count" role="status"></span><span>↑ ↓ to move · Enter to open</span></div><div id="desk-search-results"></div></dialog>
+  <div id="desk-toast" class="desk-toast" role="status" hidden></div>
 
   <div id="game-modal" class="modal hidden">
     <div class="modal-backdrop" id="modal-close"></div>
@@ -275,18 +322,20 @@
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
   <script src="supabase-config.js?v=239" defer></script>
-  <script src="cloud-ai.js?v=271" defer></script>
-  <script src="ai-model-utils.js?v=271" defer></script>
-  <script src="nfl-model.js?v=271" defer></script>
-  <script src="supabase/functions/_shared/betting-signals-core.js?v=271" defer></script>
-  <script src="cloud-signals.js?v=271" defer></script>
-  <script src="betting-signals-ui.js?v=271" defer></script>
-  <script src="supabase/functions/_shared/market-probability-config.js?v=271" defer></script>
-  <script src="supabase/functions/_shared/market-probability.js?v=271" defer></script>
-  <script src="mobile-chrome.js?v=271" defer></script>
-  <script src="supabase/functions/_shared/football-research-core.js?v=271" defer></script>
-  <script src="football-development.js?v=271" defer></script>
-  <script src="forecast-lock.js?v=271" defer></script>
-  <script src="app.js?v=271" defer></script>
+  <script src="cloud-ai.js?v=272" defer></script>
+  <script src="ai-model-utils.js?v=272" defer></script>
+  <script src="nfl-model.js?v=272" defer></script>
+  <script src="supabase/functions/_shared/betting-signals-core.js?v=272" defer></script>
+  <script src="cloud-signals.js?v=272" defer></script>
+  <script src="betting-signals-ui.js?v=272" defer></script>
+  <script src="supabase/functions/_shared/market-probability-config.js?v=272" defer></script>
+  <script src="supabase/functions/_shared/market-probability.js?v=272" defer></script>
+  <script src="mobile-chrome.js?v=272" defer></script>
+  <script src="supabase/functions/_shared/football-research-core.js?v=272" defer></script>
+  <script src="football-development.js?v=272" defer></script>
+  <script src="forecast-lock.js?v=272" defer></script>
+  <script src="desk-core.js?v=272" defer></script>
+  <script src="desk.js?v=272" defer></script>
+  <script src="app.js?v=272" defer></script>
 </body>
 </html>
