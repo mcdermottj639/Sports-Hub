@@ -101,6 +101,10 @@ immediately by the game radar before stats and decision cards.
 Model forecasts put the game ladder immediately after a compact play count;
 guidance, challenger summaries and tracking notes share a closed-by-default
 Board details disclosure. Game-specific cautions and past-slate notices stay visible.
+NFL main model cards show Football read directly below their live picks, with
+QB, personnel & conditions one tap away on the card. This uses the evidence
+attached to that forecast, not an older comparison snapshot. Previous model
+stays separately collapsed; its historical context remains available there.
 
 Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
@@ -614,9 +618,24 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v278** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v279** (backend **b17-fantasy-league-rules**).
+
+### v279 — Football context on the main model cards
+
+Football read and the QB/personnel/conditions disclosure now appear directly
+on NFL model cards under the live picks. They use `p.football`, including its
+frozen evidence when restored after kickoff. They do not depend on comparison
+records loading. Missing live evidence is not replaced with historical evidence.
+Previous model remains collapsed with its explicitly saved historical context.
+No model inputs, coefficients, locks, saved forecasts or backend changes.
+Validation: 199 existing Node tests and 3 main-card context tests pass. A
+synthetic browser check confirms direct QB access while Previous model stays
+closed and checks layout at 320, 390 and 1280px. No live data writes.
 
 ### v278 — Live formula first, previous model tucked away
+
+⚠️ EXTENDED in v279: live football context is now also directly accessible on
+the main cards; only historical comparisons remain under Previous model.
 
 NFL per-game comparisons and comparison records now start collapsed behind a
 muted Previous model disclosure. Missing comparison snapshots render no empty
