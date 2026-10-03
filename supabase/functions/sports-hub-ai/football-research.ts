@@ -1,7 +1,13 @@
 import '../_shared/football-research-core.js';
 import '../_shared/nfl-challenger.js';
+import '../_shared/nfl-football.js';
+import '../_shared/nfl-football-config.js';
+import '../_shared/nfl-evidence.js';
 const C = (globalThis as any).SportsHubFootballResearch;
 const N = (globalThis as any).SportsHubNFLChallenger;
+const F = (globalThis as any).SportsHubNFLFootball;
+const E = (globalThis as any).SportsHubNFLEvidence;
+const CONFIG = (globalThis as any).SportsHubNFLFootballConfig;
 type Json = Record<string, any>;
 // Caches expire within a warm isolate so a later cron can observe new evidence.
 const cache = new Map<string, {at:number, data:Promise<any>}>();
@@ -12,6 +18,13 @@ async function source(url:string) {
 }
 const efficiencyCache = new Map<number,{at:number,data:Promise<any>}>();
 const completedHistory = new Map<number,Map<string,any>>();
+let footballCache:{at:number,data:Promise<any>}|null=null;
+async function footballHistory() {
+  if(footballCache&&Date.now()-footballCache.at<15*60000)return footballCache.data;
+  const data=source('https://raw.githubusercontent.com/mcdermottj639/Sports-Hub/main/data/nfl-football-live.json');
+  footballCache={at:Date.now(),data};return data;
+}
+const states=new Map<string,any>();
 export function primeNFLHistory(efficiency:any) {
   if(!Number.isInteger(efficiency?.season))return;
   const saved=completedHistory.get(efficiency.season)||new Map();
@@ -41,20 +54,25 @@ export async function footballEvidence(sport:string,g:Json) {
     return {at,fpi:{source:url,updatedAt:ratings.updatedAt,season:year,home:ratings.ratings[g.home.id]??null,away:ratings.ratings[g.away.id]??null},candidateMargin:C.collegeMargin(ratings,g.home.id,g.away.id,g.neutral)};
   }
   const base='https://site.api.espn.com/apis/site/v2/sports/football/nfl';
-  const [h,a,injuries,efficiency]=await Promise.all([source(`${base}/teams/${g.home.id}/depthcharts`),source(`${base}/teams/${g.away.id}/depthcharts`),source(`${base}/injuries`),nflEfficiency(year)]);
+  const [h,a,injuries,history,summary]=await Promise.all([source(`${base}/teams/${g.home.id}/depthcharts`),source(`${base}/teams/${g.away.id}/depthcharts`),source(`${base}/injuries`),footballHistory(),source(`${base}/summary?event=${g.id}`)]);
   const at=new Date().toISOString();
   const qb={home:C.quarterback(h,injuries,g.home.id,year,at),away:C.quarterback(a,injuries,g.away.id,year,at)};
-  const candidate=N.candidate(efficiency,g.home.id,g.away.id,g.neutral,qb);
-  return {at,sourceStatus:{homeDepth:h?._sourceStatus,awayDepth:a?._sourceStatus,injuries:injuries?._sourceStatus},qb,efficiency,candidate,candidateMargin:candidate.margin,candidateTotal:candidate.total};
+  const key=`${history.generatedAt}:${at.slice(0,13)}`;
+  let state=states.get(key);if(!state){state=F.build(history,at);states.clear();states.set(key,state);}
+  const game={home:F.alias(g.home.abbr),away:F.alias(g.away.abbr),date:g.date,season:year,neutral:g.neutral};
+  const context={at,personnel:E.personnel({home:h,away:a},injuries,{home:g.home.id,away:g.away.id},year,at),weather:E.weather(summary,g.id,at),coaching:E.coaching(state,game.home,game.away)};
+  const candidate=F.candidate(state,history,game,qb,CONFIG,context);
+  return {at,sourceStatus:{homeDepth:h?._sourceStatus,awayDepth:a?._sourceStatus,injuries:injuries?._sourceStatus,playByPlay:history?._sourceStatus},qb,context,candidate,
+    efficiency:{used:state.used,expected:history.coverage?.expected,method:'opponent-adjusted-play-level-efficiency'},candidateMargin:candidate.margin,candidateTotal:candidate.total};
 }
 export function researchRows(sport:string,g:Json,p:Json,o:Json|null,evidence:Json,app:string) {
   const at=new Date().toISOString(),phase=C.phase(g.date,at);
   if(!phase||C.phase(g.date,g.observedAt)!==phase||Date.parse(g.observedAt)>Date.parse(at)||g.state!=='pre'||!['nfl','cfb'].includes(sport)||p.quality.length)return [];
   const candidate=evidence.candidateMargin;
-  const margin=candidate??p.margin,home=candidate!=null?margin>=0:p.home;
+  const margin=candidate??p.margin,home=candidate!=null?(evidence.candidate?.probHome!=null?evidence.candidate.probHome>=.5:margin>=0):p.home;
   const total=sport==='nfl'&&candidate!=null?evidence.candidateTotal:p.total;
   const baseline={margin:p.margin,total:p.total,home:p.home,probHome:p.p,version:'v239'};
-  const research={phase,baseline,evidence,method:sport==='cfb'?(candidate!=null?'fpi-difference-home3-v1':'baseline-only-fpi-unavailable'):'opponent-adjusted-team-points-per-drive-v1',candidateAvailable:candidate!=null,policy:'research-only',unvalidated:true};
+  const research={phase,baseline,evidence,method:sport==='cfb'?(candidate!=null?'fpi-difference-home3-v1':'baseline-only-fpi-unavailable'):'opponent-adjusted-play-level-efficiency-v1',candidateAvailable:candidate!=null,policy:'research-only',unvalidated:true};
   const base={event_id:g.id,sport,model_version:`${C.versionFor(sport)}-${phase}`,app_version:app,matchup:`${g.away.abbr} @ ${g.home.abbr}`,slate_date:new Date(g.date).toLocaleDateString('en-CA',{timeZone:'America/New_York'}),starts_at:g.date,captured_at:at,confidence:null,tier:null,model_probability:null,market_probability:null,provider:o?.provider||null,quality:[],snapshot:{research,odds:o,neutral:g.neutral,oddsObservedAt:g.observedAt,features:p.features}};
   const row=(market:string,selection:string,selection_home:boolean|null,line:number|null,projection:number|null,price:number|null)=>({...base,market,selection,selection_home,line,projection,price});
   const rows=[row('moneyline',home?g.home.name:g.away.name,home,null,margin,home?o?.hML??null:o?.aML??null)];

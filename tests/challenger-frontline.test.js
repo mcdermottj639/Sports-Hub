@@ -4,7 +4,7 @@ const C=require('../supabase/functions/_shared/football-research-core.js');
 function ui(){const s={SportsHubFootballResearch:C};s.globalThis=s;vm.runInNewContext(fs.readFileSync(require.resolve('../football-development.js'),'utf8'),s);return s.SportsHubFootballDevelopment;}
 function rows(phase='early',available=true){
   return ['moneyline','spread','total'].map(market=>({
-    event_id:'game',model_version:'football-research-nfl-v3-'+phase,matchup:'PIT @ CLE',
+    event_id:'game',model_version:C.versionFor('nfl')+'-'+phase,matchup:'PIT @ CLE',
     starts_at:'2026-10-04T17:00Z',captured_at:phase==='early'?'2026-09-30T20:00Z':'2026-10-04T16:00Z',
     market,line:market==='spread'?-3:market==='total'?42:null,projection:market==='total'?40:2,result:'pending',
     snapshot:{research:{phase,candidateAvailable:available,baseline:{margin:5,total:45},

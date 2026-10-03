@@ -232,10 +232,11 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   as the final step of the task. Only
   hold back from `main` if the owner explicitly says not to ship, or the change is
   knowingly broken/incomplete.
-- **Data source = ESPN's free public feeds only.** ESPN endpoints send permissive
-  CORS headers, so the browser can read them directly. Most other sources
-  (API-Sports, X/Twitter, Reddit) **block browser CORS** and are NOT usable here —
-  see "Things we tried that don't work."
+- **Public data sources:** ESPN remains the browser/live-game source. The NFL
+  research engine also uses public nflverse play-by-play and player identities
+  through the scheduled server-side aggregate workflow authorized in v275.
+  Do not add paid sources or expose secrets. Browser CORS restrictions still
+  apply to other direct feeds; see "Things we tried that don't work."
 - **No model identifier** (e.g. the exact model name/ID) in commits, code, PRs, or
   any pushed artifact. Chat only.
 - Don't create PRs unless explicitly asked.
@@ -612,7 +613,29 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v274** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v275** (backend **b17-fantasy-league-rules**).
+
+### v275 — Football evidence and validated challenger
+
+- Adds `nfl-football.js`, frozen fitted config, `nfl-evidence.js` and
+  `nfl-validation.js` plus `nfl-football-ui.js`. The v4 research cohort uses
+  opponent-adjusted play-level passing/rushing, QB changes, accuracy, protection,
+  explosive plays and pace. Official v239 calculations and locks stay unchanged.
+- Public nflverse history is reduced by `scripts/nfl-data.py` to a compact
+  three-season `data/nfl-football-live.json`. A repository workflow refreshes
+  it at 10:23, 16:23 and 22:23 UTC; weights are NEVER refit on this schedule.
+  Edge collection reads the raw snapshot, fails closed on stale/missing data,
+  and stores small per-game evidence with existing immutable early/near rows.
+- QB uncertainty has conditional backup scenarios and withholding, not guessed
+  playing probabilities. ESPN personnel, weather, coaching tendencies and
+  late/cold samples are visible; clutch/coaching/weather/non-QB injury bonuses
+  remain zero until prospective validation. The source notebook is browser-local,
+  dated, expiring and exportable; it has no automatic prediction weight.
+- Historical totals error improves modestly, margin is roughly level and winner
+  probabilities are worse. No automatic promotion. Separate prospective gates
+  compare the current model, challenger, same-time book and fixed market blend.
+  See `docs/NFL_FOOTBALL_ENGINE.md` and `data/nfl-football-validation.json` for
+  reproducibility, exact historical limitations and feature ablations.
 
 ### v274 — Teams first, games next
 
@@ -713,6 +736,10 @@ Current version as of this writing: **v274** (backend **b17-fantasy-league-rules
 - Shared one-minute read cache coalesces all card and summary requests; failures are retryable. UI-only release: baseline v239, challenger NFL v3 and backend collection are unchanged.
 
 ### v263 — Isolated NFL efficiency challenger
+
+⚠️ SUPERSEDED in v275: v4 play-level research replaces v3 for new captures;
+old v3 observations remain immutable and archived. The old module is retained
+for reproducibility and regression tests.
 
 - Official v239 coefficients and predictions are unchanged. NFL research uses `football-research-nfl-v3-early/near`; CFB stays on `football-research-v2-early/near`. Old NFL v2 rows remain archived, never relabeled or rewritten. New records begin prospectively, not retroactively.
 - `nfl-challenger.js` fits opponent-adjusted team points per offensive drive (including defensive/special-teams scoring, explicitly NOT EPA or pure offensive PPD) from ESPN completed regular-season boxscores. Current season only, exact season/event checks, final status and a six-hour post-start cutoff. Alternating ridge estimates separate offense/defense effects with 30 pseudo-drives of zero-effect shrinkage. These are fixed unvalidated research assumptions, not weights optimized on the existing pick log. Forecast possession count is pooled team pace shrunk by six league-average team-games; home margin reuses the existing NFL fitted 1.595353-point term, removed before fitting and restored for non-neutral forecasts. No invented QB point adjustment or challenger probabilities.
@@ -6409,6 +6436,15 @@ rewrite.**
 
 ## Architecture notes
 
+- **v275 NFL football research:** `supabase/functions/_shared/nfl-football.js`
+  is the shared feature engine; its config is a frozen chronological fit.
+  `nfl-evidence.js` normalizes current context; `nfl-validation.js` compares
+  prospective paired observations without automatic promotion.
+  `scripts/nfl-data.py` and the GitHub workflow refresh public aggregates;
+  `nfl-football-ui.js` adds compact football explanations, validation and
+  the `sportshub:nfl-evidence:v1` source notebook. Existing official capture,
+  storage identity, final grading and kickoff locks remain unchanged.
+
 - **v232 AI pipeline:** `predictGame` computes forecasts and explicit
   `blockedReasons`; display retains blocked reads, qualification refuses them.
   `commitRow` checks pregame state AND kickoff time, freezes first observations
@@ -7076,6 +7112,8 @@ rewrite.**
   44px touch-target floor; keyboard focus shows a `:focus-visible` ring.
 
 ## localStorage keys
+
+- `sportshub:nfl-evidence:v1` — per-event immutable scouting observations, source URLs, fact/opinion tags, expiration timestamps; local only, exportable, zero automatic weight.
 
 - `sportshub:desk:watch:v1` — up to 80 sport/event bookmarks with an optional
   800-character note, saved time and schedule labels. Device-only; not a bet

@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v274';
+const APP_VERSION = 'v275';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239';
 const AI_MATH = globalThis.SportsHubAI;
@@ -4444,7 +4444,8 @@ function modelPanel(sport) {
     h += row('Data safeguards', 'Neutral sites receive no home-field boost. Missing conference entries stay unknown, not FCS, and block signals. Tier priors are not opponent-adjusted schedule ratings; early-season and mixed-source estimates need caution.');
   } else if (sport === 'nfl' && NFL_FIT) {
     const f = (v) => Number(v).toFixed(3);
-    h += `${row('Direction', 'NFL uses <b>three fitted paths</b>: logistic win probability for moneyline, linear point margin for spread, and a shrunk scoring projection for totals. All features are pregame-only.')}
+    h += `${row('Football challenger', '<b>New research engine:</b> opponent-adjusted play efficiency, QB ability and lineup changes, protection, pace and uncertainty scenarios. Coaching, clutch and weather are tracked without unvalidated bonuses. Open a game’s Model comparison or Board details → Football development for evidence and validation. The formulas below remain the official model.')}
+      ${row('Direction', 'NFL uses <b>three fitted paths</b>: logistic win probability for moneyline, linear point margin for spread, and a shrunk scoring projection for totals. All features are pregame-only.')}
       ${sec('Moneyline — win probability')}
       ${row('Home baseline', f(NFL_FIT.ML.intercept))}
       ${row('Record · scoring margin', `${f(NFL_FIT.ML.record)} · ${f(NFL_FIT.ML.margin)}`)}

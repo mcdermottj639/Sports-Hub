@@ -1,9 +1,9 @@
-import {footballEvidence, researchRows, primeNFLHistory} from './football-research.ts';
+import {footballEvidence, researchRows} from './football-research.ts';
 import '../_shared/market-probability-config.js';
 import '../_shared/market-probability.js';
 import {signalsEnabled, captureSignalQuotes, signalInputs, saveSignalDecision, settleSignalGame, missedSignalWindows, reconcileSignals} from './signals.ts';
 const MODEL_VERSION = 'v239';
-const APP_VERSION = 'v263';
+const APP_VERSION = 'v275';
 const SPORTS = ['nfl', 'cfb', 'mlb'] as const;
 type Sport = typeof SPORTS[number];
 type Json = Record<string, any>;
@@ -272,15 +272,13 @@ Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return new Response('Method not allowed',{status:405});
   const started=new Date().toISOString();let run:any=null,captured=0,graded=0,skipped=0;
   const errors:any[]=[], signals:any={status:'disabled',written:0,evaluated:0,unpriced:0,missed:0,graded:0,errors:0};
-  let captureSignals=false;const research={captured:0,errors:0,version:'nfl-v3-cfb-v2'};
+  let captureSignals=false;const research={captured:0,errors:0,version:'nfl-v4-cfb-v2'};
   const signalError=()=>{signals.errors++;signals.error_category='signals_step_failed';};
   try{
     const recent=await db('ai_job_runs?select=id,status,started_at,details&order=started_at.desc&limit=1');
     if(recent?.[0]&&recent[0].details?.model===MODEL_VERSION&&recent[0].details?.app===APP_VERSION&&recent[0].details?.research?.version===research.version&&['running','ok','partial'].includes(recent[0].status)&&Date.now()-Date.parse(recent[0].started_at)<10*60*1000)return Response.json({ok:true,status:'rate-limited',run:recent[0].id},{status:202});
     run=(await db('ai_job_runs',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({started_at:started,sports:[...SPORTS]})}))[0];
     captureSignals=await signalsEnabled(db).catch(()=>{signalError();return false;});
-    // Reuse immutable completed-game boxscores; recurring runs fetch new finals only.
-    try { const saved=await db('ai_predictions?sport=eq.nfl&model_version=like.football-research-nfl-v3-*&select=snapshot&order=captured_at.desc&limit=1');primeNFLHistory(saved?.[0]?.snapshot?.research?.evidence?.efficiency); } catch(_) { /* Cold source fallback remains safe. */ }
     graded=await gradePending(async(g:any)=>{
       if(!['nfl','cfb'].includes(g.sport)||(globalThis as any).SportsHubFootballResearch.phase(g.date,new Date().toISOString())!=='near')return;
       try {

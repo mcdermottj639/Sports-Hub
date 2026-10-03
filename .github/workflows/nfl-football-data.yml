@@ -1,0 +1,37 @@
+name: Refresh NFL football evidence
+on:
+  schedule:
+    - cron: '23 10,16,22 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['scripts/nfl-data.py', '.github/workflows/nfl-football-data.yml']
+permissions:
+  contents: write
+concurrency:
+  group: nfl-football-data
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download and validate public aggregates
+        run: |
+          SEASON=$(python -c 'from datetime import datetime; d=datetime.now(); print(d.year if d.month>=8 else d.year-1)')
+          python scripts/nfl-data.py --end "$SEASON" --live-only --output /tmp/nfl-football-live.json
+      - name: Publish evidence without refitting model weights
+        run: |
+          git config user.name "Sports Hub data"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --ff-only origin main
+          cp /tmp/nfl-football-live.json data/nfl-football-live.json
+          git add data/nfl-football-live.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Refresh NFL play-by-play evidence"
+          git pull --rebase origin main
+          git push origin HEAD:main

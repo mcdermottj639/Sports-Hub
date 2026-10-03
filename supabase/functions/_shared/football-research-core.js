@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const VERSION = 'football-research-v2';
-  const versionFor = sport => sport === 'nfl' ? 'football-research-nfl-v3' : VERSION;
+  const versionFor = sport => sport === 'nfl' ? 'football-research-nfl-v4' : VERSION;
   const finite = v => v != null && String(v).trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
   function phase(start, at) {
     const minutes = (Date.parse(start) - Date.parse(at)) / 60000;
@@ -42,6 +42,9 @@
     if (!qb) return result;
     result.name = qb.displayName || qb.fullName || null;
     result.athleteId = athleteId(qb);
+    const backup=position?.athletes?.[1];
+    result.backupId=backup?athleteId(backup):null;
+    result.backupName=backup?.displayName||backup?.fullName||null;
     const injuryStamp = Date.parse(injuries?.timestamp);
     const injuryFresh = Number(injuries?.season?.year) === Number(year) && Number.isFinite(injuryStamp) && injuryStamp <= now && now - injuryStamp < 2 * 864e5;
     const reports = [...(qb.injuries || []), ...(injuryFresh ? (injuries.injuries || []).find(t => String(t.id) === String(teamId))?.injuries || [] : [])];

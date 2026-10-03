@@ -3463,3 +3463,25 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .fc-selection b { font-size: .79rem; }
 .fc-game .fc-selection small { font-size: .65rem; line-height: 1.25; font-weight: 400; color: var(--muted); }
 .fc-market > summary:has(.fc-selection) { padding: .4rem 0; }
+/* NFL football evidence stays inside the existing compact disclosures. */
+.nf-detail, .nf-validation, .nf-scouting { margin: .65rem 0; max-width: 100%; min-width: 0; }
+.nf-detail summary, .nf-validation > summary, .nf-scouting > summary { cursor: pointer; font-weight: 700; padding: .65rem 0; }
+.nf-drivers { list-style: none; padding: 0; margin: .45rem 0; }
+.nf-drivers li { display: flex; gap: .6rem; justify-content: space-between; padding: .4rem 0; border-bottom: 1px solid var(--border, #d8e0d9); }
+.nf-drivers b { white-space: nowrap; }
+.nf-uncertainty { margin: .45rem 0; padding: .5rem .65rem; background: rgba(151,112,28,.09); border-left: 3px solid #aa842f; font-size: .82rem; line-height: 1.45; overflow-wrap: anywhere; }
+.nf-detail p, .nf-validation p, .nf-scouting p { line-height: 1.5; font-size: .85rem; overflow-wrap: anywhere; }
+.nf-detail table, .nf-validation table { width: 100%; border-collapse: collapse; font-size: .8rem; table-layout: fixed; }
+.nf-detail td, .nf-detail th, .nf-validation td, .nf-validation th { padding: .5rem .35rem; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.nf-detail caption { text-align: left; font-weight: 700; margin-bottom: .4rem; }
+.nf-factors { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .6rem; }
+.nf-scouting form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .65rem; }
+.nf-scouting label { display: grid; gap: .25rem; font-size: .85rem; min-width: 0; }
+.nf-scouting label:has(textarea), .nf-scouting label:has(input[type=url]) { grid-column: 1 / -1; }
+.nf-scouting input, .nf-scouting select, .nf-scouting textarea { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid #b8c5bd; border-radius: 8px; padding: .65rem; font: inherit; background: var(--surface,#fff); color: inherit; }
+.nf-scouting textarea { min-height: 90px; resize: vertical; }
+.nf-scouting button { min-height: 42px; padding: .6rem .9rem; border-radius: 8px; border: 1px solid #bfd0c4; cursor: pointer; }
+.nf-observation { margin: .75rem 0; padding: .65rem; border: 1px solid #d8e0d9; border-radius: 8px; }
+.nf-observation small { display: block; font-size: .75rem; }
+.nf-observation a { display: inline-block; padding: .4rem 0; }
+@media(max-width:480px) { .nf-factors { grid-template-columns: 1fr; } .nf-scouting input,.nf-scouting select,.nf-scouting textarea { font-size: 16px; } }

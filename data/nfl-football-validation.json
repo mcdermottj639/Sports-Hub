@@ -1,0 +1,212 @@
+{
+  "version": "football-research-nfl-v4",
+  "generatedAt": "2026-10-03T04:04:35.963180+00:00",
+  "featureHash": "b2d01b557ba4e78f4cfea62df65b8105013041ed6fba97fb88a272e3eb31043a",
+  "split": {
+    "train": "2018\u20132023",
+    "selection": "2024",
+    "holdout": "2025",
+    "future": "2026 after deployment"
+  },
+  "limitations": [
+    "Corrected historical play-by-play is retrospective, not archived pregame source vintages.",
+    "Historical QB expectation uses the prior game passer; lineup-change scenarios require prospective validation.",
+    "2025 was used by earlier model research; no claim it is an untouched organizational test.",
+    "No timestamped historical sportsbook quotes: historical ROI, CLV and market blends are not claimed.",
+    "Weather, coaching, non-QB personnel and clutch have zero extra weight pending prospective validation."
+  ],
+  "samples": {
+    "train": 1657,
+    "selection": 285,
+    "holdout": 285
+  },
+  "ablations": {
+    "margin": [
+      {
+        "family": "core",
+        "regularization": 10,
+        "selectionLoss": 171.18402492784924
+      },
+      {
+        "family": "core",
+        "regularization": 100,
+        "selectionLoss": 171.33474646320565
+      },
+      {
+        "family": "core",
+        "regularization": 1000,
+        "selectionLoss": 175.28840961756111
+      },
+      {
+        "family": "qb",
+        "regularization": 10,
+        "selectionLoss": 169.45697360252282
+      },
+      {
+        "family": "qb",
+        "regularization": 100,
+        "selectionLoss": 169.48635900478607
+      },
+      {
+        "family": "qb",
+        "regularization": 1000,
+        "selectionLoss": 172.71156677587072
+      },
+      {
+        "family": "matchup",
+        "regularization": 10,
+        "selectionLoss": 169.69413070689492
+      },
+      {
+        "family": "matchup",
+        "regularization": 100,
+        "selectionLoss": 169.29319484356435
+      },
+      {
+        "family": "matchup",
+        "regularization": 1000,
+        "selectionLoss": 169.4934194146336
+      }
+    ],
+    "total": [
+      {
+        "family": "core",
+        "regularization": 10,
+        "selectionLoss": 164.6975116604609
+      },
+      {
+        "family": "core",
+        "regularization": 100,
+        "selectionLoss": 164.69133863505257
+      },
+      {
+        "family": "core",
+        "regularization": 1000,
+        "selectionLoss": 165.65861851986847
+      },
+      {
+        "family": "qb",
+        "regularization": 10,
+        "selectionLoss": 164.56856816233693
+      },
+      {
+        "family": "qb",
+        "regularization": 100,
+        "selectionLoss": 164.54590307721284
+      },
+      {
+        "family": "qb",
+        "regularization": 1000,
+        "selectionLoss": 164.944089113659
+      },
+      {
+        "family": "matchup",
+        "regularization": 10,
+        "selectionLoss": 166.3205349387828
+      },
+      {
+        "family": "matchup",
+        "regularization": 100,
+        "selectionLoss": 165.73097099675925
+      },
+      {
+        "family": "matchup",
+        "regularization": 1000,
+        "selectionLoss": 163.89450909771696
+      }
+    ],
+    "moneyline": [
+      {
+        "family": "core",
+        "regularization": 10,
+        "selectionLoss": 0.218008209406787
+      },
+      {
+        "family": "core",
+        "regularization": 100,
+        "selectionLoss": 0.2189064759304033
+      },
+      {
+        "family": "core",
+        "regularization": 1000,
+        "selectionLoss": 0.2306519366639168
+      },
+      {
+        "family": "qb",
+        "regularization": 10,
+        "selectionLoss": 0.21359396135191488
+      },
+      {
+        "family": "qb",
+        "regularization": 100,
+        "selectionLoss": 0.21428193542875662
+      },
+      {
+        "family": "qb",
+        "regularization": 1000,
+        "selectionLoss": 0.2263676133036393
+      },
+      {
+        "family": "matchup",
+        "regularization": 10,
+        "selectionLoss": 0.21284069544109513
+      },
+      {
+        "family": "matchup",
+        "regularization": 100,
+        "selectionLoss": 0.21196356613718031
+      },
+      {
+        "family": "matchup",
+        "regularization": 1000,
+        "selectionLoss": 0.21939283175155946
+      }
+    ]
+  },
+  "holdout": {
+    "margin": {
+      "candidate": {
+        "n": 285,
+        "mae": 10.238871603682268,
+        "rmse": 12.966098692776576
+      },
+      "baseline": {
+        "n": 285,
+        "mae": 10.14330614789499,
+        "rmse": 12.921320972099675
+      },
+      "selectedFamily": "matchup",
+      "regularization": 100
+    },
+    "total": {
+      "candidate": {
+        "n": 285,
+        "mae": 10.589103411719126,
+        "rmse": 13.420044622765358
+      },
+      "baseline": {
+        "n": 285,
+        "mae": 10.873279526317258,
+        "rmse": 13.654780189065029
+      },
+      "selectedFamily": "matchup",
+      "regularization": 1000
+    },
+    "moneyline": {
+      "candidate": {
+        "n": 284,
+        "brier": 0.2255336044631937,
+        "logLoss": 0.6415811705155279,
+        "accuracy": 0.6161971830985915
+      },
+      "baseline": {
+        "n": 284,
+        "brier": 0.21762321500079693,
+        "logLoss": 0.6240153357152459,
+        "accuracy": 0.6584507042253521
+      },
+      "selectedFamily": "matchup",
+      "regularization": 100
+    }
+  }
+}

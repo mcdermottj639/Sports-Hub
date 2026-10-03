@@ -35,7 +35,7 @@ test('new NFL cohort preserves baseline, freezes candidate margins/totals and ma
  const g={id:'1',state:'pre',date:new Date(Date.now()+4*3600000).toISOString(),observedAt:new Date().toISOString(),home:{id:'A',name:'Home',abbr:'H'},away:{id:'B',name:'Away',abbr:'A'}};
  const p={home:true,p:.6,margin:5,total:45,quality:[],features:{}},o={spread:-3,ou:44,hML:-150,aML:130,hSpreadPrice:-110,aSpreadPrice:-105,overPrice:-108,underPrice:-112};
  const rows=researchRows('nfl',g,p,o,{candidateMargin:-4,candidateTotal:39},'test');
- assert.ok(rows.every(r=>r.model_version===N.VERSION+'-early'&&r.model_probability===null&&r.tier===null));assert.equal(rows[0].selection_home,false);assert.equal(rows[0].price,130);assert.equal(rows[2].projection,39);assert.equal(rows[2].selection,'UNDER 44');assert.equal(rows[2].snapshot.research.baseline.total,45);
+ assert.ok(rows.every(r=>r.model_version===C.versionFor('nfl')+'-early'&&r.model_probability===null&&r.tier===null));assert.equal(rows[0].selection_home,false);assert.equal(rows[0].price,130);assert.equal(rows[2].projection,39);assert.equal(rows[2].selection,'UNDER 44');assert.equal(rows[2].snapshot.research.baseline.total,45);
  const missing=researchRows('nfl',g,p,o,{},'test');assert.equal(missing[0].snapshot.research.candidateAvailable,false);
  assert.equal(C.versionFor('cfb'),C.VERSION);
 });
