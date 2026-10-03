@@ -6,7 +6,7 @@ const math=require('../ai-model-utils.js');
 const source=fs.readFileSync('supabase/functions/sports-hub-ai/index.ts','utf8');
 function load(rows=[]){
  const writes=[];
- const context=vm.createContext({Date,encodeURIComponent,SportsHubSignalsCore:core,MODEL_VERSION:'v239',american:math.american,implied:math.implied,pickPrice:(p,o)=>math.priceFor(o,p.home),db:async(path,opts)=>{if(opts){writes.push({path,body:JSON.parse(opts.body)});return [];}return rows;}});
+ const context=vm.createContext({Date,encodeURIComponent,SportsHubSignalsCore:core,MODEL_VERSION:'v239',modelVersionFor:require('../supabase/functions/_shared/nfl-live.js').versionFor,american:math.american,implied:math.implied,pickPrice:(p,o)=>math.priceFor(o,p.home),db:async(path,opts)=>{if(opts){writes.push({path,body:JSON.parse(opts.body)});return [];}return rows;}});
  for(const name of ['odds','enrichPrices','fairProbability']){
   const fn=source.match(new RegExp(`^(?:async )?function ${name}\\([^]*?^}`, 'm'))[0];
   vm.runInContext(stripTypeScriptTypes(fn),context);

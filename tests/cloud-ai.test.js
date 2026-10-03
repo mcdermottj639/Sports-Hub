@@ -6,9 +6,10 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(require.resolve('../cloud-ai.js'), 'utf8');
 
-function load(rows) {
+function load(rows, live) {
   const values = new Map([['sportshub:cloud-ai:v1', JSON.stringify({ at: '2026-09-15T00:00:00Z', rows, run: { status: 'ok' } })]]);
   const root = {
+    SportsHubNFLLive: live,
     SPORTS_HUB_SUPABASE: { url: 'https://example.supabase.co', key: 'publishable' },
     localStorage: { getItem: (k) => values.get(k) || null, setItem: (k, v) => values.set(k, v) },
     dispatchEvent() {}, CustomEvent: class {}, fetch: async () => ({ ok: true, json: async () => [] }),
@@ -53,4 +54,20 @@ test('snapshot cannot override canonical saved probability or filled price',()=>
  const api=load([{...base,market:'moneyline',selection:'Home',result:'win',model_probability:.65,snapshot:{price:null,prob:.9,v:'stale'}}]);
  const q=api.maps().tally['game-1'].q;
  assert.equal(q.price,-110);assert.equal(q.prob,.65);assert.equal(q.v,'v239');
+});
+
+test('promotion isolates official games and keeps every replaced row in the version archive',()=>{
+ const live=require('../supabase/functions/_shared/nfl-live.js');
+ const old={...base,starts_at:'2026-10-04T17:00Z',market:'moneyline',result:'pending',selection:'Old home',selection_home:true};
+ const next={...old,model_version:live.VERSION,selection:'New away',selection_home:false};
+ const spread={...old,market:'spread',selection:'Old spread'};
+ for(const rows of [[old,next,spread],[next,spread,old]]){
+  const api=load(rows,live),current=api.maps(),archive=api.maps(true);
+  assert.deepEqual(Object.keys(current.pending),['game-1']);assert.equal(current.pending['game-1'].pick,'New away');
+  assert.equal(Object.keys(archive.pending).length,3);
+ }
+ assert.equal(Object.keys(load([old,spread],live).maps().pending).length,0);
+ const settled=[{...old,result:'win'},{...next,result:'loss'}];
+ assert.equal(Object.keys(load(settled,live).maps().tally).length,1);
+ assert.equal(Object.keys(load(settled,live).maps(true).tally).length,2);
 });

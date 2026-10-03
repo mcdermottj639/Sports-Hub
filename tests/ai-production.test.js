@@ -8,7 +8,8 @@ const AI_MATH = require('../ai-model-utils.js');
 const NFL_FIT = require('../nfl-model.js');
 function load() {
   const storage = new Map();
-  const s = vm.createContext({ AI_MATH, NFL_FIT, Date, console, SportsHubMarketProbability: require('../supabase/functions/_shared/market-probability.js'), SportsHubSignalsCore: require('../supabase/functions/_shared/betting-signals-core.js'),
+  const live = require('../supabase/functions/_shared/nfl-live.js');
+  const s = vm.createContext({ AI_MATH, NFL_FIT, Date, console, SportsHubNFLLive:live, modelVersionFor:live.versionFor, SportsHubMarketProbability: require('../supabase/functions/_shared/market-probability.js'), SportsHubSignalsCore: require('../supabase/functions/_shared/betting-signals-core.js'),
     localStorage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, String(v)) },
     clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)), logistic: (z) => 1 / (1 + Math.exp(-z)),
     esc: (x) => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'),
@@ -143,7 +144,7 @@ test('first pregame snapshot is immutable; markets coexist without collisions', 
   const rows = JSON.parse(before);
   assert.deepEqual(Object.keys(rows).sort(), ['fixture', 'fixture:s', 'fixture:t']);
   assert.equal(rows.fixture.q.price, -150); assert.equal(rows['fixture:s'].q.price, null);
-  assert.equal(rows.fixture.q.v, source.match(/AI_MODEL_VERSION = '([^']+)'/)[1]);
+  assert.equal(rows.fixture.q.v, s.SportsHubNFLLive.VERSION);
   assert.equal(rows.fixture.q.app, source.match(/APP_VERSION = '([^']+)'/)[1]);
 });
 test('saved results fall back to exact sport, date and matchup metadata', () => {

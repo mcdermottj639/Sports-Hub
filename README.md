@@ -15,13 +15,13 @@ A personal sports decision workspace for **NFL, college football (Top 25), NBA, 
 - **🏈 NFL** — the weekly slate, a betting board (line + model price + where the money is), league headlines, a power board and the playoff picture.
 - **📊 Game Report** — tap any game: the book's line against the model's price, line movement, DraftKings bets-vs-dollars splits, and **🔪 Sharp Action** — how many times the line has moved toward each side, plus how the books disagree with each other. Honestly labelled: it counts what the app actually saw, not a paid steam feed.
 - **🎓 CFB** — college football, **Top 25 only**: the ranked slate, the poll with weekly movement, the projected playoff field, a betting board and league news. A game appears anywhere in the app only when a ranked team is playing in it.
-- **NFL football research** — a play-level challenger measures QB ability, opponent-adjusted passing/rushing, protection and pace. Open a game comparison for personnel/weather context and conditional QB scenarios. Dated scouting notes and separate prospective validation live in Board details. The current model remains official until improvements earn promotion.
+- **Live NFL football model** — the former play-level challenger now drives official winner, spread and total forecasts. It measures QB ability, opponent-adjusted passing/rushing, protection and pace. Open a game comparison for personnel/weather context and conditional QB scenarios. Dated scouting notes and separate prospective validation live in Board details. Promoted by owner choice in v276; a new official record starts with nfl-football-v1. The previous v239 model remains the comparison benchmark; statistical improvement is not yet established.
 - **Models** — forecasts, official results, calibration and methodology. Winner, spread and total stay separate. Official performance uses scheduled cloud capture and saved quotes; missing-price coverage is explicit. Local older records remain available separately.
 - **🧪 Labs** — standalone experiments: an NFL mock draft simulator, a sports trivia lab, a fantasy mock draft, and a **Workout Lab** (a 3-day training split with guided sessions, rest timers and load tracking).
 
 ## How it works
 
-Live public sports data comes from **ESPN**, fetched directly in the browser. NFL research also uses scheduled public **nflverse** play-by-play aggregates; see [the football engine](docs/NFL_FOOTBALL_ENGINE.md). Private fantasy league sync uses the existing Render service; durable model and research history uses the existing Supabase collection services. No frontend build step is needed. Collection continues while the app is closed.
+Live public sports data comes from **ESPN**, fetched directly in the browser. The NFL engine also uses scheduled public **nflverse** play-by-play aggregates; see [the football engine](docs/NFL_FOOTBALL_ENGINE.md). Private fantasy league sync uses the existing Render service; durable model and research history uses the existing Supabase collection services. No frontend build step is needed. Collection continues while the app is closed.
 
 ## Make it yours
 

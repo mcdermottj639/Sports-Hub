@@ -233,7 +233,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   hold back from `main` if the owner explicitly says not to ship, or the change is
   knowingly broken/incomplete.
 - **Public data sources:** ESPN remains the browser/live-game source. The NFL
-  research engine also uses public nflverse play-by-play and player identities
+  football engine also uses public nflverse play-by-play and player identities
   through the scheduled server-side aggregate workflow authorized in v275.
   Do not add paid sources or expose secrets. Browser CORS restrictions still
   apply to other direct feeds; see "Things we tried that don't work."
@@ -267,9 +267,10 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   sizing is scoped to desk components so existing analytical charts retain
   their dimensions. No theme switch or frontend build step.
 - `app.js` (~12,000 lines) — main application logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
-- `nfl-model.js` — dependency-free v231 NFL moneyline/spread/totals arithmetic.
+- `nfl-model.js` — archived v239 NFL baseline arithmetic for comparison.
   It is loaded before `app.js` and required directly by the Node tests, so the
-  tested formulas are the production formulas rather than a duplicate.
+  baseline remains reproducible. Live NFL routes through `_shared/nfl-live.js`
+  and `nfl-live-client.js`, using the shared frozen football engine.
 - `ai-model-utils.js` — v232 strict stat/odds parsing, baseball innings,
   quote-specific EV, pregame eligibility and version-filtered evaluation.
 - `supabase-config.js`, `cloud-ai.js` — public read-only Supabase configuration
@@ -613,9 +614,37 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v275** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v276** (backend **b17-fantasy-league-rules**).
+
+### v276 — Promote the football engine to live NFL
+
+- Owner explicitly selects the v4 football challenger as the live NFL model.
+  The frozen coefficients are unchanged; this is not a statistical-gate pass.
+  `nfl-football-v1` starts a new official winner/spread/total record; CFB and MLB
+  keep v239. Historical cloud rows are never rewritten.
+- `_shared/nfl-live.js` unifies evidence construction and forecast mapping for
+  the browser and Edge collector. `nfl-live-client.js` loads current ESPN inputs
+  and the public aggregate snapshot. Missing/uncertain evidence withholds the
+  forecast without silently falling back to v239. The scheduled collector keeps
+  the old NFL model solely as the v4 comparison baseline.
+- Home field, rest, recency and team strength are already in the football model;
+  no arbitrary averaging of the two predictions or duplicate bonuses. Coaching,
+  clutch, weather and non-QB injury point weights remain zero.
+- NFL totals can now qualify for the main board at existing thresholds. New NFL
+  spread/total probabilities do not reuse the old engine's residual calibration.
+  Moneyline uses the football fit's own probability, bounded 2–98%.
+- Official cloud views select current versions per league. Old pending NFL
+  rows cannot fill missing new-engine markets; old records remain available in
+  the previous-version archive. Kickoff recovery checks model identity.
+- Main cards, comparison headings, How it works and validation describe the
+  promotion consistently. The comparison cohort remains v4 and its older
+  observations do not become new official results retroactively.
 
 ### v275 — Football evidence and validated challenger
+
+⚠️ SUPERSEDED in v276: the owner promotes the unchanged v4 fit to the live
+NFL engine. Official NFL now uses nfl-football-v1, while v239 is the comparison.
+The statistical gate remains unpassed; data collection and frozen fits persist.
 
 - Adds `nfl-football.js`, frozen fitted config, `nfl-evidence.js` and
   `nfl-validation.js` plus `nfl-football-ui.js`. The v4 research cohort uses
@@ -6436,14 +6465,17 @@ rewrite.**
 
 ## Architecture notes
 
-- **v275 NFL football research:** `supabase/functions/_shared/nfl-football.js`
+- **v276 live NFL football engine:** `supabase/functions/_shared/nfl-football.js`
   is the shared feature engine; its config is a frozen chronological fit.
   `nfl-evidence.js` normalizes current context; `nfl-validation.js` compares
   prospective paired observations without automatic promotion.
   `scripts/nfl-data.py` and the GitHub workflow refresh public aggregates;
   `nfl-football-ui.js` adds compact football explanations, validation and
-  the `sportshub:nfl-evidence:v1` source notebook. Existing official capture,
-  storage identity, final grading and kickoff locks remain unchanged.
+  the `sportshub:nfl-evidence:v1` source notebook. `nfl-live.js` and
+  `nfl-live-client.js` route the unchanged v4 fit into official NFL forecasts as
+  `nfl-football-v1`; CFB/MLB retain v239. Old model rows are preserved, cloud
+  evaluation filters versions per sport, and forecast recovery checks identity.
+  v4 comparison snapshots continue against the previous NFL baseline.
 
 - **v232 AI pipeline:** `predictGame` computes forecasts and explicit
   `blockedReasons`; display retains blocked reads, qualification refuses them.

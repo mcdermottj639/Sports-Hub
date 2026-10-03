@@ -3,11 +3,9 @@ import '../_shared/nfl-challenger.js';
 import '../_shared/nfl-football.js';
 import '../_shared/nfl-football-config.js';
 import '../_shared/nfl-evidence.js';
+import '../_shared/nfl-live.js';
 const C = (globalThis as any).SportsHubFootballResearch;
 const N = (globalThis as any).SportsHubNFLChallenger;
-const F = (globalThis as any).SportsHubNFLFootball;
-const E = (globalThis as any).SportsHubNFLEvidence;
-const CONFIG = (globalThis as any).SportsHubNFLFootballConfig;
 type Json = Record<string, any>;
 // Caches expire within a warm isolate so a later cron can observe new evidence.
 const cache = new Map<string, {at:number, data:Promise<any>}>();
@@ -24,7 +22,6 @@ async function footballHistory() {
   const data=source('https://raw.githubusercontent.com/mcdermottj639/Sports-Hub/main/data/nfl-football-live.json');
   footballCache={at:Date.now(),data};return data;
 }
-const states=new Map<string,any>();
 export function primeNFLHistory(efficiency:any) {
   if(!Number.isInteger(efficiency?.season))return;
   const saved=completedHistory.get(efficiency.season)||new Map();
@@ -55,15 +52,7 @@ export async function footballEvidence(sport:string,g:Json) {
   }
   const base='https://site.api.espn.com/apis/site/v2/sports/football/nfl';
   const [h,a,injuries,history,summary]=await Promise.all([source(`${base}/teams/${g.home.id}/depthcharts`),source(`${base}/teams/${g.away.id}/depthcharts`),source(`${base}/injuries`),footballHistory(),source(`${base}/summary?event=${g.id}`)]);
-  const at=new Date().toISOString();
-  const qb={home:C.quarterback(h,injuries,g.home.id,year,at),away:C.quarterback(a,injuries,g.away.id,year,at)};
-  const key=`${history.generatedAt}:${at.slice(0,13)}`;
-  let state=states.get(key);if(!state){state=F.build(history,at);states.clear();states.set(key,state);}
-  const game={home:F.alias(g.home.abbr),away:F.alias(g.away.abbr),date:g.date,season:year,neutral:g.neutral};
-  const context={at,personnel:E.personnel({home:h,away:a},injuries,{home:g.home.id,away:g.away.id},year,at),weather:E.weather(summary,g.id,at),coaching:E.coaching(state,game.home,game.away)};
-  const candidate=F.candidate(state,history,game,qb,CONFIG,context);
-  return {at,sourceStatus:{homeDepth:h?._sourceStatus,awayDepth:a?._sourceStatus,injuries:injuries?._sourceStatus,playByPlay:history?._sourceStatus},qb,context,candidate,
-    efficiency:{used:state.used,expected:history.coverage?.expected,method:'opponent-adjusted-play-level-efficiency'},candidateMargin:candidate.margin,candidateTotal:candidate.total};
+  return (globalThis as any).SportsHubNFLLive.evidence(g,{homeDepth:h,awayDepth:a,injuries,history,summary});
 }
 export function researchRows(sport:string,g:Json,p:Json,o:Json|null,evidence:Json,app:string) {
   const at=new Date().toISOString(),phase=C.phase(g.date,at);

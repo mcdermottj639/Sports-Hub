@@ -46,7 +46,8 @@
     const out = { n: 0, w: 0, l: 0, pushes: 0, priced: 0, units: 0, probabilityN: 0, brier: 0, logLoss: 0, legacy: 0, probabilitySum: 0, impliedSum: 0 };
     records.forEach((r) => {
       const q = r.q;
-      if (!q || (version && q.v !== version) || !(Date.parse(q.at) < Date.parse(q.start))) { out.legacy++; return; }
+      const expected = typeof version === 'function' ? version(r.s || r.sport) : version;
+      if (!q || (expected && q.v !== expected) || !(Date.parse(q.at) < Date.parse(q.start))) { out.legacy++; return; }
       if (r.c !== 0 && r.c !== 1 && !r.pu) return;
       out.n++;
       if (r.pu) out.pushes++; else if (r.c) out.w++; else out.l++;

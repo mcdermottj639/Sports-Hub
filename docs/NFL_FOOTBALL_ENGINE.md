@@ -1,15 +1,36 @@
-# NFL football challenger — v275
+# Live NFL football engine — v276
 
-The official v239 winner, spread and total paths remain unchanged. The new
-`football-research-nfl-v4` cohort records an independently fitted challenger at
-the existing immutable early/near capture windows. No stakes or automatic
-promotion are enabled. Existing v3/v2 observations remain in the database.
+The owner promoted the existing fitted v4 challenger on October 3, 2026.
+`nfl-football-v1` now drives official NFL winner, spread and total forecasts
+in the browser and scheduled collector. The coefficients are unchanged.
+This is an owner-selected promotion, **not a passed statistical improvement
+gate**. CFB and MLB remain on v239. Existing records are never rewritten.
+
+`nfl-live.js` shares evidence construction and official projection mapping;
+`nfl-live-client.js` loads current public inputs with a short in-memory cache.
+The previous v239 score/record model continues in the immutable v4 early/near
+comparison snapshots. Home field, rest, recency and team strength are already
+represented in the live engine; no arbitrary blend or duplicate bonuses are
+added. Future model fusion needs a separate chronological fit.
+
+Official results filter the current version per sport. Older NFL forecasts are
+retained in full history and the version archive; old pending picks cannot
+fill gaps in the new official slate. Missing/restricted QB evidence withholds
+the official forecast rather than falling back to v239. Historical display
+locks are recovered only from compatible saved pregame observations.
+
+NFL totals now qualify for the live board at the existing 4-point floor and
+14-point maximum; spread keeps its 2-point floor. Moneyline keeps the existing
+actual-price/two-sided-market gate. The fitted winner probability is unchanged
+(bounds 2–98%); older v239 residual fits are **not** reused for new NFL spread
+or total probabilities. These percentages remain unavailable until calibrated
+for this engine. No stakes are assigned.
 
 ## What is implemented
 
 - Public nflverse play-by-play aggregates, identity mapping and three daily
   refreshes through `.github/workflows/nfl-football-data.yml`. The server reads
-  the small raw GitHub snapshot; the phone downloads only saved game evidence.
+  the small raw GitHub snapshot; the phone loads the same compact snapshot plus current ESPN evidence.
 - Separate opponent-adjusted passing/rushing EPA, observable garbage-time
   filtering, two-year history with time decay and small-sample shrinkage.
 - QB efficiency, accuracy over expectation, sack/scramble information and an
@@ -31,7 +52,7 @@ promotion are enabled. Existing v3/v2 observations remain in the database.
   independently checked; source links do not prove correctness.
 - Experimental outcome ranges and conditional backup forecasts. Unknown QBs,
   stale/partial feeds and important unresolved personnel/conditions withhold
-  the challenger. No arbitrary probability is assigned to a questionable QB.
+  the official forecast. No arbitrary probability is assigned to a questionable QB.
 - Compact game explanation: three grouped contributions relative to training
   averages and one uncertainty; deeper evidence is collapsed by default.
 - Prospective same-game validation, baseline/market/fixed 50/50 market blend,
@@ -45,7 +66,7 @@ the chronological holdout uses 2025 (285, including one tie). Three fixed featur
 families and three regularization settings were selected only on 2024. Weights
 are frozen and the refresh workflow **never refits them**.
 
-| 2025 measure | Current reproduced baseline | Challenger |
+| 2025 measure | Previous reproduced baseline | Live football engine |
 |---|---:|---:|
 | Margin MAE | 10.143 | 10.239 |
 | Total MAE | 10.873 | 10.589 |
@@ -53,7 +74,7 @@ are frozen and the refresh workflow **never refits them**.
 | Winner log loss | 0.624 | 0.642 |
 
 Lower is better. Totals improved modestly; margin and winner results do not
-justify replacing the current model. This is a replay of corrected historical
+demonstrate superiority to the previous model. The owner nevertheless selected the football engine for live use. This is a replay of corrected historical
 data, not an archive of what each source actually published before kickoff.
 Expected historical QBs use the prior game's passer, not hindsight knowledge
 of the actual starter. Changed-lineup scenarios need prospective validation.

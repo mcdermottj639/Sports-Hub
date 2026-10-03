@@ -39,10 +39,17 @@
       ...(row.market === 'spread' ? { a: 1, home: row.selection_home ? 1 : 0, hsp: row.line, proj: row.projection } : {}),
       ...(row.market === 'total' ? { t: 1, line: row.line, proj: row.projection } : {}) };
   }
-  function maps() {
+  function maps(includeArchive = false) {
     const tally = {}, pending = {};
+    const live = root.SportsHubNFLLive;
+    const currentEvents = new Set((cached().rows || []).filter(r => live?.current(r)).map(r => `${r.sport}:${r.event_id}`));
     for (const row of cached().rows || []) {
-      const key = keyFor(row);
+      const replaced = row.sport === 'nfl' && live && row.model_version !== live.VERSION
+        && (Date.parse(row.starts_at) >= Date.parse(live.ACTIVATED_AT) || currentEvents.has(`${row.sport}:${row.event_id}`));
+      // An old pending spread must not masquerade as the new engine's pick
+      // merely because the new model does not qualify (or withholds the game).
+      if (replaced && !includeArchive) continue;
+      const key = keyFor(row) + (replaced ? `:${row.model_version}` : '');
       if (row.result === 'pending') pending[key] = legacy(row, false);
       else if (row.result !== 'void') tally[key] = legacy(row, true);
     }
@@ -59,7 +66,8 @@
   async function history() {
     const all = [];
     for (let offset = 0; ; offset += 500) {
-      const rows = await request(`ai_predictions?model_version=eq.v239&select=*&order=starts_at.desc,id.asc&limit=500&offset=${offset}`);
+      const versions = root.SportsHubNFLLive ? `in.(v239,${root.SportsHubNFLLive.VERSION})` : 'eq.v239';
+      const rows = await request(`ai_predictions?model_version=${versions}&select=*&order=starts_at.desc,id.asc&limit=500&offset=${offset}`);
       all.push(...rows);
       if (rows.length < 500) return all;
     }

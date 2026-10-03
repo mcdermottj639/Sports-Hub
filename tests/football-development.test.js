@@ -43,8 +43,8 @@ test('paired baseline and human grading uses frozen market line, not winner accu
  assert.equal(sandbox.SportsHubFootballDevelopment.resultFor(row,{margin:3,total:45}),'win');assert.equal(sandbox.SportsHubFootballDevelopment.resultFor(row,{margin:10,total:45}),'loss');
  assert.equal(C.grade('total','OVER',null,44,{home:24,away:20}),'push');
 });
-test('research rows remain outside the official model query; football total promotion excluded',()=>{
- const cloud=fs.readFileSync(require.resolve('../cloud-ai.js'),'utf8'),app=fs.readFileSync(require.resolve('../app.js'),'utf8');assert.match(cloud,/model_version=eq.v239/);assert.match(app,/live.filter\(\(r\) => r.tot && !r.tot.researchOnly\)/);assert.match(app,/tier: sport === 'mlb' \?/);assert.match(app,/FootballDevelopment\?\.mount\(target, sport\)/);
+test('research cohorts stay outside official history; only CFB totals remain research only',()=>{
+ const cloud=fs.readFileSync(require.resolve('../cloud-ai.js'),'utf8'),app=fs.readFileSync(require.resolve('../app.js'),'utf8');assert.match(cloud,/in.\(v239,\$\{root.SportsHubNFLLive.VERSION\}/);assert.match(app,/live.filter\(\(r\) => r.tot && !r.tot.researchOnly\)/);assert.match(app,/researchOnly: sport === 'cfb'/);assert.match(app,/FootballDevelopment\?\.mount\(target, sport\)/);
 });
 test('browser postseason profile actually uses current regular-season history, not prior-year fallback',async()=>{
  const source=fs.readFileSync(require.resolve('../app.js'),'utf8'),calls=[];

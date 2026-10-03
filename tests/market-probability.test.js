@@ -15,7 +15,7 @@ test('new probability timestamps guard retrospective scoring',()=>{const q={v:'v
 test('pending enrichment saves timestamped probability without changing forecast, odds or result',async()=>{
  const {stripTypeScriptTypes}=require('node:module');const src=fs.readFileSync('supabase/functions/sports-hub-ai/index.ts','utf8');
  const writes=[],date=new Date(Date.now()+864e5).toISOString(),r={id:1,sport:'nfl',market:'spread',projection:5,line:-3,selection_home:true,selection:'HOME -3',starts_at:date,snapshot:{priceCapturedAt:'kept'}};
- const c=vm.createContext({Date,encodeURIComponent,MODEL_VERSION:'v239',SportsHubMarketProbability:{estimate:a=>P.estimate(a,config)},db:async(path,init)=>{if(init){writes.push({path,body:JSON.parse(init.body)});return [];}return [r];}});
+ const c=vm.createContext({Date,encodeURIComponent,MODEL_VERSION:'v239',modelVersionFor:require('../supabase/functions/_shared/nfl-live.js').versionFor,SportsHubMarketProbability:{estimate:a=>P.estimate(a,config)},db:async(path,init)=>{if(init){writes.push({path,body:JSON.parse(init.body)});return [];}return [r];}});
  vm.runInContext(stripTypeScriptTypes(src.match(/^async function enrichProbabilities\([^]*?^}/m)[0]),c);
  await c.enrichProbabilities({id:'event',state:'pre',date});assert.equal(writes.length,1);const b=writes[0].body;assert.ok(b.model_probability>0&&b.model_probability<1);assert.equal(b.snapshot.priceCapturedAt,'kept');assert.equal(b.projection,undefined);assert.equal(b.price,undefined);assert.equal(b.result,undefined);assert.ok(Date.parse(b.snapshot.probability.at)<Date.parse(date));
  writes.length=0;await c.enrichProbabilities({id:'event',state:'post',date});assert.equal(writes.length,0);

@@ -1,9 +1,10 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v275';
+const APP_VERSION = 'v276';
 // UI-only releases must not reset the model's evaluation cohort.
-const AI_MODEL_VERSION = 'v239';
+const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
+function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
 const AI_MATH = globalThis.SportsHubAI;
 
 // Optional backend that syncs the owner's REAL ESPN fantasy leagues (the static
@@ -447,6 +448,7 @@ function normEvent(ev) {
     id: ev.id,
     date: ev.date,
     state: st.state, // 'pre' | 'in' | 'post'
+    season: Number(ev.season?.year) || null,
     seasonType: Number(ev.season?.type ?? comp.season?.type) || null, // 1 pre, 2 regular, 3 post
     statusText: st.shortDetail || st.detail || st.description,
     situation: comp.situation || null,
@@ -1922,11 +1924,8 @@ const PARK_WEIGHT = 0.7;
 // so MLB confidence is capped well below the football/basketball ceiling.
 const CONF_CAP = { mlb: 72, nfl: 85, cfb: 90, default: 92 };
 
-// NFL (v231) uses three independently calibrated market paths from the shared
-// feature set in nfl-model.js. The coefficients were trained on 2017-2023,
-// selected on 2024, then checked once on untouched 2025 games. The old generic
-// log-odds formula remains the fallback if the small companion script fails to
-// load, so one missing asset can never blank the board.
+// Archived v239 NFL baseline, retained for reproducible comparison.
+// Official NFL forecasts route through SportsHubNFLLiveClient before this path.
 const NFL_FIT = globalThis.SportsHubNFLModel || null;
 
 // ATS (v164). Football is a SPREAD market — "who wins" is barely the question
@@ -2455,11 +2454,13 @@ async function matchupFactor(sport, g) {
 let forecastRecoverySync = null;
 async function restoreForecast(sport, g) {
   const lock = globalThis.SportsHubForecastLock;
-  let saved = lock.read(sport, g) || lock.recover(sport, g, { ...getPending(), ...getTally(), ...(globalThis.SportsHubCloudAI?.maps()?.pending || {}) });
+  const live = globalThis.SportsHubNFLLive;
+  const version = sport === 'nfl' && live && Date.parse(g.date) >= Date.parse(live.ACTIVATED_AT) ? live.VERSION : null;
+  let saved = lock.read(sport, g, version) || lock.recover(sport, g, { ...getPending(), ...getTally(), ...(globalThis.SportsHubCloudAI?.maps()?.pending || {}) }, version);
   if (!saved && globalThis.SportsHubCloudAI) {
     forecastRecoverySync ||= globalThis.SportsHubCloudAI.sync().catch(() => null);
     await forecastRecoverySync;
-    saved = lock.recover(sport, g, { ...getPending(), ...getTally(), ...(globalThis.SportsHubCloudAI?.maps()?.pending || {}) });
+    saved = lock.recover(sport, g, { ...getPending(), ...getTally(), ...(globalThis.SportsHubCloudAI?.maps()?.pending || {}) }, version);
   }
   return saved ? { ...saved.prediction, locked: true, lockedAt:saved.at, lockedSource:saved.source,
     lockedOdds:saved.odds, lockedProbabilities:saved.probabilities || {} } : null;
@@ -2476,6 +2477,7 @@ async function predictGame(sport, g, opts) {
   return p;
 }
 async function computePregamePrediction(sport, g, opts) {
+  if (sport === 'nfl') return globalThis.SportsHubNFLLiveClient?.predict(g) || null;
   const [hf, af] = await Promise.all([teamProfile(sport, g.home.id, g.date), teamProfile(sport, g.away.id, g.date)]);
   const scale = PD_SCALE[sport] || 5;
   const w = MODEL_W[sport] || MODEL_W.default;
@@ -3863,9 +3865,16 @@ function exportButton() {
 
 // 🧪 Calibrationing — the charts and the instruments. `sport` narrows every card
 // to one league; null is the cumulative view.
-function backtestPanel(det, sport) {
+function backtestPanel(det, sport, archive = false) {
   const box = el('div', 'bt-wrap');
   const scope = sport ? lgLabel(sport) : 'all leagues';
+  if (sport === 'nfl' && !archive) {
+    const rows = Object.values(globalThis.SportsHubCloudAI?.maps()?.tally || {}).filter(r => r.s === 'nfl' && !r.a && !r.t && !r.pu && r.q?.v === modelVersionFor('nfl') && Number.isFinite(r.q?.prob));
+    box.innerHTML = `<p class="ai-note">Live NFL football model · calibration starts with nfl-football-v1. Previous-model results are excluded.</p>${evaluationHTML('nfl')}<div class="bt-card"><b>Winner calibration · new engine</b>${[[50,60],[60,70],[70,80],[80,101]].map(([lo,hi])=>{const group=rows.filter(r=>r.q.prob*100>=lo&&r.q.prob*100<hi),n=group.length;return `<p>${lo}–${Math.min(hi-1,100)}%: ${n ? `${n} forecasts · average ${(group.reduce((s,r)=>s+r.q.prob,0)*100/n).toFixed(1)}% · won ${(group.filter(r=>r.c===1).length*100/n).toFixed(1)}%` : 'Collecting'}</p>`;}).join('')}</div>`;
+    const older = el('details', 'desk-history-details');
+    older.innerHTML = '<summary>Historical diagnostics · earlier versions included</summary><p>These older device instruments are not calibration evidence for the new football engine.</p>';
+    older.appendChild(backtestPanel(det, sport, true));box.appendChild(older);return box;
+  }
 
   // ---- calibration chart ----
   const BK = ['50–54%', '55–59%', '60–64%', '65–69%', '70%+'];
@@ -4362,12 +4371,12 @@ const MODEL_NOTES = {
   },
   nfl: {
     fitted: [
-      ['moneyline probability', 'trained 2017–2023 · selected on 2024 · untouched 2025 Brier .2178 vs .2336 before'],
-      ['spread margin', 'untouched 2025 MAE 10.17 points vs 12.48 before'],
-      ['total shrink', 'untouched 2025 RMSE 14.51 points vs 15.22 before'],
+      ['Football engine', 'trained 2018–2023; selected on 2024; replayed on 2025'],
+      ['QB and matchup inputs', 'opponent-adjusted pass/rush efficiency, QB changes and accuracy, protection, explosives and pace'],
+      ['Historical result', 'total MAE 10.59 vs old 10.87; margin 10.24 vs 10.14; winner Brier .226 vs .218 (lower is better)'],
     ],
-    guesses: ['cap 85%', 'ATS floor 2 pts', 'totals floor 4 pts'],
-    open: '<b>Market profitability is not proven.</b> The historical ESPN test has final scores but no archived wager prices or closing lines, so it validates probability and score error—not ROI. Sharp money is monitor-only until at least 20 graded NFL picks were logged with the feed live.',
+    guesses: ['ATS floor 2 pts', 'totals floor 4 pts', 'Future calibration remains unproven'],
+    open: 'The former challenger is now <b>the live NFL model</b> by owner choice. The historical performance gate has not passed. New official results start with nfl-football-v1; v239 remains the saved comparison. Coaching, clutch and weather add zero extra points. No betting profitability is established.',
   },
   nba: {
     fitted: [],
@@ -4387,7 +4396,7 @@ function modelPanel(sport) {
   if (!sport) {
     const sports = sortedSports({ teamOnly: true });
     let h = `${sec('What the model does')}
-      ${row('Inputs', 'Team records, scoring margin, recent form, home/road splits, rest — plus per-sport matchup factors and DraftKings money-vs-tickets splits. Everything comes from ESPN\'s free public feeds and runs in your browser.')}
+      ${row('Inputs', 'Team records, scoring margin, recent form, home/road splits, rest — plus per-sport matchup factors and DraftKings money-vs-tickets splits. NFL combines public nflverse play-by-play with ESPN personnel evidence; the other leagues use ESPN. Scheduled capture shares the model code.')}
       ${row('Output', 'Three different questions: win probability, scoring margin, combined score. NFL has separately fitted paths. CFB derives probability from a team-rating margin; MLB uses pitcher-aware winner and total forecasts. Spread and total probabilities are not calibrated.')}
       ${row('Markets', `Moneyline everywhere · <b>spread</b> for ${[...ATS_SPORTS].map((s) => LEAGUES[s]?.label || s).join(' and ')} · totals everywhere a line is posted. Each keeps its OWN record — a model can pick winners well and still lose to the number.`)}
       ${sec('When it calls a play')}
@@ -4405,7 +4414,7 @@ function modelPanel(sport) {
       const bits = s === 'cfb'
         ? `team rating → margin · cap ${CONF_CAP.cfb}%`
         : s === 'nfl' && NFL_FIT
-        ? `3 fitted market paths · cap ${CONF_CAP.nfl}%`
+        ? 'Live football engine · QB and matchup inputs'
         : `${Object.keys(w).length} factors · shrink ×${shr} · cap ${CONF_CAP[s] || CONF_CAP.default}%`;
       const mk = ['ML', ATS_SPORTS.has(s) ? 'spread' : '', 'totals'].filter(Boolean).join(' · ');
       const fit = (MODEL_NOTES[s]?.fitted || []).length;
@@ -4442,19 +4451,17 @@ function modelPanel(sport) {
       ${row('Probability', `Φ(margin ÷ ${n(PD_SD.cfb)}), bounded by the ${cap}% confidence guard for BOTH display and price calculations. The scoring margin itself remains unbounded.`)}
       ${row('Confidence', `capped at ${n(cap + '%')}. The ×${shr} shrink only applies if the rating path can't run at all.`)}`;
     h += row('Data safeguards', 'Neutral sites receive no home-field boost. Missing conference entries stay unknown, not FCS, and block signals. Tier priors are not opponent-adjusted schedule ratings; early-season and mixed-source estimates need caution.');
-  } else if (sport === 'nfl' && NFL_FIT) {
-    const f = (v) => Number(v).toFixed(3);
-    h += `${row('Football challenger', '<b>New research engine:</b> opponent-adjusted play efficiency, QB ability and lineup changes, protection, pace and uncertainty scenarios. Coaching, clutch and weather are tracked without unvalidated bonuses. Open a game’s Model comparison or Board details → Football development for evidence and validation. The formulas below remain the official model.')}
-      ${row('Direction', 'NFL uses <b>three fitted paths</b>: logistic win probability for moneyline, linear point margin for spread, and a shrunk scoring projection for totals. All features are pregame-only.')}
-      ${sec('Moneyline — win probability')}
-      ${row('Home baseline', f(NFL_FIT.ML.intercept))}
-      ${row('Record · scoring margin', `${f(NFL_FIT.ML.record)} · ${f(NFL_FIT.ML.margin)}`)}
-      ${row('Recent form · home/road · rest', `${f(NFL_FIT.ML.form)} · ${f(NFL_FIT.ML.split)} · ${f(NFL_FIT.ML.rest)}`)}
-      ${sec('Spread — projected margin')}
-      ${row('Formula', `home ${f(NFL_FIT.SPREAD.intercept)} pts + record ${f(NFL_FIT.SPREAD.record)} + scoring margin ${f(NFL_FIT.SPREAD.margin)} + form ${f(NFL_FIT.SPREAD.form)} + split ${f(NFL_FIT.SPREAD.split)} + rest ${f(NFL_FIT.SPREAD.rest)}`)}
-      ${sec('Totals — projected points')}
-      ${row('Formula', `${f(NFL_FIT.TOTAL.intercept)} + ${f(NFL_FIT.TOTAL.slope)} × the two teams' combined scoring rates`)}
-      ${row('Sharp money', '<b>Monitor only.</b> Feed coverage is logged, but the split cannot move an NFL prediction until coverage and results validate it.')}`;
+  } else if (sport === 'nfl') {
+    h += `${row('Live model', '<b>NFL football engine · nfl-football-v1</b>. The former v4 challenger now drives official winner, spread and total forecasts.')}
+      ${row('Direction', 'Three jointly featured, separately fitted paths: logistic win probability, point margin and total points. The existing frozen challenger coefficients are used unchanged.')}
+      ${row('Team strength', 'Opponent-adjusted passing and rushing efficiency, success and explosive-play rates; two years of history with recent games weighted more.')}
+      ${row('QB &amp; matchup', 'Expected QB efficiency and accuracy, the change from the QBs already measured in team history, sack/protection matchups and expected pace.')}
+      ${row('Retained context', 'Home field, neutral sites, rest and recent performance remain in the engine. The old record/margin model runs alongside it as a benchmark; its full prediction is not added twice.')}
+      ${row('Uncertainty', 'Missing, stale or unresolved QB/personnel evidence withholds the forecast. Backup scenarios are conditional. There is no silent fallback to the old model.')}
+      ${row('Observed context', 'Coaching tendencies, clutch samples, weather and non-QB personnel are visible evidence with zero extra point bonuses.')}
+      ${row('Sources', 'Public nflverse play-by-play aggregates and QB identities; current ESPN depth charts, injuries and conditions. Browser and scheduled capture share the same engine.')}
+      ${row('Probabilities', 'Winner probability is the fitted engine output (bounded 2–98%). Spread/total probabilities await engine-specific calibration; older-model residual fits are not reused.')}
+      ${row('Sharp money', 'Monitor only; no prediction weight.')}`;
   } else {
     const fw = [
       ['Record', w.record, 'season win% gap'],
@@ -4710,8 +4717,8 @@ async function buildBoard(sport, games, opts = {}) {
         // totals disagreement is an edge like any other, and without a tier it
         // could never reach Home or be measured against the side picks.
         tot = { side: diff > 0 ? 'OVER' : 'UNDER', line: Number(info.ou), proj: p.projTotal, diff,
-                researchOnly: sport === 'nfl' || sport === 'cfb',
-                tier: sport === 'mlb' ? (Math.abs(diff) >= floor * 2 ? 'best' : 'edge') : null };
+                researchOnly: sport === 'cfb',
+                tier: sport !== 'cfb' ? (Math.abs(diff) >= floor * 2 ? 'best' : 'edge') : null };
       }
     }
     // ATS (football only). `spread` is home-oriented, so the market's implied
@@ -4783,6 +4790,8 @@ async function buildBoard(sport, games, opts = {}) {
 // Immutable evidence attached to each new pick. No synthetic -110 prices.
 function marketProbabilityFor(r, market) {
   if (r.p?.locked) return r.p.lockedProbabilities?.[market] || null;
+  // Old model residual calibration must not be reused for the promoted engine.
+  if (r.p?.modelVersion && r.p.modelVersion === globalThis.SportsHubNFLLive?.VERSION) return null;
   const read = market === 'spread' ? (r.ats || r.atsR) : (r.tot || r.totR);
   if (!read || read.qualifies === false || r.p?.thin || r.p?.blockedReasons?.length || gameState(r.g) !== 'scheduled') return null;
   return globalThis.SportsHubMarketProbability?.estimate({sport:r.sport,market,
@@ -4800,13 +4809,14 @@ function pickSnapshot(r, market) {
     : market === 'spread' ? (home ? info?.hSpreadPrice : info?.aSpreadPrice)
     : r.tot.side === 'OVER' ? info?.overPrice : info?.underPrice;
   const probability = market === 'moneyline' ? null : marketProbabilityFor(r, market);
-  return { researchOnly: market === 'total' && ATS_SPORTS.has(sport), historyPolicy: sport === 'mlb' ? 'current-season-regular-plus-post-v1' : null, ...(probability ? { probability } : {}), v: AI_MODEL_VERSION, app: APP_VERSION, at: new Date().toISOString(), start: g.date, market,
+  return { researchOnly: market === 'total' && sport === 'cfb', historyPolicy: sport === 'mlb' ? 'current-season-regular-plus-post-v1' : null, ...(probability ? { probability } : {}), v: p.modelVersion || modelVersionFor(sport), app: APP_VERSION, at: new Date().toISOString(), start: g.date, market,
     home, price: price ?? null, provider: info?.provider || null,
     prob: market === 'moneyline' ? (home ? p.probHome : 1 - p.probHome) : probability?.prob ?? null,
     marketProb: marketHomeProb(info),
     line: market === 'spread' ? r.ats.homeSpread : market === 'total' ? r.tot.line : null,
     proj: market === 'spread' ? p.projMargin : market === 'total' ? p.projTotal : null,
     odds: info, neutral: !!g.neutralSite, quality: p.blockedReasons || [],
+    ...(sport === 'nfl' ? { forecast: { margin:p.projMargin, total:p.projTotal }, promotion:p.promotion } : {}),
     sharpMode: p.sharp?.monitor ? 'monitor' : p.sharp ? 'applied' : 'absent',
     ...(market === 'moneyline' ? { features: p.features, rating: p.rating } : {}) };
 }
@@ -5029,12 +5039,12 @@ function compactMarketsHTML({ g, sport, p, info, atsR, totR, tier }) {
   return `<div class="slate-markets${spread ? '' : ' two-markets'}" aria-label="Model leans">${ 
     cell('Winner', `${esc(winner)} <strong>${p.conf}%</strong>`, status(!!tier && tier !== 'lean'))}${
     spread ? cell('Spread', atsR ? esc(atsR.label) : '—', atsR ? (atsR.pinned ? 'Model limit' : status(atsR.qualifies)) : info?.spread != null ? 'Unavailable' : 'No line') : ''}${
-    cell('Total', totR ? `${totR.side === 'OVER' ? 'O' : 'U'}${esc(totR.line)}` : '—', totR ? (p.locked || gameState(g) !== 'scheduled' ? 'Locked' : p.blockedReasons?.length || totR.broken ? 'Data check' : spread ? 'Research' : status(totR.qualifies)) : p.locked ? 'Not saved' : info?.ou != null ? 'No lean' : 'No line')}</div>`;
+    cell('Total', totR ? `${totR.side === 'OVER' ? 'O' : 'U'}${esc(totR.line)}` : '—', totR ? (p.locked || gameState(g) !== 'scheduled' ? 'Locked' : p.blockedReasons?.length || totR.broken ? 'Data check' : sport === 'cfb' ? 'Research' : status(totR.qualifies)) : p.locked ? 'Not saved' : info?.ou != null ? 'No lean' : 'No line')}</div>`;
 }
 
 function marketRowsHTML(r) {
   const { g, sport, p } = r;
-  if (!p) return `<div class="ai-note">${globalThis.SportsHubForecastLock.eligible(g) ? 'Model data unavailable for this game.' : 'No saved pregame forecast — model locked.'}</div>`;
+  if (!p) return `<div class="ai-note">${globalThis.SportsHubForecastLock.eligible(g) ? sport === 'nfl' ? 'Forecast withheld: ' + esc(globalThis.SportsHubNFLLiveClient?.reason(g) || 'Required football evidence unavailable') : 'Model data unavailable for this game.' : 'No saved pregame forecast — model locked.'}</div>`;
   const info = r.shownInfo !== undefined ? r.shownInfo : r.info;
   const ar = r.atsR, tr = r.totR;
   const blocked = p.blockedReasons?.length;
@@ -5056,12 +5066,12 @@ function marketRowsHTML(r) {
     ar ? `<p>Projected winner: ${esc(marginWinner.abbr || marginWinner.name)} by ${Math.abs(ar.proj).toFixed(1)}. Difference: <b>${Math.abs(ar.edge).toFixed(1)} points</b> toward ${esc(ar.abbr)} covering. ${ar.pinned ? 'Projection limit reached; no signal.' : ''}</p>
       ${comparisonGraphic(ar.proj, -ar.homeSpread, '', true)}<small>Margins above are toward ${esc(g.home.abbr || 'home')}; negative means ${esc(g.away.abbr || 'away')}. ${ATS_EDGE_MIN[sport]}-point signal threshold. Probability estimates are experimental.</small>${marketProbabilityHTML(spreadProbability)}`
       : '<p>A winner forecast is not a spread pick.</p>');
-  const total = section('Total', 'How much will both teams score?', tr ? `${tr.side} ${tr.line}${totalProbability ? ` · ${(totalProbability.prob * 100).toFixed(0)}% experimental` : ''}` : p.projTotal != null && info?.ou != null ? 'No difference / no signal' : 'Waiting for a total', live ? 'Locked' : blocked || tr?.broken ? 'Data check' : ATS_SPORTS.has(sport) ? 'Research' : status(!!tr?.qualifies),
-    tr ? `<p>${ATS_SPORTS.has(sport) ? 'Tracked for evaluation; not a promoted pick. ' : ''}${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'points'} ${tr.diff > 0 ? 'above' : 'below'} the book. ${tr.broken ? '<b>Outside the sanity limit — not a signal.</b>' : ''}</p>
+  const total = section('Total', 'How much will both teams score?', tr ? `${tr.side} ${tr.line}${totalProbability ? ` · ${(totalProbability.prob * 100).toFixed(0)}% experimental` : ''}` : p.projTotal != null && info?.ou != null ? 'No difference / no signal' : 'Waiting for a total', live ? 'Locked' : blocked || tr?.broken ? 'Data check' : sport === 'cfb' ? 'Research' : status(!!tr?.qualifies),
+    tr ? `<p>${sport === 'cfb' ? 'Tracked for evaluation; not a promoted pick. ' : ''}${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'points'} ${tr.diff > 0 ? 'above' : 'below'} the book. ${tr.broken ? '<b>Outside the sanity limit — not a signal.</b>' : ''}</p>
       ${comparisonGraphic(tr.proj, tr.line, '')}<small>${TOT_EDGE_MIN[sport] ?? 1}-${sport === 'mlb' ? 'run' : 'point'} signal threshold. Probability estimates are experimental.</small>${marketProbabilityHTML(totalProbability)}`
       : '<p>No total signal without both a projection and a line.</p>');
   const provenance = r.linePregame ? `Saved pregame line${lineAtLabel(r.lineAt) ? ' · ' + lineAtLabel(r.lineAt) : ''}. Model and lines are locked to saved pregame evidence.` : info?.provider ? `Odds source: ${info.provider}.` : 'Odds source unavailable.';
-  return `<div class="ai-market-grid compact-market-rows">${ml}${ATS_SPORTS.has(sport) ? spread : ''}${total}</div><p class="ai-read-foot">${esc(provenance)} ${live ? 'Game started: no new pregame pick is recorded.' : 'Different markets answer different questions; winner and cover sides can differ.'}</p>`;
+  return `${p.modelVersion && p.modelVersion === globalThis.SportsHubNFLLive?.VERSION ? '<p class="ai-read-foot"><b>Live NFL football model</b> · formerly the challenger</p>' : ''}<div class="ai-market-grid compact-market-rows">${ml}${ATS_SPORTS.has(sport) ? spread : ''}${total}</div><p class="ai-read-foot">${esc(provenance)} ${live ? 'Game started: no new pregame pick is recorded.' : 'Different markets answer different questions; winner and cover sides can differ.'}</p>${sport === 'nfl' && p.football ? (globalThis.SportsHubNFLFootballUI?.detail(p.football) || '') : ''}`;
 }
 
 // The model's confidence against the market's own implied number for the same
@@ -5109,6 +5119,7 @@ function boardCard(r, opts = {}) {
       <span class="brd-meta">${cfg.emoji} ${cfg.label} · ${esc(when)}</span></div>
     <div class="compact-matchup" title="${esc(g.away.name)} at ${esc(g.home.name)}">${logoHTML(g.away)}<b>${rankHTML(g.away)}${esc(away)}</b><span>at</span>${logoHTML(g.home)}<b>${rankHTML(g.home)}${esc(home)}</b>${scores}</div>
     ${bookBits ? `<div class="compact-book">${bookBits}</div>` : ''}
+    ${sport === 'nfl' && p.modelVersion === globalThis.SportsHubNFLLive?.VERSION ? '<div class="ai-read-foot"><b>Live football model</b></div>' : ''}
     ${compactMarketsHTML({...r,info:shownInfo,atsR:r.atsR || r.ats,totR:r.totR || r.tot})}
     ${gap != null ? `<div class="compact-gap">Winner vs market: <b>${gap >= 0 ? '+' : ''}${gap} pp</b></div>` : ''}
     ${p.blockedReasons?.length ? '<div class="compact-warning">Data check · see report before using this read</div>' : ''}`;
@@ -5464,15 +5475,17 @@ function evaluationHTML(sport) {
   const all = Object.values(globalThis.SportsHubCloudAI?.maps()?.tally || {}).filter((r) => !sport || sport === 'all' || r.s === sport);
   const upcoming = Object.values(globalThis.SportsHubCloudAI?.maps()?.pending || {}).filter(r => !sport || sport === 'all' || r.sport === sport);
   const markets = [['moneyline', 'Winner', (r) => !r.a && !r.t], ['spread', 'Spread', (r) => !!r.a], ['total', 'Total', (r) => !!r.t]];
-  return `<section class="ai-evidence"><div class="ai-guide-top"><b>Official model record</b><span>Current model · ${AI_MODEL_VERSION}</span></div><p>Automatically saved before the game. Results and prices stay tied to that forecast.</p><div class="ai-evidence-grid">${markets.map(([key, title, filter]) => {
-    const e = AI_MATH.evaluate(all.filter(filter), AI_MODEL_VERSION);
+  const oldNFL = (!sport || sport === 'all' || sport === 'nfl') ? Object.values(globalThis.SportsHubCloudAI?.maps(true)?.tally || {}).filter(r => r.s === 'nfl' && r.q?.v === 'v239') : [];
+  const archive = oldNFL.length ? `<details class="desk-history-details"><summary>Previous NFL model · v239</summary><p>Preserved results from the former official model. These do not count toward the new football engine.</p>${markets.map(([,title,filter])=>{const e=AI_MATH.evaluate(oldNFL.filter(filter),'v239');return `<p><b>${title}:</b> ${e.w}W · ${e.l}L · ${e.pushes}P (${e.n} settled)</p>`;}).join('')}<details><summary>Saved previous-model results</summary>${oldNFL.map(r=>`<p>${esc(r.m)} · ${esc(r.p)} · ${r.pu?'Push':r.c?'Win':'Loss'}</p>`).join('')}</details></details>` : '';
+  return `<section class="ai-evidence"><div class="ai-guide-top"><b>Official model record</b><span>${sport && sport !== 'all' ? modelVersionFor(sport) : 'Current version for each league'}</span></div><p>Automatically saved before the game. Results and prices stay tied to that forecast.</p><div class="ai-evidence-grid">${markets.map(([key, title, filter]) => {
+    const e = AI_MATH.evaluate(all.filter(filter), modelVersionFor);
     const decided = e.w + e.l;
-    const pending = upcoming.filter(filter), pricedPending = pending.filter(r => AI_MATH.american(r.q?.price) != null);
+    const pending = upcoming.filter(filter).filter(r => r.q?.v === modelVersionFor(r.sport)), pricedPending = pending.filter(r => AI_MATH.american(r.q?.price) != null);
     const pendingProbs = pending.map(r => AI_MATH.number(r.q?.prob)).filter(p => p != null && p >= 0 && p <= 1);
     const upcomingProbability = pendingProbs.length ? pendingProbs.reduce((a,b) => a+b,0) / pendingProbs.length : null;
     const notStarted = pending.filter(r => Date.parse(r.q?.start) > Date.now()).length;
     return `<div class="desk-evidence-market"><div class="desk-evidence-heading"><b>${title}</b><span>${e.n} settled</span></div><strong>${e.n ? `${e.w}W · ${e.l}L${e.pushes ? ` · ${e.pushes}P` : ''}` : 'Collecting'}</strong><div class="ai-result-track" role="img" aria-label="${e.w} wins, ${e.l} losses, ${e.pushes} pushes"><i style="width:${decided ? e.w / decided * 100 : 0}%"></i></div><div class="desk-return"><b>${e.priced ? `${e.roi>=0?'+':''}${(e.roi*100).toFixed(1)}%` : '—'}</b><span>${e.priced?'paper ROI':'ROI awaiting prices'}</span></div><p>${e.priced}/${e.n} results with saved odds${e.priced ? ` · ${e.units >= 0 ? '+' : ''}${e.units.toFixed(2)} units` : ''}<br>${decided ? (e.w / decided * 100).toFixed(1) + '% hit rate' : 'Awaiting results'} · ${notStarted} upcoming · ${pending.length-notStarted} awaiting grading</p><details class="desk-probability-details"><summary>Probability &amp; evidence</summary><p>${e.probabilityN ? `Avg model probability ${(e.meanProbability * 100).toFixed(1)}% · ${e.probabilityN} forecasts${key !== 'moneyline' ? ' · experimental, excluding pushes' : ''}` : key === 'moneyline' ? 'Model probability not saved for this sample' : 'New model probabilities awaiting settled results'}<br>${e.priced ? `Avg odds-implied probability ${(e.meanImplied * 100).toFixed(1)}% (includes vig)` : 'Odds-implied probability awaiting saved odds'}${e.probabilityN ? `<br><small>Brier ${e.brier.toFixed(3)} · log loss ${e.logLoss.toFixed(3)}</small>` : ''}<br>${pending.length} pending · ${pricedPending.length} with odds${upcomingProbability != null ? `<br>Avg pending model probability ${(upcomingProbability * 100).toFixed(1)}% · ${pendingProbs.length} forecasts${key !== 'moneyline' ? ' · experimental, excluding pushes' : ''}` : ''}<br>${e.legacy} older/unverified excluded</p></details></div>`;
-  }).join('')}</div><p class="desk-evidence-caption">Paper ROI risks one unit at each saved quote; unpriced results stay outside ROI. Football totals remain research only.</p><details class="desk-probability-details"><summary>How to read these results</summary><p>Official cloud record across devices. Picks and results save automatically—even with the app closed. No manual logging. Device-only history stays separate.</p><p>Spread/total percentages are experimental estimates, excluding pushes. Validation is still limited; totals have not beaten a 50/50 baseline. Hit rate is past results, not a future probability. Model and odds-implied probabilities are different. Pushes return the stake. No assumed −110 prices. Markets on the same game are correlated. Older unpriced results remain in the record but are excluded from ROI. Closing-line value needs closing quotes.</p></details></section>`;
+  }).join('')}</div><p class="desk-evidence-caption">Paper ROI risks one unit at each saved quote; unpriced results stay outside ROI. NFL uses the live football engine; CFB totals remain research only.</p><details class="desk-probability-details"><summary>How to read these results</summary><p>Official cloud record across devices. Picks and results save automatically—even with the app closed. No manual logging. Device-only history stays separate.</p><p>Spread/total percentages are experimental estimates, excluding pushes. Validation is still limited. NFL spread/total probabilities await calibration for the new engine; older-model error fits are not reused. Hit rate is past results, not a future probability. Model and odds-implied probabilities are different. Pushes return the stake. No assumed −110 prices. Markets on the same game are correlated. Older unpriced results remain in the record but are excluded from ROI. Closing-line value needs closing quotes.</p></details>${archive}</section>`;
 }
 // Bumped on every view paint so an async fill (the CFB rating probe) that
 // lands after the user has moved on can't paint over the new view.
@@ -5519,12 +5532,14 @@ function buildAiSubs() {
 function renderAiTally(sport, todayTxt) {
   const rows = Object.values(globalThis.SportsHubCloudAI?.maps()?.tally || {}).filter(r => !sport || r.s === sport);
   const parts = [['Winner', r => !r.a && !r.t], ['Spread', r => !!r.a], ['Total', r => !!r.t]].map(([name, filter]) => {
-    const e = AI_MATH.evaluate(rows.filter(filter), AI_MODEL_VERSION);
+    const e = AI_MATH.evaluate(rows.filter(filter), modelVersionFor);
     return e.n ? `${name} ${e.w}–${e.l}${e.pushes ? `–${e.pushes}P` : ''}` : null;
   }).filter(Boolean);
-  if (todayTxt) parts.push(todayTxt);
+  // The weekly device tally may contain the previous NFL engine's Thursday
+  // result. It must not be presented as this newly promoted model's record.
+  if (todayTxt && sport !== 'nfl') parts.push(todayTxt);
   const box = $('#ai-score');
-  if (box) box.textContent = parts.length ? `Official record · ${parts.join(' · ')}` : 'Official results are collecting';
+  if (box) box.textContent = parts.length ? `Official record · ${parts.join(' · ')}` : sport === 'nfl' ? 'Live NFL football model · results collecting' : 'Official results are collecting';
 }
 
 // Paint whichever view is selected. Record / Backtest / Model read ONLY
@@ -5842,9 +5857,10 @@ async function paintSportBoard(tok) {
     playCount ? `${playBits} · experimental signals, not guarantees` : anyLines ? 'no qualified signals — inspect the reads below' : 'no lines posted yet'));
   if (upcoming.length) {
     const pending = getPending(), gradedNow = getTally();
-    const logged = upcoming.filter((r) => pending[r.g.id] || gradedNow[r.g.id]).length;
+    const cloudPending = globalThis.SportsHubCloudAI?.maps()?.pending || {};
+    const logged = upcoming.filter((r) => sport === 'nfl' ? cloudPending[r.g.id]?.q?.v === modelVersionFor('nfl') : pending[r.g.id] || gradedNow[r.g.id]).length;
     notes.appendChild(el('div', 'ai-note',
-      `📥 Pregame winner snapshots saved for ${logged} of ${upcoming.length} upcoming game${upcoming.length === 1 ? '' : 's'} on this browser. Spread and total snapshots save only when their posted line produces a qualifying signal.`));
+      `📥 Pregame winner snapshots saved for ${logged} of ${upcoming.length} upcoming game${upcoming.length === 1 ? '' : 's'} ${sport === 'nfl' ? 'by the live-model cloud collector; withheld games stay unrecorded' : 'on this browser'}. Spread and total snapshots save only when their posted line produces a qualifying signal.`));
   }
   // Say which day this is and why, so a slate of finished games can't be
   // mistaken for today's board.
@@ -5939,6 +5955,12 @@ async function paintSportBoard(tok) {
     totRows.forEach((r) => { displayed.add(r.g.id); container.appendChild(boardCard(r)); });
   }
 
+  const withheld = rows.filter(r => sport === 'nfl' && !r.p && globalThis.SportsHubForecastLock.eligible(r.g));
+  if (withheld.length) {
+    const d = el('details', 'lad-fold');
+    d.innerHTML = `<summary>Forecast withheld · ${withheld.length} games</summary>${withheld.map(r=>`<p><b>${esc(r.g.away.abbr)} @ ${esc(r.g.home.abbr)}</b>: ${esc(globalThis.SportsHubNFLLiveClient?.reason(r.g) || 'Required football evidence unavailable')}</p>`).join('')}`;
+    container.appendChild(d);
+  }
   const watch = rows.filter((r) => r.p && gameState(r.g) !== 'final' && !displayed.has(r.g.id));
   if (watch.length) {
     const d = el('details', 'lad-fold');
@@ -11068,7 +11090,7 @@ async function enrichSlate(sport, host, games) {
 
     const markets = p ? compactMarketsHTML({ g, sport, p, info,
       atsR: atsRead(sport, g, p, info), totR: totalRead(sport, p, info) })
-      : `<div class="slate-unavailable">${g.seasonType === 1 ? 'Preseason · model sits out' : !globalThis.SportsHubForecastLock.eligible(g) ? 'No saved pregame forecast · model locked' : 'Model data unavailable · tap for game report'}</div>`;
+      : `<div class="slate-unavailable">${g.seasonType === 1 ? 'Preseason · model sits out' : !globalThis.SportsHubForecastLock.eligible(g) ? 'No saved pregame forecast · model locked' : sport === 'nfl' ? 'Forecast withheld: ' + esc(globalThis.SportsHubNFLLiveClient?.reason(g) || 'Required evidence unavailable') : 'Model data unavailable · tap for game report'}</div>`;
     const strip = el('div', 'bb-strip');
     strip.innerHTML = `${lineRow}${markets}`;
     // Sit above the "tap for game report →" hint so the hint stays last.
