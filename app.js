@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v280';
+const APP_VERSION = 'v281';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -4816,7 +4816,10 @@ function pickSnapshot(r, market) {
     line: market === 'spread' ? r.ats.homeSpread : market === 'total' ? r.tot.line : null,
     proj: market === 'spread' ? p.projMargin : market === 'total' ? p.projTotal : null,
     odds: info, neutral: !!g.neutralSite, quality: p.blockedReasons || [],
-    ...(sport === 'nfl' ? { forecast: { margin:p.projMargin, total:p.projTotal }, promotion:p.promotion } : {}),
+    forecast: { margin:p.projMargin, total:p.projTotal },
+    decisions: { spread: r.ats ? 'Qualifying pick missing' : (r.atsR?.pinned || p.thin || p.blockedReasons?.length) ? 'Data quality blocked bet' : 'No qualifying edge',
+      total: r.tot ? 'Qualifying pick missing' : (r.totR?.broken || p.thin || p.blockedReasons?.length) ? 'Data quality blocked bet' : 'No qualifying edge' },
+    ...(sport === 'nfl' ? { promotion:p.promotion } : {}),
     sharpMode: p.sharp?.monitor ? 'monitor' : p.sharp ? 'applied' : 'absent',
     ...(market === 'moneyline' ? { features: p.features, rating: p.rating } : {}) };
 }
@@ -5471,16 +5474,28 @@ function aiGuideHTML(sub, sport) {
     <div class="ai-guide-steps"><div><b>1 · Choose the market</b><p>Winner, cover and total are three different predictions.</p></div><div><b>2 · Compare model & book</b><p>A gap is a disagreement. It does not prove an advantage.</p></div><div><b>3 · Check the evidence</b><p>Missing data means watch only. Review results before trusting a signal.</p></div></div>
     <details><summary>Quick glossary & what gets saved</summary><div class="ai-glossary"><p><b>Moneyline:</b> pick the winner. 60% means about 6 wins in 10 similar games if calibrated, not certainty.</p><p><b>Spread:</b> the handicap. +7.5 can cover even in a loss by 7; −7.5 needs a win by 8 or more.</p><p><b>Total:</b> combined score. OVER 8.5 needs 9+ runs; UNDER needs 8 or fewer.</p><p><b>pp vs points:</b> 60% vs 55% is +5 percentage points. A projected margin of 7 vs a line of 3 is 4 scoring points.</p><p><b>Tracking:</b> first pregame forecasts are frozen with version, timestamp and inputs. Missing prices may be filled before kickoff only at the same saved line and provider. The scheduled collector runs even when the app is closed; official performance uses cloud history; device-only history is retained separately.</p><p><b>Experimental signals:</b> moneyline tiers require a positive model return at a real quote and two-sided market odds. Spread/total signals use projection thresholds. Their experimental probabilities are tracked separately and do not change signal ranking. No market has proven profit.</p></div></details></div></details>`;
 }
+function forecastEvaluationHTML(records, pending) {
+  const forecasts = [...records, ...pending].filter(r => !r.a && !r.t);
+  const markets = [['moneyline','Winner'],['spread','Spread'],['total','Total']];
+  return `<div class="ai-guide-top"><b>All pregame forecasts</b><span>Model evaluation</span></div><p>Every available saved forecast, including reads below betting thresholds. Graded against its original line; no betting ROI.</p><div class="ai-evidence-grid">${markets.map(([market,label]) => {
+    const rows = forecasts.map(r => AI_MATH.forecastGrade(r, market, modelVersionFor));
+    const graded = rows.filter(r => r.result), w = graded.filter(r => r.result === 'win').length, l = graded.filter(r => r.result === 'loss').length, pushes = graded.length-w-l;
+    const errors = rows.map(r => r.error).filter(Number.isFinite);
+    const waiting = rows.filter(r => r.status === 'Awaiting result').length;
+    const gaps = rows.filter(r => r.status.startsWith('Missing')).length;
+    return `<div class="desk-evidence-market"><div class="desk-evidence-heading"><b>${label}</b><span>${graded.length} graded</span></div><strong>${graded.length ? `${w}W · ${l}L${pushes ? ` · ${pushes}P` : ''}` : 'Collecting'}</strong><p>${w+l ? `${(100*w/(w+l)).toFixed(1)}% hit rate · ` : ''}${waiting} awaiting result${gaps ? ` · ${gaps} missing evidence` : ''}${errors.length ? `<br>Mean absolute error ${(errors.reduce((sum,x)=>sum+Math.abs(x),0)/errors.length).toFixed(1)} · ${errors.length} forecasts` : ''}${rows.some(r=>r.status==='No directional edge') ? '<br>Exact-line forecasts have no side to grade.' : ''}</p></div>`;
+  }).join('')}</div>`;
+}
 function evaluationHTML(sport) {
   const all = Object.values(globalThis.SportsHubCloudAI?.maps()?.tally || {}).filter((r) => !sport || sport === 'all' || r.s === sport);
   const upcoming = Object.values(globalThis.SportsHubCloudAI?.maps()?.pending || {}).filter(r => !sport || sport === 'all' || r.sport === sport);
   const markets = [['moneyline', 'Winner', (r) => !r.a && !r.t], ['spread', 'Spread', (r) => !!r.a], ['total', 'Total', (r) => !!r.t]];
   const oldNFL = (!sport || sport === 'all' || sport === 'nfl') ? Object.values(globalThis.SportsHubCloudAI?.maps(true)?.tally || {}).filter(r => r.s === 'nfl' && r.q?.v === 'v239') : [];
   const archive = oldNFL.length ? `<details class="desk-history-details"><summary>Previous NFL model · v239</summary><p>Preserved results from the former official model. These do not count toward the new football engine.</p>${markets.map(([,title,filter])=>{const e=AI_MATH.evaluate(oldNFL.filter(filter),'v239');return `<p><b>${title}:</b> ${e.w}W · ${e.l}L · ${e.pushes}P (${e.n} settled)</p>`;}).join('')}<details><summary>Saved previous-model results</summary>${oldNFL.map(r=>`<p>${esc(r.m)} · ${esc(r.p)} · ${r.pu?'Push':r.c?'Win':'Loss'}</p>`).join('')}</details></details>` : '';
-  return `<section class="ai-evidence"><div class="ai-guide-top"><b>Official model record</b><span>${sport && sport !== 'all' ? modelVersionFor(sport) : 'Current version for each league'}</span></div><p>Automatically saved before the game. Results and prices stay tied to that forecast.</p><div class="ai-evidence-grid">${markets.map(([key, title, filter]) => {
-    const e = AI_MATH.evaluate(all.filter(filter), modelVersionFor);
+  return `<section class="ai-evidence"><div class="ai-guide-top"><b>Official model record</b><span>${sport && sport !== 'all' ? modelVersionFor(sport) : 'Current version for each league'}</span></div>${forecastEvaluationHTML(all, upcoming)}<div class="ai-guide-top"><b>Qualifying bets</b><span>Separate paper ROI</span></div><p>Only saved betting signals count below. Watch-only forecasts and research-only CFB totals are excluded.</p><div class="ai-evidence-grid">${markets.map(([key, title, filter]) => {
+    const e = AI_MATH.evaluate(all.filter(filter).filter(AI_MATH.qualifyingBet), modelVersionFor);
     const decided = e.w + e.l;
-    const pending = upcoming.filter(filter).filter(r => r.q?.v === modelVersionFor(r.sport)), pricedPending = pending.filter(r => AI_MATH.american(r.q?.price) != null);
+    const pending = upcoming.filter(filter).filter(AI_MATH.qualifyingBet).filter(r => r.q?.v === modelVersionFor(r.sport)), pricedPending = pending.filter(r => AI_MATH.american(r.q?.price) != null);
     const pendingProbs = pending.map(r => AI_MATH.number(r.q?.prob)).filter(p => p != null && p >= 0 && p <= 1);
     const upcomingProbability = pendingProbs.length ? pendingProbs.reduce((a,b) => a+b,0) / pendingProbs.length : null;
     const notStarted = pending.filter(r => Date.parse(r.q?.start) > Date.now()).length;
@@ -5970,7 +5985,7 @@ async function paintSportBoard(tok) {
   }
   const finals = rows.filter((r) => gameState(r.g) === 'final');
   if (finals.length) {
-    const saved = getTally();
+    const saved = getTally(), pending = { ...getPending(), ...(globalThis.SportsHubCloudAI?.maps()?.pending || {}) };
     const results = finals.map((r) => ({ row: r,
       ml: savedPickForGame(saved, r.g, sport),
       sp: savedPickForGame(saved, r.g, sport, 'spread'),
@@ -5978,16 +5993,21 @@ async function paintSportBoard(tok) {
     const missing = results.filter((r) => !r.ml && !r.sp && !r.tot).length;
     const d = el('details', 'lad-fold');
     d.open = !upcoming.length;
-    const result = (label, r) => {
+    const result = (label, r, market, row, ml) => {
+      const pendingPick = pending[`${row.g.id}${market === 'spread' ? ':s' : market === 'total' ? ':t' : ''}`];
+      const evidence = ml || pending[row.g.id];
+      const grade = AI_MATH.forecastGrade(evidence, market, modelVersionFor, row.g.date);
+      const reason = r ? (AI_MATH.qualifyingBet(r) ? 'Qualifying bet' : market === 'moneyline' ? AI_MATH.missingBetReason(evidence, market, modelVersionFor, row.g.date) : 'Research only') : pendingPick ? 'Awaiting result' : AI_MATH.missingBetReason(evidence, market, modelVersionFor, row.g.date);
+      const forecast = grade.result ? `Forecast ${grade.result === 'win' ? 'won' : grade.result === 'loss' ? 'lost' : 'push'} · ${grade.selection || ''}` : grade.status;
       const state = !r ? 'empty' : r.pu ? 'push' : r.c ? 'win' : 'loss';
       const icon = state === 'win' ? '✓' : state === 'loss' ? '×' : state === 'push' ? '=' : '—';
-      const outcome = state === 'win' ? 'Won' : state === 'loss' ? 'Lost' : state === 'push' ? 'Push' : 'Not logged';
-      return `<span class="ai-final-result ${state}"><i aria-hidden="true">${icon}</i><span><small>${label}</small><b>${r ? esc(r.p || '') : outcome}</b></span>${r ? `<em>${outcome}</em>` : ''}</span>`;
+      const outcome = state === 'win' ? 'Won' : state === 'loss' ? 'Lost' : state === 'push' ? 'Push' : reason;
+      return `<span class="ai-final-result ${state}"><i aria-hidden="true">${icon}</i><span><small>${label}</small><b>${r ? esc(r.p || '') : outcome}</b></span>${r ? `<em>${outcome}</em>` : ''}<small class="ai-final-explanation">${esc(forecast)} · ${esc(reason)}</small></span>`;
     };
-    d.innerHTML = `<summary>Finished games · saved picks only (${finals.length})</summary><p class="ai-why">${missing
-      ? `${missing} game${missing === 1 ? ' has' : 's have'} no pregame snapshot in this browser. Finished games cannot be backfilled honestly. Safari, an installed home-screen app and another device each keep separate records.`
-      : 'Every finished game below matched a saved pregame record on this browser.'} Legacy entries retain their original provenance; new snapshots are versioned in Results.</p>
-      ${results.map(({ row: r, ml, sp, tot }) => `<div class="lad-row ai-final-row"><span class="lm">${esc(matchupLabel(sport, r.g))}</span><span class="ai-final-results">${result('Winner', ml)}${result('Spread', sp)}${result('Total', tot)}</span></div>`).join('')}`;
+    d.innerHTML = `<summary>Finished games · forecasts &amp; bets (${finals.length})</summary><p class="ai-why">${missing
+      ? `${missing} game${missing === 1 ? ' has' : 's have'} no settled pregame record available yet. Pending records await results; missing forecasts are never recreated after kickoff.`
+      : 'Every finished game below matched saved pregame evidence.'} Legacy entries retain their original provenance; new snapshots are versioned in Results.</p>
+      ${results.map(({ row: r, ml, sp, tot }) => `<div class="lad-row ai-final-row"><span class="lm">${esc(matchupLabel(sport, r.g))}</span><span class="ai-final-results">${result('Winner', ml, 'moneyline', r, ml)}${result('Spread', sp, 'spread', r, ml)}${result('Total', tot, 'total', r, ml)}</span></div>`).join('')}`;
     container.appendChild(d);
   }
 

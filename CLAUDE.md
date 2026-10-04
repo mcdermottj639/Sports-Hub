@@ -616,7 +616,7 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v280** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v281** (backend **b17-fantasy-league-rules**).
 
 ### v280 — Restore compact NFL cards
 
@@ -7420,3 +7420,15 @@ used to sit here belonged to Family Survivor and went with it in September.
   real options (incl. "do nothing").
 - Ship small, verifiable increments; bump the version each time so the owner can
   confirm. They verify on iPhone (Safari + home-screen PWA) and a desktop app.
+
+### v281 — Forecast evaluation separate from bets
+All saved cloud winner rows already carry the full forecast and pregame odds in
+`snapshot.forecast`/`snapshot.odds`; settlement adds final scores. Results now
+grade those immutable forecasts separately for winner/spread/total, including
+nonqualifying reads, and report margin/total absolute error even without lines.
+The existing betting ledger is unchanged. Qualifying-bet ROI excludes watch-only
+winners and research-only CFB totals. Missing evidence, no edge, quality blocks,
+research-only markets, missing qualifying picks and pending results are distinct.
+Device snapshots now retain margin/total for every sport. No postgame model
+recomputation or database migration; the existing scheduled collector continues
+saving full cloud forecasts with the app closed.

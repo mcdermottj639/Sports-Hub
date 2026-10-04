@@ -3491,3 +3491,5 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .fc-previous > summary { color:var(--muted, #626258); font-size:.73rem; font-weight:400; min-height:32px; display:list-item; align-content:center; }
 .fc-previous > summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 .fc-previous[open] > summary { margin-bottom:.5rem; }
+
+.ai-final-result .ai-final-explanation { grid-column: 2 / -1; font-size: 10px; line-height: 1.4; letter-spacing: 0; text-transform: none; font-weight: 500; overflow-wrap: anywhere; }
