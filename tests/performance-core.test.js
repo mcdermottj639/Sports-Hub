@@ -49,7 +49,7 @@ test('research rendering pairs opposite sides without merging model cohorts',()=
  global.SportsHubSignalsCore=require('../supabase/functions/_shared/betting-signals-core.js');const UI=require('../betting-signals-ui.js');
  const g={rule_id:'nfl_explore_spread_home',engine:'scheduled-v239',provider_id:'1',wins:1,losses:0,pushes:0,units:1,roi:100};
  const html=UI.systemResultsHTML({state:'ready',filters:{scope:'explore'},groups:[g,{...g,rule_id:'nfl_explore_spread_away',wins:0,losses:1},{...g,engine:'scheduled-nfl-football-v1'}]});
- assert.equal((html.match(/side comparison<\/h4>/g)||[]).length,2);assert.match(html,/Our model trends/);assert.match(html,/Game history/);
+ assert.equal((html.match(/Spread · home vs away<\/h4>/g)||[]).length,1);assert.equal((html.match(/class="bs-side-sample"/g)||[]).length,2);assert.doesNotMatch(html,/Original model context|Live NFL model context/);assert.match(html,/Our model’s performance/);assert.match(html,/Our model trends/);assert.match(html,/Game history/);
 });
 
 test('game history shows newest played games before upcoming games in kickoff order',()=>{
@@ -65,4 +65,10 @@ test('history translates home-oriented lines and projections without changing re
  const sf=ui.gameCard([base({matchup:'DEN @ SF',selection:'SF -3',line:-3,projection:6.8})]);assert.match(sf,/<dd>SF -3.0<\/dd>/);assert.match(sf,/<dd>SF by 6.8<\/dd>/);
  const dog=ui.gameCard([base({matchup:'KC @ LV',selection:'LV +4.5',line:4.5,projection:-1.6})]);assert.match(dog,/<dd>LV \+4.5<\/dd>/);assert.match(dog,/<dd>KC by 1.6<\/dd>/);
  const ml=ui.gameCard([base({market:'moneyline',line:null,projection:null,tier:null})]);assert.doesNotMatch(ml,/<dt>Saved line|<dt>Model projection|No tier/);assert.match(ml,/<dt>Saved odds/);assert.match(ml,/<dt>Model probability/);
+});
+test('market-side sample dates and counts describe games rather than opposing observations',()=>{
+ const S=require('../supabase/functions/_shared/betting-signals-core.js');global.SportsHubSignalsCore=S;const U=require('../betting-signals-ui.js');
+ const decisions=['home','away'].flatMap(side=>[2,4].map(day=>({id:`${day}-${side}`,sport:'nfl',event_id:String(day),schedule_instance:'one',rule_id:`nfl_research_spread_${side}`,rule_version:'v1',decision_policy:'pregame',model_context:{engine:'scheduled-nfl-football-v1'},inputs:{provider_id:'100'},quality_flags:[],status:'matched',selected_price:-110,scheduled_start_at:`2026-10-0${day}T17:00:00Z`})));
+ const html=U.systemResultsHTML({state:'ready',filters:{scope:'explore'},decisions,settlements:decisions.map(d=>({decision_id:d.id,result:'win'}))});
+ assert.match(html,/2 games · Oct 2, 2026 – Oct 4, 2026/);assert.match(html,/Home team/);assert.match(html,/Away team/);assert.doesNotMatch(html,/Live NFL model context|Original model context/);
 });

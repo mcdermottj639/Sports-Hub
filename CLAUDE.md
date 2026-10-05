@@ -618,7 +618,15 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v284** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v285** (backend **b17-fantasy-league-rules**).
+
+### v285 — Market results clearly separated from model performance
+
+Exploratory research is titled Market-side research and explains that it tests
+backing every market side regardless of the model pick. One full-width card per
+market groups separate samples with dates and game counts. Model-version labels
+and collector details are only inside Sample details. Existing cohort accounting
+is preserved. A direct Performance link opens the actual model record.
 
 ### v284 — Team-specific history evidence
 
@@ -649,7 +657,7 @@ and scores, and expand to original saved lines, inputs and timestamps. All views
 read existing cached scheduled history and use shareable routes. Full forecast
 and device diagnostics remain accessible; existing history is unchanged.
 
-Research pairs home/away or over/under in one compact market/cohort comparison,
+Research groups home/away or over/under into one market card with dated samples,
 keeps collector diagnostics collapsed, and exposes recent research outcomes.
 The former large opposing-side headline cards are retained only inside details.
 Raw observations and original independent cohort accounting are unchanged.

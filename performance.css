@@ -80,3 +80,12 @@
   .ph-sport-list button>span:first-child { grid-row:span 2; }
   .ph-chart { padding:15px 12px 10px; } .ph-detail>summary span { display:block; margin:5px 0 0 15px; }
 }
+
+/* Market research is an easy-to-read side table, never a model leaderboard. */
+.bs-result-grid.bs-market-side-grid { grid-template-columns:minmax(0,1fr); }
+.bs-side-sample { border-top:1px solid var(--line,#d5ded7); margin-top:12px; padding-top:8px; }
+.bs-side-sample h5 { margin:4px 0 10px; font-size:13px; }
+.bs-side-sample table { width:100%; min-width:0; }
+.bs-side-sample th,.bs-side-sample td { white-space:normal; }
+.bs-side-sample td small { display:block; font-size:10px; color:var(--gy,#657571); margin-top:4px; }
+@media(max-width:600px) { .bs-side-sample th,.bs-side-sample td { padding:8px 5px; font-size:11px; } }
