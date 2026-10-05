@@ -618,9 +618,17 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v286** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v287** (backend **b17-fantasy-league-rules**).
+
+### v287 — Situational research and compact original tests
+
+NFL research has three views: Market sides, Situational trends, and Original rule tests. The searchable situations catalog contains 25 rest/bye, travel/venue, matchup/market, and previous-result definitions in `_shared/research-situations.js`. It reads the six existing research-side observations, not fixed-rule evaluations, and retains market/provider/version/quality separation. Team situations evaluate only that team's moneyline and spread; game-wide situations also evaluate totals. Expanded rows show matching games newest first, actual saved-price records and ROI, plus explicit missing-context coverage. No strategy coefficients, picks, grading, or historical inputs change. Current collection is the default on all NFL views; legacy remains explicitly selectable.
+
+The existing `sports-hub-ai` collector now freezes venue country/state, home-base geography, verified bye status, prior game's venue-country classification, home/away status, and final margin into the existing JSON inputs. Prior games must be completed before both capture and kickoff. Missing facts remain null. Coast-to-coast research can use frozen matchup identities for historical non-neutral NFL games; it describes home-base-to-venue geography, not actual travel itinerary. International, return-trip, previous-result and road-sequence facts collect forward only. The function must be deployed with its new shared dependency and existing JWT verification preserved. No schema migration is needed.
 
 ### v286 — Retire the one-game legacy NFL research sample
+
+⚠️ Extended in v287 to original rule tests and situational research.
 
 Default NFL market-side research excludes `scheduled-v239` observations and groups, including visible game counts and entry lists. Explicit cohort selection retains access to saved legacy history; CFB and fixed-rule tests are unchanged.
 

@@ -85,7 +85,7 @@
     const sport=filters.sport||'nfl';if(!['nfl','cfb'].includes(sport))throw Error('Choose NFL or CFB.');
     const key=`results:${JSON.stringify([ruleId,version,dateRange,filters])}`;
     return run(key,async()=>{
-      const research=sport==='cfb'||filters.scope==='explore';
+      const research=sport==='cfb'||['explore','situations'].includes(filters.scope);
       const scope={sport:`eq.${sport}`,rule_id:research?`like.${sport}_research_*`:`not.like.${sport}_research_*`,select:'scheduled_start_at'};
       const [first,last]=await Promise.all([
         read('betting_system_decisions',{...scope,order:'scheduled_start_at.asc'},true),

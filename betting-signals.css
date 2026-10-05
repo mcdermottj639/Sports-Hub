@@ -38,3 +38,9 @@
 .bs-expanded .bs-conditions dt,.bs-expanded .bs-conditions dd{font-size:13px;line-height:1.4}
 .bs-detail .bs-heading h3{font-size:20px}
 @media(prefers-reduced-motion:reduce){.bs-chevron{transition:none}}
+
+/* Situational research: compact searchable rows, evidence opens in place. */
+.bs-situations{min-width:0;width:100%}.bs-situation-search{display:grid;gap:6px;margin:12px 0}.bs-situation-search input{width:100%;box-sizing:border-box;padding:11px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink)}
+.bs-situation-category{margin:12px 0;border:1px solid var(--line);border-radius:12px;overflow:hidden}.bs-situation-category>summary{padding:12px 14px;font-weight:750;background:var(--card)}
+.bs-situation-list{padding:0 12px}.bs-situation{border-top:1px solid var(--line)}.bs-situation>summary{padding:12px 2px;display:flex;justify-content:space-between;gap:16px;align-items:center;min-height:44px;box-sizing:border-box}.bs-situation>summary span{color:var(--muted);font-size:12px;text-align:right}.bs-situation-body{padding:0 0 12px}.bs-situation-body>.bs-paired{margin:10px 0}.bs-situation[hidden],.bs-situation-category[hidden]{display:none}.bs-rule-card .bs-record{font-size:22px}.bs-rule-card details{margin-top:8px}.bs-scope{flex-wrap:wrap}
+@media(max-width:600px){.bs-situation>summary{align-items:flex-start;flex-direction:column;gap:4px}.bs-situation>summary span{text-align:left}}

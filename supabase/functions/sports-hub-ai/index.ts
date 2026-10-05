@@ -5,7 +5,7 @@ import {signalsEnabled, captureSignalQuotes, signalInputs, saveSignalDecision, s
 const MODEL_VERSION = 'v239'; // CFB/MLB and the retained NFL comparison.
 const NFL_LIVE = (globalThis as any).SportsHubNFLLive;
 const modelVersionFor = (sport:string) => NFL_LIVE.versionFor(sport);
-const APP_VERSION = 'v276';
+const APP_VERSION = 'v287';
 const SPORTS = ['nfl', 'cfb', 'mlb'] as const;
 type Sport = typeof SPORTS[number];
 type Json = Record<string, any>;
@@ -60,7 +60,7 @@ function event(ev:any) {
   const a = sides.find((x:any) => x.homeAway === 'away') || sides[1] || {};
   const st = ev.status?.type || c.status?.type || {};
   return { id:String(ev.id), date:ev.date, state:st.state, status:st.shortDetail || st.detail || '',
-    seasonType:Number(ev.season?.type ?? c.season?.type) || null, season:ev.season?.year, completed:st.completed===true, neutral:c.neutralSite === true,
+    seasonType:Number(ev.season?.type ?? c.season?.type) || null, season:ev.season?.year, completed:st.completed===true, neutral:c.neutralSite === true, venue:c.venue||null,
     home:team(h), away:team(a), odds:c.odds?.[0] || null };
 }
 
