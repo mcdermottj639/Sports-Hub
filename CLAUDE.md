@@ -245,7 +245,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
 ## Files
 
-- `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. Models exposes Results / Trends / Recent games / Model info / Calibration beside Forecasts. Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Recent games expose immutable projections, outcomes and inputs, with search and result/date/market/version filters.
+- `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. Models exposes Performance / Trends / Game history / Model info / Calibration beside Forecasts. Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Game history shows newest played games first, with upcoming games below in kickoff order, and exposes immutable projections, outcomes and inputs, with search and result/date/market/version filters.
 
 - `forecast-lock.js` — persistent pregame display snapshots (`sportshub:forecast-lock:v1`, latest 300 events within a 1 MiB UTF-16 budget), shared across model surfaces and restored after reload.
 
@@ -618,9 +618,18 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v282** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v283** (backend **b17-fantasy-league-rules**).
+
+### v283 — Clearer model labels and newest-first history
+
+Results is now labeled Performance, and Recent games is labeled Game history.
+Matching shortcuts use the same names; existing routes remain unchanged.
+Game history lists the newest played games first, followed by upcoming games
+in kickoff order.
 
 ### v282 — Accessible performance trends and recent games
+
+⚠️ LABELS SUPERSEDED in v283: Results → Performance; Recent games → Game history.
 
 Models now has six direct destinations: Forecasts, Results, Trends, Recent games,
 Model info and Calibration. Results leads with compact qualifying-pick summaries,

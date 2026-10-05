@@ -49,5 +49,11 @@ test('research rendering pairs opposite sides without merging model cohorts',()=
  global.SportsHubSignalsCore=require('../supabase/functions/_shared/betting-signals-core.js');const UI=require('../betting-signals-ui.js');
  const g={rule_id:'nfl_explore_spread_home',engine:'scheduled-v239',provider_id:'1',wins:1,losses:0,pushes:0,units:1,roi:100};
  const html=UI.systemResultsHTML({state:'ready',filters:{scope:'explore'},groups:[g,{...g,rule_id:'nfl_explore_spread_away',wins:0,losses:1},{...g,engine:'scheduled-nfl-football-v1'}]});
- assert.equal((html.match(/side comparison<\/h4>/g)||[]).length,2);assert.match(html,/Our model trends/);assert.match(html,/Recent model results/);
+ assert.equal((html.match(/side comparison<\/h4>/g)||[]).length,2);assert.match(html,/Our model trends/);assert.match(html,/Game history/);
+});
+
+test('game history shows newest played games before upcoming games in kickoff order',()=>{
+ const now=Date.parse('2026-10-05T18:00:00Z');
+ const rows=[base({event_id:'old',starts_at:'2026-10-01T17:00:00Z'}),base({event_id:'future2',starts_at:'2026-10-11T17:00:00Z'}),base({event_id:'recent',starts_at:'2026-10-04T17:00:00Z'}),base({event_id:'future1',starts_at:'2026-10-05T23:00:00Z'}),base({event_id:'live',starts_at:'2026-10-05T17:00:00Z'})];
+ assert.deepEqual(C.games(rows,now).map(rs=>rs[0].event_id),['live','recent','old','future1','future2']);
 });

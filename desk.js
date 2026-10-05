@@ -62,9 +62,9 @@
   const links = [
     ['today', 'Today', 'Your personal daily brief', 'home'],
     ['models/all/picks', 'Model board', 'Winner, spread and total forecasts', 'predictions'],
-    ['models/all/results', 'Model results', 'Official record, saved odds and paper ROI', 'predictions'],
+    ['models/all/results', 'Model performance', 'Official record, saved odds and paper ROI', 'predictions'],
     ['models/all/trends', 'Model trends', 'Profit over time, weekly results, baselines and model splits', 'predictions'],
-    ['models/all/recent', 'Recent model games', 'Wins, losses, final scores and saved model inputs', 'predictions'],
+    ['models/all/recent', 'Game history', 'Wins, losses, final scores and saved model inputs', 'predictions'],
     ['research', 'Research desk', 'Compare official models and experimental challengers', 'research'],
     ['nfl/research', 'NFL research', 'Saved betting systems, odds history and football development', 'nfl'],
     ['cfb/research', 'College research', 'Top 25 systems and the FPI challenger', 'cfb'],
@@ -217,7 +217,7 @@
     if (!agendaLoaded) { host.innerHTML='<div class="desk-empty" role="status">Loading your game radar…</div>'; return; }
     host.replaceChildren();
     if (agendaErrors.length) host.insertAdjacentHTML('beforeend',`<div class="desk-inline-note">${escape(agendaErrors.join(', '))} feed unavailable. <button type="button" data-desk-refresh>Retry</button></div>`);
-    if (!list.length) host.insertAdjacentHTML('beforeend',`<div class="desk-empty"><b>${agendaFilter==='watchlist' ? 'Give your radar a personal touch.' : agendaErrors.length ? 'Waiting for the schedule.' : 'No games in this view.'}</b><p>${agendaFilter==='watchlist' ? 'Save a game with the bookmark icon. It will be easy to find here and in your watchlist.' : agendaErrors.length ? 'Your saved results and notes are still available.' : 'Football covers this week; baseball and basketball cover today. Try another league or explore saved model results.'}</p>${button('models/all/results','View saved results')}</div>`);
+    if (!list.length) host.insertAdjacentHTML('beforeend',`<div class="desk-empty"><b>${agendaFilter==='watchlist' ? 'Give your radar a personal touch.' : agendaErrors.length ? 'Waiting for the schedule.' : 'No games in this view.'}</b><p>${agendaFilter==='watchlist' ? 'Save a game with the bookmark icon. It will be easy to find here and in your watchlist.' : agendaErrors.length ? 'Your saved results and notes are still available.' : 'Football covers this week; baseball and basketball cover today. Try another league or explore saved model results.'}</p>${button('models/all/results','View performance')}</div>`);
     list.slice(0,agendaLimit).forEach(({sport,g}) => {
       const row = document.createElement('div'); row.className = 'desk-game';
       const status = gameState(g), started = status !== 'scheduled';

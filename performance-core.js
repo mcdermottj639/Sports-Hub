@@ -159,9 +159,13 @@
         bias:errors.length?errors.reduce((a,b)=>a+b,0)/errors.length:null};
     });
   }
-  function games(rows) {
+  function games(rows, now = Date.now()) {
     const groups=new Map();for(const r of rows){const k=gameKey(r);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);}
-    return [...groups.values()].sort((a,b)=>Date.parse(b[0].starts_at)-Date.parse(a[0].starts_at))
+    return [...groups.values()].sort((a,b)=>{
+        const at=Date.parse(a[0].starts_at),bt=Date.parse(b[0].starts_at);
+        const af=at>now,bf=bt>now;
+        return Number(af)-Number(bf)||(af?at-bt:bt-at);
+      })
       .map(rs=>rs.sort((a,b)=>MARKETS.indexOf(a.market)-MARKETS.indexOf(b.market)));
   }
   return Object.freeze({SPORTS,MARKETS,legacy,valid,select,qualified,settled,summary,profit,series,weekly,benchmarks,splits,calibration,forecastErrors,games});

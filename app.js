@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v282';
+const APP_VERSION = 'v283';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -2794,7 +2794,7 @@ function aiPickHead(pred, sport, g, info) {
   // the v224 lesson about where that sentence belongs. The look-back slate has
   // said this since v199; the modal never got the banner.
   const played = g && !AI_MATH.pregame(g)
-    ? '<div class="ai-why">Locked pregame forecast. Model probabilities, projections and comparison lines stay fixed after the game starts. Results retains the original performance record.</div>'
+    ? '<div class="ai-why">Locked pregame forecast. Model probabilities, projections and comparison lines stay fixed after the game starts. Performance retains the original record.</div>'
     : '';
   return `<div class="md-section-title acc-open">🤖 AI Pick</div>
     ${played}
@@ -4176,7 +4176,7 @@ function historyLinks(sport) {
     ? (rec?.n ? `${wlOf(rec)} on the moneyline${det.atsBySport?.[sport]?.n ? ` · ${wlOf(det.atsBySport[sport])} ATS` : ''}` : 'nothing graded yet')
     : (det.total ? 'every league, every market' : 'nothing graded yet');
   const jump = el('div', 'ai-histlink');
-  jump.innerHTML = `<button type="button" data-sub="record"><b>📈 Results</b><span>${mlLine}</span></button>
+  jump.innerHTML = `<button type="button" data-sub="record"><b>📈 Performance</b><span>${mlLine}</span></button>
     <button type="button" data-sub="backtest"><b>🧪 Calibration</b><span>${det.total ? `${det.total} graded pick${det.total === 1 ? '' : 's'}` : 'no sample yet'}</span></button>
     <button type="button" data-sub="model"><b>🧠 How it works</b><span>what it computes</span></button>`;
   jump.addEventListener('click', (e) => {
@@ -5455,7 +5455,7 @@ async function aiRecentFor(sport) {
 // Now: level 1 picks the league (or 🌐 Overview = everything), level 2 picks
 // the question. Nothing was dropped — every element of the old tab is on one
 // of the four sub-tabs, and the Board sub-tab is the old ladder untouched.
-const AI_SUBS = [['board', 'Forecasts'], ['record', 'Results'], ['trends', 'Trends'], ['recent', 'Recent games'], ['model', 'Model info'], ['backtest', 'Calibration']];
+const AI_SUBS = [['board', 'Forecasts'], ['record', 'Performance'], ['trends', 'Trends'], ['recent', 'Game history'], ['model', 'Model info'], ['backtest', 'Calibration']];
 const AI_BLURB = {
   board: 'Start with the market, compare the numbers, then check the data. Larger gaps are not guarantees.',
   record: '',
