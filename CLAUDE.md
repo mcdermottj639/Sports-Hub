@@ -618,9 +618,15 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v285** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v286** (backend **b17-fantasy-league-rules**).
+
+### v286 — Retire the one-game legacy NFL research sample
+
+Default NFL market-side research excludes `scheduled-v239` observations and groups, including visible game counts and entry lists. Explicit cohort selection retains access to saved legacy history; CFB and fixed-rule tests are unchanged.
 
 ### v285 — Market results clearly separated from model performance
+
+⚠️ Default legacy NFL sample visibility superseded in v286; the one-game old collection is hidden by default.
 
 Exploratory research is titled Market-side research and explains that it tests
 backing every market side regardless of the model pick. One full-width card per
