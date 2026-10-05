@@ -618,7 +618,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v288** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v289** (backend **b17-fantasy-league-rules**).
+
+### v289 — Readable NFL calibration
+
+NFL calibration uses a single full-width flow: all-forecast record cards, a semantic probability comparison table, then collapsed historical diagnostics. Responsive cards wrap before becoming narrow columns. The qualifying-bet ROI block is omitted from calibration; forecast grading and model coefficients are unchanged.
 
 ### v288 — Track every saved model pick
 

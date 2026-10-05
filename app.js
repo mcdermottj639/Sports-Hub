@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v288';
+const APP_VERSION = 'v289';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -3870,9 +3870,13 @@ function backtestPanel(det, sport, archive = false) {
   const scope = sport ? lgLabel(sport) : 'all leagues';
   if (sport === 'nfl' && !archive) {
     const rows = Object.values(globalThis.SportsHubCloudAI?.maps()?.tally || {}).filter(r => r.s === 'nfl' && !r.a && !r.t && !r.pu && r.q?.v === modelVersionFor('nfl') && Number.isFinite(r.q?.prob));
-    box.innerHTML = `<p class="ai-note">Live NFL football model · calibration starts with nfl-football-v1. Previous-model results are excluded.</p>${evaluationHTML('nfl')}<div class="bt-card"><b>Winner calibration · new engine</b>${[[50,60],[60,70],[70,80],[80,101]].map(([lo,hi])=>{const group=rows.filter(r=>r.q.prob*100>=lo&&r.q.prob*100<hi),n=group.length;return `<p>${lo}–${Math.min(hi-1,100)}%: ${n ? `${n} forecasts · average ${(group.reduce((s,r)=>s+r.q.prob,0)*100/n).toFixed(1)}% · won ${(group.filter(r=>r.c===1).length*100/n).toFixed(1)}%` : 'Collecting'}</p>`;}).join('')}</div>`;
+    box.classList.add('ai-calibration-layout');
+    box.innerHTML = `<p class="ai-note">Current NFL model · all saved pregame forecasts. Earlier model versions are kept below.</p>${evaluationHTML('nfl', true)}<section class="bt-card ai-calibration-card"><h3>Win probability calibration</h3><p>Compare the model’s average win probability with how often those picks won.</p><div class="ai-calibration-scroll" role="region" aria-label="Win probability calibration" tabindex="0"><table class="ai-calibration-table"><thead><tr><th scope="col">Predicted range</th><th scope="col">Games</th><th scope="col">Average prediction</th><th scope="col">Actual win rate</th></tr></thead><tbody>${[[50,60],[60,70],[70,80],[80,101]].map(([lo,hi]) => {
+      const group = rows.filter(r => r.q.prob*100 >= lo && r.q.prob*100 < hi), n = group.length;
+      return `<tr><th scope="row">${lo}–${Math.min(hi-1,100)}%</th><td>${n}</td><td>${n ? (group.reduce((sum,r) => sum+r.q.prob,0)*100/n).toFixed(1)+'%' : '—'}</td><td>${n ? (group.filter(r => r.c===1).length*100/n).toFixed(1)+'%' : '—'}</td></tr>`;
+    }).join('')}</tbody></table></div><p class="ai-calibration-caption">Small groups can swing sharply with one result. Empty ranges are still collecting games.</p></section>`;
     const older = el('details', 'desk-history-details');
-    older.innerHTML = '<summary>Historical diagnostics · earlier versions included</summary><p>These older device instruments are not calibration evidence for the new football engine.</p>';
+    older.innerHTML = '<summary>Historical diagnostics</summary><p>Earlier model versions and device records. These are separate from the current NFL model above.</p>';
     older.appendChild(backtestPanel(det, sport, true));box.appendChild(older);return box;
   }
 
@@ -5461,7 +5465,7 @@ const AI_BLURB = {
   record: '',
   trends: '',
   recent: '',
-  backtest: 'Does a 60% forecast win about 60% of the time? These are device-record diagnostics, not a new out-of-sample backtest.',
+  backtest: 'Does a 60% prediction win about 60% of the time? Compare saved predictions with their results.',
   model: 'Inputs, formulas, limitations and validation — the detail behind every forecast.',
 };
 function aiGuideHTML(sub, sport) {
@@ -5479,7 +5483,7 @@ function aiGuideHTML(sub, sport) {
 function forecastEvaluationHTML(records, pending) {
   const forecasts = [...records, ...pending].filter(r => !r.a && !r.t);
   const markets = [['moneyline','Winner'],['spread','Spread'],['total','Total']];
-  return `<div class="ai-guide-top"><b>All pregame forecasts</b><span>Model evaluation</span></div><p>Every available saved forecast, including reads below betting thresholds. Graded against its original line; no betting ROI.</p><div class="ai-evidence-grid">${markets.map(([market,label]) => {
+  return `<div class="ai-guide-top"><b>All pregame forecasts</b><span>Model evaluation</span></div><p>Every available saved pregame forecast. Spread and total results use the original saved line.</p><div class="ai-evidence-grid">${markets.map(([market,label]) => {
     const rows = forecasts.map(r => AI_MATH.forecastGrade(r, market, modelVersionFor));
     const graded = rows.filter(r => r.result), w = graded.filter(r => r.result === 'win').length, l = graded.filter(r => r.result === 'loss').length, pushes = graded.length-w-l;
     const errors = rows.map(r => r.error).filter(Number.isFinite);
@@ -5488,9 +5492,10 @@ function forecastEvaluationHTML(records, pending) {
     return `<div class="desk-evidence-market"><div class="desk-evidence-heading"><b>${label}</b><span>${graded.length} graded</span></div><strong>${graded.length ? `${w}W · ${l}L${pushes ? ` · ${pushes}P` : ''}` : 'Collecting'}</strong><p>${w+l ? `${(100*w/(w+l)).toFixed(1)}% hit rate · ` : ''}${waiting} awaiting result${gaps ? ` · ${gaps} missing evidence` : ''}${errors.length ? `<br>Mean absolute error ${(errors.reduce((sum,x)=>sum+Math.abs(x),0)/errors.length).toFixed(1)} · ${errors.length} forecasts` : ''}${rows.some(r=>r.status==='No directional edge') ? '<br>Exact-line forecasts have no side to grade.' : ''}</p></div>`;
   }).join('')}</div>`;
 }
-function evaluationHTML(sport) {
+function evaluationHTML(sport, forecastsOnly = false) {
   const all = Object.values(globalThis.SportsHubCloudAI?.maps()?.tally || {}).filter((r) => !sport || sport === 'all' || r.s === sport);
   const upcoming = Object.values(globalThis.SportsHubCloudAI?.maps()?.pending || {}).filter(r => !sport || sport === 'all' || r.sport === sport);
+  if (forecastsOnly) return `<section class="ai-evidence"><div class="ai-guide-top"><b>Model record</b><span>${esc(modelVersionFor(sport))}</span></div>${forecastEvaluationHTML(all, upcoming)}</section>`;
   const markets = [['moneyline', 'Winner', (r) => !r.a && !r.t], ['spread', 'Spread', (r) => !!r.a], ['total', 'Total', (r) => !!r.t]];
   const oldNFL = (!sport || sport === 'all' || sport === 'nfl') ? Object.values(globalThis.SportsHubCloudAI?.maps(true)?.tally || {}).filter(r => r.s === 'nfl' && r.q?.v === 'v239') : [];
   const archive = oldNFL.length ? `<details class="desk-history-details"><summary>Previous NFL model · v239</summary><p>Preserved results from the former official model. These do not count toward the new football engine.</p>${markets.map(([,title,filter])=>{const e=AI_MATH.evaluate(oldNFL.filter(filter),'v239');return `<p><b>${title}:</b> ${e.w}W · ${e.l}L · ${e.pushes}P (${e.n} settled)</p>`;}).join('')}<details><summary>Saved previous-model results</summary>${oldNFL.map(r=>`<p>${esc(r.m)} · ${esc(r.p)} · ${r.pu?'Push':r.c?'Win':'Loss'}</p>`).join('')}</details></details>` : '';
