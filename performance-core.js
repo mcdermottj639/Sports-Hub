@@ -39,7 +39,7 @@
       && (!opts.query||`${r.matchup} ${r.selection}`.toLowerCase().includes(opts.query.toLowerCase())));
   }
   function summary(rows) {
-    const bets=rows.filter(qualified).filter(r=>r.result!=='void');
+    const bets=rows.filter(r=>r.result!=='void');
     const e=A.evaluate(bets.filter(settled).map(legacy));
     return {...e,games:new Set(bets.filter(settled).map(gameKey)).size,
       pending:bets.filter(r=>r.result==='pending').length,unpriced:e.n-e.priced};
@@ -51,7 +51,7 @@
   const day = r => new Date(r.starts_at).toLocaleDateString('en-CA',{timeZone:'America/New_York'});
   function series(rows) {
     const buckets=new Map();
-    rows.filter(qualified).filter(settled).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at)).forEach(r=>{
+    rows.filter(settled).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at)).forEach(r=>{
       const p=profit(r);if(p==null)return;
       const d=day(r),v=buckets.get(d)||{date:d,units:0,n:0};v.units+=p;v.n++;buckets.set(d,v);
     });
@@ -60,7 +60,7 @@
   }
   function weekly(rows) {
     const groups=new Map();
-    for(const r of rows.filter(qualified).filter(settled)) {
+    for(const r of rows.filter(settled)) {
       const date=new Date(`${day(r)}T12:00:00Z`);date.setUTCDate(date.getUTCDate()-(date.getUTCDay()+6)%7);
       const k=date.toISOString().slice(0,10);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);
     }
@@ -69,7 +69,7 @@
   // Baselines use both sides of the very same saved quote as the model bet.
   // No reverse-engineered odds, refreshed lines, or convenient extra games.
   function benchmarkRow(r, strategy) {
-    if(!qualified(r)||!settled(r)||A.american(r.price)==null)return null;
+    if(!settled(r)||A.american(r.price)==null)return null;
     const h=A.number(r.final_home_score),a=A.number(r.final_away_score);
     if(h==null||a==null)return null;
     const snap=r.snapshot||{}, enriched=Date.parse(snap.priceCapturedAt)<Date.parse(r.starts_at);
@@ -114,7 +114,7 @@
   }
   function splits(rows,dimension) {
     const groups=new Map();
-    for(const r of rows.filter(qualified)) {
+    for(const r of rows) {
       let label;
       if(dimension==='side')label=r.market==='total'?(/^OVER\b/i.test(r.selection)?'Over':'Under')
         :typeof r.selection_home==='boolean'?(r.snapshot?.neutral?'Neutral venue':r.selection_home?'Home':'Away'):'Side unavailable';
@@ -136,7 +136,7 @@
   }
   function calibration(rows) {
     const buckets=new Map();
-    for(const r of rows.filter(qualified).filter(settled)) {
+    for(const r of rows.filter(settled)) {
       if(r.result==='push')continue;
       const v=A.evaluate([legacy(r)]);if(!v.probabilityN)continue;
       const low=Math.min(90,Math.floor(Number(r.model_probability)*10)*10);

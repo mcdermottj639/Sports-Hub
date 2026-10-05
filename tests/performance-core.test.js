@@ -12,9 +12,9 @@ test('settlement refresh replaces the same row without inflating totals',()=>{
  const pending=base({result:'pending'}),win=base({updated_at:'2026-10-05T00:00:00Z'});
  assert.equal(C.valid([pending,win]).length,1);assert.equal(C.summary(C.valid([pending,win])).w,1);
 });
-test('ROI excludes missing odds, voids, watch-only and CFB research totals; pushes keep stake denominator',()=>{
+test('all model picks count regardless of tier; ROI excludes only missing odds and voids',()=>{
  const rows=[base(),base({result:'loss'}),base({result:'push'}),base({price:null}),base({result:'void'}),base({market:'moneyline',tier:'watch'}),base({sport:'cfb',market:'total'})];
- const s=C.summary(rows);assert.equal(s.n,4);assert.equal(s.priced,3);assert.equal(s.unpriced,1);assert.equal(s.pushes,1);assert.ok(Math.abs(s.units-(100/110-1))<1e-8);assert.equal(s.roi,s.units/3);
+ const s=C.summary(rows);assert.equal(s.n,6);assert.equal(s.priced,5);assert.equal(s.unpriced,1);assert.equal(s.pushes,1);assert.ok(Math.abs(s.units-(3*100/110-1))<1e-8);assert.equal(s.roi,s.units/5);
 });
 test('current and historical cohorts remain separately selectable',()=>{
  const rs=[base(),base({id:'old',model_version:'old'})];assert.equal(C.select(rs,{versionFor:()=> 'current'}).length,1);
@@ -84,4 +84,9 @@ test('legacy research stays available explicitly and CFB is unaffected',()=>{
  assert.equal(vm.decisions.length,2);
  assert.match(UI.systemResultsHTML({...vm,decisions:[old],filters:{scope:'explore',cohort:'scheduled-v239'}}),/data-bs-report="legacy"/);
  assert.match(UI.systemResultsHTML({...vm,decisions:[{...old,sport:'cfb'}],filters:{sport:'cfb'}}),/data-bs-report="legacy"/);
+});
+
+test('untiered Lions loss is counted consistently in record, trend and calibration',()=>{
+ const lion=base({market:'moneyline',tier:null,result:'loss',price:-185});
+ assert.equal(C.summary([lion]).l,1);assert.equal(C.series([lion])[0].units,-1);assert.equal(C.weekly([lion])[0].l,1);assert.equal(C.calibration([lion])[0].actual,0);
 });

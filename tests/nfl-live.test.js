@@ -32,7 +32,7 @@ test('the actual browser NFL entry point cannot reach the old score/record path'
  assert.equal((await c.computePregamePrediction('nfl',g)).projMargin,7);assert.equal(calls,1);
  c.SportsHubNFLLiveClient.predict=async()=>null;assert.equal(await c.computePregamePrediction('nfl',g),null);
 });
-test('official collector saves the new version, exact qualifying markets and model evidence; withheld creates no rows',()=>{
+test('official collector saves the new version, all available markets and model evidence; withheld creates no rows',()=>{
  const core=require('../supabase/functions/_shared/betting-signals-core.js');
  const c=vm.createContext({Date,Number,SPORTS:[],APP_VERSION:'v276',MODEL_VERSION:'v239',modelVersionFor:L.versionFor,SportsHubSignalsCore:core,
   american:math.american,implied:math.implied,ATS_EDGE_MIN:{nfl:2},TOTAL_MIN:{nfl:4},TOTAL_MAX:{nfl:14}});
@@ -45,6 +45,7 @@ test('official collector saves the new version, exact qualifying markets and mod
  }
  const game={...g,date:new Date(Date.now()+864e5).toISOString(),odds:{provider:{name:'Book'},spread:-3,overUnder:44,homeTeamOdds:{moneyLine:-150},awayTeamOdds:{moneyLine:130}}};
  const p={modelVersion:L.VERSION,home:true,p:.7,conf:70,margin:8,total:50,quality:[],features:{football:{marker:'shared'}},promotion:{mode:'owner-selected'}};
+ const small=c.rowsFor('nfl',game,{...p,p:.51,margin:3.1,total:44.1});assert.equal(small.length,3);assert.equal(small[0].tier,null);
  const rows=c.rowsFor('nfl',game,p);assert.equal(rows.length,3);assert.ok(rows.every(r=>r.model_version===L.VERSION));
  assert.equal(rows.find(r=>r.market==='total').snapshot.researchOnly,false);assert.equal(rows.find(r=>r.market==='spread').projection,8);
  assert.equal(rows[0].snapshot.forecast.total,50);assert.equal(rows[0].snapshot.features.football.marker,'shared');

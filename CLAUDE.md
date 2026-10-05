@@ -618,7 +618,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v287** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v288** (backend **b17-fantasy-league-rules**).
+
+### v288 — Track every saved model pick
+
+Performance records, trends, weekly tables, splits, calibration and matched baselines count all saved pregame model picks regardless of value tier. Missing odds do not exclude a pick from W/L; profit and ROI use only actual saved prices. Game history labels every selection Model pick. The scheduled collector now saves spread and total selections at every finite supported projection and available line, without minimum-edge thresholds; unavailable/invalid model inputs remain withheld. Existing completed history is not reconstructed. This supersedes the v282 qualifying-only reporting policy. No model weights change.
 
 ### v287 — Situational research and compact original tests
 
