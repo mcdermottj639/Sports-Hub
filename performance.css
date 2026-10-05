@@ -52,7 +52,7 @@
 .ph-game-body { padding:0 15px 15px; border-top:1px solid #e1e8df; }
 .ph-pick { padding:8px 0 14px; border-bottom:1px solid #e1e8df; } .ph-pick:last-child { border:0; }
 .ph-pick h4 { font-size:14px; margin:12px 0 7px; } .ph-pick p { font-size:12px; line-height:1.6; }
-.ph-pick dl { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+.ph-pick dl { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; }
 .ph-pick dt { font-size:10px; color:#657571; } .ph-pick dd { margin:4px 0; font-size:13px; font-weight:750; }
 .ph-pick details summary { font-size:12px; cursor:pointer; padding:8px 0; }
 .ph-pick pre { font-size:11px; line-height:1.5; max-height:300px; overflow:auto; background:#f1f5ef; padding:12px; border-radius:7px; white-space:pre-wrap; overflow-wrap:anywhere; }

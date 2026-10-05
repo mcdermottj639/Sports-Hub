@@ -57,3 +57,12 @@ test('game history shows newest played games before upcoming games in kickoff or
  const rows=[base({event_id:'old',starts_at:'2026-10-01T17:00:00Z'}),base({event_id:'future2',starts_at:'2026-10-11T17:00:00Z'}),base({event_id:'recent',starts_at:'2026-10-04T17:00:00Z'}),base({event_id:'future1',starts_at:'2026-10-05T23:00:00Z'}),base({event_id:'live',starts_at:'2026-10-05T17:00:00Z'})];
  assert.deepEqual(C.games(rows,now).map(rs=>rs[0].event_id),['live','recent','old','future1','future2']);
 });
+
+test('history translates home-oriented lines and projections without changing results',()=>{
+ global.SportsHubPerformance=C;require('../performance-ui.js');const ui=global.SportsHubPerformanceUI;
+ const kc=base({matchup:'KC @ LV',selection:'KC -4.5',selection_home:false,line:4.5,projection:-6.5,result:'loss',tier:null});
+ const html=ui.gameCard([kc]);assert.match(html,/<dd>KC -4.5<\/dd>/);assert.match(html,/<dd>KC by 6.5<\/dd>/);assert.match(html,/-1.00u/);assert.doesNotMatch(html,/No tier|home margin/);
+ const sf=ui.gameCard([base({matchup:'DEN @ SF',selection:'SF -3',line:-3,projection:6.8})]);assert.match(sf,/<dd>SF -3.0<\/dd>/);assert.match(sf,/<dd>SF by 6.8<\/dd>/);
+ const dog=ui.gameCard([base({matchup:'KC @ LV',selection:'LV +4.5',line:4.5,projection:-1.6})]);assert.match(dog,/<dd>LV \+4.5<\/dd>/);assert.match(dog,/<dd>KC by 1.6<\/dd>/);
+ const ml=ui.gameCard([base({market:'moneyline',line:null,projection:null,tier:null})]);assert.doesNotMatch(ml,/<dt>Saved line|<dt>Model projection|No tier/);assert.match(ml,/<dt>Saved odds/);assert.match(ml,/<dt>Model probability/);
+});
