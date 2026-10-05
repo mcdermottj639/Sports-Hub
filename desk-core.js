@@ -9,8 +9,8 @@
   const PANELS = ['home', 'predictions', 'research', 'fantasy', 'watchlist', 'explore', 'eagles', 'redsox', 'nfl', 'cfb', 'pickem', 'pulse', 'labs', 'about'];
   const aliases = { today: 'home', models: 'predictions', more: 'explore', news: 'pulse', tools: 'labs' };
   const names = { home: 'today', predictions: 'models', explore: 'more', pulse: 'news', labs: 'tools' };
-  const subs = { picks: 'board', results: 'record', calibration: 'backtest', method: 'model' };
-  const subNames = { board: 'picks', record: 'results', backtest: 'calibration', model: 'method' };
+  const subs = { picks: 'board', results: 'record', calibration: 'backtest', method: 'model', trends: 'trends', recent: 'recent' };
+  const subNames = { board: 'picks', record: 'results', backtest: 'calibration', model: 'method', trends: 'trends', recent: 'recent' };
   const FANTASY_SECTIONS = ['matchup', 'gm', 'lineup', 'roster', 'season', 'waivers'];
   function route(hash) {
     if (String(hash).startsWith('#pk=')) return null;

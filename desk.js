@@ -63,6 +63,8 @@
     ['today', 'Today', 'Your personal daily brief', 'home'],
     ['models/all/picks', 'Model board', 'Winner, spread and total forecasts', 'predictions'],
     ['models/all/results', 'Model results', 'Official record, saved odds and paper ROI', 'predictions'],
+    ['models/all/trends', 'Model trends', 'Profit over time, weekly results, baselines and model splits', 'predictions'],
+    ['models/all/recent', 'Recent model games', 'Wins, losses, final scores and saved model inputs', 'predictions'],
     ['research', 'Research desk', 'Compare official models and experimental challengers', 'research'],
     ['nfl/research', 'NFL research', 'Saved betting systems, odds history and football development', 'nfl'],
     ['cfb/research', 'College research', 'Top 25 systems and the FPI challenger', 'cfb'],
@@ -292,7 +294,7 @@
   function renderExplore() {
     const host=$d('desk-explore-grid');
     const groups = [
-      ['Make a decision','models/all/picks','models/all/results','watchlist','fantasy/gm','fantasy/lineup','pickem'],
+      ['Make a decision','models/all/picks','models/all/results','models/all/trends','models/all/recent','watchlist','fantasy/gm','fantasy/lineup','pickem'],
       ['Follow your sports','eagles','redsox','nfl','cfb','models/mlb/picks','models/nba/picks','news'],
       ['Go deeper','nfl/research','cfb/research','fantasy/season','models/all/calibration','models/all/method','tools','about'],
     ];

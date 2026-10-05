@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v281';
+const APP_VERSION = 'v282';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -4192,7 +4192,7 @@ function recordPanel(det, pend, sport) {
   const box = el('div');
   const official = el('div', 'desk-official-results');
   const ts = tallyStats(sport);
-  official.insertAdjacentHTML('beforeend', evaluationHTML(sport));
+  official.appendChild(globalThis.SportsHubPerformanceUI.panel({sport:sport||'all',view:'record',versionFor:modelVersionFor,cache:globalThis.SportsHubCloudAI?.cached(),officialHTML:evaluationHTML(sport)}));
 
   // ---- the stat strip ----
   // 🚨 SIX tiles, not five. Five wrap 3+2 on a 390px phone and the orphan row
@@ -5455,10 +5455,12 @@ async function aiRecentFor(sport) {
 // Now: level 1 picks the league (or 🌐 Overview = everything), level 2 picks
 // the question. Nothing was dropped — every element of the old tab is on one
 // of the four sub-tabs, and the Board sub-tab is the old ladder untouched.
-const AI_SUBS = [['board', 'Forecasts'], ['record', 'Results'], ['backtest', 'Calibration'], ['model', 'How it works']];
+const AI_SUBS = [['board', 'Forecasts'], ['record', 'Results'], ['trends', 'Trends'], ['recent', 'Recent games'], ['model', 'Model info'], ['backtest', 'Calibration']];
 const AI_BLURB = {
   board: 'Start with the market, compare the numbers, then check the data. Larger gaps are not guarantees.',
-  record: 'What happened to saved picks — winner, spread and total records stay separate. Historical results below include earlier model versions.',
+  record: '',
+  trends: '',
+  recent: '',
   backtest: 'Does a 60% forecast win about 60% of the time? These are device-record diagnostics, not a new out-of-sample backtest.',
   model: 'Inputs, formulas, limitations and validation — the detail behind every forecast.',
 };
@@ -5554,7 +5556,7 @@ function renderAiTally(sport, todayTxt) {
   // result. It must not be presented as this newly promoted model's record.
   if (todayTxt && sport !== 'nfl') parts.push(todayTxt);
   const box = $('#ai-score');
-  if (box) box.textContent = parts.length ? `Official record · ${parts.join(' · ')}` : sport === 'nfl' ? 'Live NFL football model · results collecting' : 'Official results are collecting';
+  if (box) box.textContent = parts.length ? `Saved forecast record · ${parts.join(' · ')}` : sport === 'nfl' ? 'Live NFL football model · results collecting' : 'Official results are collecting';
 }
 
 // Paint whichever view is selected. Record / Backtest / Model read ONLY
@@ -5569,7 +5571,7 @@ async function paintAiView() {
   const guide = $('#ai-guide');
   if (guide) guide.innerHTML = sub === 'board' ? `<details class="desk-board-details"><summary>Board details <span>Guide · research · tracking</span></summary><div id="desk-model-notes"><p class="ai-why">${esc(AI_BLURB.board)}</p>${aiGuideHTML(sub, sport)}</div></details>` : '';
   const blurb = $('#ai-blurb');
-  if (blurb) { blurb.textContent = AI_BLURB[sub] || ''; blurb.hidden = sub === 'board'; }
+  if (blurb) { blurb.textContent = AI_BLURB[sub] || ''; blurb.hidden = !AI_BLURB[sub] || sub === 'board'; }
   const head = $('#ai-head');
   if (head) {
     const scope = all ? '🌐 Everything' : `${LEAGUES[sport]?.emoji || ''} ${LEAGUES[sport]?.label || sport}`;
@@ -5594,6 +5596,7 @@ async function paintAiView() {
   container.innerHTML = '';
   container.appendChild(
     sub === 'record' ? recordPanel(det, pend, s)
+    : ['trends','recent'].includes(sub) ? globalThis.SportsHubPerformanceUI.panel({sport,view:sub,versionFor:modelVersionFor,cache:globalThis.SportsHubCloudAI?.cached()})
     : sub === 'backtest' ? backtestPanel(det, s)
     : modelPanel(s));
   if (sub === 'record' && (all || ['nfl','cfb'].includes(sport))) container.insertAdjacentHTML('beforeend', '<div class="desk-record-research"><b>Want to test a different model?</b><span>Matched current vs challenger results live in Research.</span><button type="button" class="desk-link" data-desk-route="research">Compare models →</button></div>');

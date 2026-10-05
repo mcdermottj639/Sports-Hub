@@ -245,6 +245,8 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
 ## Files
 
+- `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. Models exposes Results / Trends / Recent games / Model info / Calibration beside Forecasts. Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Recent games expose immutable projections, outcomes and inputs, with search and result/date/market/version filters.
+
 - `forecast-lock.js` — persistent pregame display snapshots (`sportshub:forecast-lock:v1`, latest 300 events within a 1 MiB UTF-16 budget), shared across model surfaces and restored after reload.
 
 - `BETTING_SIGNALS.md` — v244 architecture, capture/freeze policy, research limits and rollback.
@@ -616,7 +618,29 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v281** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v282** (backend **b17-fantasy-league-rules**).
+
+### v282 — Accessible performance trends and recent games
+
+Models now has six direct destinations: Forecasts, Results, Trends, Recent games,
+Model info and Calibration. Results leads with compact qualifying-pick summaries,
+a date-scaled cumulative profit chart, sport/market rows and latest settled games.
+Trends adds observed weekly results, matched home/favorite/over/under benchmarks,
+side/gap splits, probability calibration and per-game forecast error. No assumed
+prices or fitted weights are introduced. Current and historical model versions
+are separately selectable. Recent games group markets by event, show outcomes
+and scores, and expand to original saved lines, inputs and timestamps. All views
+read existing cached scheduled history and use shareable routes. Full forecast
+and device diagnostics remain accessible; existing history is unchanged.
+
+Research pairs home/away or over/under in one compact market/cohort comparison,
+keeps collector diagnostics collapsed, and exposes recent research outcomes.
+The former large opposing-side headline cards are retained only inside details.
+Raw observations and original independent cohort accounting are unchanged.
+
+Validation: numerical tests cover duplicate captures, version isolation, matched
+benchmarks, missing prices, pushes, voids, delayed price enrichment, probability
+provenance, sparse dates, forecast error and navigation routes.
 
 ### v280 — Restore compact NFL cards
 
