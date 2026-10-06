@@ -243,6 +243,15 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
   any pushed artifact. Chat only.
 - Don't create PRs unless explicitly asked.
 
+## Live score refresh
+
+Every 30 seconds while visible and online, `refreshLiveScores` awaits fresh ESPN
+scoreboards, updates score/status fields in mounted game/model cards, updates
+Today/watchlist games, and repaints the score rail. It also runs on return to the
+app and reconnect. One cycle at a time; failed feeds retain existing values.
+Forecasts, saved odds, disclosures and page scroll are preserved. This does not
+rebuild an already-open full game report or refresh fantasy/golf data.
+
 ## Files
 
 - `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. Models exposes Performance / Trends / Game history / Model info / Calibration beside Forecasts. Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Game history uses team-specific spread/projection labels, omits inapplicable moneyline fields, and shows newest played games first, with upcoming games below in kickoff order, and exposes immutable projections, outcomes and inputs, with search and result/date/market/version filters.
@@ -618,7 +627,7 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v291** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v292** (backend **b17-fantasy-league-rules**).
 
 ### v291 — Preserve postgame football reports
 

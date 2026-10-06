@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v291';
+const APP_VERSION = 'v292';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -963,6 +963,7 @@ function gameCard(sport, g, opts = {}) {
   // it rather than on position, so an async model read can't land on the
   // wrong game if the slate repainted while it waited.
   if (g.id) card.dataset.gid = g.id;
+  bindLiveScore(card, sport, g);
   if (interactive && g.id) card.onclick = (event) => { if (!event.target.closest('details,button,a,input,select')) openGameDetail(sport, g.id, g); };
   if (['nfl','cfb'].includes(sport) && g.id) globalThis.SportsHubFootballDevelopment?.mountGame(card, g.id, sport);
   if (['nfl','cfb'].includes(sport) && interactive && g.id) {
@@ -1447,7 +1448,7 @@ const DEMO = {
 // A permanent 0–0 strip is worse than no strip, and reclaiming that chrome is
 // the whole point of the v163 layout: masthead + tab rail + rail = ~186px with
 // live games, ~102px without, vs ~208px for the old wrapping tab grid.
-const LIVE_RAIL_MS = 60000;
+const LIVE_RAIL_MS = 30000;
 let liveRailTimer = null;
 // Sports where one of YOUR teams is live — drives the Eagles/Red Sox tab pips
 // (those tabs pip for their own game only, not for any game in the league).
@@ -1675,15 +1676,75 @@ function paintLivePips(liveSports) {
 // on a timer — paused while the page is hidden so a backgrounded PWA isn't
 // polling ESPN, and re-run immediately on return so you never look at a stale
 // score after unlocking the phone.
-function startLiveRail() {
-  const run = () => {
-    if (document.hidden) return;
-    renderLiveRail().catch(() => {});
+// Refresh score fields only: forecasts, odds and expanded reports stay untouched.
+function bindLiveScore(card, sport, g) {
+  card.dataset.liveSport = sport;
+  card.dataset.liveId = String(g.id);
+  card._updateLiveScore = (next) => {
+    g.state = next.state; g.statusText = next.statusText; g.situation = next.situation;
+    for (const side of ['away', 'home']) {
+      g[side].score = next[side].score; g[side].winner = next[side].winner;
+    }
+    const st = gameState(g);
+    const label = st === 'final' ? 'FINAL' : st === 'live' ? (g.statusText || 'LIVE') : scheduledLabel(g);
+    const time = card.querySelector('.slate-time');
+    if (time) { time.textContent = label + (g.tv ? ` · ${g.tv}` : ''); time.classList.toggle('live', st === 'live'); }
+    const status = card.querySelector('.status');
+    if (status) { status.textContent = label; status.className = 'status' + (st === 'scheduled' ? '' : ` ${st}`); }
+    const meta = card.querySelector('.brd-meta');
+    if (meta) meta.textContent = `${LEAGUES[sport].emoji} ${LEAGUES[sport].label} · ${label}`;
+    const matchup = card.querySelector('.slate-matchup, .compact-matchup');
+    if (matchup) {
+      let score = matchup.querySelector('.slate-scores, .compact-score');
+      if (!score && st !== 'scheduled') {
+        score = el('strong', card.classList.contains('board-compact') ? 'compact-score' : 'slate-scores');
+        matchup.appendChild(score);
+      }
+      if (score) { score.textContent = `${g.away.score ?? '–'}–${g.home.score ?? '–'}`; score.hidden = st === 'scheduled'; }
+    }
+    card.querySelectorAll('.team-row').forEach((row, i) => {
+      const team = i === 0 ? g.away : g.home;
+      const score = row.querySelector('.score');
+      if (score) score.textContent = st === 'scheduled' ? '–' : (team.score ?? '–');
+      row.classList.toggle('winner', winnerName(g) === team.name);
+    });
   };
+}
+let liveScorePending = false;
+async function refreshLiveScores() {
+  if (document.hidden || navigator.onLine === false || liveScorePending) return;
+  liveScorePending = true;
+  try {
+    const sports = new Set([...sortedSports({ teamOnly: true }), 'nfl', 'cfb', 'mlb', 'nba']);
+    const updates = [];
+    await Promise.allSettled([...sports].map(async sport => {
+      const cfg = LEAGUES[sport];
+      const queries = [ymd(sportsDate()), ...(WEEK_SPORTS.has(sport) ? [null] : [])];
+      await Promise.allSettled(queries.map(async date => {
+        const parts = [cfg.sbQuery, date ? `dates=${date}` : ''].filter(Boolean);
+        const url = `${SITE}/${cfg.espnPath}/scoreboard${parts.length ? `?${parts.join('&')}` : ''}`;
+        // Wait for the network; disk stale-while-revalidate would paint the old score.
+        const json = await fetchLive(url, LIVE_RAIL_MS);
+        updates.push(...(json.events || []).map(ev => ({ sport, g: normEvent(ev) })));
+      }));
+    }));
+    if (document.hidden) return;
+    const byId = new Map(updates.map(x => [`${x.sport}:${x.g.id}`, x.g]));
+    document.querySelectorAll('[data-live-sport][data-live-id]').forEach(card => {
+      const g = byId.get(`${card.dataset.liveSport}:${card.dataset.liveId}`);
+      if (g) card._updateLiveScore?.(g);
+    });
+    window.dispatchEvent(new CustomEvent('sportshub:live-scores', { detail: updates }));
+    await renderLiveRail();
+  } finally { liveScorePending = false; }
+}
+function startLiveRail() {
+  const run = () => refreshLiveScores().catch(() => {});
   run();
   if (liveRailTimer) clearInterval(liveRailTimer);
   liveRailTimer = setInterval(run, LIVE_RAIL_MS);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) run(); });
+  document.addEventListener('visibilitychange', run);
+  window.addEventListener('online', run);
 }
 
 async function renderHome() { return globalThis.SportsHubDesk.renderHome(); }
@@ -5169,6 +5230,7 @@ function boardCard(r, opts = {}) {
     }
   }
   globalThis.SportsHubDesk?.addWatchControl(card, sport, g);
+  bindLiveScore(card, sport, g);
   return card;
 }
 

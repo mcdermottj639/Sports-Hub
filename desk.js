@@ -391,7 +391,11 @@
     window.addEventListener('sportshub:fantasy-rendered',focusSection);
     window.addEventListener('sportshub:league-updated',paintBrief);
     window.addEventListener('storage',e=>{if(e.key===WATCH_KEY){paintWatchButtons();paintWatchlist();paintAgenda();paintBrief();}});
-    document.addEventListener('visibilitychange',()=>{if(!document.hidden&&currentTab==='home'){paintBrief();loadAgenda();}});
+    window.addEventListener('sportshub:live-scores', e => {
+      const fresh = new Map(e.detail.map(x => [C.key(x.sport,x.g.id),x.g]));
+      games = games.map(x => ({...x,g:fresh.get(C.key(x.sport,x.g.id)) || x.g}));
+      if (currentTab === 'home' || currentTab === 'watchlist') { paintAgenda(); paintWatchlist(); paintClubs(); }
+    });
     $d('desk-board-fold').addEventListener('toggle',e=>{try{localStorage.setItem('sportshub:desk:board-open',String(e.target.open));}catch(_){}});
     try{$d('desk-board-fold').open=localStorage.getItem('sportshub:desk:board-open')==='true';}catch(_){}
   }
