@@ -3525,3 +3525,12 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-palette] .nfl-model-weights .mc-f { grid-template-columns: 90px minmax(0, 1fr); }
 :root[data-palette] .nfl-model-weights .mc-fw { font-variant-numeric: tabular-nums; font-size: 16px; overflow-wrap: normal; }
 :root[data-palette] .nfl-model-weights .mc-fd { font-size: 12px; }
+
+.saved-game-report { margin: 18px 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
+.saved-game-report h3 { margin-top: 0; font-size: 18px; }
+.saved-game-report details { margin: 12px 0; }
+.saved-game-report summary { cursor: pointer; font-weight: 700; }
+.saved-game-report p { font-size: 13px; line-height: 1.5; color: var(--muted); }
+.saved-game-report pre { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.saved-report-market { border-top: 1px solid var(--line); padding: 10px 0; }
+.saved-report-market > span { display: block; color: var(--muted); font-size: 12px; }

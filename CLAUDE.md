@@ -618,7 +618,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v290** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v291** (backend **b17-fantasy-league-rules**).
+
+### v291 — Preserve postgame football reports
+
+NFL/CFB game details read per-event cloud snapshots (including archived research) through saved-game-report.js. Show saved inputs, markets, prices, capture times and NFL withheld reasons/conditional evidence without adding archived picks to current performance. Forecast locks retain full features and available device-observed pregame splits/movement (frozen after kickoff), restore college ratings, and can recover official rows through a direct event query. Cloud sync retains an in-memory copy when device storage is full and allows retry after failures. Game Report renders independently of the optional betting feed and survives its failure. Existing pregame evidence is never reconstructed from postgame data. No model or backend changes.
 
 ### v290 — NFL model weights
 

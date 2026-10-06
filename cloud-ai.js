@@ -4,7 +4,10 @@
   const cfg = root.SPORTS_HUB_SUPABASE;
   const empty = () => ({ at: null, rows: [], run: null });
 
+  let memory = null;
+  const eventRequests = new Map();
   function cached() {
+    if (memory) return memory;
     try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null') || empty(); }
     catch (_) { return empty(); }
   }
@@ -79,9 +82,22 @@
       request('ai_job_runs?select=*&order=started_at.desc&limit=1'),
     ]);
     const value = { at: new Date().toISOString(), rows, run: runs[0] || null };
+    memory = value;
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(value)); } catch (_) {}
     root.dispatchEvent(new CustomEvent('sportshub:cloud-ai', { detail: value }));
     return value;
   }
-  root.SportsHubCloudAI = Object.freeze({ cached, maps, sync });
+  async function eventRows(sport, id) {
+    if (!cfg?.url || !cfg?.key) return (cached().rows || []).filter(r => r.sport === sport && String(r.event_id) === String(id));
+    const key = `${sport}:${id}`, old = eventRequests.get(key);
+    if (old && Date.now() - old.at < 60000) return old.promise;
+    const entry = {at:Date.now(), promise:null};
+    entry.promise = request(`ai_predictions?sport=eq.${encodeURIComponent(sport)}&event_id=eq.${encodeURIComponent(id)}&select=*&order=captured_at.desc,id.asc`).catch(error => { eventRequests.delete(key); throw error; });
+    eventRequests.set(key, entry);
+    return entry.promise;
+  }
+  function recordsFor(rows, version) {
+    return Object.fromEntries(rows.filter(r => r.model_version === version && r.result !== 'void').map(r => [keyFor(r), legacy(r, r.result !== 'pending')]));
+  }
+  root.SportsHubCloudAI = Object.freeze({ cached, maps, sync, eventRows, recordsFor });
 })(globalThis);

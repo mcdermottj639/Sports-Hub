@@ -31,8 +31,14 @@
     if (!eligible(g, now) || !prediction) return null;
     const old = read(sport,g);
     if (old && Date.parse(old.at) > now) return old;
-    return persist(sport, g, { at:new Date(now).toISOString(), start:g.date, source:'device',
-      prediction:copy({...prediction, features:null, winner:{name:prediction.winner?.name,abbr:prediction.winner?.abbr,logo:prediction.winner?.logo}}), odds:copy(odds), probabilities:copy(probabilities) });
+    return persist(sport, g, { report:old?.report || null, reportAt:old?.reportAt || null, at:new Date(now).toISOString(), start:g.date, source:'device',
+      prediction:copy({...prediction, winner:{name:prediction.winner?.name,abbr:prediction.winner?.abbr,logo:prediction.winner?.logo}}), odds:copy(odds), probabilities:copy(probabilities) });
+  }
+  function captureReport(sport, g, report, now = Date.now()) {
+    if (!eligible(g, now) || !report) return null;
+    const saved = read(sport,g); if (!saved) return null;
+    saved.report = copy({...report, splits:report.splits || saved.report?.splits || null}); saved.reportAt = new Date(now).toISOString();
+    return persist(sport,g,saved);
   }
   function recover(sport, g, records, version) {
     const saved = read(sport,g,version); if (saved) return saved;
@@ -52,13 +58,13 @@
       conf:ml.row.cf ?? ml.row.conf ?? Math.round(ml.q.prob*100),
       projMargin:spread?.q.proj ?? ml.q.forecast?.margin ?? null, projTotal:total?.q.proj ?? ml.q.forecast?.total ?? null,
       breakdown:[], notes:['Restored from saved pregame evidence; missing projections are not recomputed.'],
-      blockedReasons:ml.q.quality || [], thin:false, marginSat:false, rating:ml.q.rating || null,
-      features:ml.q.features || null, football:ml.q.features?.football || null, sharp:null,
+      blockedReasons:ml.q.quality || [], thin:false, marginSat:false, rating:ml.q.rating || ml.q.features?.rating || null,
+      features:ml.q.features || null, football:ml.q.features?.football || null, sharp:null, savedEvidence:copy(ml.q),
     };
     return persist(sport,g,{at:ml.q.at,start:ml.q.start,source:ml.q.cloud?'cloud':'saved record',prediction,odds,
       probabilities:{spread:spread?.q.probability || null,total:total?.q.probability || null}});
   }
-  const api = Object.freeze({eligible,read,capture,recover});
+  const api = Object.freeze({eligible,read,capture,captureReport,recover});
   root.SportsHubForecastLock = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

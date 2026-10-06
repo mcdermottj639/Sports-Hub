@@ -54,3 +54,25 @@ test('frozen probabilities are restored without estimating from live inputs',()=
  assert.equal(root.marketProbabilityFor({p:{locked:true,lockedProbabilities:{total:{prob:.62}}}},'total').prob,.62);
  assert.equal(root.marketProbabilityFor({p:{locked:true}},'spread'),null);
 });
+
+test('football locks preserve complete inputs and pregame report through final',()=>{
+ const {lock,storage}=load(),g=game();
+ const features={rating:{home:{r:12},away:{r:4}},football:{context:{weather:{temperature:42}}}};
+ lock.capture('cfb',g,{...p,features}, {},{},start-2000);
+ lock.captureReport('cfb',g,{splits:{games:[{home:{ml_bets:60}}]}},start-1000);
+ g.state='post';
+ assert.equal(lock.captureReport('cfb',g,{splits:{games:[]}},start+1000),null);
+ const saved=load(storage).lock.read('cfb',g);
+ assert.equal(saved.prediction.features.rating.home.r,12);
+ assert.equal(saved.report.splits.games[0].home.ml_bets,60);
+});
+test('college ratings and NFL evidence restore from cloud without recalculation',()=>{
+ for(const sport of ['cfb','nfl']) {
+  const {lock}=load(),g=game();g.state='post';
+  const q={at:new Date(start-1000).toISOString(),start:g.date,prob:.6,home:true,v:'test',features:{rating:{home:{r:12}},football:{candidate:{available:true}}},forecast:{margin:4,total:45}};
+  const saved=lock.recover(sport,g,{'1':{s:sport,q}},'test');
+  assert.equal(saved.prediction.rating.home.r,12);
+  assert.equal(saved.prediction.projTotal,45);
+  assert.equal(saved.prediction.football.candidate.available,true);
+ }
+});

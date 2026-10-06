@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v290';
+const APP_VERSION = 'v291';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1087,7 +1087,7 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
       extra += nflKeyHTML(g);
     }
     const signalSlot = ['nfl','cfb'].includes(sport) && signalsEnabled() ? '<div id="md-signals" data-acc-boundary aria-live="polite"></div>' : '';
-    const slot = reportP ? '<div id="md-report"><div class="empty">📊 Loading betting report…</div></div>' : '';
+    const slot = g ? `<div id="md-report">${gameReportHTML(sport,g,pred,pred?.lockedOdds || shownOdds(sport,g,normOdds(g?.odds,g?.home?.name,g?.away?.name,g?.home?.abbr,g?.away?.abbr)).info,null,data)}</div>` : '';
     $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, slot, signalSlot);
     if (g) {
       const actions = el('div', 'desk-report-actions');
@@ -1096,7 +1096,10 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
       $('#modal-body').prepend(actions);
     }
     makeAccordion($('#modal-body'), '.md-section-title', SEC_OPEN_ALL);
-    if (['nfl','cfb'].includes(sport)) globalThis.SportsHubFootballDevelopment?.mountGame($('#md-challenger'), id, sport);
+    if (['nfl','cfb'].includes(sport)) {
+      globalThis.SportsHubSavedGameReport?.mount($('#md-saved-report'),sport,g,pred);
+      globalThis.SportsHubFootballDevelopment?.mountGame($('#md-challenger'), id, sport);
+    }
     if (signalSlot) paintSignalDetail(id, token, focusSignals,'spread',null,sport);
     // v183: the game is on screen — now hold the model to what it just said.
     // Deliberately NOT awaited and deliberately not token-guarded: the pick was
@@ -1116,8 +1119,7 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
         host.innerHTML = gameReportHTML(sport, g, pred, shownOdds(sport, g, normOdds(rawO, g.home.name, g.away.name, g.home.abbr, g.away.abbr)).info, report, data);
         makeAccordion(host, '.md-section-title', SEC_OPEN_ALL);
       }).catch(() => {
-        const host = token === detailToken ? document.getElementById('md-report') : null;
-        if (host) host.innerHTML = '';
+        // Keep the saved model report visible when the optional betting feed fails.
       });
     }
   } catch (_) {
@@ -1357,8 +1359,8 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
       g, sport, p: pred, info: oddsInfo, linePregame: !!oddsPre, lineAt: oddsPre,
       atsR: atsRead(sport, g, pred, oddsInfo), totR: totalRead(sport, pred, oddsInfo) });
   } else html += aiPickHead(pred, sport, g, oddsInfo);
-  if (!pred && g && !globalThis.SportsHubForecastLock.eligible(g)) html += '<div class="ai-note">No saved pregame forecast — model locked; no in-game recalculation.</div>';
-  if (['nfl','cfb'].includes(sport)) html += '<div id="md-challenger" data-acc-boundary></div>';
+  if (!pred && g && !globalThis.SportsHubForecastLock.eligible(g)) html += '<div class="ai-note">No official pregame pick available. Saved evidence and any withheld reason appear below.</div>';
+  if (['nfl','cfb'].includes(sport)) html += '<div id="md-saved-report" data-acc-boundary></div><div id="md-challenger" data-acc-boundary></div>';
   html += aiFactors(pred, sport);
   html += signals;
   html += extra || '';
@@ -2458,12 +2460,17 @@ async function restoreForecast(sport, g) {
   const version = sport === 'nfl' && live && Date.parse(g.date) >= Date.parse(live.ACTIVATED_AT) ? live.VERSION : null;
   let saved = lock.read(sport, g, version) || lock.recover(sport, g, { ...getPending(), ...getTally(), ...(globalThis.SportsHubCloudAI?.maps()?.pending || {}) }, version);
   if (!saved && globalThis.SportsHubCloudAI) {
-    forecastRecoverySync ||= globalThis.SportsHubCloudAI.sync().catch(() => null);
+    forecastRecoverySync ||= globalThis.SportsHubCloudAI.sync().catch(() => null).finally(() => { forecastRecoverySync = null; });
     await forecastRecoverySync;
     saved = lock.recover(sport, g, { ...getPending(), ...getTally(), ...(globalThis.SportsHubCloudAI?.maps()?.pending || {}) }, version);
   }
+  if (!saved && globalThis.SportsHubCloudAI?.eventRows) {
+    const cloud = globalThis.SportsHubCloudAI;
+    const rows = await cloud.eventRows(sport,g.id).catch(() => []);
+    saved = lock.recover(sport,g,cloud.recordsFor(rows,version || modelVersionFor(sport)),version);
+  }
   return saved ? { ...saved.prediction, locked: true, lockedAt:saved.at, lockedSource:saved.source,
-    lockedOdds:saved.odds, lockedProbabilities:saved.probabilities || {} } : null;
+    lockedOdds:saved.odds, lockedReport:saved.report || null, lockedProbabilities:saved.probabilities || {} } : null;
 }
 async function predictGame(sport, g, opts) {
   const lock = globalThis.SportsHubForecastLock;
@@ -3309,6 +3316,14 @@ function sharpSignals(g, sp, mv) {
 // The modal's PRO-style report: model line vs book (graded per side), model
 // total, line movement, DK money splits, and sharp signals.
 function gameReportHTML(sport, g, pred, info, report, data) {
+  if (g && !globalThis.SportsHubForecastLock?.eligible(g)) report = pred?.lockedReport || globalThis.SportsHubForecastLock?.read(sport,g)?.report || null;
+  else if (g && report && globalThis.SportsHubForecastLock?.eligible(g)) {
+    const sp = splitsFor(report,g);
+    globalThis.SportsHubForecastLock.captureReport(sport,g,{
+      splits:sp ? {...report.splits,games:[sp]} : null,
+      movement:{[String(g.id)]:report.movement?.[String(g.id)] || lineRec(sport,g)},
+    });
+  }
   const parts = [];
   if (pred?.locked) parts.push(`<div class="ai-why">Locked pregame forecast${lineAtLabel(pred.lockedAt) ? ` · saved ${esc(lineAtLabel(pred.lockedAt))}` : ''}. Model lines do not update during play.</div>`);
   const mkt = info ? marketHomeProb(info) : null;
