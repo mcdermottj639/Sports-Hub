@@ -252,7 +252,10 @@ app and reconnect. One cycle at a time; failed feeds retain existing values.
 Forecasts, saved odds, disclosures and page scroll are preserved. The open game report also refreshes its score, clock and live situation from a
 fresh summary on the same cycle (v293), preserving its disclosure state and
 locked pregame forecast/odds. Close/replacement guards reject late responses.
-Other report statistics and fantasy/golf data are not refreshed by this cycle.
+Missing summary situations fall back to the current scoreboard situation; if both
+are absent, the last play stays visible with a waiting-for-update note (v294).
+Only a confirmed final clears the situation. Other report statistics and
+fantasy/golf data are not refreshed by this cycle.
 
 ## Files
 
@@ -629,7 +632,7 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v293** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v294** (backend **b17-fantasy-league-rules**).
 
 ### v291 — Preserve postgame football reports
 

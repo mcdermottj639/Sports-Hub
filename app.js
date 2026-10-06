@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v293';
+const APP_VERSION = 'v294';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1045,7 +1045,7 @@ let detailToken = 0;
 let activeGameDetail = null;
 let detailRefreshPending = false;
 
-async function refreshOpenGameDetail() {
+async function refreshOpenGameDetail(updates = []) {
   const active = activeGameDetail;
   const host = $('#md-live-situation');
   if (!active || !host || modal().classList.contains('hidden') || document.hidden || detailRefreshPending) return;
@@ -1068,7 +1068,16 @@ async function refreshOpenGameDetail() {
     const heading = host.querySelector('.md-section-title');
     const open = heading ? heading.classList.contains('open') : true;
     // Keep this disclosure separate from the frozen odds/model report below it.
-    const html = st.state === 'in' ? liveSituationHTML(active.sport, data, comp, null) : '';
+    const fallback = updates.find(x => x.sport === active.sport && String(x.g.id) === String(active.id))?.g;
+    const html = st.state === 'in' ? (liveSituationHTML(active.sport, data, comp, null)
+      || (fallback?.state === 'in' ? liveSituationHTML(active.sport, {}, {...comp, situation: null}, fallback) : '')) : '';
+    const note = $('#md-live-note');
+    // ESPN can omit situation between plays. Only a confirmed final clears it.
+    if (!html && st.state !== 'post') {
+      if (note) { note.hidden = false; note.textContent = host.innerHTML ? 'Last available play · waiting for a live situation update.' : 'Waiting for a live situation update.'; }
+      return;
+    }
+    if (note) note.hidden = true;
     if (host.dataset.liveHtml !== html) {
       host.innerHTML = html; host.dataset.liveHtml = html;
       makeAccordion(host, '.md-section-title', SEC_OPEN_ALL);
@@ -1380,7 +1389,7 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
 
   // Order: 🔴 Live Situation on top when the game is live (most timely), then
   // Betting Odds, then the Game Report, then the model's read + box-score detail.
-  html += `<div id="md-live-situation" data-acc-boundary>${live ? liveSituationHTML(sport, data, comp, g) : ''}</div>`;
+  html += `<div id="md-live-situation" data-acc-boundary>${live ? liveSituationHTML(sport, data, comp, g) : ''}</div><div id="md-live-note" class="ai-why" data-acc-boundary hidden></div>`;
 
   const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g?.odds;
   let oddsInfo = normOdds(rawO, home.team?.displayName, away.team?.displayName, home.team?.abbreviation, away.team?.abbreviation);
@@ -1774,7 +1783,7 @@ async function refreshLiveScores() {
       if (g) card._updateLiveScore?.(g);
     });
     window.dispatchEvent(new CustomEvent('sportshub:live-scores', { detail: updates }));
-    await Promise.allSettled([renderLiveRail(), refreshOpenGameDetail()]);
+    await Promise.allSettled([renderLiveRail(), refreshOpenGameDetail(updates)]);
   } finally { liveScorePending = false; }
 }
 function startLiveRail() {

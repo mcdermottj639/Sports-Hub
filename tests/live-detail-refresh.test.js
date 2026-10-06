@@ -30,3 +30,14 @@ test('failed summary retains last score and final clears live situation',async()
  const x=setup(async()=>{throw Error('offline')});await x.ctx.refreshOpenGameDetail();assert.equal(x.away.textContent,'45');
  const y=setup();y.data.header.competitions[0].status.type={state:'post',detail:'Final'};await y.ctx.refreshOpenGameDetail();assert.equal(y.status.textContent,'Final');assert.equal(y.host.innerHTML,'');
 });
+test('missing situation keeps last play and collapsed state while clock advances',async()=>{
+ const x=setup();const note={hidden:true};const get=x.ctx.$;x.ctx.$=s=>s==='#md-live-note'?note:get(s);
+ x.ctx.liveSituationHTML=()=>'';await x.ctx.refreshOpenGameDetail();
+ assert.equal(x.host.innerHTML,'old play');assert.equal(x.expanded(),false);assert.equal(x.status.textContent,'1:00 - 4th Quarter');assert.equal(note.hidden,false);assert.match(note.textContent,/Last available play/);
+ x.ctx.liveSituationHTML=()=>'<div>recovered play</div>';await x.ctx.refreshOpenGameDetail();assert.equal(note.hidden,true);assert.match(x.host.innerHTML,/recovered play/);
+});
+test('missing summary situation falls back only to matching live scoreboard game',async()=>{
+ const x=setup();x.ctx.liveSituationHTML=(sport,data,comp,g)=>g?.situation?.lastPlay?.text||'';
+ await x.ctx.refreshOpenGameDetail([{sport:'nfl',g:{id:'other',state:'in',situation:{lastPlay:{text:'wrong game'}}}}]);assert.equal(x.host.innerHTML,'old play');
+ await x.ctx.refreshOpenGameDetail([{sport:'nfl',g:{id:'123',state:'in',situation:{lastPlay:{text:'scoreboard play'}}}}]);assert.equal(x.host.innerHTML,'scoreboard play');
+});
