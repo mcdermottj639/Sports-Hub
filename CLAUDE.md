@@ -618,7 +618,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v289** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v290** (backend **b17-fantasy-league-rules**).
+
+### v290 — NFL model weights
+
+NFL Model info renders all 17 coefficients and the intercept directly from the live football configuration for winner, margin and total. Winner is expanded initially; each market has plain-language factor definitions and output units. Coefficients are displayed to four decimals, not presented as importance percentages. This is display-only; no fitting or model parameters change.
 
 ### v289 — Readable NFL calibration
 

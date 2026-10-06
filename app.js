@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v289';
+const APP_VERSION = 'v290';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -4457,7 +4457,7 @@ function modelPanel(sport) {
     h += row('Data safeguards', 'Neutral sites receive no home-field boost. Missing conference entries stay unknown, not FCS, and block signals. Tier priors are not opponent-adjusted schedule ratings; early-season and mixed-source estimates need caution.');
   } else if (sport === 'nfl') {
     h += `${row('Live model', '<b>NFL football engine · nfl-football-v1</b>. The former v4 challenger now drives official winner, spread and total forecasts.')}
-      ${row('Direction', 'Three jointly featured, separately fitted paths: logistic win probability, point margin and total points. The existing frozen challenger coefficients are used unchanged.')}
+      ${nflModelWeightsHTML()}
       ${row('Team strength', 'Opponent-adjusted passing and rushing efficiency, success and explosive-play rates; two years of history with recent games weighted more.')}
       ${row('QB &amp; matchup', 'Expected QB efficiency and accuracy, the change from the QBs already measured in team history, sack/protection matchups and expected pace.')}
       ${row('Retained context', 'Home field, neutral sites, rest and recent performance remain in the engine. The old record/margin model runs alongside it as a benchmark; its full prediction is not added twice.')}
@@ -5479,6 +5479,39 @@ function aiGuideHTML(sub, sport) {
     <div class="ai-note">${esc(cloudLine)}</div>
     <div class="ai-guide-steps"><div><b>1 · Choose the market</b><p>Winner, cover and total are three different predictions.</p></div><div><b>2 · Compare model & book</b><p>A gap is a disagreement. It does not prove an advantage.</p></div><div><b>3 · Check the evidence</b><p>Missing data means watch only. Review results before trusting a signal.</p></div></div>
     <details><summary>Quick glossary & what gets saved</summary><div class="ai-glossary"><p><b>Moneyline:</b> pick the winner. 60% means about 6 wins in 10 similar games if calibrated, not certainty.</p><p><b>Spread:</b> the handicap. +7.5 can cover even in a loss by 7; −7.5 needs a win by 8 or more.</p><p><b>Total:</b> combined score. OVER 8.5 needs 9+ runs; UNDER needs 8 or fewer.</p><p><b>pp vs points:</b> 60% vs 55% is +5 percentage points. A projected margin of 7 vs a line of 3 is 4 scoring points.</p><p><b>Tracking:</b> first pregame forecasts are frozen with version, timestamp and inputs. Missing prices may be filled before kickoff only at the same saved line and provider. The scheduled collector runs even when the app is closed; official performance uses cloud history; device-only history is retained separately.</p><p><b>Experimental signals:</b> moneyline tiers require a positive model return at a real quote and two-sided market odds. Spread/total signals use projection thresholds. Their experimental probabilities are tracked separately and do not change signal ranking. No market has proven profit.</p></div></details></div></details>`;
+}
+// Display the same frozen coefficients used by the live football engine.
+function nflModelWeightsHTML() {
+  const models = globalThis.SportsHubNFLFootballConfig?.models;
+  if (!models) return '<p class="ai-note">Model weights are unavailable. Reload to load the model configuration.</p>';
+  const labels = {
+    home: ['Home field', '1 at a home venue; 0 at a neutral site'],
+    passGap: ['Passing matchup gap', 'Home minus away passing efficiency, adjusted for the opposing defense'],
+    rushGap: ['Rushing matchup gap', 'Home minus away rushing efficiency, adjusted for the opposing defense'],
+    passSum: ['Combined passing matchup', 'Sum of both teams’ defense-adjusted passing efficiency'],
+    rushSum: ['Combined rushing matchup', 'Sum of both teams’ defense-adjusted rushing efficiency'],
+    restGap: ['Rest advantage', 'Home minus away rest days; each team is bounded to 3–14 days'],
+    qbGap: ['QB change gap', 'Home minus away QB efficiency change from each team’s historical QB baseline'],
+    qbSum: ['Combined QB change', 'Sum of both QB efficiency changes from their team baselines'],
+    accuracyGap: ['QB accuracy gap', 'Home minus away QB completion percentage over expectation'],
+    accuracySum: ['Combined QB accuracy', 'Sum of both QBs’ completion percentage over expectation'],
+    sackGap: ['Sack matchup gap', 'Home minus away expected sack rate, blending protection and opposing defense'],
+    sackSum: ['Combined sack matchup', 'Sum of both expected sack rates'],
+    successGap: ['Success rate gap', 'Home minus away offensive success rate'],
+    successSum: ['Combined success rate', 'Sum of both offensive success rates'],
+    pace: ['Game pace', 'Average of both teams’ estimated drives per game'],
+    explosiveGap: ['Explosive-play gap', 'Home minus away explosive-play rate'],
+    explosiveSum: ['Combined explosive plays', 'Sum of both teams’ explosive-play rates'],
+  };
+  const number = value => `${value > 0 ? '+' : ''}${value.toFixed(4).replace(/\.?0+$/, '')}`;
+  return `<section class="nfl-model-weights"><h3>How it picks · actual weights</h3><p>Each weight multiplies its factor. These are coefficients, not percentages of importance: factors use different units. Values below are rounded to four decimals; calculations use full precision.</p>${[
+    ['moneyline', 'Winner · win probability', 'Weights add to a home-win log-odds score, converted to probability and bounded to 2–98%.'],
+    ['margin', 'Spread · projected margin', 'Weights add to the projected home scoring margin in points. Positive means home leads; the saved spread determines the cover pick.'],
+    ['total', 'Total · combined points', 'Weights add to projected combined points, compared with the saved total to pick over or under.'],
+  ].map(([key,title,description],index) => {
+    const model = models[key];
+    return `<details class="nfl-weight-market"${index === 0 ? ' open' : ''}><summary>${title}</summary><p>${description}</p><div class="mc-fac">${[['Baseline',model.intercept,'Starting value before the weighted factors are added'],...model.features.map((key,i) => [labels[key]?.[0] || key,model.coefficients[i],labels[key]?.[1] || key])].map(([label,value,description]) => `<div class="mc-f"><span class="mc-fw">${number(value)}</span><span class="mc-fl">${esc(label)}</span><span class="mc-fd">${esc(description)}</span></div>`).join('')}</div></details>`;
+  }).join('')}<p>Formula: baseline + sum of (weight × factor). A negative coefficient reduces that output when its factor increases, holding other factors fixed.</p></section>`;
 }
 function forecastEvaluationHTML(records, pending) {
   const forecasts = [...records, ...pending].filter(r => !r.a && !r.t);
