@@ -249,8 +249,10 @@ Every 30 seconds while visible and online, `refreshLiveScores` awaits fresh ESPN
 scoreboards, updates score/status fields in mounted game/model cards, updates
 Today/watchlist games, and repaints the score rail. It also runs on return to the
 app and reconnect. One cycle at a time; failed feeds retain existing values.
-Forecasts, saved odds, disclosures and page scroll are preserved. This does not
-rebuild an already-open full game report or refresh fantasy/golf data.
+Forecasts, saved odds, disclosures and page scroll are preserved. The open game report also refreshes its score, clock and live situation from a
+fresh summary on the same cycle (v293), preserving its disclosure state and
+locked pregame forecast/odds. Close/replacement guards reject late responses.
+Other report statistics and fantasy/golf data are not refreshed by this cycle.
 
 ## Files
 
@@ -627,7 +629,7 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v292** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v293** (backend **b17-fantasy-league-rules**).
 
 ### v291 — Preserve postgame football reports
 

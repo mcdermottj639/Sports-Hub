@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v292';
+const APP_VERSION = 'v293';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -981,7 +981,7 @@ function gameCard(sport, g, opts = {}) {
 
 // --- game detail modal ----------------------------------------------------
 const modal = () => $('#game-modal');
-function closeModal() { modal().classList.add('hidden'); }
+function closeModal() { modal().classList.add('hidden'); activeGameDetail = null; ++detailToken; }
 $('#modal-close').addEventListener('click', closeModal);
 $('#modal-x').addEventListener('click', closeModal);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
@@ -1042,11 +1042,49 @@ async function openNewsSummary(a, backFn) {
 // Bumped on every modal open so a slow async section (the Game Report) can tell
 // it's landing in a modal the user has since closed or replaced.
 let detailToken = 0;
+let activeGameDetail = null;
+let detailRefreshPending = false;
+
+async function refreshOpenGameDetail() {
+  const active = activeGameDetail;
+  const host = $('#md-live-situation');
+  if (!active || !host || modal().classList.contains('hidden') || document.hidden || detailRefreshPending) return;
+  detailRefreshPending = true;
+  try {
+    const data = await fetchLive(`${SITE}/${LEAGUES[active.sport].espnPath}/summary?event=${active.id}`, 30000);
+    // A slow response must never paint over a different game, player, or article.
+    if (active !== activeGameDetail || active.token !== detailToken || host !== $('#md-live-situation') || modal().classList.contains('hidden') || document.hidden) return;
+    const comp = data.header?.competitions?.[0] || data.competitions?.[0];
+    if (!comp?.competitors?.length || !comp.status?.type) return;
+    const body = $('#modal-body');
+    for (const side of ['away', 'home']) {
+      const team = comp.competitors.find(c => c.homeAway === side);
+      const score = body.querySelector(`[data-detail-score="${side}"]`);
+      if (team && score) score.textContent = team.score ?? '–';
+    }
+    const status = body.querySelector('.md-status');
+    const st = comp.status.type;
+    if (status) { status.textContent = st.detail || st.shortDetail || st.description || ''; status.classList.toggle('live', st.state === 'in'); }
+    const heading = host.querySelector('.md-section-title');
+    const open = heading ? heading.classList.contains('open') : true;
+    // Keep this disclosure separate from the frozen odds/model report below it.
+    const html = st.state === 'in' ? liveSituationHTML(active.sport, data, comp, null) : '';
+    if (host.dataset.liveHtml !== html) {
+      host.innerHTML = html; host.dataset.liveHtml = html;
+      makeAccordion(host, '.md-section-title', SEC_OPEN_ALL);
+      host.querySelector('.md-section-title')?._accSet?.(open, false);
+    }
+  } catch (_) {
+    // A transient failure leaves the last successful score and situation in place.
+  } finally { detailRefreshPending = false; }
+}
+
 
 async function openGameDetail(sport, id, g, focusSignals = false) {
   modal().classList.remove('hidden');
   $('#modal-body').innerHTML = '<div class="empty">Loading live stats…</div>';
   const token = ++detailToken;
+  activeGameDetail = null;
   try {
     const path = LEAGUES[sport].espnPath;
     // Preseason: the model's data is regular-season based (and starters sit),
@@ -1064,7 +1102,7 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
     // modal would show a different confidence than the AI Picks tab for the
     // same game. It races the ESPN summary fetch, so it usually costs nothing.
     let [data, pred, hitters] = await Promise.all([
-      fetchJSON(`${SITE}/${path}/summary?event=${id}`, 30000),
+      fetchLive(`${SITE}/${path}/summary?event=${id}`, 30000),
       g && !preseason
         ? raceReport(reportP, SHARP_WAIT.modal)
             .then((r) => predictGame(sport, g, { splits: r ? splitsFor(r, g) : null }))
@@ -1097,6 +1135,7 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
       $('#modal-body').prepend(actions);
     }
     makeAccordion($('#modal-body'), '.md-section-title', SEC_OPEN_ALL);
+    activeGameDetail = { sport, id, token };
     if (['nfl','cfb'].includes(sport)) {
       globalThis.SportsHubSavedGameReport?.mount($('#md-saved-report'),sport,g,pred);
       globalThis.SportsHubFootballDevelopment?.mountGame($('#md-challenger'), id, sport);
@@ -1327,21 +1366,21 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
   const cs = comp.competitors || [];
   const home = cs.find((c) => c.homeAway === 'home') || cs[0] || {};
   const away = cs.find((c) => c.homeAway === 'away') || cs[1] || {};
-  const teamCell = (c) => {
+  const teamCell = (c, side) => {
     const t = c.team || {};
     const logo = t.logos?.[0]?.href || t.logo;
     return `<div class="md-team">${logo ? `<img src="${esc(logo)}" alt=""/>` : ''}
       <div class="nm">${esc(t.shortDisplayName || t.displayName || t.abbreviation || 'TBD')}</div>
-      <div class="sc">${c.score ?? '–'}</div></div>`;
+      <div class="sc" data-detail-score="${side}">${c.score ?? '–'}</div></div>`;
   };
   const st = comp.status?.type || {};
   const live = st.state === 'in';
-  let html = `<div class="md-head">${teamCell(away)}<div style="color:var(--muted);font-weight:700">@</div>${teamCell(home)}</div>
+  let html = `<div class="md-head">${teamCell(away, 'away')}<div style="color:var(--muted);font-weight:700">@</div>${teamCell(home, 'home')}</div>
     <div class="md-status ${live ? 'live' : ''}">${st.detail || st.shortDetail || ''}</div>`;
 
   // Order: 🔴 Live Situation on top when the game is live (most timely), then
   // Betting Odds, then the Game Report, then the model's read + box-score detail.
-  if (live) html += liveSituationHTML(sport, data, comp, g);
+  html += `<div id="md-live-situation" data-acc-boundary>${live ? liveSituationHTML(sport, data, comp, g) : ''}</div>`;
 
   const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g?.odds;
   let oddsInfo = normOdds(rawO, home.team?.displayName, away.team?.displayName, home.team?.abbreviation, away.team?.abbreviation);
@@ -1735,7 +1774,7 @@ async function refreshLiveScores() {
       if (g) card._updateLiveScore?.(g);
     });
     window.dispatchEvent(new CustomEvent('sportshub:live-scores', { detail: updates }));
-    await renderLiveRail();
+    await Promise.allSettled([renderLiveRail(), refreshOpenGameDetail()]);
   } finally { liveScorePending = false; }
 }
 function startLiveRail() {
