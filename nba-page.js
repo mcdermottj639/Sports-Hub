@@ -38,10 +38,10 @@
   async function standings(){
     const box=$('nba-standings');
     try{
-      const rows=await getStandings('nba');
+      const data=await fetchJSON('https://site.api.espn.com/apis/v2/sports/basketball/nba/standings?level=3&seasontype=2',5*60000),rows=normStandings(data);
       if(!rows.length){box.innerHTML='<div class="empty">Standings are not available yet.</div>';return;}
       const played=rows.some(r=>r.wins+r.losses>0);
-      box.innerHTML=`${played?'':'<p class="desk-caption">Season standings will develop as regular-season games finish.</p>'}${['Eastern','Western'].map(conf=>{
+      box.innerHTML=`<p class="desk-caption">${esc(data.season?.displayName||'Current season')} · Regular-season standings${played?'':'. The regular season has not started.'}</p>${['Eastern','Western'].map(conf=>{
         const list=rows.filter(r=>`${r.league} ${r.division}`.includes(conf)).sort((a,b)=>Number(a.seed||99)-Number(b.seed||99)||b.wins/(b.wins+b.losses||1)-a.wins/(a.wins+a.losses||1));
         return list.length?`<div class="nba-conference"><h3>${conf} Conference</h3><div class="nba-table-wrap"><table><thead><tr><th>Team</th><th>W–L</th><th>Win %</th></tr></thead><tbody>${list.map(r=>`<tr><td>${r.logo?`<img src="${esc(r.logo)}" alt="" loading="lazy">`:''}${esc(r.team)}</td><td>${r.wins}–${r.losses}</td><td>${(100*r.wins/(r.wins+r.losses||1)).toFixed(0)}%</td></tr>`).join('')}</tbody></table></div></div>`:'';
       }).join('')}`;

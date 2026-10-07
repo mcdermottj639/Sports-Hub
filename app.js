@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v295';
+const APP_VERSION = 'v296';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -3486,7 +3486,7 @@ function gameReportHTML(sport, g, pred, info, report, data) {
         : ats.pinned
           ? ` <span class="bb-muted">→ no play: the model tops out around ${Math.abs(pred.projMargin).toFixed(1)} points, so it can't price a number this big.</span>`
           : ` → <b>${esc(ats.label)}</b> <span class="gr-edge ${heatCls(ats.edge, ATS_EDGE_MIN[sport] ?? 2)}">${Math.abs(ats.edge).toFixed(1)} pts${ats.qualifies ? ' of value' : ''}</span>${
-              ats.qualifies ? '' : ` <span class="bb-muted">— under the ${ATS_EDGE_MIN[sport] ?? 2}-pt bar, so it's a read, not a recorded play</span>`}`}</div>`);
+              ats.qualifies ? '' : ` <span class="bb-muted">— under the ${ATS_EDGE_MIN[sport] ?? 2}-pt display filter${sport==='nba'?'; the forecast still enters tracking':", so it's a read, not a recorded play"}</span>`}`}</div>`);
     }
   }
   const mv = lineMoves(sport, g, report);

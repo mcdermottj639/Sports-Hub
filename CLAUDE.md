@@ -637,7 +637,19 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v295** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v296** (backend **b17-fantasy-league-rules**).
+
+### v296 — Label regular-season NBA standings
+
+Live browser verification caught the default ESPN standings feed showing
+preseason records. The NBA page now explicitly requests regular-season
+standings and labels their season, including an empty-season explanation.
+NBA game reports also distinguish an upcoming game awaiting scheduled capture
+from a finished game without a cloud snapshot, and make clear that the spread
+display filter does not remove forecasts from tracking. Live checks confirm
+mobile/desktop navigation and three opening-night model forecasts; collector
+run 1035 completed successfully after one CPU-limited attempt and correctly
+excluded 11 preseason events.
 
 ### v295 — Live NBA model, league page and faster league navigation
 
