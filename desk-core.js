@@ -6,7 +6,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
   const SPORTS = ['nfl', 'cfb', 'mlb', 'nba'];
-  const PANELS = ['home', 'predictions', 'research', 'fantasy', 'watchlist', 'explore', 'eagles', 'redsox', 'nfl', 'cfb', 'pickem', 'pulse', 'labs', 'about'];
+  const PANELS = ['home', 'predictions', 'research', 'fantasy', 'watchlist', 'explore', 'leagues', 'eagles', 'redsox', 'nfl', 'cfb', 'nba', 'pickem', 'pulse', 'labs', 'about'];
   const aliases = { today: 'home', models: 'predictions', more: 'explore', news: 'pulse', tools: 'labs' };
   const names = { home: 'today', predictions: 'models', explore: 'more', pulse: 'news', labs: 'tools' };
   const subs = { picks: 'board', results: 'record', calibration: 'backtest', method: 'model', trends: 'trends', recent: 'recent' };
@@ -32,7 +32,7 @@
   function group(r) {
     if (r.panel === 'predictions') return 'predictions';
     if (r.panel === 'research' || r.sportView === 'research') return 'research';
-    if (r.panel === 'fantasy') return 'fantasy';
+    if (['leagues','nfl','cfb','nba'].includes(r.panel)) return 'leagues';
     return r.panel === 'home' ? 'home' : 'explore';
   }
   function key(sport, id) { return `${sport}:${id}`; }

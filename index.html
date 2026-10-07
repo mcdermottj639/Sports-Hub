@@ -13,10 +13,10 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=294" />
-  <link rel="stylesheet" href="betting-signals.css?v=294" />
-  <link rel="stylesheet" href="desk.css?v=294" />
-  <link rel="stylesheet" href="performance.css?v=294" />
+  <link rel="stylesheet" href="styles.css?v=295" />
+  <link rel="stylesheet" href="betting-signals.css?v=295" />
+  <link rel="stylesheet" href="desk.css?v=295" />
+  <link rel="stylesheet" href="performance.css?v=295" />
 </head>
 <body class="desk-shell">
   <a class="desk-skip" href="#main-content">Skip to content</a>
@@ -63,6 +63,8 @@
     <button id="tab-redsox" data-tab="redsox" class="" role="tab" aria-selected="false" aria-controls="redsox"><span class="ic" data-desk-icon="redsox" aria-hidden="true"></span><span class="lb">Red Sox</span></button>
     <button id="tab-nfl" data-tab="nfl" class="" role="tab" aria-selected="false" aria-controls="nfl"><span class="ic" data-desk-icon="nfl" aria-hidden="true"></span><span class="lb">NFL</span></button>
     <button id="tab-cfb" data-tab="cfb" class="" role="tab" aria-selected="false" aria-controls="cfb"><span class="ic" data-desk-icon="cfb" aria-hidden="true"></span><span class="lb">College football</span></button>
+    <button id="tab-nba" data-tab="nba" role="tab" aria-selected="false" aria-controls="nba"><span class="ic" data-desk-icon="nba" aria-hidden="true"></span><span class="lb">NBA</span></button>
+    <button id="tab-leagues" data-tab="leagues" role="tab" aria-selected="false" aria-controls="leagues"><span class="ic" data-desk-icon="leagues" aria-hidden="true"></span><span class="lb">All leagues</span></button>
     <button id="tab-pulse" data-tab="pulse" class="" role="tab" aria-selected="false" aria-controls="pulse"><span class="ic" data-desk-icon="pulse" aria-hidden="true"></span><span class="lb">News & scores</span></button>
     <button id="tab-labs" data-tab="labs" class="" role="tab" aria-selected="false" aria-controls="labs"><span class="ic" data-desk-icon="labs" aria-hidden="true"></span><span class="lb">Tools</span></button>
     <button id="tab-about" data-tab="about" class="" role="tab" aria-selected="false" aria-controls="about"><span class="ic" data-desk-icon="about" aria-hidden="true"></span><span class="lb">About & data</span></button>
@@ -103,6 +105,25 @@
     </section>
     <section id="watchlist" class="tab-panel" role="tabpanel" aria-labelledby="tab-watchlist" tabindex="0"><div class="desk-watch-info"><p>Saved games and notes stay on this browser. Bookmarks are personal reminders; they do not log a bet or alter the model record.</p><button type="button" class="desk-link" data-desk-route="today">Find games <span data-desk-icon="arrow"></span></button></div><div id="desk-watch-items" class="desk-watch-grid"></div></section>
     <section id="explore" class="tab-panel" role="tabpanel" aria-labelledby="tab-explore" tabindex="0"><div class="desk-explore-lead"><h2>What would you like to do?</h2><button type="button" class="desk-secondary" data-desk-search><span data-desk-icon="search"></span>Search the whole hub</button></div><div id="desk-explore-grid"></div><div class="desk-external"><div><b>The league’s shared home</b><p>History, rankings, the Oracle and parlay live in your separate league app.</p></div><a href="https://mcdermottj639.github.io/League-History/" target="_blank" rel="noopener">Open League History ↗</a></div></section>
+    <section id="leagues" class="tab-panel" role="tabpanel" aria-labelledby="tab-leagues" tabindex="0">
+      <div class="desk-league-grid">
+        <button type="button" data-desk-route="nfl"><span data-desk-icon="nfl"></span><b>NFL</b><small>Weekly games · picks · research</small></button>
+        <button type="button" data-desk-route="cfb"><span data-desk-icon="cfb"></span><b>College football</b><small>Top 25 · picks · research</small></button>
+        <button type="button" data-desk-route="nba"><span data-desk-icon="nba"></span><b>NBA</b><small>Daily games · model · standings</small></button>
+        <button type="button" data-desk-route="models/mlb/picks"><span data-desk-icon="redsox"></span><b>MLB</b><small>Model board · saved results</small></button>
+      </div>
+    </section>
+    <section id="nba" class="tab-panel" role="tabpanel" aria-labelledby="tab-nba" tabindex="0">
+      <div class="nba-league-head"><div><h2>NBA</h2><p id="nba-phase">Daily games &amp; model forecasts</p></div><span class="nba-model-badge">MODEL ACTIVE</span></div>
+      <div class="nba-actions"><button type="button" class="chip" data-desk-route="models/nba/picks">Model board</button><button type="button" class="chip" data-desk-route="models/nba/results">Results</button><button type="button" class="chip" data-desk-route="models/nba/recent">Saved games</button><button type="button" class="chip" data-desk-route="models/nba/method">Model info</button></div>
+      <div class="nba-date-controls"><button type="button" class="chip" data-nba-step="-1" aria-label="Previous NBA day">‹</button><label for="nba-date" class="desk-sr-only">NBA game date</label><input id="nba-date" type="date"><button type="button" class="chip" data-nba-step="1" aria-label="Next NBA day">›</button><button type="button" class="chip" data-nba-date="">Today</button></div>
+      <p id="nba-season-note" class="desk-caption">Winner, spread and total · forecasts freeze at tipoff.</p>
+      <button type="button" id="nba-next-slate" class="chip" data-nba-date="" hidden>Next regular-season slate</button>
+      <div id="nba-games" aria-live="polite"></div>
+      <h2 class="section-title" id="nba-sec-standings">Conference standings</h2><div id="nba-standings"></div>
+      <h2 class="section-title" id="nba-sec-model">How the NBA model works</h2><div id="nba-method"></div>
+      <h2 class="section-title" id="nba-sec-news">NBA headlines</h2><div id="nba-news"></div>
+    </section>
     <section id="pulse" class="tab-panel" role="tabpanel" aria-labelledby="tab-pulse" tabindex="0">
       <div id="home-headline"></div>
       <h2 class="section-title acc-open" style="margin-top:6px">My Teams</h2>
@@ -305,7 +326,7 @@
     <button type="button" data-desk-route="today" data-desk-group="home"><span data-desk-icon="home"></span><span>Today</span></button>
     <button type="button" data-desk-route="models/all/picks" data-desk-group="predictions"><span data-desk-icon="predictions"></span><span>Models</span></button>
     <button type="button" data-desk-route="research" data-desk-group="research"><span data-desk-icon="research"></span><span>Research</span></button>
-    <button type="button" data-desk-route="fantasy" data-desk-group="fantasy"><span data-desk-icon="fantasy"></span><span>Fantasy</span></button>
+    <button type="button" data-desk-route="leagues" data-desk-group="leagues"><span data-desk-icon="leagues"></span><span>Leagues</span></button>
     <button type="button" data-desk-route="more" data-desk-group="explore"><span data-desk-icon="explore"></span><span>More</span></button>
   </nav>
 
@@ -323,31 +344,34 @@
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
   <script src="supabase-config.js?v=239" defer></script>
-  <script src="cloud-ai.js?v=294" defer></script>
-  <script src="ai-model-utils.js?v=294" defer></script>
-  <script src="performance-core.js?v=294" defer></script>
-  <script src="performance-ui.js?v=294" defer></script>
-  <script src="nfl-model.js?v=294" defer></script>
-  <script src="supabase/functions/_shared/betting-signals-core.js?v=294" defer></script>
-  <script src="supabase/functions/_shared/research-situations.js?v=294" defer></script>
-  <script src="cloud-signals.js?v=294" defer></script>
-  <script src="betting-signals-ui.js?v=294" defer></script>
-  <script src="supabase/functions/_shared/market-probability-config.js?v=294" defer></script>
-  <script src="supabase/functions/_shared/market-probability.js?v=294" defer></script>
-  <script src="mobile-chrome.js?v=294" defer></script>
-  <script src="supabase/functions/_shared/football-research-core.js?v=294" defer></script>
-  <script src="supabase/functions/_shared/nfl-football.js?v=294" defer></script>
-  <script src="supabase/functions/_shared/nfl-football-config.js?v=294" defer></script>
-  <script src="supabase/functions/_shared/nfl-validation.js?v=294" defer></script>
-  <script src="supabase/functions/_shared/nfl-evidence.js?v=294" defer></script>
-  <script src="supabase/functions/_shared/nfl-live.js?v=294" defer></script>
-  <script src="nfl-live-client.js?v=294" defer></script>
-  <script src="nfl-football-ui.js?v=294" defer></script>
-  <script src="football-development.js?v=294" defer></script>
-  <script src="forecast-lock.js?v=294" defer></script>
-  <script src="saved-game-report.js?v=294" defer></script>
-  <script src="desk-core.js?v=294" defer></script>
-  <script src="desk.js?v=294" defer></script>
-  <script src="app.js?v=294" defer></script>
+  <script src="cloud-ai.js?v=295" defer></script>
+  <script src="ai-model-utils.js?v=295" defer></script>
+  <script src="performance-core.js?v=295" defer></script>
+  <script src="performance-ui.js?v=295" defer></script>
+  <script src="nfl-model.js?v=295" defer></script>
+  <script src="supabase/functions/_shared/betting-signals-core.js?v=295" defer></script>
+  <script src="supabase/functions/_shared/research-situations.js?v=295" defer></script>
+  <script src="cloud-signals.js?v=295" defer></script>
+  <script src="betting-signals-ui.js?v=295" defer></script>
+  <script src="supabase/functions/_shared/market-probability-config.js?v=295" defer></script>
+  <script src="supabase/functions/_shared/market-probability.js?v=295" defer></script>
+  <script src="mobile-chrome.js?v=295" defer></script>
+  <script src="supabase/functions/_shared/football-research-core.js?v=295" defer></script>
+  <script src="supabase/functions/_shared/nfl-football.js?v=295" defer></script>
+  <script src="supabase/functions/_shared/nfl-football-config.js?v=295" defer></script>
+  <script src="supabase/functions/_shared/nfl-validation.js?v=295" defer></script>
+  <script src="supabase/functions/_shared/nfl-evidence.js?v=295" defer></script>
+  <script src="supabase/functions/_shared/nfl-live.js?v=295" defer></script>
+  <script src="nfl-live-client.js?v=295" defer></script>
+  <script src="nfl-football-ui.js?v=295" defer></script>
+  <script src="football-development.js?v=295" defer></script>
+  <script src="forecast-lock.js?v=295" defer></script>
+  <script src="saved-game-report.js?v=295" defer></script>
+  <script src="desk-core.js?v=295" defer></script>
+  <script src="desk.js?v=295" defer></script>
+  <script src="supabase/functions/_shared/nba-model-config.js?v=295" defer></script>
+  <script src="supabase/functions/_shared/nba-model.js?v=295" defer></script>
+  <script src="nba-page.js?v=295" defer></script>
+  <script src="app.js?v=295" defer></script>
 </body>
 </html>

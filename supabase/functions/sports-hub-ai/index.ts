@@ -1,3 +1,5 @@
+import '../_shared/nba-model-config.js';
+import '../_shared/nba-model.js';
 import {footballEvidence, researchRows} from './football-research.ts';
 import '../_shared/market-probability-config.js';
 import '../_shared/market-probability.js';
@@ -5,8 +7,8 @@ import {signalsEnabled, captureSignalQuotes, signalInputs, saveSignalDecision, s
 const MODEL_VERSION = 'v239'; // CFB/MLB and the retained NFL comparison.
 const NFL_LIVE = (globalThis as any).SportsHubNFLLive;
 const modelVersionFor = (sport:string) => NFL_LIVE.versionFor(sport);
-const APP_VERSION = 'v288';
-const SPORTS = ['nfl', 'cfb', 'mlb'] as const;
+const APP_VERSION = 'v295';
+const SPORTS = ['nfl', 'cfb', 'mlb', 'nba'] as const;
 type Sport = typeof SPORTS[number];
 type Json = Record<string, any>;
 
@@ -14,14 +16,14 @@ const SITE = 'https://site.api.espn.com/apis/site/v2/sports';
 const CORE = 'https://site.api.espn.com/apis/v2/sports';
 const BBCORE = 'https://sports.core.api.espn.com/v2/sports/baseball/leagues/mlb';
 const PATH: Record<Sport, string> = {
-  nfl: 'football/nfl', cfb: 'football/college-football', mlb: 'baseball/mlb',
+  nfl: 'football/nfl', cfb: 'football/college-football', mlb: 'baseball/mlb', nba: 'basketball/nba',
 };
-const PD_SCALE: Record<Sport, number> = { nfl: 7, cfb: 14, mlb: 2.2 };
-const PD_SD: Record<Sport, number> = { nfl: 13.5, cfb: 16.5, mlb: 4 };
-const CONF_CAP: Record<Sport, number> = { nfl: 85, cfb: 90, mlb: 72 };
-const ATS_EDGE_MIN: Partial<Record<Sport, number>> = { nfl: 2, cfb: 3 };
-const TOTAL_MIN: Record<Sport, number> = { nfl: 4, cfb: 6, mlb: 1.5 };
-const TOTAL_MAX: Record<Sport, number> = { nfl: 14, cfb: 21, mlb: 4 };
+const PD_SCALE: Record<Sport, number> = { nfl: 7, cfb: 14, mlb: 2.2, nba: 6 };
+const PD_SD: Record<Sport, number> = { nfl: 13.5, cfb: 16.5, mlb: 4, nba: 20 };
+const CONF_CAP: Record<Sport, number> = { nfl: 85, cfb: 90, mlb: 72, nba: 98 };
+const ATS_EDGE_MIN: Partial<Record<Sport, number>> = { nfl: 2, cfb: 3, nba: 3 };
+const TOTAL_MIN: Record<Sport, number> = { nfl: 4, cfb: 6, mlb: 1.5, nba: 6 };
+const TOTAL_MAX: Record<Sport, number> = { nfl: 14, cfb: 21, mlb: 4, nba: 20 };
 const PARK: Record<string, number> = { COL:113,CIN:106,BOS:106,KC:104,ARI:103,PHI:103,BAL:103,TEX:103,ATL:102,CHW:101,WSH:101,LAA:101,TOR:101,HOU:101,CHC:100,MIN:100,NYY:100,STL:99,PIT:99,MIL:99,CLE:98,LAD:97,NYM:97,TB:96,DET:96,ATH:95,SD:95,MIA:95,SF:93,SEA:92 };
 const MLB_SP_ERA = 4.3;
 const CFB_TIER: Record<string, number> = { p4: 12, g5: 0, fcs: -12 };
@@ -183,6 +185,7 @@ function normalCdf(x:number){const t=1/(1+.3275911*Math.abs(x)/Math.SQRT2),y=1-(
 function invNorm(p:number){if(!(p>0&&p<1))return 0;const a=[-39.69683028665376,220.9460984245205,-275.9285104469687,138.357751867269,-30.66479806614716,2.506628277459239],b=[-54.47609879822406,161.5858368580409,-155.6989798598866,66.80131188771972,-13.28068155288572],c=[-.007784894002430293,-.3223964580411365,-2.400758277161838,-2.549732539343734,4.374664141464968,2.938163982698783],d=[.007784695709041462,.3224671290700398,2.445134137142996,3.754408661907416];let q:number,r:number;if(p<.02425){q=Math.sqrt(-2*Math.log(p));return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)}if(p>.97575){q=Math.sqrt(-2*Math.log(1-p));return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)}q=p-.5;r=q*q;return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1)}
 
 async function predict(sport:Sport,g:any){
+  if(sport==='nba')return (globalThis as any).SportsHubNBA.load(g,json);
   const [h,a]=await Promise.all([profile(sport,g.home,g.date),profile(sport,g.away,g.date)]);
   const quality:string[]=[]; if(!h||!a)quality.push('Incomplete team history');
   let p=.5,margin=0,total=h&&a?(h.ppg+h.papg+a.ppg+a.papg)/2:null,features:any={home:h,away:a};
@@ -214,7 +217,7 @@ function fairProbability(market:string,home:boolean|null,selection:string,o:any)
 }
 function rowBase(sport:Sport,g:any,p:any,o:any,market:string,selection:string,home:boolean|null,line:number|null,projection:number|null,price:number|null,tier:string|null){
   const at=new Date().toISOString();
-  const probability=market==='moneyline'||sport==='nfl'?null:(globalThis as any).SportsHubMarketProbability.estimate({sport,market,projection,line,home,side:selection.split(' ')[0],at});
+  const probability=market==='moneyline'||sport==='nfl'||sport==='nba'?null:(globalThis as any).SportsHubMarketProbability.estimate({sport,market,projection,line,home,side:selection.split(' ')[0],at});
   return {event_id:g.id,sport,market,model_version:modelVersionFor(sport),app_version:APP_VERSION,matchup:`${g.away.abbr||g.away.name} @ ${g.home.abbr||g.home.name}`,slate_date:slateDate(g),starts_at:g.date,captured_at:at,selection,selection_home:home,confidence:market==='moneyline'?p.conf:null,tier,price,line,projection,model_probability:market==='moneyline'?(home?p.p:1-p.p):probability?.prob??null,market_probability:fairProbability(market,home,selection,o),provider:o?.provider||null,quality:p.quality,snapshot:{researchOnly:market==='total'&&sport==='cfb',historyPolicy:sport==='mlb'?'current-season-regular-plus-post-v1':null,odds:o,features:p.features,neutral:g.neutral,engine:`scheduled-${modelVersionFor(sport)}`,forecast:{margin:p.margin,total:p.total},...(p.promotion?{promotion:p.promotion}:{}),...(probability?{probability}:{} )}};
 }
 function rowsFor(sport:Sport,g:any,p:any){if(!p)return [];const o=odds(g.odds,g),tt=tierFor(p,o),rows=[rowBase(sport,g,p,o,'moneyline',p.home?g.home.name:g.away.name,p.home,null,null,pickPrice(p,o),tt.tier)];if(o?.spread!=null&&ATS_EDGE_MIN[sport]!=null){const edge=p.margin+o.spread,home=edge>0;if(Number.isFinite(p.margin)&&!p.quality.length)rows.push(rowBase(sport,g,p,o,'spread',`${home?g.home.abbr:g.away.abbr} ${(home?o.spread:-o.spread)>0?'+':''}${home?o.spread:-o.spread}`,home,o.spread,p.margin,home?o.hSpreadPrice:o.aSpreadPrice,null));}if(o?.ou!=null&&p.total!=null){const diff=p.total-o.ou,side=diff>0?'OVER':'UNDER';if(Number.isFinite(p.total)&&!p.quality.length)rows.push(rowBase(sport,g,p,o,'total',`${side} ${o.ou}`,null,o.ou,p.total,side==='OVER'?o.overPrice:o.underPrice,sport!=='cfb'?(Math.abs(diff)>=TOTAL_MIN[sport]*(sport==='nfl'?2:1.75)?'best':'edge'):null));}return rows;}
@@ -242,7 +245,7 @@ async function enrichPrices(g:any){
 // Only pending pregame rows may be enriched. Final history is never backfilled.
 async function enrichProbabilities(g:any){
   // Residual fits belong to the older engine; no cross-version enrichment.
-  if(g.sport==='nfl')return;
+  if(g.sport==='nfl'||g.sport==='nba')return;
   if(g.state!=='pre'||Date.parse(g.date)<=Date.now())return;
   const rows=await db(`ai_predictions?event_id=eq.${encodeURIComponent(g.id)}&model_version=eq.${modelVersionFor(g.sport)}&market=in.(spread,total)&result=eq.pending&model_probability=is.null&select=*`);
   for(const r of rows||[]){
@@ -270,12 +273,13 @@ async function gradePending(onPregame?:(g:any)=>Promise<void>){
   }
   return n;
 }
-async function slate(sport:Sport){if(sport==='mlb'){const today=new Date(),tomorrow=new Date(Date.now()+864e5);const sets=await Promise.all([scoreboard(sport,ymd(today)),scoreboard(sport,ymd(tomorrow))]);return sets.flatMap(x=>x.games);}let board=await scoreboard(sport);if(board.games.length&&board.games.every((g:any)=>g.state==='post')){const type=Number(board.data?.season?.type),week=Number(board.data?.week?.number),year=Number(board.data?.season?.year);if([1,2].includes(type)&&week&&year){const next=await scoreboard(sport,undefined,{week:week+1,seasontype:type,dates:year}).catch(()=>null);if(next?.games?.some((g:any)=>g.state!=='post'))board=next;}}if(sport==='cfb')board.games=board.games.filter((g:any)=>g.home.rank||g.away.rank);return board.games;}
+async function slate(sport:Sport){if(sport==='mlb'||sport==='nba'){const today=new Date(),tomorrow=new Date(Date.now()+864e5),date=(d:Date)=>sport==='nba'?d.toLocaleDateString('en-CA',{timeZone:'America/New_York'}).replaceAll('-',''):ymd(d);const sets=await Promise.all([scoreboard(sport,date(today)),scoreboard(sport,date(tomorrow))]);return sets.flatMap(x=>x.games);}let board=await scoreboard(sport);if(board.games.length&&board.games.every((g:any)=>g.state==='post')){const type=Number(board.data?.season?.type),week=Number(board.data?.week?.number),year=Number(board.data?.season?.year);if([1,2].includes(type)&&week&&year){const next=await scoreboard(sport,undefined,{week:week+1,seasontype:type,dates:year}).catch(()=>null);if(next?.games?.some((g:any)=>g.state!=='post'))board=next;}}if(sport==='cfb')board.games=board.games.filter((g:any)=>g.home.rank||g.away.rank);return board.games;}
 
 Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return new Response('Method not allowed',{status:405});
   const started=new Date().toISOString();let run:any=null,captured=0,graded=0,skipped=0;
   const errors:any[]=[], signals:any={status:'disabled',written:0,evaluated:0,unpriced:0,missed:0,graded:0,errors:0};
+  const nba={model:'nba-v1',scanned:0,eligible:0,forecasts:0};
   let captureSignals=false;const research={captured:0,errors:0,version:'nfl-v4-cfb-v2'};
   const signalError=()=>{signals.errors++;signals.error_category='signals_step_failed';};
   try{
@@ -296,6 +300,7 @@ Deno.serve(async(req:Request)=>{
     for(const sport of SPORTS){
       try{
         const games=await slate(sport);
+        if(sport==='nba')nba.scanned=games.length;
         for(const g of games){
           let quotes:any[]=[],inputs:any=null;
           const watch=captureSignals&&(sport==='nfl'||sport==='cfb');
@@ -304,7 +309,8 @@ Deno.serve(async(req:Request)=>{
             try{quotes=await captureSignalQuotes(db,g,`ai:${run.id}`,g.observedAt);signals.written+=quotes.length;if(quotes.length)signals.last_observed_at=g.observedAt;}catch(_){signalError();}
           }
           if(g.state!=='pre'||g.seasonType===1||!(Date.parse(g.date)>Date.now())||/postpon|cancel|suspend|delay/i.test(g.status)){skipped++;continue;}
-          const evidencePromise=sport!=='mlb'?footballEvidence(sport,g).catch(()=>null):Promise.resolve(null);
+          if(sport==='nba')nba.eligible++;
+          const evidencePromise=(sport==='nfl'||sport==='cfb')?footballEvidence(sport,g).catch(()=>null):Promise.resolve(null);
           const inputsPromise=watch?signalInputs(g).catch(()=>{signalError();return null;}):Promise.resolve(null);
           await enrichPrices(g);
           await enrichProbabilities(g);
@@ -314,9 +320,10 @@ Deno.serve(async(req:Request)=>{
             const evidence=await evidencePromise;
             const p=sport==='nfl'?NFL_LIVE.projection(evidence,g):baseline;
             const calculatedAt=new Date().toISOString(),rows=rowsFor(sport,g,p);
+            if(sport==='nba'&&p)nba.forecasts++;
             // A slow forecast must not create a new pregame pick after kickoff.
             if(Date.parse(g.date)>Date.now())captured+=await insertRows(rows);else skipped++;
-            if(sport!=='mlb')try {
+            if(sport==='nfl'||sport==='cfb')try {
               if(!evidence)throw new Error('Football evidence unavailable');
               research.captured+=await insertRows(researchRows(sport,g,baseline,odds(g.odds,g),evidence,APP_VERSION));
             }catch(_){research.errors++;}
@@ -336,7 +343,7 @@ Deno.serve(async(req:Request)=>{
     if(captureSignals)try{signals.graded+=await reconcileSignals(db);}catch(_){signalError();}
     signals.status=signals.errors?'partial':captureSignals?'ok':'disabled';
     const status=(errors.length||research.errors)?(captured||graded?'partial':'error'):'ok',finished=new Date().toISOString();
-    await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:finished,status,captured,graded,skipped,errors,details:{model:MODEL_VERSION,nflModel:NFL_LIVE.VERSION,app:APP_VERSION,signals,research}})});
+    await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:finished,status,captured,graded,skipped,errors,details:{model:MODEL_VERSION,nflModel:NFL_LIVE.VERSION,app:APP_VERSION,signals,research,nba}})});
     return Response.json({ok:status==='ok',status,captured,graded,skipped,errors,signals,research,run:run.id});
   }catch(error){
     if(run)await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:new Date().toISOString(),status:'error',captured,graded,skipped,errors:[...errors,{error:String(error)}],details:{model:MODEL_VERSION,nflModel:NFL_LIVE.VERSION,app:APP_VERSION,signals,research}})}).catch(()=>{});

@@ -90,7 +90,9 @@ Supabase for durable, scheduled AI-pick capture and grading.
 The experience complements score/news apps with a daily brief, model
 forecasts and results, research, league-aware fantasy decisions, and a personal
 watchlist. Desktop uses a sidebar; mobile uses Today / Models / Research /
-Fantasy / More. More groups every existing destination by purpose, and global
+Leagues / More. The Leagues hub opens NFL, CFB, NBA or the MLB model board, and
+NFL/CFB/NBA pages have a direct league switch. Fantasy remains in More and the
+desktop sidebar. More groups every existing destination by purpose, and global
 search finds features, current games and saved notes. News/team/golf content
 remains available in News & scores and the dedicated team pages.
 
@@ -110,7 +112,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > Project `sports-hub` (`oqrfdhoyyogjmiqmjhnp`, us-east-2) is deliberately
 > separate from `family-survivor`. `sports-hub-ai` is a JWT-protected Edge
 > Function invoked by pg_cron at minutes 7 and 37 every hour. It reads ESPN,
-> saves immutable first pregame NFL/Top-25-CFB/MLB observations in
+> saves immutable first pregame NFL/Top-25-CFB/MLB/NBA observations in
 > `public.ai_predictions`, grades finals, and audits each run in
 > `public.ai_job_runs`. v244 adds an independent `sports-hub-odds` job and
 > normalized permanent NFL history; see `BETTING_SIGNALS.md`. The first verified run on 15 Sep 2026 completed in 15s
@@ -258,6 +260,9 @@ Only a confirmed final clears the situation. Other report statistics and
 fantasy/golf data are not refreshed by this cycle.
 
 ## Files
+
+- `nba-page.js`, `_shared/nba-model.js`, `_shared/nba-model-config.js` — NBA league UI and shared fitted model; the shared files live under `supabase/functions/`.
+- `scripts/nba-data.py`, `scripts/nba-features.js`, `scripts/fit-nba.py`, `data/nba-history.json`, `data/nba-validation.json`, `docs/NBA_MODEL.md` — reproducible NBA evidence, chronological fitting and validation.
 
 - `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. Models exposes Performance / Trends / Game history / Model info / Calibration beside Forecasts. Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Game history uses team-specific spread/projection labels, omits inapplicable moneyline fields, and shows newest played games first, with upcoming games below in kickoff order, and exposes immutable projections, outcomes and inputs, with search and result/date/market/version filters.
 
@@ -632,9 +637,35 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v294** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v295** (backend **b17-fantasy-league-rules**).
+
+### v295 — Live NBA model, league page and faster league navigation
+
+NBA has a daily league page with date browsing, scores, all three forecast
+markets, conference standings, headlines, model weights and saved-game links.
+The mobile dock replaces Fantasy with Leagues; NFL/CFB/NBA also share a direct
+league switch. Fantasy stays available through More and the desktop sidebar.
+`nba-page.js` renders the page and NBA Model info. `_shared/nba-model.js` and
+`nba-model-config.js` are the identical browser/Edge/replay engine. The model
+uses season scoring, margin, win rate, recent form, rest, back-to-backs and home
+court; no lineup/injury adjustment or possession-based pace is claimed.
+Training uses 2022–24, parameter selection 2024–25, refits through 2024–25,
+and evaluates once on 1,231 untouched 2025–26 games including the Cup final.
+Holdout: 68.4% winner accuracy, .2061 Brier, 11.42 margin MAE, 15.29 total MAE.
+These are prediction checks, not betting ROI. See `docs/NBA_MODEL.md`.
+
+Official NBA history is its own `nba-v1` cohort; cloud history reads it alongside
+existing NFL/CFB/MLB versions. The additive sport constraint permits NBA without
+changing any rows, RLS or grants. The existing twice-hourly collector includes
+NBA today/tomorrow, skips preseason and freezes original inputs/projections.
+All available forecasts enter tracking irrespective of edge thresholds; saved
+reports recover through the same pregame archive used by football. Unavailable
+history yields no forecast. NBA spread/total residual probabilities remain
+unavailable rather than borrowing another sport's calibration.
 
 ### v291 — Preserve postgame football reports
+
+⚠️ EXTENDED in v295: the same immutable report archive also covers NBA.
 
 NFL/CFB game details read per-event cloud snapshots (including archived research) through saved-game-report.js. Show saved inputs, markets, prices, capture times and NFL withheld reasons/conditional evidence without adding archived picks to current performance. Forecast locks retain full features and available device-observed pregame splits/movement (frozen after kickoff), restore college ratings, and can recover official rows through a direct event query. Cloud sync retains an in-memory copy when device storage is full and allows retry after failures. Game Report renders independently of the optional betting feed and survives its failure. Existing pregame evidence is never reconstructed from postgame data. No model or backend changes.
 
@@ -915,7 +946,7 @@ for reproducibility and regression tests.
 
 - **v261 — Compact game-report markets:** Model breakdown uses short native expandable rows with the selection, status and chevron. Unsupported spread rows are omitted. Full market calculations, source notes and experimental probabilities remain inside the disclosures; moneyline status uses the same tier gate as the board when no tier is supplied.
 
-- **v260 — Compact scan cards across the app:** Home Board and every AI Picks board/ladder/watchlist use the shared compact market summary. MLB/NBA omit unsupported spread columns; total and moneyline statuses retain their actual gates. Full market analysis is available in the game report for every modeled sport. Betting-signal previews are collapsed on cards, and news/headline/schedule/stat/fantasy summary spacing is tighter. Detail reports and input controls retain their usable sizes. Forecast locks and model calculations are unchanged.
+- **v260 — Compact scan cards across the app:** Home Board and every AI Picks board/ladder/watchlist use the shared compact market summary. ⚠️ SUPERSEDED in v295 for NBA: NBA now has a fitted spread model; MLB omits unsupported spread columns; total and moneyline statuses retain their actual gates. Full market analysis is available in the game report for every modeled sport. Betting-signal previews are collapsed on cards, and news/headline/schedule/stat/fantasy summary spacing is tighter. Detail reports and input controls retain their usable sizes. Forecast locks and model calculations are unchanged.
 
 - **v259 — Honest movement and model comparisons:** Game Report labels sampled prices as Observed line movement, not sharp action. Moneyline counts track each quoted side's probability increase independently; invalid prices, equal +100/-100 prices, and favorite-only team flips do not create moves. No net change is distinct from intermediate moves. Model/market probabilities are visible, input-blocked grades are withheld, and collapsed provenance explains pitcher inputs, cached stats and unconfirmed lineups. Model weights/cohort are unchanged; no refit to another provider's single forecast. `tests/game-report.test.js` covers these paths.
 
@@ -4884,7 +4915,8 @@ index, not the argument.
 - **⚠️ SUPERSEDED in v231: NFL had no calibration shrink and every weight was
   open.** It no longer uses `MODEL_W.default`; `nfl-model.js` holds the three
   chronologically fitted market paths. `MODEL_SHRINK.default` remains live for
-  the unfitted NBA fallback and must not be mistaken for the NFL calibration.
+  the archived fallback. ⚠️ SUPERSEDED in v295 for NBA: the fitted shared NBA
+  engine bypasses this fallback and has its own historical holdout.
 
 ## 🗓️ Monthly brainstorm log
 

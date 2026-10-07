@@ -69,7 +69,7 @@
   async function history() {
     const all = [];
     for (let offset = 0; ; offset += 500) {
-      const versions = root.SportsHubNFLLive ? `in.(v239,${root.SportsHubNFLLive.VERSION})` : 'eq.v239';
+      const versions = root.SportsHubNFLLive ? `in.(v239,${root.SportsHubNFLLive.VERSION},nba-v1)` : 'in.(v239,nba-v1)';
       const rows = await request(`ai_predictions?model_version=${versions}&select=*&order=starts_at.desc,id.asc&limit=500&offset=${offset}`);
       all.push(...rows);
       if (rows.length < 500) return all;

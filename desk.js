@@ -16,6 +16,8 @@
     eagles: '<path d="m3 5 9 5 9-5-4 10-5 5-5-5Z"/>',
     redsox: '<circle cx="12" cy="12" r="9"/><path d="M6 5c7 3 7 11 0 14M18 5c-7 3-7 11 0 14"/>',
     nfl: '<path d="M3 15C1 4 11 1 19 3c2 8-1 18-12 17Z"/><path d="m7 16 9-9M8 11l5 5m-2-8 5 5"/>',
+    leagues: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18"/>',
+    nba: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M6 5c8 2 8 12 0 14M18 5c-8 2-8 12 0 14"/>',
     cfb: '<path d="m2 8 10-5 10 5-10 5Zm4 3v6l6 3 6-3v-6m4-3v9"/>',
     pickem: '<rect x="4" y="3" width="16" height="18" rx="3"/><path d="m8 9 2 2 5-5m-7 11h8"/>',
     pulse: '<path d="M3 5h18v15H3ZM7 9h4v4H7Zm8 0h3m-3 4h3M7 17h11"/>',
@@ -52,6 +54,8 @@
     watchlist: ['Your watchlist', 'Games on your radar. Notes in your own words.'],
     eagles: ['Philadelphia Eagles', 'Your team, from the next matchup to the full season.'],
     redsox: ['Boston Red Sox', 'The season, the roster, and what comes next.'],
+    leagues: ['Leagues', 'Your league pages, one tap away.'],
+    nba: ['NBA', 'Daily games, model forecasts and the season ahead.'],
     nfl: ['NFL', 'The full week, with your model beside the market.'],
     cfb: ['College football', 'The Top 25, with context beyond the score.'],
     pickem: ['Weekly Pick’em', 'Your locked pool lines. Your picks. Your season.'],
@@ -76,6 +80,8 @@
     ['pickem', 'Weekly Pick’em', 'ATS pool, key picks, weekly results and import', 'pickem'],
     ['eagles', 'Eagles', 'Philadelphia news, depth chart, schedule and standings', 'eagles'],
     ['redsox', 'Red Sox', 'Boston news, roster, schedule and standings', 'redsox'],
+    ['leagues', 'Leagues', 'Quick access to NFL, college football, NBA and MLB', 'leagues'],
+    ['nba', 'NBA', 'Daily games, standings, headlines and the live NBA model', 'nba'],
     ['nfl', 'NFL games', 'This week’s schedule, betting board and playoff picture', 'nfl'],
     ['cfb', 'College football', 'Ranked games, Top 25 and playoff field', 'cfb'],
     ['models/mlb/picks', 'MLB model', 'Baseball predictions and saved results', 'redsox'],
@@ -149,7 +155,7 @@
     });
     const m = meta[name] || meta.home;
     $d('desk-page-title').textContent = m[0]; $d('desk-page-desc').textContent = m[1];
-    $d('desk-breadcrumb').textContent = ['home','predictions','research','fantasy'].includes(activeGroup) ? ({ home:'Today', predictions:'Models', research:'Research', fantasy:'Fantasy' })[activeGroup] : 'Workspace';
+    $d('desk-breadcrumb').textContent = ['home','predictions','research','leagues'].includes(activeGroup) ? ({ home:'Today', predictions:'Models', research:'Research', leagues:'Leagues' })[activeGroup] : 'Workspace';
     document.title = `${m[0]} · Sports Hub`;
     $d('desk-page-title').tabIndex = -1;
     $d('desk-page-title').focus({preventScroll:true});
@@ -295,7 +301,7 @@
     const host=$d('desk-explore-grid');
     const groups = [
       ['Make a decision','models/all/picks','models/all/results','models/all/trends','models/all/recent','watchlist','fantasy/gm','fantasy/lineup','pickem'],
-      ['Follow your sports','eagles','redsox','nfl','cfb','models/mlb/picks','models/nba/picks','news'],
+      ['Follow your sports','eagles','redsox','nfl','cfb','nba','models/mlb/picks','news'],
       ['Go deeper','nfl/research','cfb/research','fantasy/season','models/all/calibration','models/all/method','tools','about'],
     ];
     host.innerHTML=groups.map(([title,...paths])=>`<section class="desk-explore-section"><h2>${title}</h2><div class="desk-explore-grid">${paths.map(path=>links.find(x=>x[0]===path)).filter(Boolean).map(x=>tile(...x)).join('')}</div></section>`).join('');
@@ -348,6 +354,11 @@
     Object.entries(CLUBS).forEach(([path,club])=>{const node=document.querySelector(`#tab-${path} .ic`);if(node)node.innerHTML=teamMark(club);});
     // Keep an abbreviation if a feed logo is missing or cannot load.
     document.addEventListener('error',e=>{if(e.target.matches?.('img[data-team-logo]'))e.target.hidden=true;},true);
+    ['nfl','cfb','nba'].forEach(sport=>{
+      const nav=document.createElement('nav');nav.className='desk-league-switch';nav.setAttribute('aria-label','Switch league');
+      nav.innerHTML=[['nfl','NFL'],['cfb','CFB'],['nba','NBA'],['models/mlb/picks','MLB']].map(([path,label])=>`<button type="button" data-desk-route="${path}"${path===sport?' aria-current="page"':''}>${label}</button>`).join('');
+      $d(sport)?.prepend(nav);
+    });
     renderExplore();paintBrief();paintWatchButtons();
     document.addEventListener('click',e=>{
       const route=e.target.closest('[data-desk-route]'); if(route){navigate(route.dataset.deskRoute);return;}

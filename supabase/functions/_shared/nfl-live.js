@@ -4,7 +4,7 @@
   'use strict';
   const VERSION='nfl-football-v1', BASELINE='v239';
   const ACTIVATED_AT='2026-10-03T04:48:39Z';
-  const versionFor=sport=>sport==='nfl'?VERSION:BASELINE;
+  const versionFor=sport=>sport==='nfl'?VERSION:sport==='nba'?'nba-v1':BASELINE;
   const states=new Map();
   function evidence(g,{homeDepth,awayDepth,injuries,history,summary},at=new Date().toISOString()){
     const F=root.SportsHubNFLFootball,C=root.SportsHubFootballResearch,E=root.SportsHubNFLEvidence;

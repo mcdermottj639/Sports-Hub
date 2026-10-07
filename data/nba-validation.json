@@ -1,0 +1,26 @@
+{
+  "trainSeasons": [
+    2023,
+    2024
+  ],
+  "selectionSeason": 2025,
+  "holdoutSeason": 2026,
+  "trainN": 2461,
+  "selectionN": 1231,
+  "holdoutN": 1231,
+  "winnerAccuracy": 0.6839967506092608,
+  "brier": 0.20611798271794576,
+  "marginMAE": 11.419784690610278,
+  "totalMAE": 15.286781572910927,
+  "homeBaselineAccuracy": 0.5548334687246141,
+  "homeBaselineBrier": 0.24699421778319516,
+  "marginBaselineMAE": 13.093932431683145,
+  "totalBaselineMAE": 15.930002341110338,
+  "selectedRidge": {
+    "winner": 0,
+    "margin": 0,
+    "total": 0
+  },
+  "method": "Chronological: train 2022-24, select 2024-25, refit through 2024-25, untouched 2025-26 holdout",
+  "bettingROI": null
+}

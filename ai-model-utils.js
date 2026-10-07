@@ -89,7 +89,7 @@
         result: h == null || a == null ? null : h === a ? 'push' : (h > a) === q.home ? 'win' : 'loss', error: null,
         selection: record.p || record.pick };
     }
-    if (market === 'spread' && !['nfl', 'cfb'].includes(sport)) return missing('Market not tracked');
+    if (market === 'spread' && !['nfl', 'cfb', 'nba'].includes(sport)) return missing('Market not tracked');
     const projection = number(q.forecast?.[market === 'spread' ? 'margin' : 'total']);
     if (projection == null) return missing('Missing pregame projection');
     const actual = h == null || a == null ? null : market === 'spread' ? h - a : h + a;
@@ -115,7 +115,7 @@
     const sport = record.s || record.sport;
     if (sport === 'cfb' && market === 'total') return 'Research only';
     if (q?.decisions?.[market]) return q.decisions[market];
-    const floor = market === 'spread' ? {nfl:2,cfb:3}[sport] : {nfl:4,cfb:6,mlb:1.5,nba:6}[sport];
+    const floor = market === 'spread' ? {nfl:2,cfb:3,nba:3}[sport] : {nfl:4,cfb:6,mlb:1.5,nba:6}[sport];
     if (grade.status === 'No directional edge' || Math.abs(grade.edge) < floor) return 'No qualifying edge';
     if (market === 'total' && Math.abs(grade.edge) > ({nfl:14,cfb:21,mlb:4,nba:20}[sport])) return 'Data quality blocked bet';
     return 'Qualifying pick missing';

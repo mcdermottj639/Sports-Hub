@@ -1,1 +1,4 @@
 node_modules/
+
+.nba-cache/
+supabase/.temp/
