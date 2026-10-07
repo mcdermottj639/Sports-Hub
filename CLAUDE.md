@@ -662,7 +662,13 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v297** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v298** (backend **b17-fantasy-league-rules**).
+
+### v298 — Close the game report when opening prop results
+
+Live browser checks verified saved prop cards, their exact history, separate
+results and the 390px layout. The report-to-props link now closes the game
+report before opening the model page, so the destination is visible.
 
 ### v297 — Player props across NFL, Top-25 CFB, NBA and MLB
 
