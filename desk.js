@@ -66,6 +66,7 @@
   const links = [
     ['today', 'Today', 'Your personal daily brief', 'home'],
     ['models/all/picks', 'Model board', 'Winner, spread and total forecasts', 'predictions'],
+    ['models/all/props', 'Player props', 'Top two props per game, saved player data and results', 'predictions'],
     ['models/all/results', 'Model performance', 'Official record, saved odds and paper ROI', 'predictions'],
     ['models/all/trends', 'Model trends', 'Profit over time, weekly results, baselines and model splits', 'predictions'],
     ['models/all/recent', 'Game history', 'Wins, losses, final scores and saved model inputs', 'predictions'],
@@ -357,6 +358,7 @@
     ['nfl','cfb','nba'].forEach(sport=>{
       const nav=document.createElement('nav');nav.className='desk-league-switch';nav.setAttribute('aria-label','Switch league');
       nav.innerHTML=[['nfl','NFL'],['cfb','CFB'],['nba','NBA'],['models/mlb/picks','MLB']].map(([path,label])=>`<button type="button" data-desk-route="${path}"${path===sport?' aria-current="page"':''}>${label}</button>`).join('');
+      nav.innerHTML+=`<button type="button" data-desk-route="models/${sport}/props">Player props</button>`;
       $d(sport)?.prepend(nav);
     });
     renderExplore();paintBrief();paintWatchButtons();

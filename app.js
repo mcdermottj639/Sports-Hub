@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v296';
+const APP_VERSION = 'v297';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1148,6 +1148,11 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
     if (['nfl','cfb','nba'].includes(sport)) {
       globalThis.SportsHubSavedGameReport?.mount($('#md-saved-report'),sport,g,pred);
       if (sport !== 'nba') globalThis.SportsHubFootballDevelopment?.mountGame($('#md-challenger'), id, sport);
+    }
+    if (g && ['nfl','cfb','nba','mlb'].includes(sport)) {
+      const props=el('section','prop-game-report');props.setAttribute('data-acc-boundary','');
+      const reportHost=$('#md-report');if(reportHost)reportHost.after(props);else $('#modal-body').appendChild(props);
+      globalThis.SportsHubProps?.mount(props,sport,g);
     }
     if (signalSlot) paintSignalDetail(id, token, focusSignals,'spread',null,sport);
     // v183: the game is on screen — now hold the model to what it just said.
@@ -5586,8 +5591,8 @@ async function aiRecentFor(sport) {
 //
 // Now: level 1 picks the league (or 🌐 Overview = everything), level 2 picks
 // the question. Nothing was dropped — every element of the old tab is on one
-// of the four sub-tabs, and the Board sub-tab is the old ladder untouched.
-const AI_SUBS = [['board', 'Forecasts'], ['record', 'Performance'], ['trends', 'Trends'], ['recent', 'Game history'], ['model', 'Model info'], ['backtest', 'Calibration']];
+// of the model sub-tabs, and the Board sub-tab is the old ladder untouched.
+const AI_SUBS = [['board', 'Forecasts'], ['props', 'Player props'], ['record', 'Performance'], ['trends', 'Trends'], ['recent', 'Game history'], ['model', 'Model info'], ['backtest', 'Calibration']];
 const AI_BLURB = {
   board: 'Start with the market, compare the numbers, then check the data. Larger gaps are not guarantees.',
   record: '',
@@ -5731,6 +5736,7 @@ function renderAiTally(sport, todayTxt) {
 async function paintAiView() {
   const container = $('#ai-picks');
   if (!container) return;
+  if (container.dataset) delete container.dataset.propToken;
   const tok = ++aiViewToken;
   const sport = state.aiSport, sub = state.aiSub || 'board';
   const all = sport === 'all';
@@ -5756,6 +5762,10 @@ async function paintAiView() {
     container.innerHTML = `<div class="empty" role="status">Loading ${all ? 'all-sport' : esc(LEAGUES[sport]?.label || sport)} forecasts…</div>`;
     return all ? paintOverviewBoard(tok) : paintSportBoard(tok);
   }
+  if (sub === 'props') {
+    $('#ai-score').textContent='Player props · saved lines and automatic results';
+    return globalThis.SportsHubProps.panel(container,sport);
+  }
   const s = all ? null : sport;
   const det = tallyDetails(s), pend = pendingSummary(s);
   renderAiTally(s, '');
@@ -5766,6 +5776,7 @@ async function paintAiView() {
     : sub === 'backtest' ? backtestPanel(det, s)
     : modelPanel(s));
   if (sub === 'record' && (all || ['nfl','cfb'].includes(sport))) container.insertAdjacentHTML('beforeend', '<div class="desk-record-research"><b>Want to test a different model?</b><span>Matched current vs challenger results live in Research.</span><button type="button" class="desk-link" data-desk-route="research">Compare models →</button></div>');
+  if (['record','recent','model'].includes(sub)) container.insertAdjacentHTML('beforeend', `<div class="desk-record-research"><b>Player prop model</b><span>Saved player projections, original prop lines and a separate results record.</span><button type="button" class="desk-link" data-desk-route="models/${sport}/props">Player props & results →</button></div>`);
   if (signalsEnabled() && (all || ['nfl','cfb'].includes(sport))) {
     if (sub === 'record') {
       container.insertAdjacentHTML('beforeend', researchLinksHTML(sport));
@@ -6221,30 +6232,6 @@ async function renderAiTrends(container, sport, games, rows) {
   });
   teamTrends.sort((a, b) => b.s - a.s);
 
-  // ---- player props (MLB: probable pitchers + hot hitters) ----
-  const propRows = [];
-  if (sport === 'mlb') {
-    const pitchers = [];
-    games.forEach((g) => [['away', g.away], ['home', g.home]].forEach(([, t]) => {
-      const pr = t.probables?.[0]; const nm = pr?.athlete?.displayName || pr?.athlete?.shortName;
-      if (!nm) return;
-      const era = statVal(pr?.statistics, ['ERA', 'earnedRunAverage']);
-      const whip = statVal(pr?.statistics, ['WHIP', 'walksHitsPerInningPitched']);
-      if (era != null) pitchers.push({ nm, era, whip });
-    }));
-    pitchers.sort((a, b) => a.era - b.era);
-    pitchers.slice(0, 2).forEach((p) => propRows.push(`🎯 <b>${esc(p.nm)}</b> on the mound — ${p.era} ERA${p.whip != null ? `, ${p.whip} WHIP` : ''} (Ks / unders watch)`));
-    pitchers.slice(-1).forEach((p) => { if (p.era >= 4.8) propRows.push(`⚠️ <b>${esc(p.nm)}</b> starting — ${p.era} ERA${p.whip != null ? `, ${p.whip} WHIP` : ''} (hitter / overs spot)`); });
-
-    // hot hitters from the teams in the edge games (bounded), else top form teams
-    let hitterTeams = rows.filter((r) => r.isEdge).flatMap((r) => [r.g.home, r.g.away]);
-    if (!hitterTeams.length) hitterTeams = teams.slice(0, 4);
-    const uniqH = []; const seenH = new Set();
-    hitterTeams.forEach((t) => { if (t.id && !seenH.has(t.id)) { seenH.add(t.id); uniqH.push(t); } });
-    const hh = await Promise.all(uniqH.slice(0, 6).map((t) => topHitters(t.id, 1).catch(() => [])));
-    hh.forEach((arr, i) => { const p = arr[0]; if (p && parseFloat(p.ops) >= 0.800) propRows.push(`🔥 <b>${esc(p.name)}</b> (${esc(uniqH[i].abbr || uniqH[i].name)}) — ${ops3n(p.ops)} OPS${p.hr ? `, ${p.hr} HR` : ''} (hits / TB props)`); });
-  }
-
   // ---- render ----
   if (teamTrends.length) {
     container.appendChild(el('div', 'ai-section-head', '📈 Team Trends to Watch'));
@@ -6252,13 +6239,7 @@ async function renderAiTrends(container, sport, games, rows) {
     teamTrends.slice(0, 6).forEach((x) => box.appendChild(el('div', 'trend-row', x.t)));
     container.appendChild(box);
   }
-  if (propRows.length) {
-    container.appendChild(el('div', 'ai-section-head', '🎯 Player Props to Watch'));
-    const box = el('div', 'trend-list');
-    propRows.slice(0, 6).forEach((x) => box.appendChild(el('div', 'trend-row', x)));
-    container.appendChild(box);
-  }
-  if (!teamTrends.length && !propRows.length) {
+  if (!teamTrends.length) {
     container.appendChild(el('div', 'ai-note', 'Trends populate once teams have played enough games this season.'));
   }
 }
@@ -11201,6 +11182,7 @@ function paintSlate(sport, games, box) {
 
 async function enrichSlate(sport, host, games) {
   if (!host) return;
+  globalThis.SportsHubProps?.slate(host,sport);
   // Finals have no line left to read; the Game Report in the modal still
   // carries their closing numbers. Sorted by kickoff so that when the cap
   // below bites it keeps the games that haven't started yet, not whichever

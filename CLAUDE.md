@@ -125,6 +125,20 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > Missing prices can be filled only before kickoff at the frozen line, side and
 > provider, with a separate price observation timestamp; forecasts stay immutable. Capture therefore does not require opening the app.
 
+> ### Player props — independent model and permanent record (v297)
+> NFL, Top-25 CFB, NBA and MLB have `#/models/{sport}/props` with up to two
+> different-player selections per game, exact posted lines/prices, saved player
+> history and a separate W/L/push/void, paper-profit and ROI record. Picks also
+> appear in game reports and league slate cards. The experimental `props-v1`
+> baseline ranks supported quotes from last-20 same-team game logs; it does not
+> claim calibrated probabilities or demonstrated betting value. Missing lines,
+> insufficient history and source failures remain explicit coverage states.
+> `sports-hub-props` discovers games every 15 minutes, with two isolated game
+> workers per minute. `prop_games`, `prop_picks` and `prop_runs` are read-only
+> publicly; a trigger protects original captures. Collection and final-stat
+> grading run without opening the app. See `docs/PLAYER_PROPS.md` for markets,
+> source/role gates, immutable snapshots, paper settlement rules and validation.
+
 > ### Optional backend (`server/`) — LIVE, powers the Fantasy tab
 > The owner evolved past pure-static for ONE capability: syncing their **real
 > ESPN fantasy leagues**, which is impossible client-side (private-league
@@ -302,6 +316,17 @@ fantasy/golf data are not refreshed by this cycle.
   twice-hourly capture schedule. Vault secret values are configured remotely.
 - `supabase/functions/sports-hub-ai/index.ts` — scheduled ESPN model runner,
   immutable market capture, final-score grading and job audit trail.
+- `supabase/functions/_shared/prop-model.js` — identical server/browser/replay
+  prop parser, empirical projections, quote ranking, grading and record math.
+- `supabase/functions/sports-hub-props/index.ts` — independent prop discovery,
+  one-game worker leases, player-stat capture and final-stat grading.
+- `supabase/schedule-player-props.sql` — Vault-backed discovery/worker cron jobs.
+- `player-props.js`, `player-props.css` — prop model board, saved evidence,
+  game/league cards and separate results; memory cache only, no device history.
+- `scripts/validate-props.js`, `data/prop-validation*.json` — reproducible
+  chronological projection smoke check; no historical prop prices or ROI claim.
+- `docs/PLAYER_PROPS.md`, `tests/player-props.test.js` — prop methodology,
+  limitations, evidence and focused capture/ranking/settlement regression checks.
 - `tests/ai-model-utils.test.js`, `tests/ai-production.test.js` — regression
   checks for MLB/CFB guards, odds, immutable snapshots, grading and UI markup.
 - `tests/responsive.html` — production app framed at phone/desktop widths for
@@ -637,7 +662,39 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v296** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v297** (backend **b17-fantasy-league-rules**).
+
+### v297 — Player props across NFL, Top-25 CFB, NBA and MLB
+
+Player props is a model sub-tab and direct league-page link. Each game can save
+up to two ranked selections from different players, showing the original line,
+price, projection, recent averages, hit count and expandable exact input games.
+Game reports and league cards surface the same saved picks. Performance/history
+links lead to a separate prop record with W/L, pushes, voids, paper profit and
+ROI; no prop results are mixed into the existing winner/spread/total cohorts.
+The old MLB-only unpriced "props to watch" suggestions are replaced.
+
+The shared `props-v1` baseline uses the last 20 completed same-team games and
+actual public ESPN player-prop quotes. It requires verified player identity,
+8 games (15 for MLB hitters), current probable starters for pitcher markets,
+pregame/fresh observations, and excludes unavailable players/preseason.
+NBA/MLB include coarse workload-drop gates. Ranking uses smoothed empirical
+hit rates and the actual offered payout; a negative estimate is labeled a lean.
+These are experimental estimates, with no validated betting-edge claim.
+`docs/PLAYER_PROPS.md` records fixed assumptions, unsupported factors and a
+reproducible selected-player chronological projection check. Archived prop
+quotes were unavailable, so validation does not claim historical betting ROI.
+
+The independent JWT-protected `sports-hub-props` collector discovers slates
+every 15 minutes; two one-game workers run each minute, prioritizing the next
+start time. First-issued inputs/lines/prices are permanently frozen by a DB
+trigger. Only result fields may change. Final exact-event player stats grade
+picks; missing stats stay pending, exact-line ties push, explicit DNP and
+cancelled/rescheduled games void under stated paper-tracking rules. Public
+clients can only read. Live launch verification saved real NFL and MLB props before
+start and confirmed immutable snapshots, no future inputs and no public
+write/claim permissions. All 260 Node tests and touched-file syntax checks pass.
+No existing game-model constants were retuned.
 
 ### v296 — Label regular-season NBA standings
 
@@ -6903,6 +6960,8 @@ rewrite.**
   - **📋 Board** — the conviction ladder, unchanged: Best Bets (gap 10+) →
     Edges (5–9) → Leans (2–5, folded) → 📐 ATS → 🎯 Totals → ✅ passes (folded)
     → 📋 Finished (v199) → 📈 Team Trends → 🎯 Player Props, with a plays line
+    **⚠️ SUPERSEDED in v297:** unpriced MLB prop suggestions are replaced by
+    the independent, priced four-league Player props model and saved record.
     on top and three pointers into the history at the bottom.
     **🗓️ For NFL and CFB it is the WEEK's slate, not the day's** (v214,
     `WEEK_SPORTS` + `weekSlate`) — football is weekly, so a day query showed an

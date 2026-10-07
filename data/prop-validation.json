@@ -1,0 +1,129 @@
+{
+  "method": "Projection-only chronological replay; fixed last-20 mean. Selected player sample, not league-wide validation. No archived prop odds; probabilities, selection ranking and ROI are unvalidated.",
+  "bySport": {
+    "cfb": {
+      "players": 2,
+      "forecasts": 50,
+      "byMarket": {
+        "passingYards": {
+          "n": 5,
+          "mae": 46.85054460245637
+        },
+        "passingAttempts": {
+          "n": 5,
+          "mae": 5.827340551605258
+        },
+        "completions": {
+          "n": 5,
+          "mae": 5.260839797457445
+        },
+        "passingTouchdowns": {
+          "n": 5,
+          "mae": 1.2108478776125835
+        },
+        "rushingYards": {
+          "n": 10,
+          "mae": 9.335140864037923
+        },
+        "rushingAttempts": {
+          "n": 10,
+          "mae": 1.5476045033397972
+        },
+        "receivingYards": {
+          "n": 5,
+          "mae": 30.295274725274727
+        },
+        "receptions": {
+          "n": 5,
+          "mae": 2.9794871794871796
+        }
+      }
+    },
+    "mlb": {
+      "players": 6,
+      "forecasts": 4160,
+      "byMarket": {
+        "hits": {
+          "n": 832,
+          "mae": 0.6982268792090068
+        },
+        "totalBases": {
+          "n": 832,
+          "mae": 1.5031521642057644
+        },
+        "RBIs": {
+          "n": 832,
+          "mae": 0.7054696544398796
+        },
+        "runs": {
+          "n": 832,
+          "mae": 0.643794410582215
+        },
+        "hitsRunsRbis": {
+          "n": 832,
+          "mae": 1.6765878915035974
+        }
+      }
+    },
+    "nba": {
+      "players": 4,
+      "forecasts": 1904,
+      "byMarket": {
+        "points": {
+          "n": 238,
+          "mae": 4.639070562733309
+        },
+        "totalRebounds": {
+          "n": 238,
+          "mae": 2.0402302170227586
+        },
+        "assists": {
+          "n": 238,
+          "mae": 1.2672317016539385
+        },
+        "threes": {
+          "n": 238,
+          "mae": 1.3141208103396227
+        },
+        "pra": {
+          "n": 238,
+          "mae": 6.134439196052678
+        },
+        "pointsRebounds": {
+          "n": 238,
+          "mae": 5.661133688358104
+        },
+        "pointsAssists": {
+          "n": 238,
+          "mae": 5.061642443643836
+        },
+        "reboundsAssists": {
+          "n": 238,
+          "mae": 2.634741035451615
+        }
+      }
+    },
+    "nfl": {
+      "players": 6,
+      "forecasts": 116,
+      "byMarket": {
+        "rushingYards": {
+          "n": 29,
+          "mae": 7.564549923908576
+        },
+        "rushingAttempts": {
+          "n": 29,
+          "mae": 1.3595482760303408
+        },
+        "receivingYards": {
+          "n": 29,
+          "mae": 29.08293493349942
+        },
+        "receptions": {
+          "n": 29,
+          "mae": 2.4180070504800937
+        }
+      }
+    }
+  }
+}
