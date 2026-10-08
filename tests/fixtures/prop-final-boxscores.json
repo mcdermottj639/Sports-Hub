@@ -1,0 +1,1147 @@
+{
+  "retrieved_at": "2026-10-08T00:32:41.290030+00:00",
+  "cases": {
+    "mlb": {
+      "source": "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=401907992",
+      "summary": {
+        "header": {
+          "id": "401907992",
+          "season": {
+            "year": 2026,
+            "current": true,
+            "type": 3
+          },
+          "competitions": [
+            {
+              "id": "401907992",
+              "date": "2026-10-07T20:00Z",
+              "status": {
+                "type": {
+                  "id": "3",
+                  "name": "STATUS_FINAL",
+                  "state": "post",
+                  "completed": true,
+                  "description": "Final",
+                  "detail": "Final",
+                  "shortDetail": "Final"
+                }
+              },
+              "competitors": [
+                {
+                  "id": "4",
+                  "homeAway": "home",
+                  "team": {
+                    "id": "4",
+                    "abbreviation": "CHW",
+                    "displayName": "Chicago White Sox"
+                  }
+                },
+                {
+                  "id": "5",
+                  "homeAway": "away",
+                  "team": {
+                    "id": "5",
+                    "abbreviation": "CLE",
+                    "displayName": "Cleveland Guardians"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "boxscore": {
+          "players": [
+            {
+              "team": {
+                "id": "5"
+              },
+              "statistics": [
+                {
+                  "type": "batting",
+                  "keys": [
+                    "hits-atBats",
+                    "atBats",
+                    "runs",
+                    "hits",
+                    "RBIs",
+                    "homeRuns",
+                    "walks",
+                    "strikeouts",
+                    "pitches",
+                    "avg",
+                    "onBasePct",
+                    "slugAvg"
+                  ],
+                  "athletes": [
+                    {
+                      "stats": [
+                        "2-4",
+                        "4",
+                        "0",
+                        "2",
+                        "3",
+                        "0",
+                        "1",
+                        "1",
+                        "16",
+                        ".273",
+                        ".385",
+                        ".636"
+                      ],
+                      "atBats": [
+                        {
+                          "id": "4019079920201990057",
+                          "atBatId": "4019079920201",
+                          "playId": "4019079920201990057"
+                        },
+                        {
+                          "id": "4019079920407990057",
+                          "atBatId": "4019079920407",
+                          "playId": "4019079920407990057"
+                        },
+                        {
+                          "id": "4019079920804990057",
+                          "atBatId": "4019079920804",
+                          "playId": "4019079920804990057"
+                        },
+                        {
+                          "id": "4019079921203990057",
+                          "atBatId": "4019079921203",
+                          "playId": "4019079921203990057"
+                        },
+                        {
+                          "id": "4019079921407990057",
+                          "atBatId": "4019079921407",
+                          "playId": "4019079921407990057"
+                        }
+                      ],
+                      "athlete": {
+                        "id": "40854",
+                        "displayName": "Jo Adell"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "team": {
+                "id": "4"
+              },
+              "statistics": [
+                {
+                  "type": "batting",
+                  "keys": [
+                    "hits-atBats",
+                    "atBats",
+                    "runs",
+                    "hits",
+                    "RBIs",
+                    "homeRuns",
+                    "walks",
+                    "strikeouts",
+                    "pitches",
+                    "avg",
+                    "onBasePct",
+                    "slugAvg"
+                  ],
+                  "athletes": [
+                    {
+                      "stats": [
+                        "0-4",
+                        "4",
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "0",
+                        "3",
+                        "14",
+                        ".200",
+                        ".227",
+                        ".350"
+                      ],
+                      "atBats": [
+                        {
+                          "id": "4019079920103990057",
+                          "atBatId": "4019079920103",
+                          "playId": "4019079920103990057"
+                        },
+                        {
+                          "id": "4019079920503990057",
+                          "atBatId": "4019079920503",
+                          "playId": "4019079920503990057"
+                        },
+                        {
+                          "id": "4019079920903990057",
+                          "atBatId": "4019079920903",
+                          "playId": "4019079920903990057"
+                        },
+                        {
+                          "id": "4019079921301990057",
+                          "atBatId": "4019079921301",
+                          "playId": "4019079921301990057"
+                        }
+                      ],
+                      "athlete": {
+                        "id": "4872595",
+                        "displayName": "Munetaka Murakami"
+                      }
+                    },
+                    {
+                      "stats": [
+                        "1-4",
+                        "4",
+                        "1",
+                        "1",
+                        "0",
+                        "0",
+                        "0",
+                        "2",
+                        "22",
+                        ".368",
+                        ".400",
+                        ".579"
+                      ],
+                      "atBats": [
+                        {
+                          "id": "4019079920105990057",
+                          "atBatId": "4019079920105",
+                          "playId": "4019079920105990057"
+                        },
+                        {
+                          "id": "4019079920701990057",
+                          "atBatId": "4019079920701",
+                          "playId": "4019079920701990057"
+                        },
+                        {
+                          "id": "4019079921101990057",
+                          "atBatId": "4019079921101",
+                          "playId": "4019079921101990057"
+                        },
+                        {
+                          "id": "4019079921303990057",
+                          "atBatId": "4019079921303",
+                          "playId": "4019079921303990057"
+                        }
+                      ],
+                      "athlete": {
+                        "id": "5136929",
+                        "displayName": "Chase Meidroth"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "pitching",
+                  "keys": [
+                    "fullInnings.partInnings",
+                    "hits",
+                    "runs",
+                    "earnedRuns",
+                    "walks",
+                    "strikeouts",
+                    "homeRuns",
+                    "pitches-strikes",
+                    "ERA",
+                    "pitches"
+                  ],
+                  "athletes": [
+                    {
+                      "stats": [
+                        "2.0",
+                        "1",
+                        "0",
+                        "0",
+                        "0",
+                        "1",
+                        "0",
+                        "22-14",
+                        "3.60",
+                        "22"
+                      ],
+                      "athlete": {
+                        "id": "33856",
+                        "displayName": "Sean Newcomb"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "plays": [
+          {
+            "id": "4019079920103990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "37",
+              "text": "Strike Swinging",
+              "abbreviation": "SS",
+              "alternativeText": "Strikeout",
+              "type": "strike-swinging"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "42438"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "4872595"
+                },
+                "type": "batter"
+              },
+              {
+                "athlete": {
+                  "id": "42453"
+                },
+                "type": "onFirst"
+              },
+              {
+                "athlete": {
+                  "id": "5207167"
+                },
+                "type": "onSecond"
+              }
+            ]
+          },
+          {
+            "id": "4019079920105990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "37",
+              "text": "Strike Swinging",
+              "abbreviation": "SS",
+              "alternativeText": "Strikeout",
+              "type": "strike-swinging"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "42438"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "5136929"
+                },
+                "type": "batter"
+              },
+              {
+                "athlete": {
+                  "id": "4743772"
+                },
+                "type": "onSecond"
+              },
+              {
+                "athlete": {
+                  "id": "42453"
+                },
+                "type": "onThird"
+              }
+            ]
+          },
+          {
+            "id": "4019079920201990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "2",
+              "text": "Single",
+              "abbreviation": "1B",
+              "alternativeText": "Single",
+              "type": "single"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "33856"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "40854"
+                },
+                "type": "batter"
+              },
+              {
+                "athlete": {
+                  "id": "40854"
+                },
+                "type": "onFirst"
+              }
+            ]
+          },
+          {
+            "id": "4019079920407990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "4",
+              "text": "Triple",
+              "abbreviation": "3B",
+              "alternativeText": "Triple",
+              "type": "triple"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "5023126"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "40854"
+                },
+                "type": "batter"
+              },
+              {
+                "athlete": {
+                  "id": "40854"
+                },
+                "type": "onThird"
+              }
+            ]
+          },
+          {
+            "id": "4019079920503990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "37",
+              "text": "Strike Swinging",
+              "abbreviation": "SS",
+              "alternativeText": "Strikeout",
+              "type": "strike-swinging"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "33773"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "4872595"
+                },
+                "type": "batter"
+              },
+              {
+                "athlete": {
+                  "id": "5207167"
+                },
+                "type": "onFirst"
+              }
+            ]
+          },
+          {
+            "id": "4019079920701990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "3",
+              "text": "Double",
+              "abbreviation": "2B",
+              "alternativeText": "Double",
+              "type": "double"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "33773"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "5136929"
+                },
+                "type": "batter"
+              },
+              {
+                "athlete": {
+                  "id": "5136929"
+                },
+                "type": "onSecond"
+              }
+            ]
+          },
+          {
+            "id": "4019079920804990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "5",
+              "text": "Ball",
+              "abbreviation": "B",
+              "alternativeText": "Walk",
+              "type": "ball"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "5080754"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "40854"
+                },
+                "type": "batter"
+              },
+              {
+                "athlete": {
+                  "id": "40854"
+                },
+                "type": "onFirst"
+              },
+              {
+                "athlete": {
+                  "id": "4619649"
+                },
+                "type": "onSecond"
+              }
+            ]
+          },
+          {
+            "id": "4019079920903990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "24",
+              "text": "Ground Out",
+              "abbreviation": "GRO",
+              "alternativeText": "Ground Out",
+              "type": "ground-out"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "42488"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "4872595"
+                },
+                "type": "batter"
+              },
+              {
+                "athlete": {
+                  "id": "42453"
+                },
+                "type": "onSecond"
+              },
+              {
+                "athlete": {
+                  "id": "5207167"
+                },
+                "type": "onThird"
+              }
+            ]
+          },
+          {
+            "id": "4019079921101990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "24",
+              "text": "Ground Out",
+              "abbreviation": "GRO",
+              "alternativeText": "Ground Out",
+              "type": "ground-out"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "42488"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "5136929"
+                },
+                "type": "batter"
+              }
+            ]
+          },
+          {
+            "id": "4019079921203990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "22",
+              "text": "Fly Out",
+              "abbreviation": "FLY",
+              "alternativeText": "Fly Out",
+              "type": "fly-out"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "5270580"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "40854"
+                },
+                "type": "batter"
+              },
+              {
+                "athlete": {
+                  "id": "4619649"
+                },
+                "type": "onFirst"
+              }
+            ]
+          },
+          {
+            "id": "4019079921301990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "37",
+              "text": "Strike Swinging",
+              "abbreviation": "SS",
+              "alternativeText": "Strikeout",
+              "type": "strike-swinging"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "4228579"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "4872595"
+                },
+                "type": "batter"
+              }
+            ]
+          },
+          {
+            "id": "4019079921303990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "37",
+              "text": "Strike Swinging",
+              "abbreviation": "SS",
+              "alternativeText": "Strikeout",
+              "type": "strike-swinging"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "4228579"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "5136929"
+                },
+                "type": "batter"
+              }
+            ]
+          },
+          {
+            "id": "4019079921407990057",
+            "type": {
+              "id": "57",
+              "text": "Play Result",
+              "type": "play-result"
+            },
+            "alternativeType": {
+              "id": "37",
+              "text": "Strike Swinging",
+              "abbreviation": "SS",
+              "alternativeText": "Strikeout",
+              "type": "strike-swinging"
+            },
+            "participants": [
+              {
+                "athlete": {
+                  "id": "4960696"
+                },
+                "type": "pitcher"
+              },
+              {
+                "athlete": {
+                  "id": "40854"
+                },
+                "type": "batter"
+              },
+              {
+                "athlete": {
+                  "id": "4619649"
+                },
+                "type": "onFirst"
+              },
+              {
+                "athlete": {
+                  "id": "32801"
+                },
+                "type": "onThird"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "nfl": {
+      "source": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872967",
+      "summary": {
+        "header": {
+          "id": "401872967",
+          "season": {
+            "year": 2026,
+            "current": true,
+            "type": 2
+          },
+          "competitions": [
+            {
+              "id": "401872967",
+              "date": "2026-10-04T17:00Z",
+              "status": {
+                "type": {
+                  "id": "3",
+                  "name": "STATUS_FINAL",
+                  "state": "post",
+                  "completed": true,
+                  "description": "Final",
+                  "detail": "Final",
+                  "shortDetail": "Final"
+                }
+              },
+              "competitors": [
+                {
+                  "id": "34",
+                  "homeAway": "home",
+                  "team": {
+                    "id": "34",
+                    "abbreviation": "HOU",
+                    "displayName": "Houston Texans"
+                  }
+                },
+                {
+                  "id": "6",
+                  "homeAway": "away",
+                  "team": {
+                    "id": "6",
+                    "abbreviation": "DAL",
+                    "displayName": "Dallas Cowboys"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "boxscore": {
+          "players": [
+            {
+              "team": {
+                "id": "6"
+              },
+              "statistics": [
+                {
+                  "name": "passing",
+                  "keys": [
+                    "completions/passingAttempts",
+                    "passingYards",
+                    "yardsPerPassAttempt",
+                    "passingTouchdowns",
+                    "interceptions",
+                    "sacks-sackYardsLost",
+                    "adjQBR",
+                    "QBRating"
+                  ],
+                  "athletes": [
+                    {
+                      "stats": [
+                        "32/45",
+                        "335",
+                        "7.4",
+                        "1",
+                        "0",
+                        "3-11",
+                        "85.3",
+                        "99.8"
+                      ],
+                      "athlete": {
+                        "id": "2577417",
+                        "displayName": "Dak Prescott"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "rushing",
+                  "keys": [
+                    "rushingAttempts",
+                    "rushingYards",
+                    "yardsPerRushAttempt",
+                    "rushingTouchdowns",
+                    "longRushing"
+                  ],
+                  "athletes": [
+                    {
+                      "stats": [
+                        "19",
+                        "62",
+                        "3.3",
+                        "3",
+                        "13"
+                      ],
+                      "athlete": {
+                        "id": "4361579",
+                        "displayName": "Javonte Williams"
+                      }
+                    },
+                    {
+                      "stats": [
+                        "2",
+                        "7",
+                        "3.5",
+                        "0",
+                        "6"
+                      ],
+                      "athlete": {
+                        "id": "2577417",
+                        "displayName": "Dak Prescott"
+                      }
+                    },
+                    {
+                      "stats": [
+                        "1",
+                        "-6",
+                        "-6.0",
+                        "0",
+                        "-6"
+                      ],
+                      "athlete": {
+                        "id": "4241389",
+                        "displayName": "CeeDee Lamb"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "receiving",
+                  "keys": [
+                    "receptions",
+                    "receivingYards",
+                    "yardsPerReception",
+                    "receivingTouchdowns",
+                    "longReception",
+                    "receivingTargets"
+                  ],
+                  "athletes": [
+                    {
+                      "stats": [
+                        "17",
+                        "189",
+                        "11.1",
+                        "1",
+                        "30",
+                        "21"
+                      ],
+                      "athlete": {
+                        "id": "4241389",
+                        "displayName": "CeeDee Lamb"
+                      }
+                    },
+                    {
+                      "stats": [
+                        "5",
+                        "21",
+                        "4.2",
+                        "0",
+                        "9",
+                        "5"
+                      ],
+                      "athlete": {
+                        "id": "4361579",
+                        "displayName": "Javonte Williams"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "cfb": {
+      "source": "https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401858478",
+      "summary": {
+        "header": {
+          "id": "401858478",
+          "season": {
+            "year": 2026,
+            "current": true,
+            "type": 2
+          },
+          "competitions": [
+            {
+              "id": "401858478",
+              "date": "2026-10-03T23:30Z",
+              "status": {
+                "type": {
+                  "id": "3",
+                  "name": "STATUS_FINAL",
+                  "state": "post",
+                  "completed": true,
+                  "description": "Final",
+                  "detail": "Final",
+                  "shortDetail": "Final"
+                }
+              },
+              "competitors": [
+                {
+                  "id": "30",
+                  "homeAway": "home",
+                  "team": {
+                    "id": "30",
+                    "abbreviation": "USC",
+                    "displayName": "USC Trojans"
+                  }
+                },
+                {
+                  "id": "264",
+                  "homeAway": "away",
+                  "team": {
+                    "id": "264",
+                    "abbreviation": "WASH",
+                    "displayName": "Washington Huskies"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "boxscore": {
+          "players": [
+            {
+              "team": {
+                "id": "264"
+              },
+              "statistics": [
+                {
+                  "name": "passing",
+                  "keys": [
+                    "completions/passingAttempts",
+                    "passingYards",
+                    "yardsPerPassAttempt",
+                    "passingTouchdowns",
+                    "interceptions",
+                    "adjQBR"
+                  ],
+                  "athletes": [
+                    {
+                      "stats": [
+                        "15/26",
+                        "198",
+                        "7.6",
+                        "1",
+                        "0",
+                        "38.7"
+                      ],
+                      "athlete": {
+                        "id": "5079653",
+                        "displayName": "Demond Williams Jr."
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "rushing",
+                  "keys": [
+                    "rushingAttempts",
+                    "rushingYards",
+                    "yardsPerRushAttempt",
+                    "rushingTouchdowns",
+                    "longRushing"
+                  ],
+                  "athletes": [
+                    {
+                      "stats": [
+                        "13",
+                        "26",
+                        "2.0",
+                        "0",
+                        "11"
+                      ],
+                      "athlete": {
+                        "id": "5079653",
+                        "displayName": "Demond Williams Jr."
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "nba": {
+      "source": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401869373",
+      "summary": {
+        "header": {
+          "id": "401869373",
+          "season": {
+            "year": 2026,
+            "current": false,
+            "type": 3
+          },
+          "competitions": [
+            {
+              "id": "401869373",
+              "date": "2026-04-28T01:30Z",
+              "status": {
+                "type": {
+                  "id": "3",
+                  "name": "STATUS_FINAL",
+                  "state": "post",
+                  "completed": true,
+                  "description": "Final",
+                  "detail": "Final",
+                  "shortDetail": "Final"
+                }
+              },
+              "competitors": [
+                {
+                  "id": "21",
+                  "homeAway": "home",
+                  "team": {
+                    "id": "21",
+                    "abbreviation": "PHX",
+                    "displayName": "Phoenix Suns"
+                  }
+                },
+                {
+                  "id": "25",
+                  "homeAway": "away",
+                  "team": {
+                    "id": "25",
+                    "abbreviation": "OKC",
+                    "displayName": "Oklahoma City Thunder"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "boxscore": {
+          "players": [
+            {
+              "team": {
+                "id": "25"
+              },
+              "statistics": [
+                {
+                  "keys": [
+                    "minutes",
+                    "points",
+                    "fieldGoalsMade-fieldGoalsAttempted",
+                    "threePointFieldGoalsMade-threePointFieldGoalsAttempted",
+                    "freeThrowsMade-freeThrowsAttempted",
+                    "rebounds",
+                    "assists",
+                    "turnovers",
+                    "steals",
+                    "blocks",
+                    "offensiveRebounds",
+                    "defensiveRebounds",
+                    "fouls",
+                    "plusMinus"
+                  ],
+                  "athletes": [
+                    {
+                      "stats": [
+                        "29",
+                        "18",
+                        "5-7",
+                        "0-0",
+                        "8-9",
+                        "12",
+                        "3",
+                        "2",
+                        "1",
+                        "0",
+                        "7",
+                        "5",
+                        "2",
+                        "+13"
+                      ],
+                      "didNotPlay": false,
+                      "athlete": {
+                        "id": "4222252",
+                        "displayName": "Isaiah Hartenstein"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

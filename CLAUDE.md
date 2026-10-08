@@ -136,7 +136,10 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > `sports-hub-props` discovers games every 15 minutes, with two isolated game
 > workers per minute. `prop_games`, `prop_picks` and `prop_runs` are read-only
 > publicly; a trigger protects original captures. Collection and final-stat
-> grading run without opening the app. See `docs/PLAYER_PROPS.md` for markets,
+> grading run without opening the app. Delayed or unavailable game logs fall
+> back to confirmed final box scores matched by event, team and athlete (v299).
+> MLB total bases can use linked final at-bat results checked against hit totals;
+> missing or inconsistent data stays pending. See `docs/PLAYER_PROPS.md` for markets,
 > source/role gates, immutable snapshots, paper settlement rules and validation.
 
 > ### Optional backend (`server/`) — LIVE, powers the Fantasy tab
@@ -662,7 +665,19 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v298** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v299** (backend **b17-fantasy-league-rules**).
+
+### v299 — Settle props when player game logs lag
+
+The prop worker falls back to confirmed final box scores when athlete game logs
+are delayed or unavailable. It verifies event, team, player and final status,
+normalizes the supported football/NBA/baseball stat formats, and records the
+settlement source. Baseball total bases use explicit components or linked final
+at-bat results reconciled to hit/home-run counts. Missing evidence stays pending.
+Only result fields change; saved picks, odds, projections and model cohorts stay
+fixed. The saved game snapshot now reflects the latest checked status. Regression
+fixtures cover all four leagues and the original two MLB RBI picks, plus a worker
+run with failed player-log requests and a safe repeat run.
 
 ### v298 — Close the game report when opening prop results
 

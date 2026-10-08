@@ -76,8 +76,15 @@ stale quote capture, future-game evidence and changes to any original pick
 field. Anonymous/authenticated clients have SELECT only; writes and the claim
 RPC require the service role. Write credentials stay server-side.
 
-Only a confirmed final and exact event/player statistic grades a pick. Missing
-statistics stay pending. Explicit DNP, cancellation or rescheduling voids the
+Only a confirmed final and exact event/player statistic grades a pick. Player
+game logs are preferred; when delayed or unavailable, a final box score for the
+same event, team and player supplies the statistic. Football completion/attempt
+pairs, NBA rebound aliases/combinations, and baseball innings are normalized.
+MLB total bases use explicit values or the player's linked final at-bat results,
+checked against the box-score hit and home-run counts. Batting and pitching
+rows stay separate. Missing or inconsistent statistics stay pending; they are
+never treated as zero. The settlement note records which source graded the pick.
+Explicit DNP, cancellation or rescheduling voids the
 paper pick; integer-line equality is a push. These are stated paper-tracking
 rules and may differ from a sportsbook's participation/settlement rules.
 Record = W/L excluding pushes/voids. Paper profit uses one unit per pick at the
@@ -86,8 +93,11 @@ No historical picks are manufactured to seed this record.
 
 ## Reproducible checks and limits
 
-Run `node --test tests/player-props.test.js` for parsing, identity, timing,
-sample/workload gates, units, ranking, grading, ROI and route checks.
+Run `node --test tests/player-props.test.js tests/prop-settlement.test.js` for
+parsing, identity, timing, sample/workload gates, units, ranking, grading, ROI
+and route checks. Final-box-score fixtures from all four leagues reproduce the
+delayed MLB RBI results; the worker test covers a failed game-log request and
+idempotent settlement without modifying original selections.
 Run `node scripts/validate-props.js data/prop-validation-history.json` to
 reproduce `data/prop-validation.json`. Saved source URLs and retrieval date
 are included with the normalized game logs.

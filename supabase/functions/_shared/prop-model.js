@@ -134,19 +134,68 @@
     const athletes=new Set(),out=[];
     for(const x of sorted){if(athletes.has(x.athlete_id))continue;athletes.add(x.athlete_id);out.push({...x,rank:out.length+1});if(out.length===2)break;}return out;
   }
-  function settle(pick,game,history,explicitDnp=false){
+  // Box scores update before athlete game logs. Bind every fallback to the
+  // confirmed final, original team and exact player; missing cells are not zero.
+  function boxScoreRow(pick,game,data){
+    const head=data?.header,co=head?.competitions?.find(c=>String(c.id)===String(pick.event_id)),status=co?.status?.type;
+    if(!definitions[pick.market]?.[2].includes(game.sport)||String(head?.id)!==String(pick.event_id)||String(game.id)!==String(pick.event_id))return null;
+    if(game.state!=='post'||game.completed!==true||status?.state!=='post'||status.completed!==true||/cancel|postpon|suspend|delay/i.test(status.detail||''))return null;
+    if(Date.parse(co.date)!==Date.parse(game.date)||!pick.team_id||!pick.athlete_id||!co.competitors?.some(t=>String(t.id||t.team?.id)===String(pick.team_id)))return null;
+    const stats={},pitcher=pick.market.startsWith('pitcher');let found=false,dnp=false;
+    for(const team of data.boxscore?.players||[]){
+      if(String(team.team?.id)!==String(pick.team_id))continue;
+      for(const cat of team.statistics||[]){
+        if(game.sport==='mlb'&&(cat.type||cat.name)!==(pitcher?'pitching':'batting'))continue;
+        const rows=(cat.athletes||[]).filter(a=>String(a.athlete?.id)===String(pick.athlete_id));
+        if(rows.length>1)return null;
+        for(const row of rows){
+          found=true;if(row.didNotPlay===true){dnp=true;continue;}
+          const keys=(cat.keys||[]).map(k=>k==='rebounds'?'totalRebounds':k==='fullInnings.partInnings'?'inningsPitched':k);
+          const values=statValues(keys,row.stats);
+          const ca=row.stats?.[keys.indexOf('completions/passingAttempts')];
+          if(/^\d+\/\d+$/.test(String(ca))){[values.completions,values.passingAttempts]=String(ca).split('/').map(Number);}
+          if(game.sport==='mlb'&&!pitcher&&pick.market==='totalBases'&&values.totalBases==null){
+            // ESPN's compact batting table omits doubles/triples. Its linked
+            // final at-bat results provide exact bases, checked against hits.
+            if(values.hits===0)values.totalBases=0;
+            else if(Number.isInteger(values.hits)&&values.hits>0&&row.atBats?.length){
+              const plays=new Map((data.plays||[]).map(p=>[String(p.id),p])),seen=new Set();let hits=0,bases=0,hrs=0,complete=true;
+              for(const ab of row.atBats){
+                const id=String(ab.playId||ab.id||''),play=plays.get(id);
+                if(!id||seen.has(id)||!play||!play.participants?.some(p=>p.type==='batter'&&String(p.athlete?.id)===String(pick.athlete_id))){complete=false;break;}
+                seen.add(id);const kind=(play.alternativeType||play.type)?.type,b={single:1,double:2,triple:3,'home-run':4}[kind];
+                if(b){hits++;bases+=b;if(b===4)hrs++;}
+              }
+              if(complete&&hits===values.hits&&(values.homeRuns==null||hrs===values.homeRuns))values.totalBases=bases;
+            }
+          }
+          for(const [key,value] of Object.entries(values)){
+            if(stats[key]!=null&&stats[key]!==value)return null;
+            stats[key]=value;
+          }
+        }
+      }
+    }
+    return found?{id:String(pick.event_id),date:co.date,team_id:String(pick.team_id),stats,didNotPlay:dnp}:null;
+  }
+  function settle(pick,game,history,explicitDnp=false,summary=null){
+    if(String(game.id)!==String(pick.event_id)||(pick.sport&&pick.sport!==game.sport))return null;
     if(/cancel|postpon/i.test(game.status||'')||Date.parse(pick.starts_at)!==Date.parse(game.date))return {result:'void',actual:null,reason:'Cancelled or rescheduled game; paper tracking rule'};
     if(game.state!=='post'||game.completed!==true)return null;
     if(explicitDnp)return {result:'void',actual:null,reason:'Did not play'};
-    const row=history.find(r=>String(r.id)===String(pick.event_id)),value=row?.stats?.[pick.market];
+    const row=history.find(r=>String(r.id)===String(pick.event_id));let value=row?.stats?.[pick.market],reason='Final player game log';
+    if(value==null||!Number.isFinite(value)){
+      const box=boxScoreRow(pick,game,summary);if(box?.didNotPlay)return {result:'void',actual:null,reason:'Did not play'};
+      value=box?.stats?.[pick.market];reason='Final player box score';
+    }
     if(value==null||!Number.isFinite(value))return null;
-    return {result:value===pick.line?'push':(pick.side==='over'?value>pick.line:value<pick.line)?'win':'loss',actual:value,reason:'Final player game log'};
+    return {result:value===pick.line?'push':(pick.side==='over'?value>pick.line:value<pick.line)?'win':'loss',actual:value,reason};
   }
   function performance(rows){
     const selected=rows.filter(x=>x.model_version===VERSION&&Date.parse(x.captured_at)<Date.parse(x.starts_at)),settled=selected.filter(x=>['win','loss'].includes(x.result)),priced=selected.filter(x=>['win','loss','push'].includes(x.result)&&price(x.price)!=null);
     const wins=settled.filter(x=>x.result==='win').length,profit=priced.reduce((s,x)=>s+(x.result==='win'?payout(x.price):x.result==='loss'?-1:0),0);
     return {n:settled.length,wins,losses:settled.length-wins,pushes:selected.filter(x=>x.result==='push').length,voids:selected.filter(x=>x.result==='void').length,pending:selected.filter(x=>x.result==='pending').length,priced:priced.length,profit,roi:priced.length?profit/priced.length:null};
   }
-  const api={VERSION,SPORTS,path,definitions,number,price,payout,implied,jsonField,packageFromHTML,quotes,statValues,logs,project,select,settle,performance};
+  const api={VERSION,SPORTS,path,definitions,number,price,payout,implied,jsonField,packageFromHTML,quotes,statValues,logs,project,select,boxScoreRow,settle,performance};
   root.SportsHubPropsCore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

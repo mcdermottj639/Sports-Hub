@@ -84,13 +84,17 @@ async function worker(){
   if(saved.length){
    for(const p of saved.filter((x:any)=>x.result==='pending')){
     if(g.state!=='post'&&!/cancel|postpon/i.test(g.status)&&Date.parse(g.date)===Date.parse(p.starts_at))continue;
-    const dnp=(data.boxscore?.players||[]).some((t:any)=>(t.statistics||[]).some((cat:any)=>(cat.athletes||[]).some((a:any)=>String(a.athlete?.id)===p.athlete_id&&a.didNotPlay===true)));
-    const history=g.state==='post'?await playerHistory(g.sport,p.athlete_id,year,false):[];
-    const result=C.settle(p,g,history,dnp);
+    const dnp=C.boxScoreRow(p,g,data)?.didNotPlay===true;
+    let history:any[]=[];
+    if(g.state==='post'&&g.completed&&!dnp){
+     try{history=await playerHistory(g.sport,p.athlete_id,year,false);}
+     catch(e){console.warn('Prop game log unavailable; checking final box score',g.sport,g.id,p.athlete_id,String(e).slice(0,120));}
+    }
+    const result=C.settle(p,g,history,dnp,data);
     if(result)await db(`prop_picks?id=eq.${p.id}&result=eq.pending`,'PATCH',{result:result.result,actual:result.actual,settled_at:new Date().toISOString(),settlement_note:result.reason});
    }
    const pending=await db(`prop_picks?${key}&result=eq.pending&select=id`);
-   return finish({state:g.state,coverage_status:pending.length?'saved':'settled',coverage_note:pending.length?(g.state==='post'?'Waiting for final player statistics':'Selections and original lines are saved'):'Final prop results recorded',pick_count:saved.length,next_poll_at:pending.length?(Date.parse(g.date)>Date.now()?new Date(Date.parse(g.date)+2*3600000).toISOString():later(15*60000)):null});
+   return finish({game:g,state:g.state,coverage_status:pending.length?'saved':'settled',coverage_note:pending.length?(g.state==='post'?'Waiting for final player statistics':'Selections and original lines are saved'):'Final prop results recorded',pick_count:saved.length,next_poll_at:pending.length?(Date.parse(g.date)>Date.now()?new Date(Date.parse(g.date)+2*3600000).toISOString():later(15*60000)):null});
   }
   if(g.state!=='pre'||g.seasonType===1||Date.parse(g.date)<=Date.now()||/cancel|postpon|suspend|delay/i.test(g.status))return finish({state:g.state,coverage_status:g.seasonType===1?'preseason':'not_captured',coverage_note:g.seasonType===1?'Preseason props are excluded':'No pregame prop picks were saved',next_poll_at:null});
   if(Date.parse(g.date)!==Date.parse(job.starts_at))await db(`prop_games?${key}`,'PATCH',{starts_at:g.date,game:g});
