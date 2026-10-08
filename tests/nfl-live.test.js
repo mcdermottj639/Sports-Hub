@@ -64,3 +64,10 @@ test('kickoff recovery refuses the old cached engine and restores only a saved n
  const saved=lock.recover('nfl',{...g,state:'in'},{[g.id]:{s:'nfl',q}},L.VERSION);
  assert.equal(saved.prediction.modelVersion,L.VERSION);assert.equal(saved.prediction.projMargin,4.7);assert.equal(saved.prediction.projTotal,46.1);
 });
+
+test('provisional forecasts reach browser and collector with identical values and evidence',()=>{
+ const changed=structuredClone(inputs);
+ changed.injuries.injuries=[{id:'h',injuries:[{athlete:{id:inputs.homeDepth.depthchart[0].positions.qb.athletes[0].id},status:'Questionable',date:at}]}];
+ const e=L.evidence(g,changed,at),p=L.projection(e,g,at),browser=L.browser(e,g,at);
+ assert.ok(e.candidate.provisional);assert.ok(p);assert.ok(browser.provisional);assert.equal(p.margin,browser.projMargin);assert.equal(p.p,browser.probHome);assert.equal(p.features.football.candidate.availabilityPolicy,'provisional-v1');assert.match(browser.notes.join(' '),/Questionable/);
+});

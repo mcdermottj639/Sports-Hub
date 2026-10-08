@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v299';
+const APP_VERSION = 'v300';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -5171,14 +5171,14 @@ function moneylineValuesHTML(p, g, info) {
 // Compact slate reads use the same raw market calculations as the full report.
 function compactMarketsHTML({ g, sport, p, info, atsR, totR, tier }) {
   const status = (ready) => p.locked || gameState(g) !== 'scheduled' ? 'Locked'
-    : p.blockedReasons?.length ? 'Data check' : ready ? 'Experimental' : 'Watch';
+    : p.blockedReasons?.length ? 'Data check' : p.provisional || p.football?.candidate?.provisional ? 'Provisional' : ready ? 'Experimental' : 'Watch';
   const cell = (label, value, badge) => `<div class="slate-market"><span>${label}</span><b>${value}</b><small>${badge}</small></div>`;
   const winner = p.winner.abbr || (p.homePick ? g.home.abbr : g.away.abbr) || p.winner.name;
   const spread = ATS_SPORTS.has(sport);
   return `<div class="slate-markets${spread ? '' : ' two-markets'}" aria-label="Model leans">${ 
     cell('Winner', `${esc(winner)} <strong>${p.conf}%</strong>`, status(!!tier && tier !== 'lean'))}${
     spread ? cell('Spread', atsR ? esc(atsR.label) : '—', atsR ? (atsR.pinned ? 'Model limit' : status(atsR.qualifies)) : info?.spread != null ? 'Unavailable' : 'No line') : ''}${
-    cell('Total', totR ? `${totR.side === 'OVER' ? 'O' : 'U'}${esc(totR.line)}` : '—', totR ? (p.locked || gameState(g) !== 'scheduled' ? 'Locked' : p.blockedReasons?.length || totR.broken ? 'Data check' : sport === 'cfb' ? 'Research' : status(totR.qualifies)) : p.locked ? 'Not saved' : info?.ou != null ? 'No lean' : 'No line')}</div>`;
+    cell('Total', totR ? `${totR.side === 'OVER' ? 'O' : 'U'}${esc(totR.line)}` : '—', totR ? (p.locked || gameState(g) !== 'scheduled' ? 'Locked' : p.blockedReasons?.length || totR.broken ? 'Data check' : sport === 'cfb' ? 'Research' : status(totR.qualifies)) : p.locked ? 'Not saved' : info?.ou != null ? 'No lean' : 'No line')}</div>${p.provisional || p.football?.candidate?.provisional ? `<p class="ai-read-foot">${esc(p.football?.candidate?.mainUncertainty || 'Lineup or conditions uncertain')}</p>` : ''}`;
 }
 
 function marketRowsHTML(r) {

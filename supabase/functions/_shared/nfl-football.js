@@ -91,13 +91,19 @@
     return history?.schema===1&&Number(history.currentSeason)===Number(season)&&Number.isFinite(age)&&age>=0&&age<=policy.maxSourceAgeDays*DAY&&history.coverage?.expected>=0&&(history.coverage.expected===0||history.coverage.available/history.coverage.expected>=.9);
   }
   function candidate(state,history,game,qb,config,context={}){
-    const at=context.at||new Date().toISOString(),reasons=[],uncertainties=[],ids={},mapped={},scenarios=[];
+    const at=context.at||new Date().toISOString(),reasons=[],uncertainties=[],ids={},mapped={},scenarios=[],assumptions=[];
     if(!sourceReady(history,at,game.season))reasons.push('Play-by-play feed missing, stale or incomplete');
     if(!(Date.parse(at)<Date.parse(game.date)))reasons.push('Kickoff lock: no new forecast');
     if(!config?.models||!Number.isFinite(Date.parse(config.trainedThrough))||Date.parse(config.trainedThrough)>=Date.parse(at)||Date.parse(config.selectedThrough)>=Date.parse(at))reasons.push('Eligible frozen coefficients unavailable');
     for(const side of ['home','away']){
-      const q=qb?.[side],id=history?.qbIdentities?.[q?.athleteId]?.id;ids[side]=id;mapped[side]=state?.qbs?.[id];
-      if(!q?.athleteId||!id||/unknown|unavailable/i.test(q.status||''))reasons.push(`${side}: current QB evidence unavailable`);
+      const q=qb?.[side];
+      const ruledOut=/^(out|reserve|suspend|pup|injured reserve)/i.test(q?.status||'');
+      const useBackup=ruledOut&&q?.backupId&&/^No current restriction found/.test(q.backupStatus||'');
+      const id=history?.qbIdentities?.[useBackup?q.backupId:q?.athleteId]?.id;ids[side]=id;mapped[side]=state?.qbs?.[id];
+      if(ruledOut&&!useBackup)reasons.push(`${side}: ruled-out QB; usable backup evidence unavailable`);
+      if(useBackup)assumptions.push({side,name:q.backupName||'Backup',backup:true,text:`${side}: assumes ${q.backupName||'backup'} starts; ${q.name||'listed QB'} ${q.status}`});
+      else if(q?.status&&!/^No current restriction found/.test(q.status))assumptions.push({side,name:q.name||'Listed QB',backup:false,text:`${side}: assumes ${q.name||'listed QB'} starts (${q.status})`});
+      if(!q?.athleteId||!id||/^unknown$/i.test(q.status||''))reasons.push(`${side}: current QB evidence unavailable`);
       if(!mapped[side]||mapped[side].n<25)reasons.push(`${side}: insufficient QB history`);
       if(q?.status&&!/^No current restriction found/.test(q.status))uncertainties.push(`${side}: ${q.name||'QB'} ${q.status}`);
     }
@@ -107,7 +113,7 @@
     // probability that a questionable player participates.
     if(projection)for(const side of ['home','away']){
       const q=qb?.[side],replacement=history?.qbIdentities?.[q?.backupId]?.id;
-      if(q?.status&&!/^No current restriction found/.test(q.status)&&replacement&&state.qbs[replacement]?.n>=25){
+      if(q?.status&&!/^No current restriction found/.test(q.status)&&replacement&&replacement!==ids[side]&&/^No current restriction found/.test(q.backupStatus||'')&&state.qbs[replacement]?.n>=25){
         const p=predict(features(state,game,{...ids,[side]:replacement}),config);
         if(p)scenarios.push({side,name:q.backupName||'Backup',condition:'If backup starts',...p});
       }
@@ -118,16 +124,17 @@
     if(context.coaching?.changed)uncertainties.push('Coaching change: prior team performance may transfer less well');
     const reasonLabels={core:'Passing, rushing and home field',quarterback:'Expected QB versus the measured lineup',matchup:'Protection, explosive plays and pace'};
     const contributions=projection?Object.entries(FEATURE_GROUPS).map(([group,keys])=>({group,label:reasonLabels[group],marginPoints:round(config.models.margin.features.reduce((s,k,i)=>s+(keys.includes(k)?config.models.margin.coefficients[i]*(f[k]-(config.models.margin.centers?.[k]||0)):0),0))})).sort((a,b)=>Math.abs(b.marginPoints)-Math.abs(a.marginPoints)):[];
-    const available=reasons.length===0&&uncertainties.length===0;
+    const available=reasons.length===0;
+    const provisional=available&&(uncertainties.length>0||assumptions.length>0);
     const ranges=projection?{
       margin:[projection,...scenarios].filter(p=>p.marginRange).flatMap(p=>p.marginRange),
       total:[projection,...scenarios].filter(p=>p.totalRange).flatMap(p=>p.totalRange)}:null;
-    return {version:VERSION,available,margin:available?projection.margin:null,total:available?projection.total:null,
+    return {version:VERSION,available,provisional,availabilityPolicy:'provisional-v1',assumptions,warnings:uncertainties,blockingReasons:reasons,margin:available?projection.margin:null,total:available?projection.total:null,
       probHome:available?projection.probHome:null,conditional:projection,scenarios,features:f,reasons:[...reasons,...uncertainties],
-      decision:reasons.length?'Insufficient evidence':uncertainties.length?'Wait for confirmation':'Research forecast',
+      decision:reasons.length?'Insufficient evidence':provisional?'Provisional forecast':'Research forecast',
       uncertainty:ranges?{margin:ranges.margin.length?[Math.min(...ranges.margin),Math.max(...ranges.margin)]:null,total:ranges.total.length?[Math.min(...ranges.total),Math.max(...ranges.total)]:null,level:'80% historical residual range; experimental'}:null,
-      drivers:contributions.slice(0,3),mainUncertainty:[...reasons,...uncertainties][0]||'Experimental model; future performance is unproven',
-      qb:Object.fromEntries(['home','away'].map(side=>[side,mapped[side]?{name:qb[side].name,weightedDropbacks:Math.round(mapped[side].n),epa:round(mapped[side].rating*100)/100,cpoe:round(mapped[side].accuracy),latePlays:mapped[side].lateN}:null])),
+      drivers:contributions.slice(0,3),mainUncertainty:[...reasons,...assumptions.map(a=>a.text),...uncertainties][0]||'Experimental model; future performance is unproven',
+      qb:Object.fromEntries(['home','away'].map(side=>[side,mapped[side]?{name:assumptions.find(a=>a.side===side&&a.backup)?.name||qb[side].name,weightedDropbacks:Math.round(mapped[side].n),epa:round(mapped[side].rating*100)/100,cpoe:round(mapped[side].accuracy),latePlays:mapped[side].lateN}:null])),
       factors:{clutch:{mode:'tracked, zero extra weight'},coaching:{mode:'tracked, zero extra weight'},weather:{mode:'scenario context, zero extra weight'},personnel:{mode:'QB adjustment fitted; other positions evidence only'}},
       source:{generatedAt:history?.generatedAt,lastGame:state?.lastGame,used:state?.used,coverage:history?.coverage},policy:'research-only',promotion:config?.promotion||null};
   }

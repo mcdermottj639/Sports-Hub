@@ -7,7 +7,7 @@ import {signalsEnabled, captureSignalQuotes, signalInputs, saveSignalDecision, s
 const MODEL_VERSION = 'v239'; // CFB/MLB and the retained NFL comparison.
 const NFL_LIVE = (globalThis as any).SportsHubNFLLive;
 const modelVersionFor = (sport:string) => NFL_LIVE.versionFor(sport);
-const APP_VERSION = 'v295';
+const APP_VERSION = 'v300';
 const SPORTS = ['nfl', 'cfb', 'mlb', 'nba'] as const;
 type Sport = typeof SPORTS[number];
 type Json = Record<string, any>;

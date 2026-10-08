@@ -20,18 +20,19 @@
   function projection(e,g,at=new Date().toISOString()){
     const c=e?.candidate;
     // Require fresh evidence for this pregame observation. Never substitute the
-    // baseline or a conditional injured-QB forecast when the engine withholds.
+    // baseline when essential evidence is unavailable. Provisional forecasts retain
+    // their explicit lineup assumptions in the saved football evidence.
     if(!c?.available||![c.margin,c.total,c.probHome].every(Number.isFinite)||c.probHome<=0||c.probHome>=1
       ||g.state!=='pre'||g.seasonType===1||/postpon|cancel|suspend|delay/i.test(g.statusText||g.status||'')
       ||!(Date.parse(at)<Date.parse(g.date))||!(Date.parse(e.at)<=Date.parse(at))||Date.parse(at)-Date.parse(e.at)>5*60000)return null;
     const home=c.probHome>=.5;
-    return {modelVersion:VERSION,home,p:c.probHome,conf:Math.round((home?c.probHome:1-c.probHome)*100),margin:c.margin,total:c.total,quality:[],
+    return {modelVersion:VERSION,home,p:c.probHome,conf:Math.round((home?c.probHome:1-c.probHome)*100),margin:c.margin,total:c.total,quality:c.provisional?['Provisional forecast']:[],
       features:{nfl:c.features,football:e},football:e,promotion:{mode:'owner-selected',at:ACTIVATED_AT,statisticalGatePassed:false,baselineVersion:BASELINE}};
   }
   function browser(e,g,at){
     const p=projection(e,g,at);if(!p)return null;
     return {modelVersion:VERSION,winner:p.home?g.home:g.away,homePick:p.home,probHome:p.p,conf:p.conf,projMargin:p.margin,projTotal:p.total,
-      marginSat:false,thin:false,blockedReasons:[],rating:null,sharp:null,breakdown:[],
+      provisional:!!e.candidate.provisional,marginSat:false,thin:false,blockedReasons:[],rating:null,sharp:null,breakdown:[],
       notes:['Live NFL football model · former v4 challenger',...e.candidate.drivers.map(d=>`${d.label}: ${d.marginPoints>0?'+':''}${d.marginPoints.toFixed(1)} points toward home`),e.candidate.mainUncertainty],
       features:p.features,football:e,promotion:p.promotion,evidence:'Owner-selected football model; prospective accuracy and profitability remain unproven'};
   }

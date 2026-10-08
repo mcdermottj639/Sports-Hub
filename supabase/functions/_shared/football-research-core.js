@@ -50,6 +50,8 @@
     const reports = [...(qb.injuries || []), ...(injuryFresh ? (injuries.injuries || []).find(t => String(t.id) === String(teamId))?.injuries || [] : [])];
     const relevant = reports.filter(r => (!r.athlete || athleteId(r.athlete) === result.athleteId) && /out|doubtful|questionable|reserve|suspend|pup/i.test(r.status || '') && Number.isFinite(Date.parse(r.date)) && Date.parse(r.date) <= now && now - Date.parse(r.date) < 8 * 864e5);
     result.status = relevant.length ? relevant.sort((a,b) => Date.parse(b.date)-Date.parse(a.date))[0].status : injuryFresh ? 'No current restriction found; starter unconfirmed' : 'Injury feed unavailable; starter unconfirmed';
+    const backupReports = [...(backup?.injuries || []), ...(injuryFresh ? (injuries.injuries || []).find(t => String(t.id) === String(teamId))?.injuries || [] : [])].filter(r => (!r.athlete || athleteId(r.athlete) === result.backupId) && /out|doubtful|questionable|reserve|suspend|pup/i.test(r.status || '') && Number.isFinite(Date.parse(r.date)) && Date.parse(r.date) <= now && now - Date.parse(r.date) < 8 * 864e5);
+    result.backupStatus = backupReports.length ? backupReports.sort((a,b) => Date.parse(b.date)-Date.parse(a.date))[0].status : injuryFresh ? 'No current restriction found; starter unconfirmed' : 'Injury feed unavailable; starter unconfirmed';
     return result;
   }
   function mergeSchedules(...payloads) {

@@ -665,7 +665,20 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v299** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v300** (backend **b17-fantasy-league-rules**).
+
+### v300 — Keep forecasts visible through routine uncertainty
+
+NFL candidate availability now separates missing essential evidence from lineup,
+personnel, weather and coaching uncertainty. Valid projections remain visible
+and are saved by the same cloud collector with provisional status, warnings and
+explicit QB assumptions (`availabilityPolicy: provisional-v1`). Questionable QBs
+use the listed starter; ruled-out QBs use a fresh depth-chart backup only when
+its current injury status and measured history support it. Missing backup,
+identity/history, stale core sources, invalid projections and kickoff still block.
+Compact cards show Provisional and a short caveat; full reports retain scenarios.
+No fitted coefficients, historical picks or completed results are rewritten.
+This supersedes the v276 policy of withholding every uncertain forecast.
 
 ### v299 — Settle props when player game logs lag
 
@@ -871,7 +884,9 @@ edges cannot expose blank space. Native page scrolling, nested scroll panels,
 horizontal swipes and pinch zoom remain available. The existing visual-viewport
 bottom-control positioning and keyboard handling are retained.
 
-### v276 — Promote the football engine to live NFL
+### v276 — ⚠️ Availability policy superseded in v300
+
+### Original v276 — Promote the football engine to live NFL
 
 - Owner explicitly selects the v4 football challenger as the live NFL model.
   The frozen coefficients are unchanged; this is not a statistical-gate pass.

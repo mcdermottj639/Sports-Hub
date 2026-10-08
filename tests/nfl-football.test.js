@@ -28,8 +28,8 @@ test('QB changes use difference from the measured lineup and questionable starte
  const backup=Object.values(state.qbs).find(q=>q.id!==state.teams[home].lastQB&&q.n>100&&identity(q.id));
  const f=F.features(state,game),alt=F.features(state,game,{home:backup.id});
  assert.notEqual(f.qbGap,alt.qbGap);assert.equal(f.passGap,alt.passGap);assert.equal(f.rushGap,alt.rushGap);
- const evidence={...qb,home:{...qb.home,status:'Questionable',backupId:identity(backup.id),backupName:'Backup'}};
- const c=F.candidate(state,history,game,evidence,config,{at});assert.equal(c.available,false);assert.equal(c.decision,'Wait for confirmation');assert.equal(c.scenarios.length,1);assert.equal(c.probHome,null);
+ const evidence={...qb,home:{...qb.home,status:'Questionable',backupId:identity(backup.id),backupName:'Backup',backupStatus:'No current restriction found; starter unconfirmed'}};
+ const c=F.candidate(state,history,game,evidence,config,{at});assert.equal(c.available,true);assert.equal(c.provisional,true);assert.equal(c.decision,'Provisional forecast');assert.equal(c.scenarios.length,1);assert.ok(Number.isFinite(c.probHome));
  assert.ok(c.uncertainty.margin[0]<=c.conditional.marginRange[0]);assert.ok(c.uncertainty.margin[1]>=c.scenarios[0].marginRange[1]);
 });
 test('subjective factors do not move model output or trigger automatic promotion',()=>{
@@ -57,4 +57,23 @@ test('new UI escapes evidence and keeps expanded football detail concise',()=>{
  const s={};s.globalThis=s;vm.runInNewContext(fs.readFileSync(require.resolve('../nfl-football-ui.js'),'utf8'),s);
  const c=F.candidate(state,history,game,qb,config,{at});c.mainUncertainty='<img src=x onerror=alert(1)>';
  const html=s.SportsHubNFLFootballUI.detail({candidate:c});assert.ok(!html.includes('<img'));assert.match(html,/&lt;img/);assert.equal((html.match(/<li>/g)||[]).length,3);assert.match(html,/zero extra points/);
+});
+
+test('routine uncertainty preserves fitted forecasts with explicit warnings',()=>{
+ const base=F.candidate(state,history,game,qb,config,{at});
+ for(const context of [{personnel:{lineCluster:true}},{personnel:{missing:true}},{weather:{highImpact:true}},{coaching:{changed:true}}]){
+  const c=F.candidate(state,history,game,qb,config,{at,...context});
+  assert.equal(c.available,true);assert.equal(c.provisional,true);assert.equal(c.margin,base.margin);assert.equal(c.total,base.total);assert.equal(c.probHome,base.probHome);assert.ok(c.warnings.length);assert.equal(c.blockingReasons.length,0);
+ }
+});
+test('ruled-out QBs require usable backup evidence and preserve the selected QB assumption',()=>{
+ const backup=Object.values(state.qbs).find(q=>q.id!==state.teams[home].lastQB&&q.n>100&&identity(q.id));
+ const evidence={...qb,home:{...qb.home,status:'Out',backupId:identity(backup.id),backupName:'Backup',backupStatus:'No current restriction found; starter unconfirmed'}};
+ const c=F.candidate(state,history,game,evidence,config,{at});
+ const expected=F.predict(F.features(state,game,{home:backup.id}),config);
+ assert.equal(c.available,true);assert.equal(c.provisional,true);assert.equal(c.margin,expected.margin);assert.equal(c.total,expected.total);assert.equal(c.qb.home.name,'Backup');assert.match(c.mainUncertainty,/assumes Backup starts/);
+ for(const change of [{backupStatus:'Out'},{backupId:null},{backupId:'unmapped'},{backupStatus:'Questionable'}]){
+  const blocked=F.candidate(state,history,game,{...evidence,home:{...evidence.home,...change}},config,{at});assert.equal(blocked.available,false);assert.equal(blocked.margin,null);
+ }
+ const stale=F.candidate(state,{...history,generatedAt:'2000-01-01'},game,evidence,config,{at});assert.equal(stale.available,false);
 });
