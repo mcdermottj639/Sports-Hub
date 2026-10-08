@@ -3,19 +3,36 @@
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fixed=v=>v==null?'—':Number(v).toFixed(1),KEY='sportshub:nfl-evidence:v1';
   const read=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'{}');}catch(_){return {};}};
-  function detail(e){
+  function teams(game={}){
+    const parts=String(game.matchup||'').split(' @ ');
+    const name=(v,fallback)=>typeof v==='string'?v:v?.name||v?.abbr||fallback;
+    return {home:name(game.home,parts[1]||'Home team'),away:name(game.away,parts.length===2?parts[0]:'Away team')};
+  }
+  function margin(value,game,unit='pts'){
+    if(value==null||!Number.isFinite(Number(value)))return 'Unavailable';
+    const v=Number(value),t=teams(game);
+    return v===0?'Even':`${esc(v>0?t.home:t.away)} by ${fixed(Math.abs(v))} ${esc(unit)}`;
+  }
+  function contribution(value,game){
+    if(value==null||!Number.isFinite(Number(value)))return 'Unavailable';
+    const v=Number(value),t=teams(game);
+    return v===0?'0.0 pts · no team edge':`${fixed(Math.abs(v))} pts toward ${esc(v>0?t.home:t.away)}`;
+  }
+  function detail(e,game={}){
     const c=e?.candidate;if(!c?.version)return '';
+    const t=teams(game);
+    const uncertainty=String(c.mainUncertainty||'').replace(/\b(home|away):/g,(_,side)=>t[side]+':');
     const context=e.context||{},qb=c.qb||{},p=context.personnel,w=context.weather,co=context.coaching;
-    const scenarios=(c.scenarios||[]).map(s=>`<tr><td>${esc(s.name)} starts</td><td>${fixed(s.margin)}</td><td>${fixed(s.total)}</td></tr>`).join('');
+    const scenarios=(c.scenarios||[]).map(s=>`<tr><td>${esc(s.name)} starts</td><td>${margin(s.margin,game)}</td><td>${fixed(s.total)}</td></tr>`).join('');
     const range=(a)=>a?.length===2?`${fixed(a[0])} to ${fixed(a[1])}`:'unavailable';
-    return `<section class="nf-detail"><strong>Football read</strong><ul class="nf-drivers">${(c.drivers||[]).slice(0,3).map(d=>`<li>${esc(d.label)} <b>${d.marginPoints>0?'+':''}${fixed(d.marginPoints)} pts</b></li>`).join('')}</ul><p class="nf-uncertainty">${esc(c.mainUncertainty)}</p>
-      <details><summary>QB, personnel &amp; conditions</summary><div class="nf-factors">${['home','away'].map(side=>`<p><b>${side==='home'?'Home':'Away'} QB · ${esc(qb[side]?.name||'Unavailable')}</b><br>${qb[side]?`${qb[side].weightedDropbacks} weighted dropbacks · EPA/dropback ${Number(qb[side].epa).toFixed(2)} · accuracy vs expectation ${fixed(qb[side].cpoe)}%`:'Insufficient verified player history'}</p>`).join('')}</div>
+    return `<section class="nf-detail"><strong>Football read</strong><ul class="nf-drivers">${(c.drivers||[]).slice(0,3).map(d=>`<li>${esc(d.label)} <b>${contribution(d.marginPoints,game)}</b></li>`).join('')}</ul><p class="nf-uncertainty">${esc(uncertainty)}</p>
+      <details><summary>QB, personnel &amp; conditions</summary><div class="nf-factors">${['home','away'].map(side=>`<p><b>${esc(t[side])} QB · ${esc(qb[side]?.name||'Unavailable')}</b><br>${qb[side]?`${qb[side].weightedDropbacks} weighted dropbacks · EPA/dropback ${Number(qb[side].epa).toFixed(2)} · accuracy vs expectation ${fixed(qb[side].cpoe)}%`:'Insufficient verified player history'}</p>`).join('')}</div>
       <p><b>Personnel:</b> ${p?.missing?'Feed incomplete':p?.players?.length?p.players.map(x=>`${esc(x.name)} (${esc(x.position)}, ${esc(x.status)})`).join('; '):'No current restrictions found among the first two depth-chart players at each position.'}</p>
       <p><b>Weather:</b> ${w?.available?`${w.temperature==null?'Temperature unavailable':esc(w.temperature)+'°F'} · ${w.windMph==null?'wind unavailable':esc(w.windMph)+' mph wind'} · ${w.precipitationChance==null?'precipitation unavailable':esc(w.precipitationChance)+'% precipitation chance'}`:'Forecast unavailable'}. Weather has no fitted point adjustment.</p>
-      <p><b>Coaching &amp; execution:</b> ${['home','away'].map(side=>{const s=co?.[side];return s?`${side}: ${esc(s.name||'coach unavailable')} · fourth-down go attempts ${s.fourthDownAttempts}/${s.fourthDownOpportunities} · ${s.latePlays} late-close plays · ${s.coldDefensePlays} cold-weather rush-defense plays`:side+': unavailable';}).join('; ')}. These are team tendencies across the history window, not isolated coaching effects. Clutch, coaching and cold-weather splits add zero extra points.</p>
-      ${scenarios?`<table><caption>Conditional QB scenarios · home margin in points</caption><thead><tr><th>Scenario</th><th>Margin</th><th>Total</th></tr></thead><tbody><tr><td>Forecast QB assumption</td><td>${fixed(c.conditional?.margin)}</td><td>${fixed(c.conditional?.total)}</td></tr>${scenarios}</tbody></table><p>No assumed playing probabilities. The main forecast uses the stated QB assumption; alternatives show how the matchup could change.</p>`:''}
-      <p><b>80% historical outcome range:</b> margin ${range(c.uncertainty?.margin)}; total ${range(c.uncertainty?.total)}. Experimental residual ranges; personnel and weather uncertainty may not be fully captured.</p>
-      <p>Fitted win probability ${c.probHome==null?'withheld':(100*c.probHome).toFixed(0)+'% home'}; not calibrated on prospective results yet. Source refreshed ${esc(c.source?.generatedAt)}. ${c.source?.used||0} historical games used; current-season coverage ${c.source?.coverage?.available??'—'}/${c.source?.coverage?.expected??'—'}. Contributions are relative to the training average, positive toward the home team. They explain model arithmetic, not causal effects.</p></details></section>`;
+      <p><b>Coaching &amp; execution:</b> ${['home','away'].map(side=>{const s=co?.[side];return s?`${esc(t[side])}: ${esc(s.name||'coach unavailable')} · fourth-down go attempts ${s.fourthDownAttempts}/${s.fourthDownOpportunities} · ${s.latePlays} late-close plays · ${s.coldDefensePlays} cold-weather rush-defense plays`:esc(t[side])+': unavailable';}).join('; ')}. These are team tendencies across the history window, not isolated coaching effects. Clutch, coaching and cold-weather splits add zero extra points.</p>
+      ${scenarios?`<table><caption>Conditional QB scenarios · projected winner</caption><thead><tr><th>Scenario</th><th>Projected winner</th><th>Total</th></tr></thead><tbody><tr><td>Forecast QB assumption</td><td>${margin(c.conditional?.margin,game)}</td><td>${fixed(c.conditional?.total)}</td></tr>${scenarios}</tbody></table><p>No assumed playing probabilities. The main forecast uses the stated QB assumption; alternatives show how the matchup could change.</p>`:''}
+      <p><b>80% historical outcome range:</b> margin for ${esc(t.home)} (${esc(t.home)} minus ${esc(t.away)}) ${range(c.uncertainty?.margin)}; total ${range(c.uncertainty?.total)}. Experimental residual ranges; personnel and weather uncertainty may not be fully captured.</p>
+      <p>Fitted win probability ${c.probHome==null?'withheld':(100*c.probHome).toFixed(0)+'% for '+esc(t.home)}; not calibrated on prospective results yet. Source refreshed ${esc(c.source?.generatedAt)}. ${c.source?.used||0} historical games used; current-season coverage ${c.source?.coverage?.available??'—'}/${c.source?.coverage?.expected??'—'}. Contributions are relative to the training average, positive toward ${esc(t.home)} and negative toward ${esc(t.away)}. They explain model arithmetic, not causal effects.</p></details></section>`;
   }
   function validation(rows){
     const v=root.SportsHubNFLValidation?.evaluate(rows);if(!v)return '';
@@ -43,5 +60,5 @@
       section.querySelector('[data-nf-export]').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({schema:1,observations:read()},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='nfl-scouting-notebook.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
     }render();
   }
-  root.SportsHubNFLFootballUI={detail,validation,mountEvidence};
+  root.SportsHubNFLFootballUI={detail,validation,mountEvidence,teams,margin,contribution};
 })(globalThis);

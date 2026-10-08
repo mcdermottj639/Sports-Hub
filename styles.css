@@ -3468,7 +3468,7 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .nf-detail summary, .nf-validation > summary, .nf-scouting > summary { cursor: pointer; font-weight: 700; padding: .65rem 0; }
 .nf-drivers { list-style: none; padding: 0; margin: .45rem 0; }
 .nf-drivers li { display: flex; gap: .6rem; justify-content: space-between; padding: .4rem 0; border-bottom: 1px solid var(--border, #d8e0d9); }
-.nf-drivers b { white-space: nowrap; }
+.nf-drivers b { white-space: normal; text-align: right; flex: 0 1 48%; overflow-wrap: anywhere; }
 .nf-uncertainty { margin: .45rem 0; padding: .5rem .65rem; background: rgba(151,112,28,.09); border-left: 3px solid #aa842f; font-size: .82rem; line-height: 1.45; overflow-wrap: anywhere; }
 .nf-detail p, .nf-validation p, .nf-scouting p { line-height: 1.5; font-size: .85rem; overflow-wrap: anywhere; }
 .nf-detail table, .nf-validation table { width: 100%; border-collapse: collapse; font-size: .8rem; table-layout: fixed; }
