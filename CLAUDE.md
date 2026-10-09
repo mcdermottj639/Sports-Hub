@@ -665,7 +665,24 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v300** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v302** (backend **b17-fantasy-league-rules**).
+
+### v302 — Track every available provisional NFL market
+
+The collector now treats the NFL engine's evidenced `Provisional forecast` label
+as an assumption warning rather than a spread/total capture blocker. Every saved
+market retains its original quality label and football assumptions. Other quality
+failures, missing lines, invalid projections and kickoff gates remain enforced.
+Regression coverage reproduces TB @ DAL and tests those blocking cases.
+`scripts/repair-provisional-nfl.sql` restores only missing markets from immutable
+pregame moneyline snapshots with original projections, odds and observation time;
+it records the source row and actual restoration time without replacing picks.
+The live collector is redeployed with JWT verification preserved.
+
+### v301 — Clarify team direction throughout model reports
+
+Spread and margin displays name the referenced team; the shared game-report
+presentation and direction labels are retained unchanged by v302.
 
 ### v300 — Keep forecasts visible through routine uncertainty
 
@@ -679,6 +696,7 @@ identity/history, stale core sources, invalid projections and kickoff still bloc
 Compact cards show Provisional and a short caveat; full reports retain scenarios.
 No fitted coefficients, historical picks or completed results are rewritten.
 This supersedes the v276 policy of withholding every uncertain forecast.
+⚠️ Spread/total capture of these provisional forecasts is corrected in v302.
 
 ### v299 — Settle props when player game logs lag
 

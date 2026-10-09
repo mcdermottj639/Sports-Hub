@@ -50,6 +50,17 @@ test('official collector saves the new version, all available markets and model 
  assert.equal(rows.find(r=>r.market==='total').snapshot.researchOnly,false);assert.equal(rows.find(r=>r.market==='spread').projection,8);
  assert.equal(rows[0].snapshot.forecast.total,50);assert.equal(rows[0].snapshot.features.football.marker,'shared');
  assert.equal(rows[0].model_probability,.7);assert.equal(rows[1].model_probability,null);assert.equal(c.rowsFor('nfl',game,null).length,0);
+ // Reproduce TB @ DAL: the backup-QB assumption must accompany all markets.
+ const provisional={...p,margin:4.2,total:47.8,quality:['Provisional forecast'],features:{football:{candidate:{provisional:true,assumptions:[{text:'Assumes backup starts'}]}}}};
+ const affected={...game,home:{...game.home,abbr:'DAL'},away:{...game.away,abbr:'TB'},odds:{...game.odds,spread:-8.5,overUnder:47.5}};
+ const recovered=c.rowsFor('nfl',affected,provisional);
+ assert.equal(recovered.length,3);assert.equal(recovered[1].selection,'TB +8.5');assert.equal(recovered[2].selection,'OVER 47.5');
+ assert.ok(recovered.every(r=>r.quality.includes('Provisional forecast')&&r.snapshot.features.football.candidate.assumptions[0].text==='Assumes backup starts'));
+ assert.equal(c.rowsFor('nfl',affected,{...provisional,quality:['Provisional forecast','Incomplete team history']}).length,1);
+ assert.equal(c.rowsFor('nfl',affected,{...provisional,features:{}}).length,1);
+ assert.equal(c.rowsFor('cfb',affected,provisional).length,1);
+ assert.equal(c.rowsFor('nfl',affected,{...provisional,margin:NaN,total:NaN}).length,1);
+ assert.equal(c.rowsFor('nfl',{...affected,odds:null},provisional).length,1);
 });
 test('official results select current versions per sport and exclude legacy NFL plus research rows',()=>{
  const q={at:'2026-10-03T06:00Z',start:'2026-10-04T17:00Z',price:-110,prob:.6};

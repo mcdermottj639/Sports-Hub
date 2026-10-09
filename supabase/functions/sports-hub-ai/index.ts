@@ -7,7 +7,7 @@ import {signalsEnabled, captureSignalQuotes, signalInputs, saveSignalDecision, s
 const MODEL_VERSION = 'v239'; // CFB/MLB and the retained NFL comparison.
 const NFL_LIVE = (globalThis as any).SportsHubNFLLive;
 const modelVersionFor = (sport:string) => NFL_LIVE.versionFor(sport);
-const APP_VERSION = 'v300';
+const APP_VERSION = 'v302';
 const SPORTS = ['nfl', 'cfb', 'mlb', 'nba'] as const;
 type Sport = typeof SPORTS[number];
 type Json = Record<string, any>;
@@ -220,7 +220,22 @@ function rowBase(sport:Sport,g:any,p:any,o:any,market:string,selection:string,ho
   const probability=market==='moneyline'||sport==='nfl'||sport==='nba'?null:(globalThis as any).SportsHubMarketProbability.estimate({sport,market,projection,line,home,side:selection.split(' ')[0],at});
   return {event_id:g.id,sport,market,model_version:modelVersionFor(sport),app_version:APP_VERSION,matchup:`${g.away.abbr||g.away.name} @ ${g.home.abbr||g.home.name}`,slate_date:slateDate(g),starts_at:g.date,captured_at:at,selection,selection_home:home,confidence:market==='moneyline'?p.conf:null,tier,price,line,projection,model_probability:market==='moneyline'?(home?p.p:1-p.p):probability?.prob??null,market_probability:fairProbability(market,home,selection,o),provider:o?.provider||null,quality:p.quality,snapshot:{researchOnly:market==='total'&&sport==='cfb',historyPolicy:sport==='mlb'?'current-season-regular-plus-post-v1':null,odds:o,features:p.features,neutral:g.neutral,engine:`scheduled-${modelVersionFor(sport)}`,forecast:{margin:p.margin,total:p.total},...(p.promotion?{promotion:p.promotion}:{}),...(probability?{probability}:{} )}};
 }
-function rowsFor(sport:Sport,g:any,p:any){if(!p)return [];const o=odds(g.odds,g),tt=tierFor(p,o),rows=[rowBase(sport,g,p,o,'moneyline',p.home?g.home.name:g.away.name,p.home,null,null,pickPrice(p,o),tt.tier)];if(o?.spread!=null&&ATS_EDGE_MIN[sport]!=null){const edge=p.margin+o.spread,home=edge>0;if(Number.isFinite(p.margin)&&!p.quality.length)rows.push(rowBase(sport,g,p,o,'spread',`${home?g.home.abbr:g.away.abbr} ${(home?o.spread:-o.spread)>0?'+':''}${home?o.spread:-o.spread}`,home,o.spread,p.margin,home?o.hSpreadPrice:o.aSpreadPrice,null));}if(o?.ou!=null&&p.total!=null){const diff=p.total-o.ou,side=diff>0?'OVER':'UNDER';if(Number.isFinite(p.total)&&!p.quality.length)rows.push(rowBase(sport,g,p,o,'total',`${side} ${o.ou}`,null,o.ou,p.total,side==='OVER'?o.overPrice:o.underPrice,sport!=='cfb'?(Math.abs(diff)>=TOTAL_MIN[sport]*(sport==='nfl'?2:1.75)?'best':'edge'):null));}return rows;}
+function rowsFor(sport:Sport,g:any,p:any){
+  if(!p)return [];
+  const o=odds(g.odds,g),tt=tierFor(p,o),rows=[rowBase(sport,g,p,o,'moneyline',p.home?g.home.name:g.away.name,p.home,null,null,pickPrice(p,o),tt.tier)];
+  // The NFL engine already checks essential evidence before accepting a
+  // projection. Its provisional label documents assumptions, not missing data.
+  const blocked=p.quality.some((flag:any)=>!(sport==='nfl'&&p.features?.football?.candidate?.provisional===true&&flag==='Provisional forecast'));
+  if(o?.spread!=null&&ATS_EDGE_MIN[sport]!=null){
+    const edge=p.margin+o.spread,home=edge>0;
+    if(Number.isFinite(p.margin)&&!blocked)rows.push(rowBase(sport,g,p,o,'spread',`${home?g.home.abbr:g.away.abbr} ${(home?o.spread:-o.spread)>0?'+':''}${home?o.spread:-o.spread}`,home,o.spread,p.margin,home?o.hSpreadPrice:o.aSpreadPrice,null));
+  }
+  if(o?.ou!=null&&p.total!=null){
+    const diff=p.total-o.ou,side=diff>0?'OVER':'UNDER';
+    if(Number.isFinite(p.total)&&!blocked)rows.push(rowBase(sport,g,p,o,'total',`${side} ${o.ou}`,null,o.ou,p.total,side==='OVER'?o.overPrice:o.underPrice,sport!=='cfb'?(Math.abs(diff)>=TOTAL_MIN[sport]*(sport==='nfl'?2:1.75)?'best':'edge'):null));
+  }
+  return rows;
+}
 
 const SB_URL=Deno.env.get('SUPABASE_URL')!,SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 async function db(path:string,init:RequestInit={}){const response=await fetch(`${SB_URL}/rest/v1/${path}`,{...init,headers:{apikey:SERVICE,Authorization:`Bearer ${SERVICE}`,'Content-Type':'application/json',...(init.headers||{})}});if(!response.ok)throw new Error(`Database ${response.status}: ${await response.text()}`);const text=await response.text();return text?JSON.parse(text):null;}
