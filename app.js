@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v302';
+const APP_VERSION = 'v303';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -5169,6 +5169,16 @@ function moneylineValuesHTML(p, g, info) {
       return `<div role="row"><span role="cell">${esc(team.abbr || team.name)}</span><span role="cell">${fmtML(v?.price)}</span><span role="cell">${(prob * 100).toFixed(1)}% / ${v ? (v.breakeven * 100).toFixed(1) + '%' : '—'}</span><span role="cell">${v ? (v.ev >= 0 ? '+' : '') + (v.ev * 100).toFixed(1) + '%' : '—'}</span></div>`;
     }).join('')}</div><p>Needed = win rate to break even at that price. EV = hypothetical return per unit staked if the model probability is right; it is not measured ROI. Both sides are shown, including underdogs below 50%. This comparison does not create a second tracked pick.</p></details>`;
 }
+// v303 display-only calibration filter (Oct 2026 read): NFL winners under 60%
+// went 7-15 and NFL totals 9-14 since v231. Labels only — nothing about what is
+// computed, saved or graded changes, and no model constant moves.
+function nflNoBet(sport, market, p) {
+  const NFL_NOBET_CONF = 60;
+  if (sport !== 'nfl' || !p) return '';
+  if (market === 'winner' && p.conf < NFL_NOBET_CONF) return `No-bet: NFL winners under ${NFL_NOBET_CONF}% are 7-15 this season`;
+  if (market === 'total') return 'No-bet: NFL totals are 9-14 this season';
+  return '';
+}
 // Compact slate reads use the same raw market calculations as the full report.
 function compactMarketsHTML({ g, sport, p, info, atsR, totR, tier }) {
   const status = (ready) => p.locked || gameState(g) !== 'scheduled' ? 'Locked'
@@ -5177,9 +5187,9 @@ function compactMarketsHTML({ g, sport, p, info, atsR, totR, tier }) {
   const winner = p.winner.abbr || (p.homePick ? g.home.abbr : g.away.abbr) || p.winner.name;
   const spread = ATS_SPORTS.has(sport);
   return `<div class="slate-markets${spread ? '' : ' two-markets'}" aria-label="Model leans">${ 
-    cell('Winner', `${esc(winner)} <strong>${p.conf}%</strong>`, status(!!tier && tier !== 'lean'))}${
+    cell('Winner', `${esc(winner)} <strong>${p.conf}%</strong>`, nflNoBet(sport, 'winner', p) ? 'No-bet' : status(!!tier && tier !== 'lean'))}${
     spread ? cell('Spread', atsR ? esc(atsR.label) : '—', atsR ? (atsR.pinned ? 'Model limit' : status(atsR.qualifies)) : info?.spread != null ? 'Unavailable' : 'No line') : ''}${
-    cell('Total', totR ? `${totR.side === 'OVER' ? 'O' : 'U'}${esc(totR.line)}` : '—', totR ? (p.locked || gameState(g) !== 'scheduled' ? 'Locked' : p.blockedReasons?.length || totR.broken ? 'Data check' : sport === 'cfb' ? 'Research' : status(totR.qualifies)) : p.locked ? 'Not saved' : info?.ou != null ? 'No lean' : 'No line')}</div>${p.provisional || p.football?.candidate?.provisional ? `<p class="ai-read-foot">${esc(p.football?.candidate?.mainUncertainty || 'Lineup or conditions uncertain')}</p>` : ''}`;
+    cell('Total', totR ? `${totR.side === 'OVER' ? 'O' : 'U'}${esc(totR.line)}` : '—', totR ? (nflNoBet(sport, 'total', p) ? 'No-bet' : p.locked || gameState(g) !== 'scheduled' ? 'Locked' : p.blockedReasons?.length || totR.broken ? 'Data check' : sport === 'cfb' ? 'Research' : status(totR.qualifies)) : p.locked ? 'Not saved' : info?.ou != null ? 'No lean' : 'No line')}</div>${p.provisional || p.football?.candidate?.provisional ? `<p class="ai-read-foot">${esc(p.football?.candidate?.mainUncertainty || 'Lineup or conditions uncertain')}</p>` : ''}`;
 }
 
 function marketRowsHTML(r) {
@@ -5198,16 +5208,16 @@ function marketRowsHTML(r) {
   const marginWinner = p.projMargin >= 0 ? g.home : g.away;
   const tier = r.tier ?? pickTier(p, info, marketGap(p, info));
   const section = (name, question, selection, badge, body) => `<section class="ai-market-read"><details class="ai-market-expand"><summary aria-label="${name}: ${esc(question)} Show analysis"><div class="market-row-main"><b class="market-row-label">${name}</b><div class="ai-market-selection">${selection}</div></div><span class="ai-status">${badge}</span><span class="market-row-chevron" aria-hidden="true">⌄</span></summary><div class="ai-market-analysis"><p class="ai-market-question">${question}</p>${body}</div></details></section>`;
-  const ml = section('Moneyline', 'Who wins the game?', `${esc(p.winner.abbr || (p.homePick ? g.home.abbr : g.away.abbr) || p.winner.name)} <strong>${p.conf}%</strong>`, status(!!tier && tier !== 'lean'),
-    `<p><b>${esc(p.winner.name)}</b>. ${value ? `Price <b>${fmtML(value.price)}</b> needs ${(value.breakeven * 100).toFixed(1)}% wins to break even.` : 'No usable price for this side — value is unknown.'} ${gap != null ? `Model gap: ${gap >= 0 ? '+' : ''}${gap.toFixed(1)} percentage points vs no-vig market.` : 'Both prices are needed for a no-vig market comparison.'}</p>
+  const ml = section('Moneyline', 'Who wins the game?', `${esc(p.winner.abbr || (p.homePick ? g.home.abbr : g.away.abbr) || p.winner.name)} <strong>${p.conf}%</strong>`, nflNoBet(sport, 'winner', p) ? 'No-bet' : status(!!tier && tier !== 'lean'),
+    `${nflNoBet(sport, 'winner', p) ? `<p class="ai-nobet">${esc(nflNoBet(sport, 'winner', p))}. Still tracked and graded.</p>` : ''}<p><b>${esc(p.winner.name)}</b>. ${value ? `Price <b>${fmtML(value.price)}</b> needs ${(value.breakeven * 100).toFixed(1)}% wins to break even.` : 'No usable price for this side — value is unknown.'} ${gap != null ? `Model gap: ${gap >= 0 ? '+' : ''}${gap.toFixed(1)} percentage points vs no-vig market.` : 'Both prices are needed for a no-vig market comparison.'}</p>
     ${marketP != null ? comparisonGraphic(prob * 100, marketP * 100, '%') : ''}${moneylineValuesHTML(p, g, info)}`);
   const spreadProbability = marketProbabilityFor(r, 'spread'), totalProbability = marketProbabilityFor(r, 'total');
   const spread = section('Spread', 'Who covers the handicap?', !ATS_SPORTS.has(sport) ? 'Not modeled for this league' : ar ? `${esc(ar.label)}${spreadProbability ? ` · ${(spreadProbability.prob * 100).toFixed(0)}% experimental` : ''}` : 'Waiting for a usable spread', status(!!ar?.qualifies),
     ar ? `<p>Projected winner: ${esc(marginWinner.abbr || marginWinner.name)} by ${Math.abs(ar.proj).toFixed(1)}. Difference: <b>${Math.abs(ar.edge).toFixed(1)} points</b> toward ${esc(ar.abbr)} covering. ${ar.pinned ? 'Projection limit reached; no signal.' : ''}</p>
       ${comparisonGraphic(ar.proj, -ar.homeSpread, '', true, g)}<small>${ATS_EDGE_MIN[sport]}-point signal threshold. Probability estimates are experimental.</small>${marketProbabilityHTML(spreadProbability)}`
       : '<p>A winner forecast is not a spread pick.</p>');
-  const total = section('Total', 'How much will both teams score?', tr ? `${tr.side} ${tr.line}${totalProbability ? ` · ${(totalProbability.prob * 100).toFixed(0)}% experimental` : ''}` : p.projTotal != null && info?.ou != null ? 'No difference / no signal' : 'Waiting for a total', live ? 'Locked' : blocked || tr?.broken ? 'Data check' : sport === 'cfb' ? 'Research' : status(!!tr?.qualifies),
-    tr ? `<p>${sport === 'cfb' ? 'Tracked for evaluation; not a promoted pick. ' : ''}${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'points'} ${tr.diff > 0 ? 'above' : 'below'} the book. ${tr.broken ? '<b>Outside the sanity limit — not a signal.</b>' : ''}</p>
+  const total = section('Total', 'How much will both teams score?', tr ? `${tr.side} ${tr.line}${totalProbability ? ` · ${(totalProbability.prob * 100).toFixed(0)}% experimental` : ''}` : p.projTotal != null && info?.ou != null ? 'No difference / no signal' : 'Waiting for a total', tr && nflNoBet(sport, 'total', p) ? 'No-bet' : live ? 'Locked' : blocked || tr?.broken ? 'Data check' : sport === 'cfb' ? 'Research' : status(!!tr?.qualifies),
+    tr ? `${nflNoBet(sport, 'total', p) ? `<p class="ai-nobet">${esc(nflNoBet(sport, 'total', p))}. Still tracked and graded.</p>` : ''}<p>${sport === 'cfb' ? 'Tracked for evaluation; not a promoted pick. ' : ''}${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'points'} ${tr.diff > 0 ? 'above' : 'below'} the book. ${tr.broken ? '<b>Outside the sanity limit — not a signal.</b>' : ''}</p>
       ${comparisonGraphic(tr.proj, tr.line, '')}<small>${TOT_EDGE_MIN[sport] ?? 1}-${sport === 'mlb' ? 'run' : 'point'} signal threshold. Probability estimates are experimental.</small>${marketProbabilityHTML(totalProbability)}`
       : '<p>No total signal without both a projection and a line.</p>');
   const provenance = r.linePregame ? `Saved pregame line${lineAtLabel(r.lineAt) ? ' · ' + lineAtLabel(r.lineAt) : ''}. Model and lines are locked to saved pregame evidence.` : info?.provider ? `Odds source: ${info.provider}.` : 'Odds source unavailable.';

@@ -3534,3 +3534,4 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .saved-game-report pre { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .saved-report-market { border-top: 1px solid var(--line); padding: 10px 0; }
 .saved-report-market > span { display: block; color: var(--muted); font-size: 12px; }
+.ai-nobet { margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--wm); }

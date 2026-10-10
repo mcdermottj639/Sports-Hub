@@ -33,7 +33,7 @@ function load() {
     }
     script.runInContext(s);
   }
-  for (const name of ['statVal', 'shrinkERA', 'cfbTierFromName', 'cfbRating', 'normCdf', 'invNorm', 'projMarginFor', 'predictGame', 'computePregamePrediction', 'restoreForecast', 'normOdds', 'marketHomeProb', 'pickedPrice', 'pickTier', 'marketGap', 'atsRead', 'atsCall', 'totalRead', 'recordResult', 'recordPick', 'recordAtsPick', 'recordTotalPick', 'atsResult', 'gradePending', 'tallyStats', 'marketProbabilityFor', 'marketProbabilityHTML', 'pickSnapshot', 'commitRow', 'slateDateFor', 'savedPickForGame', 'nextWeekRequest', 'comparisonGraphic', 'moneylineValuesHTML', 'marketRowsHTML']) {
+  for (const name of ['statVal', 'shrinkERA', 'cfbTierFromName', 'cfbRating', 'normCdf', 'invNorm', 'projMarginFor', 'predictGame', 'computePregamePrediction', 'restoreForecast', 'normOdds', 'marketHomeProb', 'pickedPrice', 'pickTier', 'marketGap', 'atsRead', 'atsCall', 'totalRead', 'recordResult', 'recordPick', 'recordAtsPick', 'recordTotalPick', 'atsResult', 'gradePending', 'tallyStats', 'marketProbabilityFor', 'marketProbabilityHTML', 'pickSnapshot', 'commitRow', 'slateDateFor', 'savedPickForGame', 'nextWeekRequest', 'comparisonGraphic', 'moneylineValuesHTML', 'nflNoBet', 'marketRowsHTML']) {
     const match = source.match(new RegExp(`^(?:async )?function ${name}\\([^]*?^}`, 'm'));
     assert.ok(match, name); vm.runInContext(match[0], s);
   }
@@ -190,6 +190,14 @@ test('market graphics name the projected winner, not the side taking points', ()
   assert.match(html, /AWY \+10/); assert.match(html, /Projected winner: HOM by 7.0/);
   assert.match(html, /Compare both moneyline prices/); assert.match(html, /role="img"/);
   assert.doesNotMatch(html, /NaN|undefined|guaranteed/i);
+});
+test('NFL no-bet label is display-only: under-60% winners and every total', () => {
+  const s = load();
+  assert.match(s.nflNoBet('nfl', 'winner', { conf: 59 }), /No-bet/);
+  assert.equal(s.nflNoBet('nfl', 'winner', { conf: 60 }), '');
+  assert.match(s.nflNoBet('nfl', 'total', { conf: 80 }), /No-bet/);
+  assert.equal(s.nflNoBet('cfb', 'total', { conf: 50 }), '');
+  assert.equal(s.nflNoBet('mlb', 'winner', { conf: 51 }), '');
 });
 test('MLB starter enrichment reads pitching only and preserves scoreboard fallback', async () => {
   const s = load();

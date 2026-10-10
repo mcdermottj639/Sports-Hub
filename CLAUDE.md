@@ -665,7 +665,18 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v302** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v303** (backend **b17-fantasy-league-rules**).
+
+### v303 — NFL no-bet labels from the October calibration read
+
+Display-only. `nflNoBet(sport, market, p)` labels NFL winner picks under 60%
+confidence and every NFL total as **No-bet** on compact slate cards and in the
+game-report market rows, with the record that justifies it. Nothing about what
+is computed, saved, recorded or graded changes, and **no model constant moved**
+— the read (open measurements rows 8-9) is a filter, not a refit, per the
+measure-then-fit rule. The label is removed if the Nov 1 re-read shows the
+under-60% bucket at 50% or better; the NFL moneyline calibration is refit only
+if that bucket is still under 40% at n ≥ 40.
 
 ### v302 — Track every available provisional NFL market
 
@@ -5021,8 +5032,8 @@ index, not the argument.
 | 5 | **Record by tier** | Backtesting → Record by tier | v164 stored `gp`/`tr` | reads a real W-L instead of "collecting". **Do not touch `EDGE_BAR` before this has ~20 graded picks.** |
 | 6 | **ATS record** | Backtesting → by sport | v171 fixed grading (`:s` was never stripped, so ATS never graded at all) | any non-zero number. `PD_SD` (13.5/16.5) and `ATS_EDGE_MIN` (2/3) are guesses and are the first things to re-fit. **v204: read the "margin vs the book" row (every priced game) FIRST, never the picks-only row** — CFB read −11.8 on picks, and 19 of 19 spread picks were the dog. That is what v205's rating is fitted against. |
 | 7 | **Sharp money split** | Report Card → 💰 Sharp money | v160 stored `sh`; **v200 fixed why it never grew** | **Read the new "Splits feed live at pick time" row FIRST.** Until v200 the recorder logged the whole slate on an 8s leash against a 30-60s cold start, so ~99% of picks were made blind — 6 graded sharp picks at n=400+. It needs 20+ graded picks made with the feed live, and **only picks dated after the v200 ship count**; the 6 before it are a different population. If the coverage row is still near 0 a week after v200, the backend is not answering at all and the factor is dead weight, not unproven. |
-| 8 | **🏈 NFL live-market validation** | export, filter `s: 'nfl'` + `d >= 20260910`, then split at v231 | **⚠️ SUPERSEDED in v231:** moneyline/spread/total coefficients were fit chronologically on 2017–2023, selected on 2024 and tested once on untouched 2025 finals | The remaining question is betting performance: ROI and CLV require exact stored prices. Keep n beside every live-season number and do not refit from a thin 2026 bucket. **Every NFL pick before 10 Sep 2026 still predates BOTH the v83 confidence meta AND the v138 leak fix. Exclude it.** |
-| 9 | **🎓 CFB calibration + first ATS sample** | export, filter `s: 'cfb'` + `d >= 20260829` | **v205 rebuilt the CFB margin** (team rating, margin-primary) | **Split at the v205 ship** — the 19 picks before it were 19/19 dogs off a model that could not see the FBS/FCS gap; they are a different population. After it: read `sportshub:marginbias` (v204) FIRST — mean favourite-oriented error near 0 and dog-side well under 100% says the rating prices the market; then the ATS W-L says whether it beats it. `CFB_TIER_PTS` / `CFB_MARGIN_K` are the constants to refit, from the instrument, never from the picks. |
+| 8 | **🏈 NFL live-market validation** | export, filter `s: 'nfl'` + `d >= 20260910`, then split at v231 | **⚠️ SUPERSEDED in v231:** moneyline/spread/total coefficients were fit chronologically on 2017–2023, selected on 2024 and tested once on untouched 2025 finals | The remaining question is betting performance: ROI and CLV require exact stored prices. Keep n beside every live-season number and do not refit from a thin 2026 bucket. **Every NFL pick before 10 Sep 2026 still predates BOTH the v83 confidence meta AND the v138 leak fix. Exclude it.** **10 Oct 2026 read (v231 cohort, since 16 Sep):** ML 22-22 (50.0%, n=44) vs 62.5% stated; 50–59% bucket 7-15 (31.8%, n=22); 60%+ 15-7 (68.2%, n=22); spread 22-17 (56.4%, n=39); totals 9-14 (39.1%, n=23; overs 6-10); totals pooled across all model versions in Supabase 28-68. Action: v303 no-bet labels, no refit. **Re-read on the 1 Nov run:** refit NFL ML calibration only if 50–59% is still < 40% at n ≥ 40; drop the label if it reads ≥ 50%. |
+| 9 | **🎓 CFB calibration + first ATS sample** | export, filter `s: 'cfb'` + `d >= 20260829` | **v205 rebuilt the CFB margin** (team rating, margin-primary) | **Split at the v205 ship** — the 19 picks before it were 19/19 dogs off a model that could not see the FBS/FCS gap; they are a different population. After it: read `sportshub:marginbias` (v204) FIRST — mean favourite-oriented error near 0 and dog-side well under 100% says the rating prices the market; then the ATS W-L says whether it beats it. `CFB_TIER_PTS` / `CFB_MARGIN_K` are the constants to refit, from the instrument, never from the picks. **10 Oct 2026 read (after v205):** ML 69-14 (83.1%, n=83) vs 78.9% stated — slightly under-confident, no action; spread 36-31 (53.7%, n=67), barely above break-even. Re-read on the 1 Nov run. |
 
 **Known and deliberately NOT fixed:**
 - **`MIN_EDGE_GAP`** — edges are **18-21 (46.2%)** all-time, under the 52.4%
