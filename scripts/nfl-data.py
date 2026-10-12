@@ -35,7 +35,7 @@ def download(url, path, refresh=False):
 
 def side(team):
     return {'team':team, 'passN':0, 'passEPA':0, 'rushN':0, 'rushEPA':0,
-            'success':0, 'plays':0, 'sacks':0, 'hits':0, 'explosive':0,
+            'success':0, 'plays':0, 'rawPlays':0, 'sacks':0, 'hits':0, 'explosive':0,
             'lateN':0, 'lateEPA':0, 'fourthN':0, 'fourthGo':0,
             'fgN':0, 'fgMade':0, 'qbs':{}, '_drives':set()}
 
@@ -60,6 +60,11 @@ def aggregate(year, raw, schedules):
                          'sides':{t:side(t) for t in (schedule['home_team'],schedule['away_team'])}}
         g = games[gid]; s = next((v for k,v in g['sides'].items() if team_alias(k)==team_alias(p.get('posteam'))),None)
         if s is None: continue
+        # PPP shadow denominator: all official run/pass snaps, including sacks,
+        # kneels/spikes; exclude deleted plays and two-point attempts. Independent
+        # of the existing EPA/game-state filters below.
+        if p.get('play_type') in ('run','pass') and p.get('play_deleted')!='1' and p.get('two_point_attempt')!='1':
+            s['rawPlays']+=1
         drive = p.get('fixed_drive') or p.get('drive')
         if drive: s['_drives'].add(drive)
         if p.get('field_goal_attempt')=='1':

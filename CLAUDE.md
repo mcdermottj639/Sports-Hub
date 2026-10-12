@@ -7852,3 +7852,15 @@ research-only markets, missing qualifying picks and pending results are distinct
 Device snapshots now retain margin/total for every sport. No postgame model
 recomputation or database migration; the existing scheduled collector continues
 saving full cloud forecasts with the app closed.
+
+## NFL PPP shadow test (October 12, 2026; backend only)
+
+The collector now saves the separate `football-research-nfl-ppp-v1` totals cohort:
+75% current engine + 25% matchup PPP using last 16 games and four prior games.
+Official weights, picks, UI and version remain unchanged. The source aggregate
+adds unfiltered `rawPlays` without changing existing EPA aggregates. Read
+`docs/NFL_FOOTBALL_ENGINE.md` for definitions and paired evaluation. Preserve
+same-time baseline/PPP snapshots, first-capture immutability, kickoff gates and
+research-only separation. `scripts/validate-nfl-ppp-shadow.js` evaluates future
+settled rows; do not promote based merely on reaching 150 games. Deploy the
+collector with `_shared/nfl-ppp-shadow.js` and preserve JWT verification.

@@ -4,6 +4,7 @@ import '../_shared/nfl-football.js';
 import '../_shared/nfl-football-config.js';
 import '../_shared/nfl-evidence.js';
 import '../_shared/nfl-live.js';
+import '../_shared/nfl-ppp-shadow.js';
 const C = (globalThis as any).SportsHubFootballResearch;
 const N = (globalThis as any).SportsHubNFLChallenger;
 type Json = Record<string, any>;
@@ -52,7 +53,11 @@ export async function footballEvidence(sport:string,g:Json) {
   }
   const base='https://site.api.espn.com/apis/site/v2/sports/football/nfl';
   const [h,a,injuries,history,summary]=await Promise.all([source(`${base}/teams/${g.home.id}/depthcharts`),source(`${base}/teams/${g.away.id}/depthcharts`),source(`${base}/injuries`),footballHistory(),source(`${base}/summary?event=${g.id}`)]);
-  return (globalThis as any).SportsHubNFLLive.evidence(g,{homeDepth:h,awayDepth:a,injuries,history,summary});
+  const evidence=(globalThis as any).SportsHubNFLLive.evidence(g,{homeDepth:h,awayDepth:a,injuries,history,summary});
+  // Collector-only shadow evidence. Missing inputs must not affect live picks.
+  try { evidence.ppp=(globalThis as any).SportsHubNFLPPPShadow.project(history,{home:g.home.abbr,away:g.away.abbr,date:g.date,season:year},evidence.at); }
+  catch (_) { evidence.ppp={available:false,reason:'PPP evidence unavailable'}; }
+  return evidence;
 }
 export function researchRows(sport:string,g:Json,p:Json,o:Json|null,evidence:Json,app:string) {
   const at=new Date().toISOString(),phase=C.phase(g.date,at);

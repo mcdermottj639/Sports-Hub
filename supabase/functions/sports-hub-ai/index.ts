@@ -315,7 +315,7 @@ Deno.serve(async(req:Request)=>{
   const started=new Date().toISOString();let run:any=null,captured=0,graded=0,skipped=0;
   const errors:any[]=[], signals:any={status:'disabled',written:0,evaluated:0,unpriced:0,missed:0,graded:0,errors:0};
   const nba={model:'nba-v1',scanned:0,eligible:0,forecasts:0};
-  let captureSignals=false;const research={captured:0,errors:0,version:'nfl-v4-cfb-v2'};
+  let captureSignals=false;const research={captured:0,errors:0,pppCaptured:0,pppErrors:0,version:'nfl-v4-cfb-v2-ppp-v1'};
   const signalError=()=>{signals.errors++;signals.error_category='signals_step_failed';};
   try{
     const recent=await db('ai_job_runs?select=id,status,started_at,details&order=started_at.desc&limit=1');
@@ -358,6 +358,11 @@ Deno.serve(async(req:Request)=>{
             if(sport==='nba'&&p)nba.forecasts++;
             // A slow forecast must not create a new pregame pick after kickoff.
             if(Date.parse(g.date)>Date.now())captured+=await insertRows(rows);else skipped++;
+            if(sport==='nfl')try {
+              // Separate immutable research cohort; same-time engine/PPP pair.
+              // Existing ignore-duplicates storage freezes the first capture.
+              if(Date.parse(g.date)>Date.now())research.pppCaptured+=await insertRows((globalThis as any).SportsHubNFLPPPShadow.rows(g,p,odds(g.odds,g),APP_VERSION));
+            }catch(_){research.pppErrors++;research.errors++;}
             if(sport==='nfl'||sport==='cfb')try {
               if(!evidence)throw new Error('Football evidence unavailable');
               research.captured+=await insertRows(researchRows(sport,g,baseline,odds(g.odds,g),evidence,APP_VERSION));

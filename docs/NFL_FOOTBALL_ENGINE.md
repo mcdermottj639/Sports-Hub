@@ -118,3 +118,31 @@ JSON. A failed refresh keeps the previous snapshot; stale evidence fails closed.
 Sources: https://nflreadr.nflverse.com/articles/nflverse_data_schedule.html,
 https://github.com/nflverse/nflverse-data,
 https://github.com/nflverse/nfldata, and ESPN public NFL feeds.
+
+## PPP total shadow experiment — October 12, 2026
+
+`football-research-nfl-ppp-v1` is a separate prospective totals cohort in
+`ai_predictions`. It never replaces official `nfl-football-v1` picks. At the
+first successful pregame collection with a total line, save 75% of the current
+engine total plus 25% of the PPP total. The comparison engine total is recomputed
+at that same observation; do not substitute an older frozen official pick.
+Each immutable snapshot retains both totals, inputs, source/capture times,
+16-game histories, provisional assumptions and actual observed line/prices.
+Existing ignore-duplicate keys prevent retries replacing the experiment, and
+existing grading settles it or voids a changed kickoff. No retrospective fills.
+
+PPP uses last 16 games within 730 days and four league-average pseudo-games
+(the league prior is the preceding 365 days). Only games at least six hours
+past kickoff enter inputs. Expected snaps average offensive plays/game and
+opponent plays faced/game; expected efficiency averages offensive and opposing
+allowed scoreboard points/play. Scoreboard points include defense/special teams.
+Raw run/pass snaps include sacks/kneels/spikes, exclude deleted/two-point plays,
+and do not reuse the EPA engine's garbage-time-filtered denominator. Missing,
+future, stale or partial raw data skips only this experiment.
+
+The existing twice-hourly collector logs `research.pppCaptured` / `pppErrors`.
+Export rows for this exact cohort and run
+`node scripts/validate-nfl-ppp-shadow.js rows.json` for paired MAE/RMSE, pending,
+void and settled counts. At least 150 settled games triggers review, never
+automatic promotion. Uncertainty and odds-based performance need separate review;
+no fitted probabilities, stakes or profitability claim are added.
