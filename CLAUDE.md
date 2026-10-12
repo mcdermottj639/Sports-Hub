@@ -669,7 +669,20 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v308** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v309** (backend **b17-fantasy-league-rules**).
+
+### v309 — NFL QB source check
+"Current QB evidence unavailable" covered three different faults. New
+`SportsHubNFLLiveClient.diagnostic(g)` reads the evidence this device built and
+says, per team, whether the ESPN depth-chart request failed, loaded but was
+older than the 2-day freshness rule (with its age), or named a QB, plus whether
+the injury report loaded. It is appended to the withheld reason and to the
+v307 "Saved pregame forecast" note. Opened to settle the BUF @ LAR question:
+the desktop pane failed every `/teams/{id}` request, while a web fetch reported
+BUF/LAR depth charts dated Aug 20 / Sep 2 — conflicting with the collector,
+which used the same rule and forecast every Week 5 game. Read the source check
+on the owner's phone before changing the freshness rule. Tests:
+`tests/nfl-source-check.test.js`.
 
 ### v308 — Bug-echo follow-ups to v306
 A bug-echo sweep for v306's "failed fetch saved over good data" pattern found

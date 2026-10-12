@@ -24,7 +24,26 @@
     const e=games.get(`${g.id}:${g.date}`)?.evidence;
     const reasons=e?.candidate?.reasons?.join('; ')||'Required football evidence unavailable';
     const restricted=Object.values(e?.qb||{}).some(q=>/out|doubtful|questionable|reserve|suspend|pup/i.test(q.status||''));
-    return reasons+(restricted?' · Waiting for a starting-QB update. The depth chart has not resolved who will play; backup projections remain conditional.':'');
+    const diag=diagnostic(g);
+    return reasons+(diag?` · Source check: ${diag}`:'')+(restricted?' · Waiting for a starting-QB update. The depth chart has not resolved who will play; backup projections remain conditional.':'');
   }
-  root.SportsHubNFLLiveClient=Object.freeze({load,predict,reason});
+  /* v309: say WHICH QB input failed. "Current QB evidence unavailable" covers
+     three different faults — the ESPN request failed, ESPN's depth chart is
+     older than the 2-day freshness rule, or no QB is listed — and each needs a
+     different fix. Read straight off the evidence this device just built. */
+  function diagnostic(g){
+    const e=games.get(`${g.id}:${g.date}`)?.evidence;if(!e)return '';
+    const age=t=>{const ms=Date.now()-Date.parse(t);if(!Number.isFinite(ms))return null;const d=Math.floor(ms/864e5);return d>=1?`${d}d old`:`${Math.max(1,Math.round(ms/36e5))}h old`;};
+    const side=(abbr,status,q)=>{
+      if(status!==200)return `${abbr} depth chart: request ${status==='unavailable'?'failed':`returned ${status}`}`;
+      const a=q?.depthUpdatedAt?age(q.depthUpdatedAt):null;
+      const stale=q?.depthUpdatedAt&&Date.now()-Date.parse(q.depthUpdatedAt)>=2*864e5;
+      if(!q?.depthUpdatedAt)return `${abbr} depth chart: loaded, no timestamp`;
+      if(stale)return `${abbr} depth chart: loaded but ${a} (needs under 2 days)`;
+      return q?.name?`${abbr} QB: ${q.name} (chart ${a})`:`${abbr} depth chart: ${a}, no QB listed`;
+    };
+    const s=e.sourceStatus||{};
+    return [side(g.away.abbr,s.awayDepth,e.qb?.away),side(g.home.abbr,s.homeDepth,e.qb?.home),`injury report: ${s.injuries===200?'loaded':s.injuries==='unavailable'?'request failed':`returned ${s.injuries}`}`].join(' · ');
+  }
+  root.SportsHubNFLLiveClient=Object.freeze({load,predict,reason,diagnostic});
 })(globalThis);

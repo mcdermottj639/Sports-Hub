@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v308';
+const APP_VERSION = 'v309';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -3480,7 +3480,7 @@ function gameReportHTML(sport, g, pred, info, report, data) {
   }
   const parts = [];
   if (pred?.locked) parts.push(pred.savedFallback
-    ? `<div class="ai-why">Saved pregame forecast${lineAtLabel(pred.lockedAt) ? ` · ${esc(lineAtLabel(pred.lockedAt))}` : ''}. Today's live inputs couldn't be loaded, so this is the official read the scheduled collector already saved.</div>`
+    ? `<div class="ai-why">Saved pregame forecast${lineAtLabel(pred.lockedAt) ? ` · ${esc(lineAtLabel(pred.lockedAt))}` : ''}. Today's live inputs couldn't be loaded, so this is the official read the scheduled collector already saved.${sport === 'nfl' && g && globalThis.SportsHubNFLLiveClient?.diagnostic(g) ? ` <span class="muted">Source check: ${esc(globalThis.SportsHubNFLLiveClient.diagnostic(g))}</span>` : ''}</div>`
     : `<div class="ai-why">Locked pregame forecast${lineAtLabel(pred.lockedAt) ? ` · saved ${esc(lineAtLabel(pred.lockedAt))}` : ''}. Model lines do not update during play.</div>`);
   const mkt = info ? marketHomeProb(info) : null;
   if (pred && pred.probHome != null) {
