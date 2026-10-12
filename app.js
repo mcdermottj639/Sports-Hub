@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v304';
+const APP_VERSION = 'v305';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -409,6 +409,17 @@ const scheduledLabel = (g) => {
 };
 
 // --- ESPN normalizers -----------------------------------------------------
+// v305: a competitor's overall W-L(-T) from ESPN. The scoreboard sends
+// `records`, the game summary header sends `record`; both are arrays of
+// {type|name, summary|displayValue}. Prefer the overall/total entry, else the
+// first one. '' when ESPN sends none — the header then shows nothing rather
+// than a made-up 0-0.
+function overallRecord(c) {
+  const list = [].concat(c?.records || [], c?.record || []).filter((r) => r && typeof r === 'object');
+  const r = list.find((x) => /^(total|overall|ytd)$/i.test(x.type || x.name || '')) || list[0];
+  const v = String(r?.summary ?? r?.displayValue ?? '').trim();
+  return /^\d+-\d+(-\d+)?$/.test(v) ? v : '';
+}
 function teamObj(c) {
   const t = c?.team || {};
   return {
@@ -424,6 +435,7 @@ function teamObj(c) {
     // for "unranked", so that becomes null and everything downstream can just
     // test truthiness. The pro leagues never send this, so it stays null there.
     rank: (() => { const r = Number(c?.curatedRank?.current); return r >= 1 && r <= 25 ? r : null; })(),
+    record: overallRecord(c), // v305: "5-1" for the game screen header
     // v205: ESPN's college scoreboard stamps a conferenceId on each team. It is
     // the cheapest tier source (no extra fetch); the standings map is the
     // fallback when it is absent. Pro feeds never send it — stays null there.
@@ -1390,11 +1402,19 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
   const cs = comp.competitors || [];
   const home = cs.find((c) => c.homeAway === 'home') || cs[0] || {};
   const away = cs.find((c) => c.homeAway === 'away') || cs[1] || {};
+  // v305: record under every name; college adds the Top-25 rank when ranked.
+  // The summary header is preferred and the scoreboard game (which already
+  // carries the poll rank stamped by onlyRanked) fills any gap.
   const teamCell = (c, side) => {
     const t = c.team || {};
     const logo = t.logos?.[0]?.href || t.logo;
+    const gs = g?.[side] || {};
+    const record = overallRecord(c) || gs.record || '';
+    const rawRank = Number(c.rank ?? c.curatedRank?.current);
+    const rank = sport === 'cfb' ? ((rawRank >= 1 && rawRank <= 25 ? rawRank : null) || gs.rank || null) : null;
     return `<div class="md-team">${logo ? `<img src="${esc(logo)}" alt=""/>` : ''}
-      <div class="nm">${esc(t.shortDisplayName || t.displayName || t.abbreviation || 'TBD')}</div>
+      <div class="nm">${rank ? `<span class="md-rank">#${rank}</span> ` : ''}${esc(t.shortDisplayName || t.displayName || t.abbreviation || 'TBD')}</div>
+      ${record ? `<div class="md-rec">${esc(record)}</div>` : ''}
       <div class="sc" data-detail-score="${side}">${c.score ?? '–'}</div></div>`;
   };
   const st = comp.status?.type || {};

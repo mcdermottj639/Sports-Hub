@@ -479,6 +479,8 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .md-team { flex: 1; }
 .md-team img { width: 46px; height: 46px; object-fit: contain; }
 .md-team .nm { font-weight: 700; font-size: 14px; margin-top: 4px; }
+.md-team .md-rec { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 1px; }
+.md-team .md-rank { color: var(--muted); font-weight: 800; }
 .md-team .sc { font-size: 34px; font-weight: 800; }
 .md-status { text-align: center; color: var(--muted); font-size: 13px; margin-bottom: 16px; }
 .md-status.live { color: var(--live); font-weight: 700; }

@@ -665,7 +665,19 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v304** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v305** (backend **b17-fantasy-league-rules**).
+
+### v305 — Team records (and CFB rank) on the game screen
+The game screen header now shows every team's overall record under its name,
+and college teams in the Top 25 get their rank before the name (#9 LSU).
+`overallRecord(c)` reads ESPN's scoreboard `records` and summary-header
+`record` arrays (overall/total entry first) and returns '' when none is sent,
+so the header never shows an invented 0-0. Scoreboard games now carry
+`team.record`; the header prefers the summary's own record/rank and falls back
+to the scoreboard game (which has the poll rank `onlyRanked` stamps). Rank is
+CFB-only by owner request. Covered by `tests/team-record-header.test.js`.
+Record field shapes were coded from ESPN's documented responses, not a live
+call (sandbox can't reach ESPN) — confirm on the phone.
 
 ### v304 — Possession label comes from the team id, not the ball spot
 The live situation line ("XXX ball · 3rd & 5") in the game report and the
