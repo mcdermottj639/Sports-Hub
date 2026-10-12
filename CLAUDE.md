@@ -664,12 +664,19 @@ claim a deployment is live merely because the branch update succeeded.
 4. Commit and publish the authorized changes to `main`; verify its new remote
    head. Do not update companion branches. Check the Pages build before saying
    the change is live.
-5. The version shows in a header badge so the user can confirm what they're running.
+5. The version shows in the desktop sidebar badge and at the bottom of Today (phones) so the user can confirm what they're running.
 
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v310** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v311** (backend **b17-fantasy-league-rules**).
+
+### v311 — Version label on Today
+The header-badge claim in the release ritual had been false on phones since
+v272: `#app-version` lives in the desktop sidebar, which is hidden below 761px,
+so the only phone-visible version was three taps deep inside Models → Board
+details → How to read this board. Today now ends with "Sports Hub vN"
+(`#home-version`, set beside `#app-version`). Display only.
 
 ### v310 — ESPN team endpoints go through a relay
 Settles the v307/v309 question. ESPN now refuses BROWSER requests to

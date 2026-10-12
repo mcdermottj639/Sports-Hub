@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v310';
+const APP_VERSION = 'v311';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -12985,6 +12985,9 @@ state.aiBoard = null;
 
 const verEl = $('#app-version');
 if (verEl) verEl.textContent = APP_VERSION;
+// v311: the sidebar badge is hidden on phones, so Today carries the version too.
+const homeVerEl = $('#home-version');
+if (homeVerEl) homeVerEl.textContent = APP_VERSION;
 
 /* --- one ground, no theme switch (v219) -------------------------------------
    The owner: "Remove dark mode completely it's a waste of time I never use
