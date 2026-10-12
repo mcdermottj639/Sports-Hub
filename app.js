@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v306';
+const APP_VERSION = 'v307';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -2621,6 +2621,15 @@ async function predictGame(sport, g, opts) {
   const p = await computePregamePrediction(sport, g, opts);
   // A request started before kickoff may finish afterward. Never capture it.
   if (!lock.eligible(g)) return restoreForecast(sport, g);
+  /* v307: a failed live recompute must not hide a forecast that already
+     exists. The browser's NFL path needs ESPN depth charts the scheduled
+     collector can read but a phone sometimes cannot; when it comes back empty,
+     show the official pregame forecast the collector saved (cloud or device),
+     labelled as saved. It is never re-captured as a fresh device read. */
+  if (!p) {
+    const saved = await restoreForecast(sport, g).catch(() => null);
+    return saved ? { ...saved, savedFallback: true } : null;
+  }
   const info = normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
   const r = {g,sport,p,info,atsR:atsRead(sport,g,p,info),totR:totalRead(sport,p,info)};
   lock.capture(sport,g,p,info,{spread:marketProbabilityFor(r,'spread'),total:marketProbabilityFor(r,'total')});
@@ -3470,7 +3479,9 @@ function gameReportHTML(sport, g, pred, info, report, data) {
     });
   }
   const parts = [];
-  if (pred?.locked) parts.push(`<div class="ai-why">Locked pregame forecast${lineAtLabel(pred.lockedAt) ? ` · saved ${esc(lineAtLabel(pred.lockedAt))}` : ''}. Model lines do not update during play.</div>`);
+  if (pred?.locked) parts.push(pred.savedFallback
+    ? `<div class="ai-why">Saved pregame forecast${lineAtLabel(pred.lockedAt) ? ` · ${esc(lineAtLabel(pred.lockedAt))}` : ''}. Today's live inputs couldn't be loaded, so this is the official read the scheduled collector already saved.</div>`
+    : `<div class="ai-why">Locked pregame forecast${lineAtLabel(pred.lockedAt) ? ` · saved ${esc(lineAtLabel(pred.lockedAt))}` : ''}. Model lines do not update during play.</div>`);
   const mkt = info ? marketHomeProb(info) : null;
   if (pred && pred.probHome != null) {
     const rows = [['away', 1 - pred.probHome, info?.aML], ['home', pred.probHome, info?.hML]].map(([side, p, book]) => {
@@ -5000,7 +5011,8 @@ function commitRow(r, dateStr, opts = {}) {
     return saved && !saved.pu ? { graded: true, hit: !!saved.c } : null;
   }
   // Check both the state and the clock: cached "pre" data can outlive kickoff.
-  if (opts.record === false || !AI_MATH.pregame(g)) return null;
+  // v307: a restored saved forecast is already on record where it was made.
+  if (opts.record === false || !AI_MATH.pregame(g) || p?.savedFallback) return null;
   const label = matchupLabel(sport, g);
   recordPick(g.id, sport, dateStr, p.winner.name, info?.favName, p.conf, isEdge,
     { sh: p.sharp?.pts ?? null, sr: shLive ? 1 : null, gp: gap, tr: tier, m: label,

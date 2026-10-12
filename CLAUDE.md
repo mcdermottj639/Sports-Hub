@@ -669,7 +669,23 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v306** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v307** (backend **b17-fantasy-league-rules**).
+
+### v307 — Show the saved forecast when the live NFL recompute fails
+BUF @ LAR (MNF, 12 Oct) read "Forecast withheld" with every QB reason firing,
+while Supabase held the official `nfl-football-v1` forecast saved by the
+collector on 6 Oct (LAR 58.4%, LAR by 3.4, total 50.2). Before kickoff,
+`predictGame` recomputed NFL in the browser, and that path needs ESPN
+`/teams/{id}/depthcharts` — a request the browser could not complete (the
+desktop pane got "Failed to fetch" on every `/teams/{id}` path while
+`/scoreboard` and `/injuries` answered). No QB identity meant no projection,
+so the card said withheld. `restoreForecast` was only used after kickoff.
+Now, when the pregame recompute returns null, `predictGame` restores the saved
+forecast (device lock, pending/tally, or cloud event rows) flagged
+`savedFallback`. The card labels it "Saved pregame forecast … today's live inputs
+couldn't be loaded", and `commitRow` never records it as a new device pick. ⚠️
+The `/teams/{id}` browser fetch failure is unexplained (CORS vs pane-level
+block) and is NOT fixed here; it also blocks other browser-side team reads.
 
 ### v306 — A failed fantasy sync no longer blanks the GM page
 The owner's phone showed "ESPN free-agent data is not available" and "Trade
