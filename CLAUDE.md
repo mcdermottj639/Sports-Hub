@@ -156,7 +156,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > (set in `app.js` as `FANTASY_API`, overridable via localStorage `sportshub:api`);
 > see **`server/RENDER.md`** for the deploy steps. ⚠️ **Render free-tier cold
 > start:** the service sleeps after ~15 min idle and takes ~30–60s to wake, so the
-> frontend uses a 45s timeout on backend calls, defers the health check off the
+> frontend uses a 60s timeout (v312; was 45s) on backend calls, defers the health check off the
 > Football view, and shows a "🔄 Wake backend & retry" button (see v134). The
 > service isn't live until the owner runs the RENDER.md steps (create Blueprint +
 > paste `ESPN_S2`/`SWID`). **(History: was on Railway free tier at
@@ -669,9 +669,9 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v312** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v313** (backend **b17-fantasy-league-rules**).
 
-### v312 — Fantasy no longer sticks on an old saved league
+### v312–v313 — Fantasy no longer sticks on an old saved league
 After a reload, the owner's phone showed the GM page with record 0-3 (a
 week-old copy; live was 0-4), PTS/WK and Points For blank, and "Couldn't load
 free agents", while the backend answered every endpoint normally. Two causes.
@@ -683,6 +683,10 @@ from disk lets the fan-out hit a still-cold container at once, and sections with
 no saved copy came back null with nothing older than 3 days to carry.
 `syncLeagueOnce` now re-syncs on its own after 20s when free agents, standings,
 season or rosters are missing (at most twice, reset by a complete sync).
+(3) Reproduced live: the cold fan-out made all seven calls take ~43s, just under
+the 45s timeout. A stale (disk) roster is now followed by awaiting the live
+roster (`fetchLive`, which shares the in-flight revalidate) before fanning out,
+and the backend timeout is 60s.
 
 ### v311 — Version label on Today
 The header-badge claim in the release ritual had been false on phones since

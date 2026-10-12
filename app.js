@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v312';
+const APP_VERSION = 'v313';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -313,7 +313,7 @@ function fetchLive(url, ttl, timeoutMs) {
     const ctrl = new AbortController();
     // Backend (Render free tier) can cold-start ~30-60s after idle, so give it
     // a long leash; ESPN's direct feeds stay snappy at 9s.
-    const ms = timeoutMs || (url.startsWith(FANTASY_API) ? 45000 : 9000);
+    const ms = timeoutMs || (url.startsWith(FANTASY_API) ? 60000 : 9000); // v312: 45s → 60s
     const t = setTimeout(() => ctrl.abort(), ms);
     try {
       // v310: ESPN team pages go through the server relay (see supabase-config.js).
@@ -8561,7 +8561,14 @@ async function syncLeagueOnce(sport, force) {
     // sync handlers in a threadpool, so several requests arriving together on a
     // cold cache would each build their OWN League and hit ESPN six times.
     // One call warms it; the remaining calls then hit a warm cache in parallel.
-    const data = await fetchJSON(`${FANTASY_API}/api/fantasy/${sport}/roster${q()}`, 60000);
+    const rosterUrl = `${FANTASY_API}/api/fantasy/${sport}/roster${q()}`;
+    let data = await fetchJSON(rosterUrl, 60000);
+    /* v312: a roster served from disk returns instantly, which let the fan-out
+       below hit a still-cold container all at once — seven League builds in
+       parallel, every call ~43s, right at the timeout. The saved league is
+       already painted, so wait for the live roster (it shares the in-flight
+       revalidate) and only then fan out against a warm cache. */
+    if (isStale(data)) { try { data = await fetchLive(rosterUrl, 60000); } catch (_) {} }
     const roster = (data.roster || []).map((p) => ({
       name: p.name,
       slot: p.lineupSlot || p.pos || 'BE',
