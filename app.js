@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v311';
+const APP_VERSION = 'v312';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -8533,6 +8533,7 @@ function leagueSnap(sport) {
 }
 
 const syncInFlight = new Map();
+const autoRetry = {}; // v312: automatic re-syncs used per sport since the last complete one
 function syncFromLeague(sport, force = false) {
   // A forced refresh must not be served by an in-flight ordinary sync — the
   // whole point is to bypass both cache layers.
@@ -8631,6 +8632,20 @@ async function syncLeagueOnce(sport, force) {
     fanState.league[sport] = built;
     saveLeagueSnap(sport, built);
     window.dispatchEvent(new CustomEvent('sportshub:league-updated'));
+    /* v312: if a section came back empty (usually a cold Render start, where
+       the fan-out hits a container still building its league), try again on
+       its own once the backend is warm instead of waiting for a manual tap.
+       At most two automatic retries, reset by a complete sync. */
+    const missing = !fa || !st || (!isBb && (!se || !lr));
+    autoRetry[sport] = missing ? (autoRetry[sport] || 0) : 0;
+    if (missing && autoRetry[sport] < 2) {
+      autoRetry[sport]++;
+      setTimeout(() => {
+        fanState.synced = fanState.synced || {};
+        fanState.synced[sport] = false;
+        if (currentTab === 'fantasy' && fanState.sport === sport) renderFantasy();
+      }, 20000);
+    }
     return true;
   } catch (_) { return false; }
 }
@@ -12898,7 +12913,12 @@ function showTab(name, options = {}) {
    of a view the user is already reading. */
 let freshTimer = null, sawStale = false;
 window.addEventListener('sportshub:fresh', (e) => {
-  if (!sawStale) return;
+  /* v312: a fresh BACKEND payload always counts. Since v220, staleServed (and
+     so sawStale) only tracks ESPN feeds, so when the only stale copies were
+     fantasy ones this handler returned early and the Fantasy tab stayed on a
+     week-old saved league (record 0-3 after week 4) with free agents missing. */
+  const fan = String((e && e.detail && e.detail.url) || '').includes('/api/fantasy/');
+  if (!sawStale && !fan) return;
   /* 🚨 A repaint alone is NOT enough for a view that copies the payload into
      its own state. Fantasy derives `fanState.league[sport]` from the roster
      call and then guards on `fanState.synced[sport]`, so re-running the

@@ -669,7 +669,20 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v311** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v312** (backend **b17-fantasy-league-rules**).
+
+### v312 — Fantasy no longer sticks on an old saved league
+After a reload, the owner's phone showed the GM page with record 0-3 (a
+week-old copy; live was 0-4), PTS/WK and Points For blank, and "Couldn't load
+free agents", while the backend answered every endpoint normally. Two causes.
+(1) The `sportshub:fresh` handler returned early unless `sawStale` was set, and
+since v220 that only tracks ESPN feeds. So when the only stale copies were
+fantasy ones, the fresh roster landed and the tab never re-synced. Backend
+(`/api/fantasy/`) payloads now always trigger the re-sync. (2) A roster served
+from disk lets the fan-out hit a still-cold container at once, and sections with
+no saved copy came back null with nothing older than 3 days to carry.
+`syncLeagueOnce` now re-syncs on its own after 20s when free agents, standings,
+season or rosters are missing (at most twice, reset by a complete sync).
 
 ### v311 — Version label on Today
 The header-badge claim in the release ritual had been false on phones since
