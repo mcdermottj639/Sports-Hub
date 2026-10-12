@@ -240,6 +240,17 @@ function rowsFor(sport:Sport,g:any,p:any){
 const SB_URL=Deno.env.get('SUPABASE_URL')!,SERVICE=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 async function db(path:string,init:RequestInit={}){const response=await fetch(`${SB_URL}/rest/v1/${path}`,{...init,headers:{apikey:SERVICE,Authorization:`Bearer ${SERVICE}`,'Content-Type':'application/json',...(init.headers||{})}});if(!response.ok)throw new Error(`Database ${response.status}: ${await response.text()}`);const text=await response.text();return text?JSON.parse(text):null;}
 async function insertRows(rows:any[]){if(!rows.length)return 0;const got=await db('ai_predictions?on_conflict=event_id,market,model_version',{method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},body:JSON.stringify(rows)});return got?.length||0;}
+// ESPN saves a kickoff it has not set yet ("TBD") as midnight Eastern on the game
+// date. A row frozen at that placeholder still belongs to the same game once ESPN
+// posts the real time later that day. Any other time change still blocks enrichment.
+function sameKickoff(rowStart:string,gameDate:string){
+  const a=Date.parse(rowStart),b=Date.parse(gameDate);
+  if(!Number.isFinite(a)||!Number.isFinite(b))return false;
+  if(a===b)return true;
+  const et=(t:number)=>new Date(t).toLocaleString('en-CA',{timeZone:'America/New_York',hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const [ad,at]=et(a).split(', '),[bd]=et(b).split(', ');
+  return at==='00:00'&&ad===bd&&b>a;
+}
 // Fill only missing prices, before kickoff, at the frozen selection/line/provider.
 // Never rewrite a forecast or attach a current price to an already settled game.
 // A winner pick saved before ANY line was posted has provider null (CFB forecasts
@@ -252,7 +263,7 @@ async function enrichPrices(g:any){
   const o=odds(g.odds,g);if(!o)return;
   const rows=await db(`ai_predictions?event_id=eq.${encodeURIComponent(g.id)}&model_version=eq.${modelVersionFor(g.sport)}&result=eq.pending&price=is.null&select=*`);
   for(const r of rows||[]){
-    if(Date.parse(r.starts_at)!==Date.parse(g.date)||Date.parse(g.date)<=Date.now())continue;
+    if(!sameKickoff(r.starts_at,g.date)||Date.parse(g.date)<=Date.now())continue;
     const firstPrice=!r.provider&&r.market==='moneyline'&&o.provider===FIRST_PRICE_PROVIDER;
     if(!firstPrice&&(!r.provider||r.provider!==o.provider))continue;
     const price=r.market==='moneyline'?pickPrice({home:r.selection_home},o)
@@ -260,7 +271,7 @@ async function enrichPrices(g:any){
       :r.market==='total'&&r.line===o.ou?(r.selection.startsWith('OVER')?o.overPrice:o.underPrice):null;
     if(american(price)==null)continue;
     const at=new Date().toISOString();
-    const patch:any={price,updated_at:at,snapshot:{...r.snapshot,priceCapturedAt:at,priceSource:firstPrice?'espn_first_draftkings_pregame':'espn_same_line_pregame',pricedOdds:o,...(firstPrice?{priceProvider:o.provider}:{})}};
+    const patch:any={price,updated_at:at,snapshot:{...r.snapshot,priceCapturedAt:at,priceSource:firstPrice?'espn_first_draftkings_pregame':'espn_same_line_pregame',pricedOdds:o,...(firstPrice?{priceProvider:o.provider}:{}),...(Date.parse(r.starts_at)!==Date.parse(g.date)?{priceKickoff:g.date}:{})}};
     if(firstPrice&&r.market_probability==null){const mp=fairProbability('moneyline',r.selection_home,r.selection,o);if(mp!=null)patch.market_probability=mp;}
     await db(`ai_predictions?id=eq.${r.id}&price=is.null&result=eq.pending&starts_at=gt.${encodeURIComponent(at)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(patch)});
   }
@@ -273,7 +284,7 @@ async function enrichProbabilities(g:any){
   if(g.state!=='pre'||Date.parse(g.date)<=Date.now())return;
   const rows=await db(`ai_predictions?event_id=eq.${encodeURIComponent(g.id)}&model_version=eq.${modelVersionFor(g.sport)}&market=in.(spread,total)&result=eq.pending&model_probability=is.null&select=*`);
   for(const r of rows||[]){
-    if(Date.parse(r.starts_at)!==Date.parse(g.date)||Date.parse(g.date)<=Date.now())continue;
+    if(!sameKickoff(r.starts_at,g.date)||Date.parse(g.date)<=Date.now())continue;
     const at=new Date().toISOString();
     const probability=(globalThis as any).SportsHubMarketProbability.estimate({sport:r.sport,market:r.market,projection:r.projection,line:r.line,home:r.selection_home,side:r.selection.split(' ')[0],at});
     if(!probability)continue;
