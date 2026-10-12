@@ -242,18 +242,27 @@ async function db(path:string,init:RequestInit={}){const response=await fetch(`$
 async function insertRows(rows:any[]){if(!rows.length)return 0;const got=await db('ai_predictions?on_conflict=event_id,market,model_version',{method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},body:JSON.stringify(rows)});return got?.length||0;}
 // Fill only missing prices, before kickoff, at the frozen selection/line/provider.
 // Never rewrite a forecast or attach a current price to an already settled game.
+// A winner pick saved before ANY line was posted has provider null (CFB forecasts
+// are often saved a week early). It may take the first DraftKings pregame price
+// for its frozen side; the provider column stays null and the source is recorded
+// in the snapshot, so the original capture is never rewritten.
 async function enrichPrices(g:any){
+  const FIRST_PRICE_PROVIDER='DraftKings';
   if(g.state!=='pre'||Date.parse(g.date)<=Date.now())return;
   const o=odds(g.odds,g);if(!o)return;
   const rows=await db(`ai_predictions?event_id=eq.${encodeURIComponent(g.id)}&model_version=eq.${modelVersionFor(g.sport)}&result=eq.pending&price=is.null&select=*`);
   for(const r of rows||[]){
-    if(Date.parse(r.starts_at)!==Date.parse(g.date)||Date.parse(g.date)<=Date.now()||!r.provider||r.provider!==o.provider)continue;
+    if(Date.parse(r.starts_at)!==Date.parse(g.date)||Date.parse(g.date)<=Date.now())continue;
+    const firstPrice=!r.provider&&r.market==='moneyline'&&o.provider===FIRST_PRICE_PROVIDER;
+    if(!firstPrice&&(!r.provider||r.provider!==o.provider))continue;
     const price=r.market==='moneyline'?pickPrice({home:r.selection_home},o)
       :r.market==='spread'&&r.line===o.spread?(r.selection_home?o.hSpreadPrice:o.aSpreadPrice)
       :r.market==='total'&&r.line===o.ou?(r.selection.startsWith('OVER')?o.overPrice:o.underPrice):null;
     if(american(price)==null)continue;
     const at=new Date().toISOString();
-    await db(`ai_predictions?id=eq.${r.id}&price=is.null&result=eq.pending&starts_at=gt.${encodeURIComponent(at)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({price,updated_at:at,snapshot:{...r.snapshot,priceCapturedAt:at,priceSource:'espn_same_line_pregame',pricedOdds:o}})});
+    const patch:any={price,updated_at:at,snapshot:{...r.snapshot,priceCapturedAt:at,priceSource:firstPrice?'espn_first_draftkings_pregame':'espn_same_line_pregame',pricedOdds:o,...(firstPrice?{priceProvider:o.provider}:{})}};
+    if(firstPrice&&r.market_probability==null){const mp=fairProbability('moneyline',r.selection_home,r.selection,o);if(mp!=null)patch.market_probability=mp;}
+    await db(`ai_predictions?id=eq.${r.id}&price=is.null&result=eq.pending&starts_at=gt.${encodeURIComponent(at)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(patch)});
   }
 }
 // Probability is a new, separately timestamped observation of the frozen forecast.
