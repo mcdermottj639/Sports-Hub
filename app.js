@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v305';
+const APP_VERSION = 'v306';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -8560,7 +8560,11 @@ async function syncLeagueOnce(sport, force) {
     // Each one still degrades on its own — a soft fetch resolves to null rather
     // than rejecting, so one dead endpoint can't take the whole sync down (the
     // per-call try/catch this replaces did the same job serially).
-    const soft = (url, ttl) => fetchJSON(url, ttl).catch(() => null);
+    // v306: one retry before giving up. The free host answers a cold call
+    // slowly and a single dropped request used to blank a whole section.
+    const soft = (url, ttl) => fetchJSON(url, ttl)
+      .catch(() => new Promise((r) => setTimeout(r, 1500)).then(() => fetchJSON(url, ttl)))
+      .catch(() => null);
     // catranks/playoffs are category-league (baseball) concepts — skip for
     // football, whose equivalent is /season: per-week scores, ESPN's OWN
     // playoff odds and the all-play record, off the cached League snapshot.
@@ -8586,7 +8590,26 @@ async function syncLeagueOnce(sport, force) {
     [data, matchup, standings, freeAgents, opponent, catranks, playoffs, season, rosters].forEach((d) => {
       if (isStale(d) && d.__at && (!at || d.__at < at)) at = d.__at;
     });
-    const built = { team: data.team, record: data.record, rosterFull: data.roster || [], rules: data.rules || null, live: !!data.live, matchup, standings, freeAgents, opponent, catranks, playoffs, season, rosters, syncedAt: at || Date.now() };
+    /* v306: a failed secondary call must not erase the last good copy. The
+       GM Waiver Plan and Trade Targets read freeAgents/rosters; before this a
+       single dropped request (typically a cold Render start) saved null over
+       yesterday's data and both sections went blank until a manual refresh.
+       Carry the previous copy forward for up to 3 days and record its age, so
+       the section can say it is a saved copy rather than pass it off as live.
+       Only these two are carried: a stale matchup or opponent would describe
+       the wrong week. */
+    const prev = fanState.league[sport] || leagueSnap(sport) || null;
+    const carried = {};
+    const carry = (key, fresh) => {
+      if (fresh) return fresh;
+      const old = prev && prev[key];
+      const oldAt = (prev && prev.carried && prev.carried[key]) || (prev && prev.syncedAt) || 0;
+      if (old && oldAt && Date.now() - oldAt < 3 * 24 * HR) { carried[key] = oldAt; return old; }
+      return null;
+    };
+    const fa = carry('freeAgents', freeAgents);
+    const lr = carry('rosters', rosters);
+    const built = { team: data.team, record: data.record, rosterFull: data.roster || [], rules: data.rules || null, live: !!data.live, matchup, standings, freeAgents: fa, opponent, catranks, playoffs, season, rosters: lr, carried, syncedAt: at || Date.now() };
     fanState.league[sport] = built;
     saveLeagueSnap(sport, built);
     window.dispatchEvent(new CustomEvent('sportshub:league-updated'));
@@ -9141,8 +9164,15 @@ function fbPairDrop(add, drops, usedDrops, rules) {
   }
   return null;
 }
-function fbGMHTML(roster, freeAgents, leagueRosters, rules) {
+function fbGMHTML(roster, freeAgents, leagueRosters, rules, meta = {}) {
   const config = fbRules(rules);
+  // v306: say WHY a section is empty. "Not loaded" (the call failed and
+  // nothing was saved) and "loaded, nothing qualifies" are opposite facts.
+  const faLoaded = meta.faLoaded ?? ((freeAgents || []).length > 0);
+  const rostersLoaded = meta.rostersLoaded ?? !!(leagueRosters && Array.isArray(leagueRosters.teams));
+  const ago = (t) => { const m = Math.max(1, Math.round((Date.now() - t) / 60000)); return m < 60 ? `${m}m` : m < 2880 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`; };
+  const savedNote = (t) => t ? `<div class="ffp-cap">Saved copy from ${ago(t)} ago — the latest pull from ESPN failed. Tap Refresh to retry.</div>` : '';
+  const retryBtn = '<button class="fan-btn ghost gm-retry" style="margin-top:8px">🔄 Refresh from ESPN</button>';
   const { needs, needMap, plan } = fbPickWaivers(roster, freeAgents, rules);
   const drops = (roster || []).filter((p) => isBenched(p) && !isReserve(p)).map((p) => ({ p, pos: nflBucket(p), value: fbValue(p) })).filter((x) => !['K', 'DST'].includes(x.pos)).sort((a, b) => a.value - b.value);
   const usedDrops = new Set();
@@ -9178,7 +9208,7 @@ function fbGMHTML(roster, freeAgents, leagueRosters, rules) {
   const trades = tradeLeads.slice(0, 8).map((x) => `<div class="gm-trade"><div><b>${esc(x.p.name)}</b> <span class="ffp-slot">${x.pos}</span></div><div class="gm-owner">${esc(x.team)} · ${esc(fbValueLabel(x.p))}</div><div class="gm-fit">${x.surplus ? '✓ Manager has depth here' : 'Targets your roster need'} · ${x.need.grade} ${x.pos} need. ${x.returnFit ? `They need ${esc(x.returnFit)}; you have depth to discuss` : 'No clear matching surplus on your roster'}</div></div>`).join('');
   const needRows = needs.map((n) => `<div class="gm-need ${n.grade.toLowerCase()}"><div class="gm-need-top"><b>${n.pos}</b><span>${n.grade}</span></div><div class="gm-need-track"><i style="width:${Math.max(6, n.score)}%"></i></div><div class="gm-why">${esc(n.reason)}</div></div>`).join('');
   const first = needs[0];
-  return `<div class="gm-hero"><div><div class="pp-kicker">GM COMMAND CENTER</div><h3>${first && first.score >= 15 ? `Priority: improve ${esc(first.pos)}` : 'Roster is balanced'}</h3><p>${first && first.score >= 15 ? esc(first.reason) + '. Waiver and trade lists are ranked around that need.' : 'No major hole is showing. Prioritize upside and injury insurance.'}</p></div><div class="gm-score"><b>${first ? first.score : 0}</b><span>top need</span></div></div><div class="gm-needs">${needRows}</div><div class="gm-grid"><section><h3>Waiver Plan</h3>${waiverRows || '<div class="ffp-empty"><b>No recommendations yet</b>ESPN free-agent data is not available.</div>'}<div class="ffp-cap">One primary add, then league-eligible flex options. Past scoring differences are not projected lineup gains.</div></section><section><h3>Trade Targets</h3>${trades || '<div class="ffp-empty"><b>Trade market loading</b>Every league roster appears after the backend deploys and the next refresh.</div>'}<div class="ffp-cap">Conversation starters, not one-for-one values. Depth targets allocate your league’s bench spots; they are guidelines, not roster requirements. ${config.verified ? 'ESPN roster rules loaded.' : 'Standard roster assumptions until league rules load.'}</div></section></div>`;
+  return `<div class="gm-hero"><div><div class="pp-kicker">GM COMMAND CENTER</div><h3>${first && first.score >= 15 ? `Priority: improve ${esc(first.pos)}` : 'Roster is balanced'}</h3><p>${first && first.score >= 15 ? esc(first.reason) + '. Waiver and trade lists are ranked around that need.' : 'No major hole is showing. Prioritize upside and injury insurance.'}</p></div><div class="gm-score"><b>${first ? first.score : 0}</b><span>top need</span></div></div><div class="gm-needs">${needRows}</div><div class="gm-grid"><section><h3>Waiver Plan</h3>${waiverRows || (faLoaded ? '<div class="ffp-empty"><b>No pickup beats your roster</b>None of the available players at a position you need clears your current options.</div>' : `<div class="ffp-empty"><b>Couldn't load free agents</b>The league didn't answer on the last sync — usually the free server waking up.${retryBtn}</div>`)}${savedNote(meta.faSavedAt)}<div class="ffp-cap">One primary add, then league-eligible flex options. Past scoring differences are not projected lineup gains.</div></section><section><h3>Trade Targets</h3>${trades || (rostersLoaded ? '<div class="ffp-empty"><b>No trade leads right now</b>No other roster has a usable player at your top need positions.</div>' : `<div class="ffp-empty"><b>Couldn't load league rosters</b>The other teams' rosters didn't come back on the last sync.${retryBtn}</div>`)}${savedNote(meta.rostersSavedAt)}<div class="ffp-cap">Conversation starters, not one-for-one values. Depth targets allocate your league’s bench spots; they are guidelines, not roster requirements. ${config.verified ? 'ESPN roster rules loaded.' : 'Standard roster assumptions until league rules load.'}</div></section></div>`;
 }
 
 async function renderFootballLive() {
@@ -9348,7 +9378,7 @@ async function renderFootballLive() {
   const waiverHTML = fas.length
     ? `<div class="ffp-card">${fas.slice(0, 12).map((p) => `<div class="ffp-prow"><div class="ffp-prow-l1"><span class="ffp-slot">${esc(p.pos || '')}</span><span class="ffp-pname">${esc(p.name)}</span>${fbMatchupBadge(p)}</div><div class="ffp-prow-l2"><span class="ffp-meta">${esc(p.proTeam || '')}${p.owned != null ? ' · ' + Math.round(p.owned) + '% rostered' : ''}</span>${fbSpark(fbWeeks(p).map((w) => w.pts), 'hot')}<span class="ffp-pts proj">${fpts(p.projected) != null ? fpts(p.projected) : '–'}</span></div></div>`).join('')}<div class="ffp-cap">Top available by ESPN projection. Waivers run Wed &amp; Sun 11 PM ET.</div></div>`
     : `<div class="ffp-card"><div class="ffp-empty"><b>Waiver wire empty</b>Available players appear after the next sync.</div></div>`;
-  const gmHTML = fbGMHTML(full, fas, L.rosters, L.rules);
+  const gmHTML = fbGMHTML(full, fas, L.rosters, L.rules, { faLoaded: !!(L.freeAgents && Array.isArray(L.freeAgents.players)), rostersLoaded: !!(L.rosters && Array.isArray(L.rosters.teams)), faSavedAt: (L.carried || {}).freeAgents, rostersSavedAt: (L.carried || {}).rosters });
 
   box.innerHTML = `
     <div class="setup-card pp-hero">
@@ -9384,6 +9414,7 @@ async function renderFootballLive() {
      bug again, dropped by the v195 rebuild. It has to be on the page now: this
      view routinely paints a saved copy, and a copy that reads as current is
      exactly the lie the whole cache design is trying not to tell. */
+  box.querySelectorAll('.gm-retry').forEach((b) => { b.onclick = async () => { b.textContent = '🔄 Refreshing…'; b.disabled = true; fanState.synced = fanState.synced || {}; fanState.synced.football = false; fanState.forceSync = true; await renderFantasy(); }; });
   const rt = $('#fbl-top-resync');
   if (rt) rt.onclick = async () => { rt.textContent = '🔄 Refreshing…'; fanState.synced = fanState.synced || {}; fanState.synced.football = false; fanState.forceSync = true; await renderFantasy(); };
   const pp = box.querySelector('#fbl-prep');

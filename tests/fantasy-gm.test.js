@@ -169,3 +169,24 @@ test('trade leads explain a complementary roster need without promising fair val
   assert.match(html, /They need WR; you have depth to discuss/);
   assert.doesNotMatch(html, /estimated \+/);
 });
+
+test('v306: empty GM sections say whether data failed to load or nothing qualifies', () => {
+  const s = load();
+  const my = [p('QB', 'QB', 20), p('RB1', 'RB', 10)];
+  const failed = s.fbGMHTML(my, [], null, rules, { faLoaded: false, rostersLoaded: false });
+  assert.match(failed, /Couldn't load free agents/);
+  assert.match(failed, /Couldn't load league rosters/);
+  assert.match(failed, /gm-retry/);
+  assert.doesNotMatch(failed, /backend deploys|free-agent data is not available/);
+  const quiet = s.fbGMHTML(my, [p('Hurt RB', 'RB', 30, { injuryStatus: 'OUT' })], { teams: [] }, rules, { faLoaded: true, rostersLoaded: true });
+  assert.match(quiet, /No pickup beats your roster/);
+  assert.match(quiet, /No trade leads right now/);
+  assert.doesNotMatch(quiet, /gm-retry/);
+});
+
+test('v306: a carried-forward copy is labelled with its age', () => {
+  const s = load();
+  const html = s.fbGMHTML([p('QB', 'QB', 20)], [p('Free RB', 'RB', 12)], { teams: [] }, rules,
+    { faLoaded: true, rostersLoaded: true, faSavedAt: Date.now() - 5 * 3600 * 1000 });
+  assert.match(html, /Saved copy from 5h ago/);
+});

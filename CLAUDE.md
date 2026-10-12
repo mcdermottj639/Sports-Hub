@@ -669,7 +669,24 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v305** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v306** (backend **b17-fantasy-league-rules**).
+
+### v306 — A failed fantasy sync no longer blanks the GM page
+The owner's phone showed "ESPN free-agent data is not available" and "Trade
+market loading … after the backend deploys" while the backend was answering
+normally (80 free agents, 11 rosters) and the desktop rendered the full Waiver
+Plan. Cause: `syncLeagueOnce`'s `soft()` turned any failed secondary call into
+`null`, and that null was saved into `sportshub:league:football` over the last
+good copy, so one dropped request (usually a cold Render start) blanked both GM
+sections until a manual refresh. Fixes: `soft()` retries once after 1.5s;
+`freeAgents` and `rosters` are carried forward from the previous league object
+for up to 3 days when the fresh call fails, with their age recorded in
+`built.carried` (matchup/opponent are deliberately NOT carried — a stale one
+describes the wrong week); `fbGMHTML` takes a `meta` arg and distinguishes
+"couldn't load" (with a 🔄 retry button) from "loaded, nothing qualifies", and
+labels a carried copy "Saved copy from Xh ago". The two stale empty-state
+strings are gone. `syncedAt` still means the age of the fresh data; the carried
+age is shown per section. Tests: `tests/fantasy-gm.test.js`.
 
 ### Collector fix (no app release) — CFB winner picks saved before a line get priced
 `sports-hub-ai` only. Since Oct 1, 18 of 57 official CFB winner rows had no price;
@@ -7583,7 +7600,9 @@ rewrite.**
   same thing as the generic disk cache: that caches raw responses on a shared
   evictable budget, and this view does not read raw responses. Carries
   `syncedAt`, which is the age of the DATA (the oldest `__at` among the
-  payloads it was built from), never the age of the assembly.
+  payloads it was built from), never the age of the assembly. Since v306 it
+  may also carry `carried: {freeAgents?, rosters?}` — timestamps of sections
+  kept from an earlier sync because the fresh call failed (≤3 days old).
 - `sportshub:pickem` — 🎯 the owner's ATS pool (v218), keyed by season →
   `{cfg, weeks: {N: {picks: {gameId: {side, sp, md, at, m}}, keys: [], tb}}}`.
   ⚠️ **`sp` is the spread the pick was made at and is what grading reads** —
