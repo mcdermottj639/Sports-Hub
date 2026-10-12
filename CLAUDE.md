@@ -123,7 +123,11 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > and deny anonymous writes. `cloud-ai.js` reads the entire durable history in pages. Official model
 > performance uses cloud rows only; older device records remain available separately.
 > Missing prices can be filled only before kickoff at the frozen line, side and
-> provider, with a separate price observation timestamp; forecasts stay immutable. Capture therefore does not require opening the app.
+> provider, with a separate price observation timestamp; forecasts stay immutable.
+> A winner pick saved before any line existed (provider null — CFB is often saved
+> a week early) may take the first DraftKings pregame price for its side instead;
+> its provider column stays null and `snapshot.priceSource` says
+> `espn_first_draftkings_pregame`. Capture therefore does not require opening the app.
 
 > ### Player props — independent model and permanent record (v297)
 > NFL, Top-25 CFB, NBA and MLB have `#/models/{sport}/props` with up to two
@@ -666,6 +670,21 @@ Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
 Current version as of this writing: **v305** (backend **b17-fantasy-league-rules**).
+
+### Collector fix (no app release) — CFB winner picks saved before a line get priced
+`sports-hub-ai` only. Since Oct 1, 18 of 57 official CFB winner rows had no price;
+all 16 saved with `provider` null (forecast captured ~6 days before kickoff, before
+any line) were never priced, because `enrichPrices` skipped `!r.provider`. NFL was
+43 of 43 priced. Such a row may now take the **first DraftKings pregame price** for
+its frozen side, moneyline only, under the same pregame guards (`state==='pre'`,
+kickoff in the future, `starts_at=gt.now` on the PATCH, `price=is.null` so it is
+first-write). The forecast, `captured_at`, `selection` and the `provider` column are
+untouched; the snapshot records `priceSource: espn_first_draftkings_pregame`,
+`priceProvider` and `priceCapturedAt`. It also fills a null `market_probability`
+from the same observation so model-vs-market is measurable. Settled rows are never
+backfilled. Two DraftKings-provider rows that were also unpriced (STAN @ ND,
+MD @ OSU) have a different cause and are not addressed here.
+Regression: `tests/ai-roi-capture.test.js`.
 
 ### v305 — Team records (and CFB rank) on the game screen
 The game screen header now shows every team's overall record under its name,
