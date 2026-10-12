@@ -669,7 +669,18 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v307** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v308** (backend **b17-fantasy-league-rules**).
+
+### v308 — Bug-echo follow-ups to v306
+A bug-echo sweep for v306's "failed fetch saved over good data" pattern found
+two siblings. (1) `syncLeagueOnce` still saved null `standings`/`season` over
+the last good copy, blanking the League table, ESPN playoff odds and Luck &
+All-Play; both are now carried like free agents/rosters and the League section
+labels a saved copy. (2) `baseballPlayerIndex` cached a partial or empty
+player→team index for 24h when roster fetches failed; it now caches (and pins in
+memory) only a complete 30-team index. The sweep found no siblings of v307's
+pattern: every pregame forecast goes through `predictGame`, so its saved-forecast
+fallback already covers all sports.
 
 ### v307 — Show the saved forecast when the live NFL recompute fails
 BUF @ LAR (MNF, 12 Oct) read "Forecast withheld" with every QB reason firing,

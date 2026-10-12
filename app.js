@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v307';
+const APP_VERSION = 'v308';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -8608,8 +8608,8 @@ async function syncLeagueOnce(sport, force) {
        yesterday's data and both sections went blank until a manual refresh.
        Carry the previous copy forward for up to 3 days and record its age, so
        the section can say it is a saved copy rather than pass it off as live.
-       Only these two are carried: a stale matchup or opponent would describe
-       the wrong week. */
+       Matchup and opponent are never carried: a stale one would describe the
+       wrong week. (v308 added standings and season, below.) */
     const prev = fanState.league[sport] || leagueSnap(sport) || null;
     const carried = {};
     const carry = (key, fresh) => {
@@ -8621,7 +8621,12 @@ async function syncLeagueOnce(sport, force) {
     };
     const fa = carry('freeAgents', freeAgents);
     const lr = carry('rosters', rosters);
-    const built = { team: data.team, record: data.record, rosterFull: data.roster || [], rules: data.rules || null, live: !!data.live, matchup, standings, freeAgents: fa, opponent, catranks, playoffs, season, rosters: lr, carried, syncedAt: at || Date.now() };
+    // v308 (bug-echo): standings and season had the same null-over-good bug,
+    // blanking the League table, playoff odds and Luck & All-Play. They change
+    // at most weekly, so a carried copy is labelled, not wrong.
+    const st = carry('standings', standings);
+    const se = carry('season', season);
+    const built = { team: data.team, record: data.record, rosterFull: data.roster || [], rules: data.rules || null, live: !!data.live, matchup, standings: st, freeAgents: fa, opponent, catranks, playoffs, season: se, rosters: lr, carried, syncedAt: at || Date.now() };
     fanState.league[sport] = built;
     saveLeagueSnap(sport, built);
     window.dispatchEvent(new CustomEvent('sportshub:league-updated'));
@@ -9415,7 +9420,7 @@ async function renderFootballLive() {
     <h2 class="section-title">Luck &amp; All-Play</h2>
     ${fbLuckHTML(season)}
     <h2 class="section-title">League</h2>
-    ${fbLeagueHTML(season, L.standings)}
+    ${fbLeagueHTML(season, L.standings)}${(L.carried || {}).standings || (L.carried || {}).season ? `<div class="ffp-cap">Saved league table from ${esc(timeAgo((L.carried.standings || L.carried.season)))} — the latest pull from ESPN failed. Tap Refresh to retry.</div>` : ''}
     <h2 class="section-title" id="desk-fantasy-waivers">Waiver Wire</h2>
     ${waiverHTML}
     <div style="margin-top:14px"><button id="fbl-prep" class="fan-btn ghost">🏈 Draft board &amp; prep tools →</button></div>`;
@@ -9894,14 +9899,22 @@ async function baseballPlayerIndex() {
   if (MLB_INDEX) return MLB_INDEX;
   try { const c = JSON.parse(localStorage.getItem('sportshub:mlbidx') || 'null'); if (c && Date.now() - c.t < 86400000 && c.m) { MLB_INDEX = c.m; return MLB_INDEX; } } catch (_) {}
   const idx = {};
+  let loaded = 0;
   await Promise.all(Object.entries(MLB_ABBR).map(async ([name, abbr]) => {
     const data = await fetchJSON(`${SITE}/baseball/mlb/teams/${abbr}/roster`, 24 * 3600000).catch(() => null);
+    if (data?.athletes?.length) loaded++;
     (data?.athletes || []).forEach((grp) => (grp.items || grp.athletes || [grp]).forEach((a) => {
       const nm = a?.displayName || a?.fullName; if (nm) { const k = nameKey(nm); if (!idx[k]) idx[k] = name; }
     }));
   }));
-  MLB_INDEX = idx;
-  try { localStorage.setItem('sportshub:mlbidx', JSON.stringify({ t: Date.now(), m: idx })); } catch (_) {}
+  // v308 (bug-echo): only a COMPLETE index is cached. A partial or empty one
+  // (failed roster fetches) used to be saved for 24h and pinned in memory, so
+  // players on the missing teams stayed unmatched all day. Use it for this
+  // render only and try again next time.
+  if (loaded === Object.keys(MLB_ABBR).length) {
+    MLB_INDEX = idx;
+    try { localStorage.setItem('sportshub:mlbidx', JSON.stringify({ t: Date.now(), m: idx })); } catch (_) {}
+  }
   return idx;
 }
 async function autoResolveTeams(roster) {
