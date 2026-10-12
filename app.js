@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v309';
+const APP_VERSION = 'v310';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -316,7 +316,8 @@ function fetchLive(url, ttl, timeoutMs) {
     const ms = timeoutMs || (url.startsWith(FANTASY_API) ? 45000 : 9000);
     const t = setTimeout(() => ctrl.abort(), ms);
     try {
-      const res = await fetch(url, { signal: ctrl.signal });
+      // v310: ESPN team pages go through the server relay (see supabase-config.js).
+      const res = await (globalThis.SportsHubEspnRelay?.fetch || fetch)(url, { signal: ctrl.signal });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       // We really did reach the network. Only ESPN counts — see `globalFeed`.

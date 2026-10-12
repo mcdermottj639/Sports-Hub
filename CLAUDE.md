@@ -669,7 +669,25 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v309** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v310** (backend **b17-fantasy-league-rules**).
+
+### v310 — ESPN team endpoints go through a relay
+Settles the v307/v309 question. ESPN now refuses BROWSER requests to
+`site.api.espn.com/.../teams/{id}/...` (depth charts, rosters, schedules, team
+info) while `/scoreboard`, `/summary` and `/injuries` still answer; server-side
+requests are unaffected. The owner's phone source check read "BUF/LAR depth
+chart: request failed", so no QB → forecast withheld. New Supabase Edge Function
+`espn-teams` (`supabase/functions/espn-teams/index.ts`, `verify_jwt: false`) is a
+locked-down read-only relay: GET only, upstream pinned to site.api.espn.com, a
+path allowlist for `/teams[/{id}[/depthcharts|roster|schedule|statistics]]` on
+nfl/cfb/mlb/nba, query keys limited to season/seasontype/enable/limit, CORS for
+the app's origin, 5-minute memo. `supabase-config.js` exports
+`SportsHubEspnRelay.fetch`, which routes matching URLs through the relay and
+falls back to the direct request if the relay fails (never after an abort);
+`fetchLive` and `nfl-live-client.js` `source()` both use it. Any other URL is
+untouched. ⚠️ WebFetch's summarizer reported BUF/LAR depth charts dated Aug 20 /
+Sep 2; the relay returned BUF's chart updated 12 Oct with Josh Allen QB1 — do
+not trust summarized fetches for exact values.
 
 ### v309 — NFL QB source check
 "Current QB evidence unavailable" covered three different faults. New

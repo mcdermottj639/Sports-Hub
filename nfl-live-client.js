@@ -4,7 +4,7 @@
   const sources=new Map(),games=new Map(),base='https://site.api.espn.com/apis/site/v2/sports/football/nfl';
   async function source(url){
     const old=sources.get(url);if(old&&Date.now()-old.at<5*60000)return old.data;
-    const data=(async()=>{try{const r=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(12000)});return {...(r.ok?await r.json():{}),_sourceStatus:r.status};}catch(_){return {_sourceStatus:'unavailable'};}})();
+    const data=(async()=>{try{const r=await (root.SportsHubEspnRelay?.fetch||fetch)(url,{cache:'no-store',signal:AbortSignal.timeout(12000)});return {...(r.ok?await r.json():{}),_sourceStatus:r.status};}catch(_){return {_sourceStatus:'unavailable'};}})();
     sources.set(url,{at:Date.now(),data});return data;
   }
   async function load(g){
