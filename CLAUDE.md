@@ -665,7 +665,17 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v303** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v304** (backend **b17-fantasy-league-rules**).
+
+### v304 — Possession label comes from the team id, not the ball spot
+The live situation line ("XXX ball · 3rd & 5") in the game report and the
+football score-rail card read the first word of ESPN's `possessionText`. That
+field is the ball SPOT ("BAL 45" = on Baltimore's side of the field), not the
+team with the ball, so whenever the offense was past midfield the defense was
+named as having the ball (caught live: ATL ball at the BAL 45 showed "BAL
+ball"). `possessionAbbr(sit, teams)` in `app.js` now maps ESPN's `possession`
+team id to an abbreviation and both renderers use it. No id → no team shown,
+never a guess from the spot. Covered by `tests/possession-label.test.js`.
 
 ### v303 — NFL no-bet labels from the October calibration read
 

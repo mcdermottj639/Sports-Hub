@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v303';
+const APP_VERSION = 'v304';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1353,14 +1353,24 @@ function liveSituationHTML(sport, data, comp, g) {
     <div class="sit-last">Last play: ${last}</div>`;
 }
 
+// v304: who has the ball comes ONLY from ESPN's `possession` team id.
+// `possessionText` ("BAL 45") is the ball SPOT — the side of the field — not
+// the team with the ball, so reading its first word labelled the defense as
+// the offense whenever the offense was past midfield. No id → no label: a
+// blank beats a wrong team.
+function possessionAbbr(sit, teams) {
+  const id = sit?.possession;
+  if (id == null || id === '') return '';
+  const t = (teams || []).find((x) => x && x.id != null && String(x.id) === String(id));
+  return t?.abbr || '';
+}
+
 // Football: a field-position bar with the ball spot, possession + down/distance.
 function footballSituation(sit, comp) {
   const dd = sit.shortDownDistanceText || sit.downDistanceText;
   const last = sit.lastPlay?.text;
   const cs = comp.competitors || [];
-  const possId = sit.possession;
-  const possTeam = cs.find((c) => String(c.id) === String(possId) || String(c.team?.id) === String(possId));
-  const possAbbr = (sit.possessionText || '').split(' ')[0] || possTeam?.team?.abbreviation || '';
+  const possAbbr = possessionAbbr(sit, cs.map((c) => ({ id: c.team?.id ?? c.id, abbr: c.team?.abbreviation })));
   const yl = Number(sit.yardLine);
   const rz = !!sit.isRedZone;
   if (!dd && isNaN(yl) && !last) return '';
@@ -1527,7 +1537,7 @@ function mgcBaseball(g, sit) {
 function mgcFootball(g, sit) {
   const yl = Number(sit?.yardLine);
   const dd = sit?.shortDownDistanceText || sit?.downDistanceText || '';
-  const poss = (sit?.possessionText || '').split(' ')[0] || '';
+  const poss = possessionAbbr(sit, [g.home, g.away]);
   const rz = !!sit?.isRedZone;
   let field = '';
   if (isFinite(yl)) {
