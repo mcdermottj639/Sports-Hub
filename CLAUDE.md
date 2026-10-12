@@ -686,6 +686,24 @@ backfilled. Two DraftKings-provider rows that were also unpriced (STAN @ ND,
 MD @ OSU) have a different cause and are not addressed here.
 Regression: `tests/ai-roi-capture.test.js`.
 
+### Collector fix (no app release) — TBD kickoffs, and why huge favourites stay unpriced
+Two more causes of unpriced CFB winner picks, found 12 Oct 2026:
+- **TBD kickoff placeholder.** A forecast saved while ESPN still listed the kickoff
+  as TBD freezes ESPN's placeholder (midnight Eastern on the game date). When ESPN
+  later posts the real time, `enrichPrices`/`enrichProbabilities` required an EXACT
+  start-time match and skipped the row forever (WIS @ UCLA, NEB @ ORE). New
+  `sameKickoff(rowStart, gameDate)` also accepts a row frozen at exactly midnight
+  Eastern when the game is on that same Eastern date and later than it. Any other
+  time change, or a different date (postponement), still blocks. `starts_at` is NOT
+  rewritten; the snapshot records `priceKickoff`. The PATCH guard still uses the
+  stored placeholder, so such a row can be priced only until midnight of game day.
+- **No moneyline offered.** STAN @ ND (−37.5) and MD @ OSU (−35.5) carried
+  DraftKings spreads and totals but no moneyline in ANY observation, spread rows
+  included. That is the book not offering one, not a collector fault, and nothing
+  here can price it. Priced CFB favourites in October went up to −2800 at −26.5.
+- ⚠️ Not changed: `football-research-*` rows with a TBD placeholder still grade
+  **void** in `gradeGame`, because its reschedule test is the same exact-time match.
+
 ### v305 — Team records (and CFB rank) on the game screen
 The game screen header now shows every team's overall record under its name,
 and college teams in the Top 25 get their rank before the name (#9 LSU).
