@@ -25,6 +25,15 @@ function dimensions(d){const C=root.SportsHubSignalsCore,i=d.inputs||{},x=C.rese
  return {...x,travel,international:typeof i.international==='boolean'?i.international:null,early:valid?day==='Sun'&&hour>=12&&hour<15:null,prime:valid?hour>=19:null,
   returned:t?i[t+'_previous_international']??null:null,previousAway:t?i[t+'_previous_away']??null:null,previousMargin:t?C.number(i[t+'_previous_margin']):null,opponentBye:t?i[(t==='home'?'away':'home')+'_post_bye']??null:null};
 }
+// Display labels: which team each situation bets on. betSide 'both' = that team at home or on the road;
+// 'home'/'away' = the situation already fixes the side. Situations without an entry track both teams.
+const bettor={postbye:['Team off a bye','both'],homebye:['Home team off a bye','home'],awaybye:['Road team off a bye','away'],
+ oppbye:['Team facing a bye team','both'],short:['Short-week team','both'],long:['Rested team (10+ days)','both'],
+ restedge:['Better-rested team','both'],restdeficit:['Less-rested team','both'],westeast:['West Coast team traveling east','both'],
+ westearly:['West Coast team, early East kickoff','both'],eastwest:['East Coast team traveling west','both'],
+ intlreturn:['Team back from overseas','both'],roadrepeat:['Road team, 2nd straight road game','away'],
+ road_dog:['Road underdog','away'],home_dog:['Home underdog','home'],road_fav:['Road favorite','away'],
+ win:['Team off a win','both'],loss:['Team off a loss','both'],bigloss:['Team off a 14+ point loss','both'],bigwin:['Team off a 14+ point win','both']};
 const known=(v,fn)=>v==null?null:fn(v);
 const team=(x,fn)=>x.team?fn():false;
 const defs=[
@@ -53,7 +62,7 @@ const defs=[
  ['loss','Previous result','After a loss','Selected team lost its previous completed regular-season game.',x=>team(x,()=>known(x.previousMargin,v=>v<0))],
  ['bigloss','Previous result','After a 14+ point loss','Selected team lost its previous game by at least 14 points.',x=>team(x,()=>known(x.previousMargin,v=>v<=-14))],
  ['bigwin','Previous result','After a 14+ point win','Selected team won its previous game by at least 14 points.',x=>team(x,()=>known(x.previousMargin,v=>v>=14))]
-].map(([id,category,name,description,test])=>({id,category,name,description,test}));
+].map(([id,category,name,description,test])=>({id,category,name,description,test,...(bettor[id]?{bet:bettor[id][0],betSide:bettor[id][1]}:{})}));
 function select(rows,id){const def=defs.find(x=>x.id===id);return def?rows.filter(d=>def.test(dimensions(d))===true):rows;}
 function coverage(rows,id){const def=defs.find(x=>x.id===id);const matches=select(rows,id),unknown=def?rows.filter(d=>def.test(dimensions(d))==null):[];const count=ds=>new Set(ds.map(d=>[d.sport,d.event_id,d.schedule_instance].join('|'))).size;return {matches,games:count(matches),unknown:count(unknown)};}
 return {defs,dimensions,select,coverage,scheduleContext,international,baseZone};

@@ -49,3 +49,16 @@ test('international country missing is unknown and neutral flag remains unknown 
  assert.equal(S.international({address:{country:'United States'}}),false);assert.equal(S.international({}),null);
  const H=await import('../supabase/functions/sports-hub-ai/signals.ts');assert.equal(H.signalGame({id:'x',competitions:[{}]}).neutral,null);
 });
+test('team situations label rows by the team being bet, not a bare home/away side',()=>{
+ const away=row({away_previous_game_at:'2026-09-20T17:00:00Z'}),home={...row({matchup:'NYG @ SF',home_previous_game_at:'2026-09-20T17:00:00Z',away_previous_game_at:'2026-09-27T17:00:00Z'}),id:'h',event_id:'2',rule_id:'nfl_research_spread_home',selection_side:'home'};
+ const ml={...away,id:'m',rule_id:'nfl_research_moneyline_away',market:'moneyline'};
+ const html=UI.systemResultsHTML({state:'ready',filters:{scope:'situations'},decisions:[away,home,ml],settlements:[{decision_id:'d',result:'win'},{decision_id:'h',result:'loss'},{decision_id:'m',result:'win'}]});
+ const long=html.slice(html.indexOf('data-situation-id="long"'),html.indexOf('data-situation-id="restedge"'));
+ assert.match(long,/Bets on the rested team \(10\+ days\) only · split home and road/);
+ assert.match(long,/<th>Rested team \(10\+ days\) · home<\/th>/);assert.match(long,/<th>Rested team \(10\+ days\) · road<\/th>/);
+ assert.match(long,/<th>Bet on<\/th>/);assert.match(long,/1 priced bet · early sample/);
+ assert.doesNotMatch(long,/Matching team sides only|<th>Home team<\/th>|priced results/);
+ const dog=html.slice(html.indexOf('data-situation-id="westeast"'),html.indexOf('data-situation-id="westearly"'));
+ assert.match(dog,/<th>West Coast team traveling east · road<\/th>/);
+ assert.ok(S.defs.filter(d=>!d.bet).every(d=>['intl','neutral','division','nondivision','prime'].includes(d.id)));
+});
