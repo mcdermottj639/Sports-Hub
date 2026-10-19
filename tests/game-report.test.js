@@ -128,7 +128,9 @@ test('three market cards, each with model, book and that market\'s own money spl
   assert.doesNotMatch(html, /Dollars lean the (Over|Under)/);
   // The old duplicate sections are gone; the notes toggle remains.
   assert.doesNotMatch(html, /gr-money-row|gr-head|💰 Big Money/);
-  assert.match(html, /Model inputs, limitations/);
+  assert.match(html, /Why this read · inputs/);
+  // v316: the source of the money % is named on the card, never left to read as another app's number.
+  assert.match(html, /Money % = DraftKings only, via VSiN/);
 });
 test('missing spread and total splits degrade per market, never blank the card', () => {
   const s = load();
@@ -150,4 +152,29 @@ test('movement sits under the book number for each market', () => {
   assert.match(html, /gr-mv">-380 → -410/);
   assert.match(html, /gr-mv">-7\.0 → -7\.5/);
   assert.match(html, /gr-mv">51\.5 → 52\.5/);
+});
+
+// v316 — one caveat line per card: an NFL total that is both under the bar and
+// a no-bet says so once, in the pill and one sentence, not "(read only)" plus a
+// second "No-bet" row. The break-even line the old odds banner carried sits on
+// the moneyline card. No factor breakdown section exists outside the toggle.
+test('nfl no-bet total carries one combined caveat and the moneyline shows break-even', () => {
+  const s = load();
+  s.nflNoBet = (sport, market) => market === 'total' ? 'No-bet: NFL totals are 9-14 this season' : '';
+  s.aiFactors = () => '<div class="md-section-title">Why — Factor Breakdown</div><div class="fac-list"><div class="fac-row">Team strength</div></div>';
+  const html = s.gameReportHTML('nfl', nflGame, nflPred, nflOdds);
+  assert.match(html, /Under 52\.5 · 1\.8 pts · no-bet</);
+  assert.doesNotMatch(html, /read only/);
+  assert.equal((html.match(/No-bet: NFL totals/g) || []).length, 1);
+  assert.match(html, /No-bet: NFL totals are 9-14 this season · 1\.8 pts is under the 4-pt bar — shown, not recorded\./);
+  assert.match(html, /-410 needs 80\.4% to break even · model 79\.2% → no model EV/);
+  // The factor rows ride inside the single toggle, and the old heading is gone.
+  assert.match(html, /<details class="gr-model-notes"><summary>Why this read[^]*fac-row/);
+  assert.doesNotMatch(html, /Why — Factor Breakdown/);
+});
+test('splits timestamp is shown when the feed carries one, in local time', () => {
+  const s = load();
+  s.splitsFor = () => vsin;
+  const html = s.gameReportHTML('nfl', nflGame, nflPred, nflOdds, { splits: { ok: true, book: 'DraftKings via VSiN', fetched: 1760915520, games: [vsin] } });
+  assert.match(html, /via VSiN · updated \d{1,2}:\d{2}/);
 });

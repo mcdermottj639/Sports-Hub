@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v315';
+const APP_VERSION = 'v316';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1147,7 +1147,9 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
     } else if (g && sport === 'nfl') {
       extra += nflKeyHTML(g);
     }
-    const signalSlot = ['nfl','cfb'].includes(sport) && signalsEnabled() ? '<div id="md-signals" data-acc-boundary aria-live="polite"></div>' : '';
+    // v316: the signals section is one folded line until tapped — three
+    // "not matched" cards plus a methodology note were most of the scroll.
+    const signalSlot = ['nfl','cfb'].includes(sport) && signalsEnabled() ? '<details class="md-fold" id="md-signals-fold" data-acc-boundary><summary>Betting signals · checking…</summary><div id="md-signals" aria-live="polite"></div></details>' : '';
     const slot = g ? `<div id="md-report">${gameReportHTML(sport,g,pred,pred?.lockedOdds || shownOdds(sport,g,normOdds(g?.odds,g?.home?.name,g?.away?.name,g?.home?.abbr,g?.away?.abbr)).info,null,data)}</div>` : '';
     $('#modal-body').innerHTML = renderGameDetail(sport, data, pred, extra, g, slot, signalSlot);
     if (g) {
@@ -1159,12 +1161,13 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
     makeAccordion($('#modal-body'), '.md-section-title', SEC_OPEN_ALL);
     activeGameDetail = { sport, id, token };
     if (['nfl','cfb','nba'].includes(sport)) {
-      globalThis.SportsHubSavedGameReport?.mount($('#md-saved-report'),sport,g,pred);
+      globalThis.SportsHubSavedGameReport?.mount($('#md-saved-report'),sport,g,pred,g ? (pred?.lockedOdds || shownOdds(sport,g,normOdds(g?.odds,g?.home?.name,g?.away?.name,g?.home?.abbr,g?.away?.abbr)).info) : null);
       if (sport !== 'nba') globalThis.SportsHubFootballDevelopment?.mountGame($('#md-challenger'), id, sport);
     }
     if (g && ['nfl','cfb','nba','mlb'].includes(sport)) {
       const props=el('section','prop-game-report');props.setAttribute('data-acc-boundary','');
-      const reportHost=$('#md-report');if(reportHost)reportHost.after(props);else $('#modal-body').appendChild(props);
+      // v316: props sit under the official saved-pick strip, so model → saved pick → props read in one run.
+      const reportHost=$('#md-saved-report')||$('#md-report');if(reportHost)reportHost.after(props);else $('#modal-body').appendChild(props);
       globalThis.SportsHubProps?.mount(props,sport,g);
     }
     if (signalSlot) paintSignalDetail(id, token, focusSignals,'spread',null,sport);
@@ -1183,7 +1186,10 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
         if (token !== detailToken) return; // modal moved on while we waited
         const host = document.getElementById('md-report');
         if (!host) return;
-        host.innerHTML = gameReportHTML(sport, g, pred, shownOdds(sport, g, normOdds(rawO, g.home.name, g.away.name, g.home.abbr, g.away.abbr)).info, report, data);
+        // v316: a locked forecast keeps its locked odds here too — this late
+        // repaint used to swap in the live/empty quote and blank the Book
+        // column on an in-progress game the moment the splits feed answered.
+        host.innerHTML = gameReportHTML(sport, g, pred, pred?.lockedOdds || shownOdds(sport, g, normOdds(rawO, g.home.name, g.away.name, g.home.abbr, g.away.abbr)).info, report, data);
         makeAccordion(host, '.md-section-title', SEC_OPEN_ALL);
       }).catch(() => {
         // Keep the saved model report visible when the optional betting feed fails.
@@ -1277,18 +1283,6 @@ function marketGap(pred, info) {
   const mktPick = pred.homePick ? mkt : 1 - mkt;
   return Math.round((pickProb - mktPick) * 100);
 }
-// `sport`/`g` are optional — when given, the banner can also say whether the
-// model splits from the book on the SPREAD. Agreeing on the winner while
-// disagreeing on the number is the normal case for a big favourite, and a
-// bare "✅ Model agrees with the line" hid exactly that.
-function marketCompare(pred, favName, info, sport, g) {
-  if (!pred) return '';
-  const price = pickedPrice(pred, info);
-  const v = AI_MATH.value(pred.homePick ? pred.probHome : 1 - pred.probHome, price);
-  const text = v ? `Model ${(v.prob * 100).toFixed(1)}%; ${fmtML(price)} needs ${(v.breakeven * 100).toFixed(1)}% to break even. ${v.ev > 0 ? 'Positive model EV (unvalidated).' : 'No positive model EV at this price.'}`
-    : 'No usable quote on this side; price value cannot be established.';
-  return `${esc(pred.winner.name)} is the winner forecast. ${text}`;
-}
 // Fair American moneyline for a win probability (the model's "price").
 const fairML = (p) => {
   if (p == null || !isFinite(p)) return null;
@@ -1311,24 +1305,6 @@ function priceGrade(gapPts) {
 const gradeHue = (letter) =>
   letter[0] === 'A' ? 'var(--pos)' : letter[0] === 'B' ? 'var(--pos2)'
   : letter[0] === 'C' ? 'var(--wm)' : letter[0] === 'D' ? 'var(--neg2)' : 'var(--neg)';
-
-function oddsSectionHTML(info, awayAbbr, homeAbbr, pred, sport, g, pregameAt) {
-  if (!info) return '';
-  const cmp = marketCompare(pred, info.favName, info, sport, g);
-  const ml = (v) => (v == null ? '—' : (Number(v) > 0 ? `+${v}` : `${v}`));
-  const at = pregameAt === true ? '' : lineAtLabel(pregameAt);
-  const src = pregameAt
-    ? `<div class="ai-why" style="margin-top:2px">Locked pregame line${at ? ` (${at})` : ''} — in-game odds do not change this model read.</div>`
-    : '';
-  return `<div class="md-section-title acc-open">Betting Odds${pregameAt ? ' · pregame' : info.provider ? ` · ${info.provider}` : ''}</div>
-    <div class="odds-grid">
-      <div><div class="ol">Spread</div><div class="ov">${info.details ?? '—'}</div></div>
-      <div><div class="ol">O/U</div><div class="ov">${info.ou ?? '—'}</div></div>
-      <div><div class="ol">${awayAbbr || 'Away'} ML</div><div class="ov">${ml(info.aML)}</div></div>
-      <div><div class="ol">${homeAbbr || 'Home'} ML</div><div class="ov">${ml(info.hML)}</div></div>
-    </div>${src}${cmp ? `<div class="market-cmp">${cmp}</div>` : ''}
-    <div class="ai-why" style="opacity:.7;margin-top:2px">Odds for reference only — not betting advice.</div>`;
-}
 
 // Live game situation panel — baseball gets a bases diamond with count/outs;
 // other sports show the last play. Pulls from the summary feed (freshest),
@@ -1429,25 +1405,16 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
 
   const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g?.odds;
   let oddsInfo = normOdds(rawO, home.team?.displayName, away.team?.displayName, home.team?.abbreviation, away.team?.abbreviation);
-  let oddsPre = null;
-  if (g && !globalThis.SportsHubForecastLock.eligible(g)) {
-    oddsInfo = pred?.lockedOdds || null;
-    oddsPre = pred?.lockedAt || true;
-  }
-  html += oddsSectionHTML(oddsInfo, away.team?.abbreviation, home.team?.abbreviation, pred, sport, g, oddsPre);
+  if (g && !globalThis.SportsHubForecastLock.eligible(g)) oddsInfo = pred?.lockedOdds || null;
+  // v316: the three Game Report cards ARE the odds grid, the market rows and
+  // the factor breakdown now — one place per number. The old Betting Odds
+  // grid, the "model agrees with the line" banner and the Model breakdown rows
+  // repeated the same three lines three times down the modal.
   html += report || '';
-
-  // Pass the game + odds so the pick block can show the spread and total
-  // plays beside the moneyline rather than leaving them to look contradictory.
-  if (pred && g) {
-    html += '<div class="md-section-title acc-open">Model breakdown</div>' + marketRowsHTML({
-      g, sport, p: pred, info: oddsInfo, linePregame: !!oddsPre, lineAt: oddsPre,
-      atsR: atsRead(sport, g, pred, oddsInfo), totR: totalRead(sport, pred, oddsInfo) });
-  } else html += aiPickHead(pred, sport, g, oddsInfo);
+  if (!(pred && g)) html += aiPickHead(pred, sport, g, oddsInfo);
   if (!pred && g && !globalThis.SportsHubForecastLock.eligible(g)) html += '<div class="ai-note">No official pregame pick available. Saved evidence and any withheld reason appear below.</div>';
   if (['nfl','cfb','nba'].includes(sport)) html += '<div id="md-saved-report" data-acc-boundary></div>';
   if (['nfl','cfb'].includes(sport)) html += '<div id="md-challenger" data-acc-boundary></div>';
-  html += aiFactors(pred, sport);
   html += signals;
   html += extra || '';
 
@@ -1477,7 +1444,9 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
         <div class="val">${top.displayValue || top.value || ''}</div></div>`);
     });
   });
-  if (leadersHTML.length) html += `<div class="md-section-title">Top Performers</div>${leadersHTML.join('')}`;
+  // v316: NFL already lists the same leaders under Key Players (nflKeyHTML
+  // reads the scoreboard leaders, which are these). One list, not two.
+  if (leadersHTML.length && !(sport === 'nfl' && g)) html += `<div class="md-section-title">Top Performers</div>${leadersHTML.join('')}`;
 
   // team stats comparison — flatten nested categories (MLB) or flat list (NFL)
   const teams = data.boxscore?.teams || [];
@@ -2979,7 +2948,7 @@ function aiFactors(pred, sport) {
   // belongs here, in the section that exists to explain the number.
   const noteRows = (pred.notes || []).map((n) => `<div class="ai-why">${esc(n)}</div>`).join('');
   return `<div class="md-section-title">Why — Factor Breakdown</div>
-    ${sport === 'nfl' ? '<div class="ai-why"><strong>Winner model inputs</strong> — record, scoring margin, home field, home/road split, recent form and rest. Small/zero contributions may be hidden. Spread uses separate weights; totals use scoring rates. QB names/stats below are context, not an adjustment. See Current vs Challenger above for the separate opponent-adjusted experiment and QB availability checks.</div>' : ''}
+    ${sport === 'nfl' ? '<div class="ai-why"><strong>Winner model inputs</strong> — record, scoring margin, home field, home/road split, recent form and rest. Small/zero contributions may be hidden. Spread uses separate weights; totals use scoring rates. QB names/stats below are context, not an adjustment. The saved pregame report below carries the separate opponent-adjusted comparison and QB availability checks.</div>' : ''}
     <div class="fac-list">${rows}</div>
     ${noteRows}
     <div class="ai-why" style="margin-top:6px">${sport === 'nba' ? 'Point contributions explain the margin; winner probability is fitted separately.' : `Factors above the 50% coin-flip add up to the ${pred.conf}% pick.`}</div>`;
@@ -3044,7 +3013,7 @@ async function paintSignalDetail(id,token,focus=false,market='spread',providerId
   if(token!==detailToken)return;
   signalData.set(String(id),data);
   host=document.getElementById('md-signals'); if(!host)return;
-  if(data.config?.ui_enabled===false){host.innerHTML='';return;}
+  if(data.config?.ui_enabled===false){const fold=host.closest('#md-signals-fold');if(fold)fold.hidden=true;host.innerHTML='';return;}
   const vm=signalVM(id,data,sport);
   // Load the event's full season observations, including games outside the current two-week window.
   const start=vm.current?.scheduled_start_at||vm.decisions[0]?.scheduled_start_at;
@@ -3053,7 +3022,17 @@ async function paintSignalDetail(id,token,focus=false,market='spread',providerId
   if(token!==detailToken)return;
   host.dataset.bsEvent=String(id);host.dataset.bsMarket=market;host.dataset.bsSport=sport;
   renderSignalDetail(host,{...vm,quotes:history.quotes||vm.quotes.filter(q=>q.market===market),market,providerId,side:market==='total'?'under':'away',state:history.state==='error'?'error':vm.state,error:history.error||vm.error});
-  if(focus)host.scrollIntoView({block:'start',behavior:'smooth'});
+  signalFoldLabel(host, vm, sport);
+  if(focus){const fold=host.closest('#md-signals-fold');if(fold)fold.open=true;host.scrollIntoView({block:'start',behavior:'smooth'});}
+}
+// v316: the folded signals line says what is inside before it is opened.
+function signalFoldLabel(host, vm, sport) {
+  const sum = host?.closest('#md-signals-fold')?.querySelector('summary');
+  if (!sum) return;
+  const rules = sport === 'cfb' ? [] : (vm.rules || vm.decisions || []);
+  const hit = rules.filter((r) => ['matched','unpriced_match'].includes(r.status)).length;
+  sum.textContent = rules.length ? `Betting signals · ${hit} of ${rules.length} system${rules.length === 1 ? '' : 's'} match${vm.rules ? '' : ' · frozen'}` : `Betting signals · ${sport === 'cfb' ? 'odds history only' : 'history collecting'}`;
+  if (hit) sum.classList.add('hit');
 }
 // One research renderer and one live results host; each league keeps its filters.
 const sportResearchFilters = {};
@@ -3524,6 +3503,11 @@ function gameReportHTML(sport, g, pred, info, report, data) {
       <div class="gr-cell"><div class="gr-lbl">Book</div>${book}</div>
     </div>${extra || ''}</div>`;
   const bookName = esc(report?.splits?.book || 'DraftKings');
+  // v316: on a final, every card grades its own read off the score — the
+  // locked numbers stay, the result sits beside them.
+  const hs = Number(g?.home?.score), as = Number(g?.away?.score);
+  const isFinal = g?.state === 'post' && isFinite(hs) && isFinite(as);
+  const res = (v) => v == null ? '' : `<span class="gr-res ${v === 'push' ? 'p' : v ? 'w' : 'l'}">${v === 'push' ? 'PUSH' : v ? '✓ HIT' : '✗ MISS'}</span>`;
 
   // ---- Moneyline -----------------------------------------------------------
   const mkt = info ? marketHomeProb(info) : null;
@@ -3537,7 +3521,7 @@ function gameReportHTML(sport, g, pred, info, report, data) {
     const pick = sides[0].p >= sides[1].p ? sides[0] : sides[1];
     const other = pick === sides[0] ? sides[1] : sides[0];
     const pill = pick.grade
-      ? `<span class="gr-pill ${heatCls(pick.gap, typeof EDGE_BAR !== 'undefined' ? EDGE_BAR.edge : 5)}" style="color:${gradeHue(pick.grade)};border-color:${gradeHue(pick.grade)}">${pick.grade} · ${abbr(pick.team)} ${pick.gap > 0 ? '+' : ''}${pick.gap.toFixed(1)}% vs market</span>`
+      ? `<span class="gr-pill ${heatCls(pick.gap, typeof EDGE_BAR !== 'undefined' ? EDGE_BAR.edge : 5)}" style="color:${gradeHue(pick.grade)};border-color:${gradeHue(pick.grade)}">${pick.grade} · ${abbr(pick.team)} ${pick.gap > 0 ? '+' : ''}${pick.gap.toFixed(1)}% vs market${sport === 'nfl' && typeof nflNoBet === 'function' && nflNoBet(sport, 'winner', pred) ? ' · no-bet' : ''}</span>`
       : (pred.thin || pred.blockedReasons?.length ? '<span class="gr-pill none">grades withheld</span>' : '');
     const fml = (s) => `${abbr(s.team)} ${fmtML(fairML(s.p))}`;
     const bml = (s) => `${abbr(s.team)} ${fmtML(s.book)}`;
@@ -3552,8 +3536,14 @@ function gameReportHTML(sport, g, pred, info, report, data) {
     // v160: the divergence feeds the model; say where it went.
     sharpSignals(g, sp, mv).forEach((s) => extras.push(flag(s.replace(/^[💰🔪]\s*/u, ''))));
     if (sp && pred?.sharp) extras.push(`<div class="ai-why">Folded into the model's pick: ${pred.sharp.pts > 0 ? '+' : ''}${pred.sharp.pts.toFixed(1)} points toward ${esc(pred.winner.name)}.</div>`);
+    // v316: what the old "Betting Odds" banner said, on the card it belongs to.
+    if (pick.book != null && typeof AI_MATH !== 'undefined') {
+      const v = AI_MATH.value(pick.p, pick.book);
+      if (v) extras.push(`<div class="ai-why">${fmtML(pick.book)} needs ${(v.breakeven * 100).toFixed(1)}% to break even · model ${(pick.p * 100).toFixed(1)}% → ${v.ev > 0 ? 'positive' : 'no'} model EV${v.ev > 0 ? ' (unvalidated)' : ''}.</div>`);
+    }
     if (sport === 'nfl' && typeof nflNoBet === 'function' && nflNoBet(sport, 'winner', pred)) extras.push(`<div class="ai-nobet">${esc(nflNoBet(sport, 'winner', pred))}</div>`);
-    parts.push(card('Moneyline', pill, model, book, extras.join('')));
+    const mlRes = isFinal && hs !== as ? (pick.side === 'home') === (hs > as) : isFinal ? 'push' : null;
+    parts.push(card('Moneyline', (pill || '') + res(mlRes), model, book, extras.join('')));
     // Plain strings (model prose, feed reasons) are escaped here; every other
     // note below is composed from already-escaped pieces.
     notes.push(...[
@@ -3577,16 +3567,20 @@ function gameReportHTML(sport, g, pred, info, report, data) {
       const modelFav = pred.projMargin >= 0;
       const pill = !ats ? ''
         : ats.pinned ? `<span class="gr-pill none">no play · model tops out near ${Math.abs(pred.projMargin).toFixed(1)}</span>`
-        : `<span class="gr-pill ${heatCls(ats.edge, ATS_EDGE_MIN[sport] ?? 2)}">${esc(ats.label)} · ${Math.abs(ats.edge).toFixed(1)} pts${ats.qualifies ? '' : ' (read only)'}</span>`;
+        : `<span class="gr-pill ${heatCls(ats.edge, ATS_EDGE_MIN[sport] ?? 2)}">${esc(ats.label)} · ${Math.abs(ats.edge).toFixed(1)} pts${ats.qualifies ? '' : ' · read only'}</span>`;
       const model = `<div class="gr-big">${modelFav ? abbr(g.home) : abbr(g.away)} ${fmt(modelFav ? mLine : -mLine)}</div>
         <div class="gr-sm">projects ${modelFav ? abbr(g.home) : abbr(g.away)} by ${Math.abs(pred.projMargin).toFixed(1)}</div>`;
       const book = `<div class="gr-big">${favSide(hsp <= 0)}</div>
-        <div class="gr-sm">${moveTxt(mv?.first?.sp, mv?.last?.sp, (v) => fmt(v)) || 'no spread move seen'}</div>`;
+        <div class="gr-sm">${moveTxt(mv?.first?.sp, mv?.last?.sp, (v) => fmt(v)) || (pred.locked ? '' : 'no spread move seen')}</div>`;
       const rows = sp ? [{ label: abbr(g.away), handle: sp.away?.spread_handle, bets: sp.away?.spread_bets }, { label: abbr(g.home), handle: sp.home?.spread_handle, bets: sp.home?.spread_bets }] : [];
       const lean = leanOf(rows);
       const extras = [moneyRows(rows), lean ? flag(`Dollars lean ${esc(lean.label)} on the spread — ${Math.round(lean.handle)}% of $ on ${Math.round(lean.bets)}% of bets`) : ''];
-      if (!ats?.qualifies && ats && !ats.pinned) extras.push(`<div class="ai-why">Under the ${ATS_EDGE_MIN[sport] ?? 2}-pt display filter${sport === 'nba' ? '; the forecast still enters tracking' : ', so this is a read, not a recorded play'}.</div>`);
-      parts.push(card('Spread', pill, model, book, extras.join('')));
+      if (!ats?.qualifies && ats && !ats.pinned) extras.push(`<div class="ai-why">${Math.abs(ats.edge).toFixed(1)} pts is under the ${ATS_EDGE_MIN[sport] ?? 2}-pt bar${sport === 'nba' ? ' — still tracked' : ' — shown, not recorded'}.</div>`);
+      const spP = typeof marketProbabilityFor === 'function' ? marketProbabilityFor({ g, sport, p: pred, atsR: ats }, 'spread') : null;
+      if (spP) extras.push(`<div class="ai-why">Experimental cover chance ${(spP.prob * 100).toFixed(1)}% excluding pushes (${spP.n} past errors).</div>`);
+      const cov = isFinal && ats ? (hs - as) + hsp : null;   // >0 home covers
+      const spRes = cov == null ? null : cov === 0 ? 'push' : (cov > 0) === !!ats.home;
+      parts.push(card('Spread', (pill || '') + res(spRes), model, book, extras.join('')));
     } else if (ATS_SPORTS.has(sport) && pred.projMargin != null) {
       parts.push(card('Spread', '', `<div class="gr-big">${pred.projMargin >= 0 ? abbr(g.home) : abbr(g.away)} by ${Math.abs(pred.projMargin).toFixed(1)}</div>`, '<div class="gr-big"><span class="gr-none">no spread posted</span></div>', ''));
     }
@@ -3599,7 +3593,7 @@ function gameReportHTML(sport, g, pred, info, report, data) {
       const side = line != null ? (pred.projTotal < line ? 'Under' : pred.projTotal > line ? 'Over' : null) : null;
       const pill = !tr ? (side == null && line != null ? '<span class="gr-pill none">model lands on the number</span>' : '')
         : tr.broken ? '<span class="gr-pill none">data hole — not a play</span>'
-        : `<span class="gr-pill ${heatCls(tr.diff, TOT_EDGE_MIN[sport] ?? 1)}">${tr.side === 'OVER' ? 'Over' : 'Under'} ${tr.line} · ${Math.abs(tr.diff).toFixed(1)} pts${tr.qualifies ? '' : ' (read only)'}</span>`;
+        : `<span class="gr-pill ${heatCls(tr.diff, TOT_EDGE_MIN[sport] ?? 1)}">${tr.side === 'OVER' ? 'Over' : 'Under'} ${tr.line} · ${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'pts'}${sport === 'nfl' && typeof nflNoBet === 'function' && nflNoBet(sport, 'total', pred) ? ' · no-bet' : tr.qualifies ? '' : ' · read only'}</span>`;
       const model = `<div class="gr-big">${pred.projTotal.toFixed(1)}</div><div class="gr-sm">model total${side ? ` → ${side}` : ''}</div>`;
       const book = `<div class="gr-big">${line != null ? `O/U ${line}` : '<span class="gr-none">no total posted</span>'}</div>
         <div class="gr-sm">${moveTxt(mv?.first?.ou, mv?.last?.ou, (v) => String(v))}</div>`;
@@ -3608,9 +3602,17 @@ function gameReportHTML(sport, g, pred, info, report, data) {
       const rows = sp ? [{ label: 'Over', handle: sp.away?.total_handle, bets: sp.away?.total_bets }, { label: 'Under', handle: sp.home?.total_handle, bets: sp.home?.total_bets }] : [];
       const ln = leanOf(rows);
       const extras = [moneyRows(rows), ln ? flag(`Dollars lean the ${esc(ln.label)} — ${Math.round(ln.handle)}% of $ on ${Math.round(ln.bets)}% of bets`) : ''];
-      if (tr && !tr.broken && !tr.qualifies) extras.push(`<div class="ai-why">Under the ${TOT_EDGE_MIN[sport] ?? 1}-pt floor, so this is a read, not a recorded play.</div>`);
-      if (sport === 'nfl' && typeof nflNoBet === 'function' && nflNoBet(sport, 'total', pred)) extras.push(`<div class="ai-nobet">${esc(nflNoBet(sport, 'total', pred))}</div>`);
-      parts.push(card('Total', pill, model, book, extras.join('')));
+      // One caveat line, not two: the NFL no-bet label and the under-bar read
+      // are both reasons this is not a play, so they share a sentence.
+      const noBetT = sport === 'nfl' && typeof nflNoBet === 'function' ? nflNoBet(sport, 'total', pred) : '';
+      const underT = tr && !tr.broken && !tr.qualifies ? `${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'pts'} is under the ${TOT_EDGE_MIN[sport] ?? 1}-${sport === 'mlb' ? 'run' : 'pt'} bar — shown, not recorded` : '';
+      if (noBetT) extras.push(`<div class="ai-nobet">${esc(noBetT)}${underT ? ` · ${underT}` : ''}.</div>`);
+      else if (underT) extras.push(`<div class="ai-why">${underT}.</div>`);
+      const toP = tr && typeof marketProbabilityFor === 'function' ? marketProbabilityFor({ g, sport, p: pred, totR: tr }, 'total') : null;
+      if (toP) extras.push(`<div class="ai-why">Experimental hit chance ${(toP.prob * 100).toFixed(1)}% excluding pushes (${toP.n} past errors).</div>`);
+      const tot = isFinal && line != null && side ? hs + as : null;
+      const toRes = tot == null ? null : tot === line ? 'push' : (tot > line) === (side === 'Over');
+      parts.push(card('Total', (pill || '') + res(toRes), model, book, extras.join('')));
     }
   }
 
@@ -3657,9 +3659,16 @@ function gameReportHTML(sport, g, pred, info, report, data) {
     const split = [spread(con.ouSpread, 'Totals'), spread(con.spSpread, 'Spreads')].filter(Boolean);
     notes.push(`Across ${con.n} book${con.n === 1 ? '' : 's'}: ${[...bits, ...split].join('; ') || 'all on the same number right now'}.`);
   }
-  if (notes.length) parts.push(`<details class="gr-model-notes"><summary>Model inputs, limitations &amp; movement notes</summary>${notes.map((n) => `<div class="ai-why">${n}</div>`).join('')}</details>`);
+  // v316: the factor breakdown (the old "Why — Factor Breakdown" section)
+  // lives in the same toggle as the notes — one "why", not two.
+  const why = pred && typeof aiFactors === 'function' ? aiFactors(pred, sport).replace(/<div class="md-section-title">[^<]*<\/div>/, '') : '';
+  if (why || notes.length) parts.push(`<details class="gr-model-notes"><summary>Why this read · inputs &amp; movement</summary>${why}${notes.map((n) => `<div class="ai-why">${n}</div>`).join('')}</details>`);
   if (!parts.length) return '';
-  return `<div class="md-section-title acc-open">📊 Game Report</div><div class="gr-card gr-cards">${parts.join('')}</div>`;
+  // Where the money % come from, so it never reads as the same number another
+  // app shows: DraftKings only (via VSiN) vs Action Network's multi-book blend.
+  const fetched = report?.splits?.fetched ? Number(report.splits.fetched) * (Number(report.splits.fetched) > 2e10 ? 1 : 1000) : null;
+  const src = sp ? `<div class="gr-src">Money % = ${bookName.replace(/ via VSiN$/i, '')} only, via VSiN${fetched ? ` · updated ${esc(new Date(fetched).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}` : ''} · multi-book apps (Action, etc.) will show different %.</div>` : '';
+  return `<div class="md-section-title acc-open">📊 Game Report</div>${src}<div class="gr-card gr-cards">${parts.join('')}</div>`;
 }
 
 // Persistent model performance tally (vs results and vs the betting line).

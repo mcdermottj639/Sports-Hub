@@ -3579,3 +3579,37 @@ tr.fav td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
   .gr-big { font-size: 17px; }
   .gr-mrow { grid-template-columns: 40px 1fr 44px 56px; gap: 6px; }
 }
+
+/* ===== v316 — Game modal: one place per number ============================
+   Source line over the market cards, the official saved-pick strip, the
+   folded "why"/signals/archive toggles. Appended last so it wins. */
+.gr-src { font-size: 11.5px; color: var(--muted); line-height: 1.35; margin: -2px 0 8px; }
+.gr-saved { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--card-2); font-size: 13px; }
+.gr-saved-k { display: inline-block; font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--gold); font-weight: 800; }
+.gr-saved-when { margin-left: 8px; font-size: 11.5px; color: var(--muted); }
+.gr-saved-row { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; padding-top: 6px; }
+.gr-saved-m { flex: 0 0 56px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 700; }
+.gr-saved-res { font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--muted); }
+.gr-saved-res.w { color: var(--pos); } .gr-saved-res.l { color: var(--neg); }
+.gr-saved-flip { flex-basis: 100%; padding-left: 64px; font-size: 12px; font-weight: 700; color: var(--wm); }
+.saved-game-report { margin: 0; padding: 0; border: 0; }
+.saved-game-report .md-fold, details.md-fold { margin: 10px 0 0; padding: 8px 12px; border-radius: 12px; background: var(--card-2); font-size: 12.5px; }
+details.md-fold > summary, .saved-game-report .md-fold > summary { cursor: pointer; list-style: none; font-weight: 800; font-size: 12px; letter-spacing: .5px; text-transform: uppercase; color: var(--text); display: flex; align-items: center; gap: 6px; }
+details.md-fold > summary::-webkit-details-marker { display: none; }
+details.md-fold > summary::before { content: '▸'; color: var(--muted); font-size: 11px; transition: transform .15s; }
+details.md-fold[open] > summary::before { transform: rotate(90deg); }
+details.md-fold > summary.hit { color: var(--pos); }
+details.md-fold .bs-detail { margin-top: 8px; }
+.saved-game-report .md-fold details { margin: 8px 0 0; }
+.saved-game-report .md-fold summary { font-size: 12.5px; }
+.gr-cards .gr-model-notes .fac-list { margin: 4px 0 6px; }
+@media (max-width: 360px) { .gr-saved-m { flex-basis: 48px; } .gr-saved-flip { padding-left: 0; } }
+/* The report's own toggle wears the same fold as the signals/archive ones. */
+.gr-cards .gr-model-notes { margin: 8px 0 0; padding: 8px 12px; border-radius: 12px; background: var(--card-2); }
+.gr-cards .gr-model-notes > summary { list-style: none; cursor: pointer; font-weight: 800; font-size: 12px; letter-spacing: .5px; text-transform: uppercase; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.gr-cards .gr-model-notes > summary::-webkit-details-marker { display: none; }
+.gr-cards .gr-model-notes > summary::before { content: '▸'; color: var(--muted); font-size: 11px; transition: transform .15s; }
+.gr-cards .gr-model-notes[open] > summary::before { transform: rotate(90deg); }
+.gr-res { display: inline-block; margin-left: 6px; padding: 3px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 900; letter-spacing: .4px; }
+.gr-res.w { color: var(--on-ac, #fff); background: var(--pos); } .gr-res.l { color: #fff; background: var(--neg); } .gr-res.p { color: var(--text); background: var(--card-2); border: 1px solid var(--line); }
+.gr-mkt-h { flex-wrap: wrap; row-gap: 6px; }
