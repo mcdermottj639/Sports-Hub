@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v314';
+const APP_VERSION = 'v315';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -3468,8 +3468,13 @@ function sharpSignals(g, sp, mv) {
   }
   return out;
 }
-// The modal's PRO-style report: model line vs book (graded per side), model
-// total, line movement, DK money splits, and sharp signals.
+// The modal's PRO-style report (v315: one card per market). Moneyline, Spread
+// and Total each get the SAME shape — Model | Book (with the observed move
+// tucked under the book number) | an edge/grade pill | the DK money-vs-bets
+// bars for that market — so the owner reads three identical cards instead of a
+// table, two prose lines, a ticker and a bar chart that all said pieces of the
+// same thing. The spread/total splits were always in the backend's VSiN parse
+// (`_SIX_COL`); until v315 the frontend only ever read the moneyline pair.
 function gameReportHTML(sport, g, pred, info, report, data) {
   if (g && !globalThis.SportsHubForecastLock?.eligible(g)) report = pred?.lockedReport || globalThis.SportsHubForecastLock?.read(sport,g)?.report || null;
   else if (g && report && globalThis.SportsHubForecastLock?.eligible(g)) {
@@ -3480,146 +3485,181 @@ function gameReportHTML(sport, g, pred, info, report, data) {
     });
   }
   const parts = [];
+  const notes = [];       // everything that used to be its own section → one toggle at the bottom
+  const abbr = (t) => esc(t?.abbr || t?.name || '');
   if (pred?.locked) parts.push(pred.savedFallback
     ? `<div class="ai-why">Saved pregame forecast${lineAtLabel(pred.lockedAt) ? ` · ${esc(lineAtLabel(pred.lockedAt))}` : ''}. Today's live inputs couldn't be loaded, so this is the official read the scheduled collector already saved.${sport === 'nfl' && g && globalThis.SportsHubNFLLiveClient?.diagnostic(g) ? ` <span class="muted">Source check: ${esc(globalThis.SportsHubNFLLiveClient.diagnostic(g))}</span>` : ''}</div>`
     : `<div class="ai-why">Locked pregame forecast${lineAtLabel(pred.lockedAt) ? ` · saved ${esc(lineAtLabel(pred.lockedAt))}` : ''}. Model lines do not update during play.</div>`);
+
+  // ---- shared pieces -------------------------------------------------------
+  const mv = lineMoves(sport, g, report);
+  const since = mv?.first?.t ? timeAgo(new Date(mv.first.t > 2e10 ? mv.first.t : mv.first.t * 1000)) : '';
+  // "−380 → −410 (4h ago)" under the book number, or nothing when it never moved.
+  const moveTxt = (f, l, fmt) => {
+    if (f == null || l == null || f === l) return '';
+    return `<span class="gr-mv">${fmt(f)} → ${fmt(l)}${since ? ` <small>(${esc(since)})</small>` : ''}</span>`;
+  };
+  const sp = splitsFor(report, g);
+  const pct = (v) => (v == null || !isFinite(Number(v)) ? null : clamp(Number(v), 0, 100));
+  // Two bars per market: money% is the bar, bets% sits beside it. The spread
+  // between them is the only read these numbers carry (v160's divergence).
+  const moneyRows = (rows) => {
+    const ok = rows.filter((r) => pct(r.handle) != null || pct(r.bets) != null);
+    if (!ok.length) return '';
+    return `<div class="gr-money">${ok.map((r) => `<div class="gr-mrow${pct(r.handle) != null && pct(r.bets) != null && r.handle - r.bets >= 7 ? ' lean' : ''}">
+      <span class="gr-mside">${esc(r.label)}</span>
+      <span class="gr-mbar"><i style="width:${pct(r.handle) ?? 0}%"></i></span>
+      <span class="gr-mpct">${pct(r.handle) != null ? `${Math.round(r.handle)}% $` : '–'}</span>
+      <span class="gr-mbets">${pct(r.bets) != null ? `${Math.round(r.bets)}% bets` : '–'}</span>
+    </div>`).join('')}</div>`;
+  };
+  // The side whose dollars run ahead of its tickets by the deadband, if any.
+  const leanOf = (rows) => rows.filter((r) => pct(r.handle) != null && pct(r.bets) != null && r.handle - r.bets >= 7)
+    .sort((a, b) => (b.handle - b.bets) - (a.handle - a.bets))[0] || null;
+  const flag = (txt) => `<div class="gr-flag">💰 ${txt}</div>`;
+  const card = (label, pill, model, book, extra) => `<div class="gr-mkt">
+    <div class="gr-mkt-h"><span class="gr-mkt-lbl">${label}</span>${pill || ''}</div>
+    <div class="gr-grid2">
+      <div class="gr-cell"><div class="gr-lbl">Model</div>${model}</div>
+      <div class="gr-cell"><div class="gr-lbl">Book</div>${book}</div>
+    </div>${extra || ''}</div>`;
+  const bookName = esc(report?.splits?.book || 'DraftKings');
+
+  // ---- Moneyline -----------------------------------------------------------
   const mkt = info ? marketHomeProb(info) : null;
   if (pred && pred.probHome != null) {
-    const rows = [['away', 1 - pred.probHome, info?.aML], ['home', pred.probHome, info?.hML]].map(([side, p, book]) => {
-      const team = g[side];
+    const sides = [['home', pred.probHome, info?.hML], ['away', 1 - pred.probHome, info?.aML]].map(([side, p, book]) => {
       const mktP = mkt != null ? (side === 'home' ? mkt : 1 - mkt) : null;
-      const grade = mktP != null && !pred.thin && !pred.blockedReasons?.length ? priceGrade((p - mktP) * 100) : null;
-      return `<div class="gr-row">
-        <span class="gr-team">${logoHTML(team)}${esc(team.abbr || team.name)}</span>
-        <span class="gr-fair">${fmtML(fairML(p))}<small class="gr-prob">${(p * 100).toFixed(1)}% model</small></span>
-        <span class="gr-book">${fmtML(book)}${mktP == null ? '' : `<small class="gr-prob">${(mktP * 100).toFixed(1)}% market</small>`}</span>
-        ${grade ? `<span class="gr-grade" style="color:${gradeHue(grade)};border-color:${gradeHue(grade)}">${grade}</span>` : '<span class="gr-grade none">—</span>'}
-      </div>`;
-    }).join('');
-    parts.push(`<div class="gr-head"><span></span><span>Model line</span><span>Book</span><span>Grade</span></div>${rows}`);
-    const modelNotes = [
+      const gap = mktP != null ? (p - mktP) * 100 : null;
+      const grade = gap != null && !pred.thin && !pred.blockedReasons?.length ? priceGrade(gap) : null;
+      return { side, team: g[side], p, book, mktP, gap, grade };
+    });
+    const pick = sides[0].p >= sides[1].p ? sides[0] : sides[1];
+    const other = pick === sides[0] ? sides[1] : sides[0];
+    const pill = pick.grade
+      ? `<span class="gr-pill ${heatCls(pick.gap, typeof EDGE_BAR !== 'undefined' ? EDGE_BAR.edge : 5)}" style="color:${gradeHue(pick.grade)};border-color:${gradeHue(pick.grade)}">${pick.grade} · ${abbr(pick.team)} ${pick.gap > 0 ? '+' : ''}${pick.gap.toFixed(1)}% vs market</span>`
+      : (pred.thin || pred.blockedReasons?.length ? '<span class="gr-pill none">grades withheld</span>' : '');
+    const fml = (s) => `${abbr(s.team)} ${fmtML(fairML(s.p))}`;
+    const bml = (s) => `${abbr(s.team)} ${fmtML(s.book)}`;
+    const model = `<div class="gr-big">${fml(pick)}</div>
+      <div class="gr-sm">${(pick.p * 100).toFixed(1)}% model · ${fml(other)} <span class="gr-prob">${(other.p * 100).toFixed(1)}% model</span></div>`;
+    const first = mv?.first, last = mv?.last;
+    const mvML = moveTxt(pick.side === 'home' ? first?.hML : first?.aML, pick.side === 'home' ? last?.hML : last?.aML, fmtML);
+    const book = `<div class="gr-big">${pick.book != null ? bml(pick) : '<span class="gr-none">no line</span>'}</div>
+      <div class="gr-sm">${pick.mktP != null ? `${(pick.mktP * 100).toFixed(1)}% market` : ''}${other.book != null ? ` · ${bml(other)}` : ''}${other.mktP != null ? ` <span class="gr-prob">${(other.mktP * 100).toFixed(1)}% market</span>` : ''}${mvML}</div>`;
+    const rows = sp ? [{ label: abbr(g.away), handle: sp.away?.ml_handle, bets: sp.away?.ml_bets }, { label: abbr(g.home), handle: sp.home?.ml_handle, bets: sp.home?.ml_bets }] : [];
+    const extras = [moneyRows(rows)];
+    // v160: the divergence feeds the model; say where it went.
+    sharpSignals(g, sp, mv).forEach((s) => extras.push(flag(s.replace(/^[💰🔪]\s*/u, ''))));
+    if (sp && pred?.sharp) extras.push(`<div class="ai-why">Folded into the model's pick: ${pred.sharp.pts > 0 ? '+' : ''}${pred.sharp.pts.toFixed(1)} points toward ${esc(pred.winner.name)}.</div>`);
+    if (sport === 'nfl' && typeof nflNoBet === 'function' && nflNoBet(sport, 'winner', pred)) extras.push(`<div class="ai-nobet">${esc(nflNoBet(sport, 'winner', pred))}</div>`);
+    parts.push(card('Moneyline', pill, model, book, extras.join('')));
+    // Plain strings (model prose, feed reasons) are escaped here; every other
+    // note below is composed from already-escaped pieces.
+    notes.push(...[
       'Sports Hub model, independent of Action. Market % removes the bookmaker margin using both quotes. Grades measure model/market disagreement, not proven betting value.',
       ...(pred.blockedReasons || []),
       ...(sport === 'mlb' ? [
         'Starting-pitcher season stats and recent starts feed the model. Team OPS is a season average, not a confirmed batting lineup. Stats may be cached for up to 6 hours; bullpen and weather are not modeled.',
         ...(pred.notes || []).filter((n) => /^(SP:|SP form|Team OPS:|Starter innings)/.test(n)),
       ] : []),
-    ];
+    ].map((n) => esc(n)));
     if (pred.thin || pred.blockedReasons?.length) parts.push('<div class="gr-unavail">Incomplete model inputs — grades withheld.</div>');
-    parts.push(`<details class="gr-model-notes"><summary>Model inputs &amp; limitations</summary>${modelNotes.map((n) => `<div class="ai-why">${esc(n)}</div>`).join('')}</details>`);
-    if (pred.projTotal != null && info?.ou != null) {
-      const lean = pred.projTotal > info.ou ? 'OVER' : pred.projTotal < info.ou ? 'UNDER' : null;
-      parts.push(`<div class="gr-total">Total: model ${pred.projTotal.toFixed(1)} vs O/U ${info.ou}${lean ? ` → <b>${lean}</b>` : ''}</div>`);
-    }
-    // 📐 The model's own SPREAD, next to the book's (v178). The model has
-    // projected a margin since v164 and the AI Picks tab has played and graded
-    // it — but this card only ever showed the moneyline and the total, so the
-    // one number that says "the book has the favourite too high" was invisible
-    // exactly where the owner was looking at the game. On a big favourite the
-    // moneyline row can't show it either: -100000 vs a model -992 is off the
-    // scale and grades F, which says the price is bad without saying the
-    // spread is the bet.
+
+    // ---- Spread --------------------------------------------------------------
     if (ATS_SPORTS.has(sport) && pred.projMargin != null && info?.spread != null) {
-      const sp = Number(info.spread);                    // home-oriented
-      const mLine = -pred.projMargin;                    // the model's own home number
-      // v181: the READ, not the play — so the side is named even when the
-      // difference is too small to record. "No play" alone threw away the
-      // one thing the owner wanted to see.
+      const hsp = Number(info.spread);                 // home-oriented
+      const mLine = -pred.projMargin;                  // the model's own home number
       const ats = atsRead(sport, g, pred, info);
-      const fmt = (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
-      const side = `${esc(g.home.abbr || g.home.name)} ${fmt(mLine)}`;
-      const book = `${esc(g.home.abbr || g.home.name)} ${fmt(sp)}`;
-      parts.push(`<div class="gr-total">Spread: model <b>${side}</b> vs book ${book}${!ats ? ''
-        : ats.pinned
-          ? ` <span class="bb-muted">→ no play: the model tops out around ${Math.abs(pred.projMargin).toFixed(1)} points, so it can't price a number this big.</span>`
-          : ` → <b>${esc(ats.label)}</b> <span class="gr-edge ${heatCls(ats.edge, ATS_EDGE_MIN[sport] ?? 2)}">${Math.abs(ats.edge).toFixed(1)} pts${ats.qualifies ? ' of value' : ''}</span>${
-              ats.qualifies ? '' : ` <span class="bb-muted">— under the ${ATS_EDGE_MIN[sport] ?? 2}-pt display filter${sport==='nba'?'; the forecast still enters tracking':", so it's a read, not a recorded play"}</span>`}`}</div>`);
+      const fmt = (v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(1)}`;
+      // Name the side the number favours, never "X by −14" (v205).
+      const favSide = (home) => (home ? `${abbr(g.home)} ${fmt(hsp)}` : `${abbr(g.away)} ${fmt(-hsp)}`);
+      const modelFav = pred.projMargin >= 0;
+      const pill = !ats ? ''
+        : ats.pinned ? `<span class="gr-pill none">no play · model tops out near ${Math.abs(pred.projMargin).toFixed(1)}</span>`
+        : `<span class="gr-pill ${heatCls(ats.edge, ATS_EDGE_MIN[sport] ?? 2)}">${esc(ats.label)} · ${Math.abs(ats.edge).toFixed(1)} pts${ats.qualifies ? '' : ' (read only)'}</span>`;
+      const model = `<div class="gr-big">${modelFav ? abbr(g.home) : abbr(g.away)} ${fmt(modelFav ? mLine : -mLine)}</div>
+        <div class="gr-sm">projects ${modelFav ? abbr(g.home) : abbr(g.away)} by ${Math.abs(pred.projMargin).toFixed(1)}</div>`;
+      const book = `<div class="gr-big">${favSide(hsp <= 0)}</div>
+        <div class="gr-sm">${moveTxt(mv?.first?.sp, mv?.last?.sp, (v) => fmt(v)) || 'no spread move seen'}</div>`;
+      const rows = sp ? [{ label: abbr(g.away), handle: sp.away?.spread_handle, bets: sp.away?.spread_bets }, { label: abbr(g.home), handle: sp.home?.spread_handle, bets: sp.home?.spread_bets }] : [];
+      const lean = leanOf(rows);
+      const extras = [moneyRows(rows), lean ? flag(`Dollars lean ${esc(lean.label)} on the spread — ${Math.round(lean.handle)}% of $ on ${Math.round(lean.bets)}% of bets`) : ''];
+      if (!ats?.qualifies && ats && !ats.pinned) extras.push(`<div class="ai-why">Under the ${ATS_EDGE_MIN[sport] ?? 2}-pt display filter${sport === 'nba' ? '; the forecast still enters tracking' : ', so this is a read, not a recorded play'}.</div>`);
+      parts.push(card('Spread', pill, model, book, extras.join('')));
+    } else if (ATS_SPORTS.has(sport) && pred.projMargin != null) {
+      parts.push(card('Spread', '', `<div class="gr-big">${pred.projMargin >= 0 ? abbr(g.home) : abbr(g.away)} by ${Math.abs(pred.projMargin).toFixed(1)}</div>`, '<div class="gr-big"><span class="gr-none">no spread posted</span></div>', ''));
     }
-  }
-  const mv = lineMoves(sport, g, report);
-  if (mv) {
-    const f = mv.first, l = mv.last;
-    const changes = [];
-    if (f.hML != null && l.hML != null && f.hML !== l.hML) changes.push(`${esc(g.home.abbr || 'Home')} ML ${fmtML(f.hML)} → ${fmtML(l.hML)}`);
-    if (f.aML != null && l.aML != null && f.aML !== l.aML) changes.push(`${esc(g.away.abbr || 'Away')} ML ${fmtML(f.aML)} → ${fmtML(l.aML)}`);
-    if (f.ou != null && l.ou != null && f.ou !== l.ou) changes.push(`O/U ${f.ou} → ${l.ou}`);
-    if (!changes.length && f.details && l.details && f.details !== l.details) changes.push(`${esc(f.details)} → ${esc(l.details)}`);
-    const since = f.t ? timeAgo(new Date(f.t > 2e10 ? f.t : f.t * 1000)) : '';
-    parts.push(`<div class="gr-move">📈 ${changes.length ? changes.join(' · ') : 'No net price/total change since first observation'}
-      <span class="gr-src">${mv.src === 'server' ? `server tracking since ${since}` : `since first seen on this device (${since})`}</span></div>`);
-  }
-  // Observed price changes — no bettor identity or sharp-money inference. Two independent sources, either of which may be absent.
-  const mh = moveHistory(sport, g, report);
-  const con = bookConsensus(data);
-  // ANSWERED on device (v168): ESPN lists exactly ONE sportsbook per MLB game,
-  // so the multi-book comparison never renders there and saying so on every
-  // card was just noise. bookConsensus is kept because football is a different
-  // market with far more books quoted — whether pickcenter carries several for
-  // NFL/CFB is still unverified, and it costs nothing to find out in season.
-  if (mh || con) {
-    const rows = [];
-    const bar = (v, max) => `<span class="sa-bar"><i style="width:${max ? clamp((v / max) * 100, 0, 100) : 0}%"></i></span>`;
-    const pair = (label, aLbl, a, bLbl, b) => {
-      const max = Math.max(a, b, 1);
-      return `<div class="sa-pair"><div class="sa-lbl">${label}</div>
-        <div class="sa-row${a > b ? ' hot' : ''}"><span class="sa-side">${esc(aLbl)}</span>
-          <span class="sa-n">${a} move${a === 1 ? '' : 's'}</span>${bar(a, max)}</div>
-        <div class="sa-row${b > a ? ' hot' : ''}"><span class="sa-side">${esc(bLbl)}</span>
-          <span class="sa-n">${b} move${b === 1 ? '' : 's'}</span>${bar(b, max)}</div></div>`;
-    };
-    if (mh) {
-      const c = countMoves(mh.hist);
-      if (c.ouDown || c.ouUp) rows.push(pair('Total', 'Under', c.ouDown, 'Over', c.ouUp));
-      if (c.homeIn || c.awayIn) rows.push(pair('Moneyline — observed price shortenings', g.home.abbr || 'Home', c.homeIn, g.away.abbr || 'Away', c.awayIn));
-      if (c.spHome || c.spAway) rows.push(pair('Spread', g.home.abbr || 'Home', c.spHome, g.away.abbr || 'Away', c.spAway));
-      if (!rows.length) rows.push(`<div class="ai-why">No price shortenings or total/spread changes counted across ${c.n} check${c.n === 1 ? '' : 's'}.</div>`);
-      rows.push(`<div class="sa-note">Price changes only; not verified sharp money. Pre-game line only — live in-game prices are ignored. ${mh.src === 'server'
-        ? 'Counted from the backend\'s snapshots, which only poll while it\'s awake, so this undercounts.'
-        : 'Counted from what this device saw while the app was open, so this undercounts.'}</div>`);
+
+    // ---- Total ---------------------------------------------------------------
+    if (pred.projTotal != null) {
+      const tr = totalRead(sport, pred, info);
+      const line = info?.ou != null ? Number(info.ou) : null;
+      // model 50.7 vs 52.5 → Under.
+      const side = line != null ? (pred.projTotal < line ? 'Under' : pred.projTotal > line ? 'Over' : null) : null;
+      const pill = !tr ? (side == null && line != null ? '<span class="gr-pill none">model lands on the number</span>' : '')
+        : tr.broken ? '<span class="gr-pill none">data hole — not a play</span>'
+        : `<span class="gr-pill ${heatCls(tr.diff, TOT_EDGE_MIN[sport] ?? 1)}">${tr.side === 'OVER' ? 'Over' : 'Under'} ${tr.line} · ${Math.abs(tr.diff).toFixed(1)} pts${tr.qualifies ? '' : ' (read only)'}</span>`;
+      const model = `<div class="gr-big">${pred.projTotal.toFixed(1)}</div><div class="gr-sm">model total${side ? ` → ${side}` : ''}</div>`;
+      const book = `<div class="gr-big">${line != null ? `O/U ${line}` : '<span class="gr-none">no total posted</span>'}</div>
+        <div class="gr-sm">${moveTxt(mv?.first?.ou, mv?.last?.ou, (v) => String(v))}</div>`;
+      // VSiN prints the total group on the away row as Over and the home row as
+      // Under (confirmed against the live DK page, Oct 2026).
+      const rows = sp ? [{ label: 'Over', handle: sp.away?.total_handle, bets: sp.away?.total_bets }, { label: 'Under', handle: sp.home?.total_handle, bets: sp.home?.total_bets }] : [];
+      const ln = leanOf(rows);
+      const extras = [moneyRows(rows), ln ? flag(`Dollars lean the ${esc(ln.label)} — ${Math.round(ln.handle)}% of $ on ${Math.round(ln.bets)}% of bets`) : ''];
+      if (tr && !tr.broken && !tr.qualifies) extras.push(`<div class="ai-why">Under the ${TOT_EDGE_MIN[sport] ?? 1}-pt floor, so this is a read, not a recorded play.</div>`);
+      if (sport === 'nfl' && typeof nflNoBet === 'function' && nflNoBet(sport, 'total', pred)) extras.push(`<div class="ai-nobet">${esc(nflNoBet(sport, 'total', pred))}</div>`);
+      parts.push(card('Total', pill, model, book, extras.join('')));
     }
-    if (con) {
-      const bits = [];
-      const m = con.moved;
-      if (m.ouDown || m.ouUp) bits.push(`<b>${m.ouDown}</b> book${m.ouDown === 1 ? '' : 's'} moved toward the Under, <b>${m.ouUp}</b> toward the Over`);
-      if (m.spHome || m.spAway) bits.push(`<b>${m.spHome}</b> toward ${esc(g.home.abbr || 'home')}, <b>${m.spAway}</b> toward ${esc(g.away.abbr || 'away')} on the spread`);
-      const spread = (arr, label) => arr.length > 1
-        ? `${label}: ${arr.map(([v, n]) => `${v} <span class="sa-c">×${n}</span>`).join(' · ')}` : '';
-      const split = [spread(con.ouSpread, 'Totals'), spread(con.spSpread, 'Spreads')].filter(Boolean);
-      rows.push(`<div class="sa-pair"><div class="sa-lbl">Across ${con.n} book${con.n === 1 ? '' : 's'}</div>
-        ${bits.length ? bits.map((b) => `<div class="sa-row"><span class="sa-txt">${b}</span></div>`).join('') : ''}
-        ${split.length ? split.map((b) => `<div class="sa-row"><span class="sa-txt">${b}</span></div>`).join('')
-          : (!bits.length ? '<div class="ai-why">All books are on the same number right now.</div>' : '')}</div>`);
-    }
-    parts.push(`<div class="gr-sub">📈 Observed line movement</div>${rows.join('')}`);
   }
 
-  const sp = splitsFor(report, g);
-  if (sp) {
-    const bar = (v) => `<span class="gr-bar"><i style="width:${clamp(v, 0, 100)}%"></i></span>`;
-    const row = (team, s) => `<div class="gr-money-row"><span class="gr-mteam">${esc(team.abbr || team.name)}</span>
-      <span class="gr-pcts">bets ${s.ml_bets ?? '–'}%${s.ml_bets != null ? bar(s.ml_bets) : ''}</span>
-      <span class="gr-pcts">money ${s.ml_handle ?? '–'}%${s.ml_handle != null ? bar(s.ml_handle) : ''}</span>
-      ${s.ml_handle != null && s.ml_bets != null ? `<span class="gr-diff ${s.ml_handle - s.ml_bets > 0 ? 'up' : ''}">${s.ml_handle - s.ml_bets > 0 ? '+' : ''}${s.ml_handle - s.ml_bets}</span>` : '<span></span>'}
-    </div>`;
-    parts.push(`<div class="gr-sub">💰 Big Money — moneyline splits (${esc(report?.splits?.book || 'DraftKings')})</div>${row(g.away, sp.away)}${row(g.home, sp.home)}`);
-    sharpSignals(g, sp, mv).forEach((s) => parts.push(`<div class="gr-sharp">${s}</div>`));
-    // v160: this divergence is no longer display-only — say where it went.
-    if (pred?.sharp) parts.push(`<div class="ai-why">Folded into the model's pick below: ${pred.sharp.pts > 0 ? '+' : ''}${pred.sharp.pts.toFixed(1)} points toward ${esc(pred.winner.name)}.</div>`);
-  } else if (report?.splits && !report.splits.ok) {
-    parts.push(`<div class="gr-unavail">DK betting splits unavailable — ${esc(report.splits.error || 'source down')}.</div>`);
-  } else if (report?.splits?.ok) {
-    // Say WHICH of the two very different failures this is. "No row matched"
-    // on its own can't tell "the scrape came back empty" from "the page has
-    // plenty of games, just not this one" — and for college those call for
-    // opposite responses (fix the scrape vs. nothing to fix, VSiN only covers
-    // part of the slate).
+  // ---- splits availability (only when nothing above could show them) -------
+  if (!sp && report?.splits && !report.splits.ok) {
+    parts.push(`<div class="gr-unavail">${bookName} betting splits unavailable — ${esc(report.splits.error || 'source down')}.</div>`);
+  } else if (!sp && report?.splits?.ok) {
     const listed = (report.splits.games || []).length;
     parts.push(`<div class="gr-unavail">${listed
       ? `No DK splits for this game — ${listed} game${listed === 1 ? '' : 's'} posted, this one isn't among them.`
       : 'No DK splits posted for this league right now.'}</div>`);
+  } else if (sp) {
+    notes.push(`Money and bets % are ${bookName} moneyline, spread and total splits via VSiN. A side whose dollars run ahead of its tickets by 7+ points is flagged; that is a divergence, not verified sharp money.`);
   }
+
+  // ---- movement & method notes (collapsed; the bars this replaced were noise)
+  if (mv) {
+    const f = mv.first, l = mv.last;
+    const changes = [];
+    if (f.hML != null && l.hML != null && f.hML !== l.hML) changes.push(`${abbr(g.home)} ML ${fmtML(f.hML)} → ${fmtML(l.hML)}`);
+    if (f.aML != null && l.aML != null && f.aML !== l.aML) changes.push(`${abbr(g.away)} ML ${fmtML(f.aML)} → ${fmtML(l.aML)}`);
+    if (f.sp != null && l.sp != null && f.sp !== l.sp) changes.push(`spread ${f.sp} → ${l.sp}`);
+    if (f.ou != null && l.ou != null && f.ou !== l.ou) changes.push(`O/U ${f.ou} → ${l.ou}`);
+    if (!changes.length && f.details && l.details && f.details !== l.details) changes.push(`${esc(f.details)} → ${esc(l.details)}`);
+    notes.push(`Observed line movement: ${changes.length ? changes.join(' · ') : 'No net price/total change since first observation'} — ${mv.src === 'server' ? `server tracking since ${esc(since)}` : `since first seen on this device (${esc(since)})`}.`);
+  }
+  const mh = moveHistory(sport, g, report);
+  const con = bookConsensus(data);
+  if (mh) {
+    const c = countMoves(mh.hist);
+    const bits = [];
+    if (c.homeIn || c.awayIn) bits.push(`observed price shortenings: ${abbr(g.home)} ${c.homeIn}, ${abbr(g.away)} ${c.awayIn}`);
+    if (c.spHome || c.spAway) bits.push(`spread moves: toward ${abbr(g.home)} ${c.spHome}, toward ${abbr(g.away)} ${c.spAway}`);
+    if (c.ouDown || c.ouUp) bits.push(`total moves: Under ${c.ouDown}, Over ${c.ouUp}`);
+    notes.push(`${bits.length ? bits.join(' · ') : `No price shortenings or total/spread changes counted across ${c.n} check${c.n === 1 ? '' : 's'}`}. Price changes only; not verified sharp money. Pre-game line only — live in-game prices are ignored. ${mh.src === 'server'
+      ? 'Counted from the backend\'s snapshots, which only poll while it\'s awake, so this undercounts.'
+      : 'Counted from what this device saw while the app was open, so this undercounts.'}`);
+  }
+  if (con) {
+    const m = con.moved, bits = [];
+    if (m.ouDown || m.ouUp) bits.push(`${m.ouDown} book${m.ouDown === 1 ? '' : 's'} moved toward the Under, ${m.ouUp} toward the Over`);
+    if (m.spHome || m.spAway) bits.push(`${m.spHome} toward ${abbr(g.home)}, ${m.spAway} toward ${abbr(g.away)} on the spread`);
+    const spread = (arr, label) => arr.length > 1 ? `${label}: ${arr.map(([v, n]) => `${v} ×${n}`).join(' · ')}` : '';
+    const split = [spread(con.ouSpread, 'Totals'), spread(con.spSpread, 'Spreads')].filter(Boolean);
+    notes.push(`Across ${con.n} book${con.n === 1 ? '' : 's'}: ${[...bits, ...split].join('; ') || 'all on the same number right now'}.`);
+  }
+  if (notes.length) parts.push(`<details class="gr-model-notes"><summary>Model inputs, limitations &amp; movement notes</summary>${notes.map((n) => `<div class="ai-why">${n}</div>`).join('')}</details>`);
   if (!parts.length) return '';
-  return `<div class="md-section-title acc-open">📊 Game Report</div><div class="gr-card">${parts.join('')}</div>`;
+  return `<div class="md-section-title acc-open">📊 Game Report</div><div class="gr-card gr-cards">${parts.join('')}</div>`;
 }
 
 // Persistent model performance tally (vs results and vs the betting line).
