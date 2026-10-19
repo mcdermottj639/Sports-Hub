@@ -41,3 +41,8 @@ test('missing summary situation falls back only to matching live scoreboard game
  await x.ctx.refreshOpenGameDetail([{sport:'nfl',g:{id:'other',state:'in',situation:{lastPlay:{text:'wrong game'}}}}]);assert.equal(x.host.innerHTML,'old play');
  await x.ctx.refreshOpenGameDetail([{sport:'nfl',g:{id:'123',state:'in',situation:{lastPlay:{text:'scoreboard play'}}}}]);assert.equal(x.host.innerHTML,'scoreboard play');
 });
+test('scheduled game never shows the waiting-for-live note (v317)',async()=>{
+ const x=setup();x.host.innerHTML='';const note={hidden:true,textContent:''};const get=x.ctx.$;x.ctx.$=s=>s==='#md-live-note'?note:get(s);
+ x.data.header.competitions[0].status.type={state:'pre',detail:'Sat, October 24th at 12:00 PM EDT'};x.ctx.liveSituationHTML=()=>'';
+ await x.ctx.refreshOpenGameDetail();assert.equal(note.hidden,true);assert.equal(note.textContent,'');assert.equal(x.status.textContent,'Sat, October 24th at 12:00 PM EDT');
+});

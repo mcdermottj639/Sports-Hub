@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v316';
+const APP_VERSION = 'v317';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1086,6 +1086,8 @@ async function refreshOpenGameDetail(updates = []) {
       || (fallback?.state === 'in' ? liveSituationHTML(active.sport, {}, {...comp, situation: null}, fallback) : '')) : '';
     const note = $('#md-live-note');
     // ESPN can omit situation between plays. Only a confirmed final clears it.
+    // A scheduled game has no situation to wait for (v317: the note showed pregame).
+    if (st.state === 'pre') { if (note) note.hidden = true; return; }
     if (!html && st.state !== 'post') {
       if (note) { note.hidden = false; note.textContent = host.innerHTML ? 'Last available play · waiting for a live situation update.' : 'Waiting for a live situation update.'; }
       return;
@@ -2908,7 +2910,7 @@ function aiPickHead(pred, sport, g, info) {
   const soft = [ats && !ats.pinned && !ats.qualifies ? 'spread' : '', tot && !tot.qualifies ? 'total' : '']
     .filter(Boolean);
   const softNote = soft.length
-    ? `<div class="ai-why">The ${soft.join(' and ')} ${soft.length > 1 ? 'reads do' : 'read does'} not qualify — a threshold or data-quality check is unmet. Shown for context, not recorded as a signal.</div>`
+    ? `<div class="ai-why">The ${soft.join(' and ')} ${soft.length > 1 ? 'reads do' : 'read does'} not qualify — a threshold or data-quality check is unmet. Shown for context, not counted as a play.</div>`
     : '';
   const homeAbbr = g?.home?.abbr || 'home', awayAbbr = g?.away?.abbr || 'away';
   const marginTxt = pred.projMargin != null
@@ -3575,7 +3577,7 @@ function gameReportHTML(sport, g, pred, info, report, data) {
       const rows = sp ? [{ label: abbr(g.away), handle: sp.away?.spread_handle, bets: sp.away?.spread_bets }, { label: abbr(g.home), handle: sp.home?.spread_handle, bets: sp.home?.spread_bets }] : [];
       const lean = leanOf(rows);
       const extras = [moneyRows(rows), lean ? flag(`Dollars lean ${esc(lean.label)} on the spread — ${Math.round(lean.handle)}% of $ on ${Math.round(lean.bets)}% of bets`) : ''];
-      if (!ats?.qualifies && ats && !ats.pinned) extras.push(`<div class="ai-why">${Math.abs(ats.edge).toFixed(1)} pts is under the ${ATS_EDGE_MIN[sport] ?? 2}-pt bar${sport === 'nba' ? ' — still tracked' : ' — shown, not recorded'}.</div>`);
+      if (!ats?.qualifies && ats && !ats.pinned) extras.push(`<div class="ai-why">${Math.abs(ats.edge).toFixed(1)} pts is under the ${ATS_EDGE_MIN[sport] ?? 2}-pt play bar — still tracked, not a play.</div>`);
       const spP = typeof marketProbabilityFor === 'function' ? marketProbabilityFor({ g, sport, p: pred, atsR: ats }, 'spread') : null;
       if (spP) extras.push(`<div class="ai-why">Experimental cover chance ${(spP.prob * 100).toFixed(1)}% excluding pushes (${spP.n} past errors).</div>`);
       const cov = isFinal && ats ? (hs - as) + hsp : null;   // >0 home covers
@@ -3605,7 +3607,7 @@ function gameReportHTML(sport, g, pred, info, report, data) {
       // One caveat line, not two: the NFL no-bet label and the under-bar read
       // are both reasons this is not a play, so they share a sentence.
       const noBetT = sport === 'nfl' && typeof nflNoBet === 'function' ? nflNoBet(sport, 'total', pred) : '';
-      const underT = tr && !tr.broken && !tr.qualifies ? `${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'pts'} is under the ${TOT_EDGE_MIN[sport] ?? 1}-${sport === 'mlb' ? 'run' : 'pt'} bar — shown, not recorded` : '';
+      const underT = tr && !tr.broken && !tr.qualifies ? `${Math.abs(tr.diff).toFixed(1)} ${sport === 'mlb' ? 'runs' : 'pts'} is under the ${TOT_EDGE_MIN[sport] ?? 1}-${sport === 'mlb' ? 'run' : 'pt'} play bar — still tracked, not a play` : '';
       if (noBetT) extras.push(`<div class="ai-nobet">${esc(noBetT)}${underT ? ` · ${underT}` : ''}.</div>`);
       else if (underT) extras.push(`<div class="ai-why">${underT}.</div>`);
       const toP = tr && typeof marketProbabilityFor === 'function' ? marketProbabilityFor({ g, sport, p: pred, totR: tr }, 'total') : null;

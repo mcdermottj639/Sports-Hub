@@ -669,7 +669,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v316** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v317** (backend **b17-fantasy-league-rules**).
+
+### v317 — "Read only" means not a play, not "not saved"; no live note before kickoff
+The owner asked why a CFB spread (IU −7, model IU −8.5) said "read only". The pill is right: a 1.5-pt edge is under `ATS_EDGE_MIN.cfb` (3; NFL 2), so it is a read, not a play. The sentence under it was wrong: it said "shown, not recorded", but since v288 the `sports-hub-ai` collector saves every unblocked spread and total selection regardless of edge (`rowBase` pushes spread/total when the projection is finite and not quality-blocked). The under-bar lines now read "N pts is under the X-pt play bar — still tracked, not a play" (spread and total), and the soft-read note says "not counted as a play". Display text only — `atsRead`/`totalRead` gating, tiers, the collector and grading are unchanged.
+- **🐛 "Waiting for a live situation update." showed on scheduled games.** `refreshOpenGameDetail` (30s cycle) showed the note for any state other than `post`, so a pregame modal picked it up on the first refresh. A `pre` state now hides the note and returns. Test: `tests/live-detail-refresh.test.js` (+1). Node 302/302.
 
 ### v316 — Game modal: one place per number, and pre/live/post each say what they are
 The owner's screen recording of the whole WSH @ SF modal, after v315: the three market cards were followed by a Betting Odds grid, a "model agrees with the line" banner, a Model breakdown of the same three markets, a Saved pregame report repeating the same three picks, two separate notes toggles, three "not matched" signal cards with a methodology note, and NFL Key Players beside Top Performers carrying identical stats. *"Want the visuals good for all and no repeating info."*
@@ -4739,7 +4743,7 @@ The live pipeline saves probability method, sample size, training cutoff and its
     totals via **`totalRead(sport, pred, info)`**.
   - Rows under the bar are rendered with a **muted pill** (`.ai-edge.under`,
     `.gr-edge.under`) plus a sentence saying they're a read the model does not
-    record — a number that looks like a play but never grades would be worse
+    record (⚠️ SUPERSEDED in v317: since v288 the collector saves these reads; the sentence now says "still tracked, not a play") — a number that looks like a play but never grades would be worse
     than hiding it.
   - The card also degrades honestly rather than silently: "no spread posted"
     (ATS sports with no number), "model lands exactly on 44.5" (a zero

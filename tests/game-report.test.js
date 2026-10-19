@@ -166,7 +166,7 @@ test('nfl no-bet total carries one combined caveat and the moneyline shows break
   assert.match(html, /Under 52\.5 · 1\.8 pts · no-bet</);
   assert.doesNotMatch(html, /read only/);
   assert.equal((html.match(/No-bet: NFL totals/g) || []).length, 1);
-  assert.match(html, /No-bet: NFL totals are 9-14 this season · 1\.8 pts is under the 4-pt bar — shown, not recorded\./);
+  assert.match(html, /No-bet: NFL totals are 9-14 this season · 1\.8 pts is under the 4-pt play bar — still tracked, not a play\./);
   assert.match(html, /-410 needs 80\.4% to break even · model 79\.2% → no model EV/);
   // The factor rows ride inside the single toggle, and the old heading is gone.
   assert.match(html, /<details class="gr-model-notes"><summary>Why this read[^]*fac-row/);
