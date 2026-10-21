@@ -20,7 +20,7 @@ function load() {
     getGames: async () => [], sharpSplit: () => null, lineAtLabel: () => '',
     LEAGUES: { nfl: { label: 'NFL' }, cfb: { label: 'CFB' }, mlb: { label: 'MLB' } },
   });
-  for (const name of ['APP_VERSION', 'AI_MODEL_VERSION', 'PD_SCALE', 'HR_GAP', 'MODEL_W', 'MODEL_SHRINK', 'CONF_CAP', 'MLB_SP_ERA', 'SP_ERA_PRIOR_IP', 'PARK_WEIGHT', 'MLB_PARK', 'PD_SD', 'CFB_TIER_PTS', 'CFB_MARGIN_K', 'CFB_HFA', 'CFB_FORM_K', 'CFB_SHARP_PTS', 'CFB_P4_RE', 'CFB_ND_RE', 'ATS_SPORTS', 'ATS_EDGE_MIN', 'TOT_EDGE_MIN', 'TOT_MAX_DIFF', 'EDGE_BAR', 'ALERT_DOG_ML', 'TALLY_KEY', 'PENDING_KEY', 'getTally', 'getPending', 'setPending', 'stOf', 'impliedP', 'fmtML']) {
+  for (const name of ['APP_VERSION', 'AI_MODEL_VERSION', 'PD_SCALE', 'HR_GAP', 'MODEL_W', 'MODEL_SHRINK', 'CONF_CAP', 'MLB_SP_ERA', 'CFB_TOTAL_OFFSET', 'SP_ERA_PRIOR_IP', 'PARK_WEIGHT', 'MLB_PARK', 'PD_SD', 'CFB_TIER_PTS', 'CFB_MARGIN_K', 'CFB_HFA', 'CFB_FORM_K', 'CFB_SHARP_PTS', 'CFB_P4_RE', 'CFB_ND_RE', 'ATS_SPORTS', 'ATS_EDGE_MIN', 'TOT_EDGE_MIN', 'TOT_MAX_DIFF', 'EDGE_BAR', 'ALERT_DOG_ML', 'TALLY_KEY', 'PENDING_KEY', 'getTally', 'getPending', 'setPending', 'stOf', 'impliedP', 'fmtML']) {
     const at = source.indexOf(`const ${name} =`);
     assert.ok(at >= 0, name);
     // Compile candidates so a semicolon in a comment or nested try block
@@ -98,6 +98,16 @@ test('CFB neutral site removes exactly the home-field points', async () => {
   const neutral = await s.predictGame('cfb', { ...game(), neutralSite: true });
   assert.equal(home.projMargin - neutral.projMargin, 3);
   assert.ok(Math.abs(neutral.probHome - 0.5) < 1e-7);
+});
+test('v318 browser CFB total subtracts the fitted offset, same as the collector', async () => {
+  const s = load(); s.teamProfile = async () => profile;
+  s.matchupFactor = async () => ({ factors: [], notes: [] });
+  s.cfbRating = async () => ({ r: 12, tier: 'p4', src: 'tier' });
+  const cfb = await s.predictGame('cfb', game());
+  // raw = (24 + 20 + 24 + 20) / 2 = 44 → 44 − 2.6
+  assert.ok(Math.abs(cfb.projTotal - 41.4) < 1e-9);
+  const cfbNeutral = await s.predictGame('cfb', { ...game(), neutralSite: true });
+  assert.ok(Math.abs(cfbNeutral.projTotal - 41.4) < 1e-9);
 });
 test('CFB probability cap also governs value math without capping margin', async () => {
   const s = load(); s.teamProfile = async () => profile;
