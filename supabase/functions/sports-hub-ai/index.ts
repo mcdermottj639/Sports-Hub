@@ -24,6 +24,9 @@ const CONF_CAP: Record<Sport, number> = { nfl: 85, cfb: 90, mlb: 72, nba: 98 };
 const ATS_EDGE_MIN: Partial<Record<Sport, number>> = { nfl: 2, cfb: 3, nba: 3 };
 const TOTAL_MIN: Record<Sport, number> = { nfl: 4, cfb: 6, mlb: 1.5, nba: 6 };
 const TOTAL_MAX: Record<Sport, number> = { nfl: 14, cfb: 21, mlb: 4, nba: 20 };
+// CFB total = raw season PF/PA average, which ran +2.58 pts above the book line on all 64 v239 pregame rows
+// (SE 0.39, stable early/late). Fitted to the book, pre-change rows only. Keep identical to CFB_TOTAL_OFFSET in app.js.
+const CFB_TOTAL_OFFSET = 2.6, CFB_TOTAL_CAL = 'cfb-total-offset-v1';
 const PARK: Record<string, number> = { COL:113,CIN:106,BOS:106,KC:104,ARI:103,PHI:103,BAL:103,TEX:103,ATL:102,CHW:101,WSH:101,LAA:101,TOR:101,HOU:101,CHC:100,MIN:100,NYY:100,STL:99,PIT:99,MIL:99,CLE:98,LAD:97,NYM:97,TB:96,DET:96,ATH:95,SD:95,MIA:95,SF:93,SEA:92 };
 const MLB_SP_ERA = 4.3;
 const CFB_TIER: Record<string, number> = { p4: 12, g5: 0, fcs: -12 };
@@ -190,7 +193,7 @@ async function predict(sport:Sport,g:any){
   const quality:string[]=[]; if(!h||!a)quality.push('Incomplete team history');
   let p=.5,margin=0,total=h&&a?(h.ppg+h.papg+a.ppg+a.papg)/2:null,features:any={home:h,away:a};
   if(sport==='nfl'&&h&&a){const ss=clamp(Math.min(h.homeGP,a.roadGP)/10,0,1),split=g.neutral?0:ss*((h.homeWP??0)-(a.roadWP??0)),day=864e5,hr=h.lastDate?clamp(Math.round((Date.parse(g.date)-Date.parse(h.lastDate))/day),0,10):0,ar=a.lastDate?clamp(Math.round((Date.parse(g.date)-Date.parse(a.lastDate))/day),0,10):0;const f={record:h.winPct-a.winPct,margin:clamp((h.pdpg-a.pdpg)/7,-3,3),form:clamp((h.form-a.form)/7,-3,3),split,rest:clamp(hr-ar,-5,5)};p=logistic((g.neutral?0:NFL_ML.i)+NFL_ML.record*f.record+NFL_ML.margin*f.margin+NFL_ML.form*f.form+NFL_ML.split*f.split+NFL_ML.rest*f.rest);margin=(g.neutral?0:NFL_SP.i)+NFL_SP.record*f.record+NFL_SP.margin*f.margin+NFL_SP.form*f.form+NFL_SP.split*f.split+NFL_SP.rest*f.rest;total=total==null?null:28.832+.3679*total;features.nfl=f;}
-  if(sport==='cfb'){const cm=await conferenceMap(),ht=tier(cm.get(g.home.id)||'',g.home.name),at=tier(cm.get(g.away.id)||'',g.away.name);if(!ht||!at)quality.push('Unverified college team classification');const hr=(CFB_TIER[ht||'g5']||0)+(ht==='fcs'?.3:.6)*(h?.pdpg||0),ar=(CFB_TIER[at||'g5']||0)+(at==='fcs'?.3:.6)*(a?.pdpg||0);margin=hr-ar+(g.neutral?0:3)+clamp((h?.form||0)-(a?.form||0),-20,20)*.25;p=normalCdf(margin/PD_SD.cfb);features.rating={home:{tier:ht,r:hr},away:{tier:at,r:ar}};}
+  if(sport==='cfb'){const cm=await conferenceMap(),ht=tier(cm.get(g.home.id)||'',g.home.name),at=tier(cm.get(g.away.id)||'',g.away.name);if(!ht||!at)quality.push('Unverified college team classification');const hr=(CFB_TIER[ht||'g5']||0)+(ht==='fcs'?.3:.6)*(h?.pdpg||0),ar=(CFB_TIER[at||'g5']||0)+(at==='fcs'?.3:.6)*(a?.pdpg||0);margin=hr-ar+(g.neutral?0:3)+clamp((h?.form||0)-(a?.form||0),-20,20)*.25;p=normalCdf(margin/PD_SD.cfb);features.rating={home:{tier:ht,r:hr},away:{tier:at,r:ar}};if(total!=null){features.cfbTotal={raw:Math.round(total*10)/10,offset:CFB_TOTAL_OFFSET,cal:CFB_TOTAL_CAL};total-=CFB_TOTAL_OFFSET;}}
   if(sport==='mlb'){
     let z=0; if(h&&a){z+=.6*(h.winPct-a.winPct)+.9*clamp((h.pdpg-a.pdpg)/2.2,-3,3)+.4*clamp((h.form-a.form)/2.2,-3,3);const s=clamp(Math.min(h.homeGP,a.roadGP)/10,0,1);z+=.7*s*(((h.homeWP??0)-(a.roadWP??0))-.06)+.24;}
     else z=.24;

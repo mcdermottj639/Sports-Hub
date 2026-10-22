@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v317';
+const APP_VERSION = 'v318';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1985,6 +1985,13 @@ const MODEL_W = {
 // (p = 0.0019 against a 50/50 split), implying a +0.28 to +0.40 run bias at a
 // realistic spread — the same order this error produces.
 const MLB_SP_ERA = 4.30;
+// CFB projected total is the raw season PF/PA average with no opponent
+// adjustment. On all 64 v239 CFB total rows saved before this change it ran
+// +2.58 pts above the book line (SE 0.39, stable early vs late season), and 57
+// of 64 picks were OVER. Fitted to the BOOK on pre-change rows only — never
+// refit on rows this offset produced. Must match CFB_TOTAL_OFFSET in
+// supabase/functions/sports-hub-ai/index.ts (tests/cfb-total-offset.test.js).
+const CFB_TOTAL_OFFSET = 2.6;
 // Matchup weights for the MLB-only factors computed in matchupFactor. Hoisted
 // out of that function (v213) because the Model card renders them: a weight
 // that lives as a literal inside a function is invisible to the screen that
@@ -2783,6 +2790,7 @@ async function computePregamePrediction(sport, g, opts) {
   if (sport === 'nfl' && NFL_FIT && projTotal != null) {
     projTotal = NFL_FIT.projectedTotal(projTotal);
   }
+  if (sport === 'cfb' && projTotal != null) projTotal -= CFB_TOTAL_OFFSET;
   if (sport === 'mlb' && projTotal != null) {
     if (mu.starters && mu.starters.hERA != null && mu.starters.aERA != null) {
       const adj = ((mu.starters.hERA - MLB_SP_ERA) + (mu.starters.aERA - MLB_SP_ERA)) * 0.6;
@@ -4592,6 +4600,7 @@ const MODEL_NOTES = {
   cfb: {
     fitted: [
       ['tier points P4 +12 / G5 0 / FCS −12', 'v205, matched to the market across 19 games by matchup type — so a cupcake prices like a cupcake'],
+      ['total −2.6 pts', 'v318, fitted to the book on 64 pre-change saved totals (raw total ran +2.58 above the line; 57 of 64 picks OVER) — totals stay research-only'],
     ],
     guesses: ['shrink 0.8', 'cap 90%', 'home field 3 pts', 'sharp 3 pts/unit', 'form ×0.25', 'totals floor 6'],
     open: 'Margin vs the book should sit near <b>0.0</b> with the dog-side share near <b>50%</b>. Before v205 it read −11.8 with the model on the dog side of <b>19 of 19</b> spreads. Fit from that instrument on 🧪 Calibration — <b>never from the ATS picks this model itself produced.</b>',
