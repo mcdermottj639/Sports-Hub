@@ -106,7 +106,7 @@
       const injury = String(p.injuryStatus || 'ACTIVE').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()).replace('Injury reserve', 'IR').replace('Normal', 'Active');
       rows.push({
         side, id: p.id != null ? String(p.id) : null, player: p.name, nfl: team, slot: displaySlot(p), starter, bench: isBenched(p), pos: posOf(p), injury,
-        played, live, bye, points: pts, proj: proj == null ? 0 : proj,
+        played, live, bye, points: pts, proj: proj == null ? 0 : proj, projectionAvailable: proj != null,
         current: played || live ? (pts || 0) : (proj || 0),
         seasonAvg: num(p.avg), projAvg: num(p.projAvg), prk: num(p.prk),
         weeks: Array.isArray(p.weeks) ? p.weeks.filter((w) => w && typeof w.pts === 'number') : [],
@@ -324,6 +324,10 @@
   }
 
   function render(box, ctx) {
+    // Repaints share this mount. Dispose old handlers so one refresh tap
+    // cannot invoke every prior render's callback and start duplicate syncs.
+    box._mhqEvents?.abort();
+    const events = new AbortController(); box._mhqEvents = events;
     const L = ctx.L || {}; const games = ctx.games || [];
     const players = buildPlayers(L, games);
     const M = L.matchup || {};
@@ -334,11 +338,17 @@
     const standings = seasonTeams.slice().sort((a, b) => (b.wins - a.wins) || (b.pointsFor - a.pointsFor));
     const meT = seasonTeams.find((t) => t.isMe), oppT = seasonTeams.find((t) => t.team === oppName);
     const rankOf = (t) => t ? standings.indexOf(t) + 1 : null;
-    const weekLabel = ctx.weekLabel || '';
+    const snapshotIssue = globalThis.SportsHubFantasySync?.snapshotIssue(L) ||
+      (!globalThis.SportsHubFantasySync ? 'Saved matchup validation is unavailable. Please reload the app.' : '');
+    const weekLabel = snapshotIssue ? 'Saved matchup' : (ctx.weekLabel || '');
     const state = { page: ctx.page || 'overview', over: {}, pick: null, logs: {}, hist: null };
     const o0 = outlook(players, score, seasonTeams);
     const weekOK = games.length > 0;
     const anyProj = players.some((p) => p.proj > 0);
+    const dataIssue = snapshotIssue || (!weekOK ? 'NFL game status is loading. Your saved league is visible; win chance will return when game status is available.' : '') ||
+      (['me','opp'].some(side => !players.some(p=>p.side===side && p.starter) ||
+        players.some(p=>p.side===side && p.starter && !p.played && !p.bye && !p.projectionAvailable))
+        ? 'Some starter projections have not loaded. Win chance is unavailable until those projections arrive.' : '');
 
     const recOf = (t) => t ? `${t.wins}-${t.losses}${t.ties ? '-' + t.ties : ''} · ${ord(rankOf(t))} of ${seasonTeams.length}` : '';
     const board = () => {
@@ -480,9 +490,11 @@
       const page = state.page;
       box.innerHTML = `<div class="mhq">
         <div class="mhq-top"><div class="mhq-brand"><span class="logo" aria-hidden="true">HQ</span><h2>Matchup HQ${weekLabel ? ' · ' + H(weekLabel) : ''}</h2><button type="button" class="mhq-btn back" data-act="back">← Fantasy</button></div>
-          <p class="mhq-sub">${H(meName)} vs ${H(oppName)} · ESPN league data${L.syncedAt ? ' synced ' + H(ctx.timeAgo ? ctx.timeAgo(L.syncedAt) : '') : ''}${weekOK ? '' : ' · NFL slate unavailable, so kickoffs and lines are missing'}. <span class="mhq-link" data-act="resync">🔄 Refresh from ESPN</span></p>
+          <p class="mhq-sub">${H(meName)} vs ${H(oppName)} · ESPN league data${L.syncedAt ? ' saved ' + H(ctx.timeAgo ? ctx.timeAgo(L.coreSyncedAt || L.syncedAt) : '') : ''}. <button type="button" class="mhq-link" data-act="resync" data-fantasy-refresh ${ctx.syncStatus?.().busy ? 'disabled' : ''}>${ctx.syncStatus?.().busy ? '🔄 Refreshing…' : '🔄 Refresh from ESPN'}</button></p>
+          <p class="mhq-note" data-fantasy-sync-status role="status" aria-live="polite" ${ctx.syncStatus?.().message ? '' : 'hidden'}>${H(ctx.syncStatus?.().message || '')}</p>
+          ${L.carried?.season ? `<p class="mhq-note">Season history and standings are saved from ${H(ctx.timeAgo ? ctx.timeAgo(L.carried.season) : new Date(L.carried.season).toLocaleDateString())}; those details have not refreshed yet.</p>` : ''}
           <div class="mhq-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" data-page="${k}" aria-selected="${k === page}">${l}</button>`).join('')}</div></div>
-        <div class="mhq-page">${page === 'overview' ? overview() : page === 'lab' ? lab() : page === 'intel' ? intel() : history()}</div>
+        <div class="mhq-page">${dataIssue ? `<div class="mhq-empty" role="status"><b>Waiting for a complete matchup</b>${H(dataIssue)}</div>` : ''}${dataIssue && ['overview','lab'].includes(page) ? '' : page === 'overview' ? overview() : page === 'lab' ? lab() : page === 'intel' ? intel() : history()}</div>
         <p class="mhq-note">Win chance method: projected margin divided by the combined spread of both teams' remaining points, each team's spread being the league's week-to-week scoring swing scaled by the share of its projection still to play. In-progress players count their points so far plus half of what's left of their projection. An estimate built on ESPN's projections, not ESPN's number.</p></div>`;
       const cur = box.querySelector('[data-chart="curves"]'); if (cur) cur.innerHTML = curvesSVG(o0, Math.max(280, cur.clientWidth || 360));
       const tr = box.querySelector('[data-chart="trend"]'); if (tr) tr.innerHTML = lineSVG(weekly(seasonTeams, meName, oppName), Math.max(280, tr.clientWidth || 360));
@@ -494,9 +506,9 @@
       if (t.dataset.page) { state.page = t.dataset.page; if (ctx.onPage) ctx.onPage(state.page); paint(); return; }
       if (t.dataset.pick) { state.pick = t.dataset.pick; box.querySelectorAll('[data-pick]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pick === state.pick))); intelBody(); return; }
       if (t.dataset.act === 'back' && ctx.onBack) { ctx.onBack(); return; }
-      if (t.dataset.act === 'resync' && ctx.onResync) { t.textContent = '🔄 Refreshing…'; ctx.onResync(); return; }
+      if (t.dataset.act === 'resync' && ctx.onResync) { if(t.disabled || ctx.syncStatus?.().busy) return; t.disabled=true; t.textContent = '🔄 Refreshing…'; ctx.onResync(); return; }
       if (t.dataset.act === 'reset') { state.over = {}; paint(); }
-    });
+    }, {signal:events.signal});
     box.addEventListener('input', (ev) => {
       const inp = ev.target; if (!(inp instanceof HTMLInputElement) || inp.type !== 'range' || !inp.dataset.player) return;
       const v = Number(inp.value), base = Number(inp.dataset.base);
@@ -506,7 +518,7 @@
       const set = (k, txt) => { const e = box.querySelector(`[data-k="${k}"]`); if (e) e.textContent = txt; };
       set('me', f1(o.me.projFinal)); set('opp', f1(o.opp.projFinal)); set('win', f1(o.me.winPct) + '%');
       set('me-d', changed ? fs(o.me.projFinal - o0.me.projFinal) + ' vs ESPN' : 'ESPN projection'); set('opp-d', changed ? fs(o.opp.projFinal - o0.opp.projFinal) + ' vs ESPN' : 'ESPN projection'); set('win-d', changed ? fs(o.me.winPct - o0.me.winPct) + ' pts vs ESPN' : 'ESPN projection');
-    });
+    }, {signal:events.signal});
     paint();
     return { state, players, outlook: o0 };
   }

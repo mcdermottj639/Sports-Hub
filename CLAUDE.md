@@ -233,9 +233,16 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > two cache layers sit in front of ESPN. (a) The backend caches each League object
 > for `LEAGUE_TTL_SECONDS` (default 300s, env-tunable; `_build_league` time-bucketed
 > `lru_cache`) and auto-expires after that, plus `/api/refresh` clears it on demand.
-> (b) The frontend syncs once per session; the Refresh button sets `fanState.forceSync`,
-> which calls `/api/refresh`, bypasses the in-flight share and cache-busts
-> `fetchJSON` to force a true re-pull.
+> (b) Football v321 paints the last assembled snapshot immediately, including
+> during manual refresh. `fantasy-sync.js` reads fresh network responses through
+> `fetchLive`; roster warms the server first, then matchup/opponent must BOTH
+> succeed before replacing the saved core. Supplemental league details finish
+> independently and can carry labeled copies for up to three days. All overlapping
+> refreshes share one promise, including manual taps; an idle manual refresh calls
+> `/api/refresh` with a 10s timeout. Reopening Fantasy or returning/reconnecting to
+> it refreshes a snapshot older than five minutes. Failures/partial details retry
+> at most twice, 20s apart, while Fantasy is visible and online. Baseball retains
+> the older once-per-session `syncLeagueOnce` path.
 > If the backend is unreachable it falls back
 > to the locally-saved/manual roster, so the app never looks broken. The constraints
 > below still govern the **frontend**; the backend is the deliberate, scoped
@@ -671,7 +678,42 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v320** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v321** (backend **b17-fantasy-league-rules**).
+
+### v321 — Keep the complete fantasy matchup while ESPN refreshes
+
+Jack's phone showed an 18-day-old league, no opponent roster and a false 100%
+win chance. The previous assembler could replace the matchup/opponent with null
+after a partial success, and raw-response caching could rebuild old data. Matchup
+HQ also accumulated click listeners on every repaint, so one refresh tap could
+invoke several callbacks. The saved league's first paint awaited the separate
+NFL scoreboard request.
+
+`fantasy-sync.js` now owns football sync: warm roster first, fetch real network
+matchup and opponent, validate their team identities and scores, and publish the
+complete core before waiting for free agents/season/standings/rosters. A failed
+core leaves the previous assembled snapshot and its timestamp untouched. The
+same pending promise covers ordinary and forced refreshes. `coreSyncedAt` is
+the time the network core succeeded; supplemental carried copies keep their own
+age. Raw football revalidation events no longer start a second assembly. Saved
+league/config and cached NFL slate paint immediately, with clear refresh/failure
+status; NFL slate refreshes independently. Returning/reconnecting and reopening
+Fantasy refresh a core older than five minutes. Two bounded 20s retries remain.
+
+Matchup HQ aborts old event listeners before mounting again. Refresh is a real
+disabled-while-busy button, page selection survives updates, and missing opponent,
+scores, starter projections or NFL slate suppress the forecast. A previous-week
+snapshot is explicitly labeled and cannot claim this week's win chance (Tuesday
+4 AM Eastern rollover, DST aware). The classic This Week card uses the same core
+guard. The v320 Fantasy dock shortcut is preserved.
+
+Verified locally: 331/331 Node tests; browser regression at 320/390/1280px with
+gated network responses, partial failures, five repeated mounts, one request per
+refresh tap, slow details, missing/18-day-old opponent cache, and offline reload.
+No horizontal overflow or page errors. Read-only live API check on 23 Oct 2026
+took about 17s for roster then matchup/opponent; this frontend change does not
+remove that backend latency. No backend, collector or model changes. Actual
+iPhone interaction remains to be checked by Jack.
 
 ### v320 — One-tap Fantasy access
 
@@ -728,6 +770,9 @@ The owner's screenshot of WSH @ SF: the report was a model-vs-book table, two pr
 The owner read "10+ days of rest → Moneyline · home vs away · Home team / Away team" as every home and away team in those games. It never was: `S.select` keeps only the observations whose selected team matches the situation, so the rows were "the rested team, when at home" and "the rested team, on the road". The cards now say so. Each team situation carries a display-only `bet`/`betSide` label in `research-situations.js`; `pairedResults` takes the situation definition instead of `true` and titles rows "Rested team (10+ days) · home / · road" (or just "Road underdog" etc. when the situation fixes the side), heads the column "Bet on", and replaces "Matching team sides only" with "Bets on the … only · split home and road". Game-wide situations say "Both teams in every matching game". "N priced results" is now "N priced bet(s)". Market-sides view wording is unchanged. Display text only: no selection, grading, ROI, model or edge-function logic changed, so no function redeploy is needed (the label table rides along in the shared file but nothing server-side reads it).
 
 ### v312–v313 — Fantasy no longer sticks on an old saved league
+⚠️ SUPERSEDED for football sync in v321: fresh network core publishes atomically;
+raw endpoint refresh events do not reassemble football, and manual refreshes share
+the active promise. The bounded retry policy and baseball path remain.
 After a reload, the owner's phone showed the GM page with record 0-3 (a
 week-old copy; live was 0-4), PTS/WK and Points For blank, and "Couldn't load
 free agents", while the backend answered every endpoint normally. Two causes.
@@ -810,6 +855,9 @@ The `/teams/{id}` browser fetch failure is unexplained (CORS vs pane-level
 block) and is NOT fixed here; it also blocks other browser-side team reads.
 
 ### v306 — A failed fantasy sync no longer blanks the GM page
+⚠️ SUPERSEDED for football's matchup/opponent handling in v321: preserve the
+entire last complete core on a failed refresh, label its age, and suppress an
+old-week forecast. Supplemental data still uses labeled copies for up to 3 days.
 The owner's phone showed "ESPN free-agent data is not available" and "Trade
 market loading … after the backend deploys" while the backend was answering
 normally (80 free agents, 11 rosters) and the desktop rendered the full Waiver
@@ -2758,6 +2806,8 @@ The live pipeline saves probability method, sample size, training cutoff and its
     wrap check that flagged the buttons' own `min-height` as wrapped text.
 
 - **🚨 The disk cache was throwing away the one thing it was built for (v212)**
+  - ⚠️ v321 extends the assembled football snapshot to manual refresh too;
+    its first paint no longer awaits the separate NFL scoreboard request.
   — the owner, on a screenshot of the Fantasy tab sitting on *"Loading your
   league…"* one version after v210 shipped: *"Why's it seem like we're
   reloading everything again each time"*. Because it was. Three faults, and
@@ -7735,14 +7785,16 @@ rewrite.**
   the About tab, which reports the size); it is pure cache, so losing it costs
   one reload and nothing else.
 - `sportshub:league:{sport}` — **the ASSEMBLED fantasy league** (v212), the
-  object `syncLeagueOnce` builds out of six responses, so the Fantasy tab can
+  object football's `fantasy-sync.js` (v321) or baseball's `syncLeagueOnce` builds,
+  so the Fantasy tab can
   paint the last load with no network and nothing to reassemble. Same pattern
   as `powerlab:season` / `sportshub:fparticles`. ⚠️ It is deliberately NOT the
   same thing as the generic disk cache: that caches raw responses on a shared
   evictable budget, and this view does not read raw responses. Carries
-  `syncedAt`, which is the age of the DATA (the oldest `__at` among the
-  payloads it was built from), never the age of the assembly. Since v306 it
-  may also carry `carried: {freeAgents?, rosters?}` — timestamps of sections
+  `syncedAt` (football also `coreSyncedAt`), the time the full network core
+  succeeded. Baseball retains the oldest raw payload `__at` semantics. A failed
+  football core never advances these timestamps. Since v306 it
+  may also carry `carried: {freeAgents?, rosters?, standings?, season?}` — timestamps of sections
   kept from an earlier sync because the fresh call failed (≤3 days old).
 - `sportshub:pickem` — 🎯 the owner's ATS pool (v218), keyed by season →
   `{cfg, weeks: {N: {picks: {gameId: {side, sp, md, at, m}}, keys: [], tb}}}`.

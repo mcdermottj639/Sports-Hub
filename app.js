@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v320';
+const APP_VERSION = 'v321';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -8281,21 +8281,19 @@ async function renderFantasy() {
     // view (unless the user opened the draft-prep tools). Otherwise the prep view.
     if (cfg && cfg.football && fanState.footballView !== 'prep') {
       fanState.synced = fanState.synced || {};
-      if (!fanState.synced.football || fanState.forceSync) {
-        /* 🚨 v212: paint the last load NOW and sync behind it. v210 saved the
-           data but this line still AWAITED the sync, so a device with a
-           perfectly good saved copy sat on "Loading your league…" for the
-           full cold start anyway. A cache that is not allowed to answer is
-           not a cache. A forced refresh is the one case that still waits,
-           because bypassing the saved copy is the entire point of the button. */
-        const snap = fanState.forceSync ? null : leagueSnap('football');
+      const savedAt = fanState.league?.football?.coreSyncedAt || fanState.league?.football?.syncedAt || 0;
+      if (!fanState.synced.football || fanState.forceSync || Date.now()-savedAt>300000) {
+        // Keep the assembled snapshot visible even during a manual refresh.
+        // Only a complete network matchup may replace it.
+        const snap = leagueSnap('football');
         if (snap) {
           fanState.league = fanState.league || {};
           if (!fanState.league.football) fanState.league.football = snap;
         }
-        const done = syncFromLeague('football', !!fanState.forceSync).then((ok) => {
-          fanState.synced.football = true;
-          fanState.forceSync = false;
+        const force = !!fanState.forceSync;
+        fanState.forceSync = false;
+        const done = syncFromLeague('football', force).then((ok) => {
+          fanState.synced.football = ok;
           return ok;
         });
         if ((fanState.league || {}).football) {
@@ -8523,7 +8521,7 @@ async function leagueConfig() {
     fanState.cfg = (await fetchJSON(`${FANTASY_API}/api/health`, 300000)).configured || {};
     fanState.backendDown = false;
     saveCfg(fanState.cfg);
-  } catch (_) { fanState.cfg = {}; fanState.backendDown = true; }
+  } catch (_) { fanState.cfg = cachedCfg() || {}; fanState.backendDown = true; }
   return fanState.cfg;
 }
 
@@ -8594,7 +8592,53 @@ function leagueSnap(sport) {
 
 const syncInFlight = new Map();
 const autoRetry = {}; // v312: automatic re-syncs used per sport since the last complete one
+let footballSync, footballRetryTimer;
+let footballRetries = 0;
+function fantasySyncStatus() {
+  return fanState.syncStatus || {busy:false,message:''};
+}
+function paintFantasySyncStatus() {
+  const s = fantasySyncStatus();
+  document.querySelectorAll('[data-fantasy-sync-status]').forEach(n => {n.textContent=s.message;n.hidden=!s.message;});
+  document.querySelectorAll('[data-fantasy-refresh], #fbl-resync, .gm-retry').forEach(b => {
+    b.disabled=!!s.busy; b.textContent=s.busy?'🔄 Refreshing…':'🔄 Refresh from ESPN';
+  });
+}
+function syncFootball(force) {
+  if (!footballSync) footballSync = globalThis.SportsHubFantasySync.create({
+    read: () => fanState.league?.football || leagueSnap('football'),
+    // The assembled snapshot handles instant/offline display. A refresh itself
+    // must use the network, never reassemble an old raw-response disk cache.
+    request: path => fetchLive(`${FANTASY_API}/api/fantasy/football/${path}`,60000),
+    invalidate: async () => {
+      const ctrl=new AbortController(), timer=setTimeout(()=>ctrl.abort(),10000);
+      try {await fetch(`${FANTASY_API}/api/refresh`,{cache:'no-store',signal:ctrl.signal});}
+      finally {clearTimeout(timer);}
+    },
+    publish: L => {
+      fanState.league=fanState.league || {}; fanState.league.football=L;
+      saveLeagueSnap('football',L);
+      saveRoster('football',L.rosterFull.map(p=>({name:p.name,slot:p.lineupSlot||p.pos||'BE',pos:p.pos||'',status:p.status||'active',team:p.proTeam||''})));
+      window.dispatchEvent(new CustomEvent('sportshub:league-updated'));
+      if(currentTab==='fantasy' && fanState.footballView!=='prep') paintFootballView();
+    },
+    status: s => {
+      fanState.syncStatus=s;paintFantasySyncStatus();
+      if(s.busy) {clearTimeout(footballRetryTimer);return;}
+      if(s.phase==='ready') {footballRetries=0;return;}
+      if(footballRetries<2) {
+        footballRetries++;
+        footballRetryTimer=setTimeout(() => {
+          if(document.hidden || !navigator.onLine || currentTab!=='fantasy') return;
+          syncFootball(false).then(ok=>{fanState.synced={...fanState.synced,football:ok};});
+        },20000);
+      }
+    },
+  });
+  return footballSync.sync(force);
+}
 function syncFromLeague(sport, force = false) {
+  if (sport === 'football') return syncFootball(force);
   // A forced refresh must not be served by an in-flight ordinary sync — the
   // whole point is to bypass both cache layers.
   if (!force && syncInFlight.has(sport)) return syncInFlight.get(sport);
@@ -8604,6 +8648,14 @@ function syncFromLeague(sport, force = false) {
   if (!force) syncInFlight.set(sport, p);
   return p;
 }
+
+function resumeFantasySync() {
+  if(document.hidden || !navigator.onLine || currentTab!=='fantasy' || fanState.sport!=='football' || fanState.footballView==='prep') return;
+  const L=fanState.league?.football;
+  if((fanState.cfg || cachedCfg())?.football && Date.now()-(L?.coreSyncedAt || L?.syncedAt || 0)>300000) renderFantasy();
+}
+document.addEventListener('visibilitychange',resumeFantasySync);
+window.addEventListener('online',resumeFantasySync);
 async function syncLeagueOnce(sport, force) {
   try {
     // On a forced refresh, clear the backend's in-memory league cache first,
@@ -9317,7 +9369,25 @@ function fbGMHTML(roster, freeAgents, leagueRosters, rules, meta = {}) {
 // earlier in renderFantasy). Every repaint after a sync comes through here so
 // a refresh never drops the owner out of the view he was on.
 function paintFootballView() {
-  return fanState.footballView === 'hq' ? renderMatchupHQ() : renderFootballLive();
+  return Promise.resolve(fanState.footballView === 'hq' ? renderMatchupHQ() : renderFootballLive()).then(paintFantasySyncStatus);
+}
+
+// The saved league must not wait on a separate NFL scoreboard request to paint.
+function fantasySlate() {
+  if (!fanState.nflSlate) {
+    const url = `${SITE}/${LEAGUES.nfl.espnPath}/scoreboard`;
+    const json = cache.get(url)?.data || dcRead(url)?.d || {};
+    fanState.nflSlate = {json,games:(json.events || []).map(normEvent)};
+  }
+  if (!fanState.nflSlateLoading && Date.now()-(fanState.nflSlateChecked || 0)>60000) {
+    fanState.nflSlateChecked=Date.now(); fanState.nflSlateLoading=true;
+    scoreboard('nfl').then(next => {
+      const changed=JSON.stringify(next)!==JSON.stringify(fanState.nflSlate);
+      fanState.nflSlate=next;
+      if(changed && currentTab==='fantasy' && fanState.footballView!=='prep') paintFootballView();
+    }).catch(()=>{}).finally(()=>{fanState.nflSlateLoading=false;});
+  }
+  return fanState.nflSlate;
 }
 // Load League History's archive scripts ON DEMAND for the rivalry panel.
 // ⚠️ Linked, not copied (CLAUDE.md: the 13-season archive exists exactly once).
@@ -9351,13 +9421,12 @@ async function renderMatchupHQ() {
   const L = (fanState.league || {}).football || {};
   if (!window.SportsHubMatchupHQ) { box.innerHTML = '<div class="ffp-card"><div class="ffp-empty"><b>Matchup HQ did not load</b>matchup-hq.js is missing from this build.</div></div>'; return; }
   // The current NFL week with its lines — the same read the NFL tab makes.
-  let games = [], weekLabel = '';
-  try { const sb = await scoreboard('nfl'); games = sb.games || []; weekLabel = weekLabelOf(sb.json, games); } catch (_) { games = []; }
+  const sb = fantasySlate(), games = sb.games || [], weekLabel = weekLabelOf(sb.json, games);
   const season = Number(((games[0] || {}).season)) || new Date().getFullYear();
   const resync = async () => { fanState.synced = fanState.synced || {}; fanState.synced.football = false; fanState.forceSync = true; await renderFantasy(); };
   window.SportsHubMatchupHQ.render(box, {
     L, games, weekLabel, season, page: matchupHQPage,
-    fetchJSON, timeAgo, loadHistory: loadLeagueHistory,
+    fetchJSON, timeAgo, loadHistory: loadLeagueHistory, syncStatus: fantasySyncStatus,
     onPage: (p) => { matchupHQPage = p; },
     onBack: () => { fanState.footballView = 'live'; renderFantasy(); },
     onResync: resync,
@@ -9374,7 +9443,11 @@ async function renderFootballLive() {
   const rec = [r.wins, r.losses, r.ties].every((x) => x == null) ? ''
     : `${r.wins ?? 0}-${r.losses ?? 0}${r.ties ? '-' + r.ties : ''}`;
   const synced = L.syncedAt ? (Date.now() - L.syncedAt < 60000 ? 'synced just now' : `synced ${timeAgo(L.syncedAt)}`) : '';
-  const week = await nflWeekGames();
+  const week = {};
+  fantasySlate().games.forEach(g => {
+    if(g.home?.abbr) week[g.home.abbr.toUpperCase()]={opp:g.away?.abbr || '',at:false,date:g.date,state:g.state};
+    if(g.away?.abbr) week[g.away.abbr.toUpperCase()]={opp:g.home?.abbr || '',at:true,date:g.date,state:g.state};
+  });
   // ⚠️ An empty map means the scoreboard call FAILED, not that all 32 teams are
   // on bye. Without this every starter would be flagged BYE on any ESPN hiccup —
   // a maximally alarming false alert. `weekOK` gates every bye read below.
@@ -9403,13 +9476,15 @@ async function renderFootballLive() {
   const meVal = started ? meScore : projFor(starters);
   const opVal = started ? opScore : projFor(oppEff);
   const oppName = (M && M.opponent && M.opponent.team) || (L.opponent || {}).opponent || 'Opponent';
+  const matchupIssue = globalThis.SportsHubFantasySync.snapshotIssue(L);
   let matchupHTML;
-  if (M && M.me) {
+  if (M && M.me && !matchupIssue) {
     // Win% only renders when BOTH sides have real numbers. Before v195 my side
     // was structurally zero (the backend's roster carried no points at all), so
     // the meter read ~8% while the card above it said "Leading" — the two
     // disagreed because only one of them had data. Better to show nothing.
-    const wp = (meVal != null && opVal != null && (meVal + opVal) > 0) ? footballWinProb(starters, oppEff) : null;
+    const projectionsReady = weekOK && [starters,oppEff].every(list=>list.length && list.every(p=>isBye(p) || week[String(p.proTeam).toUpperCase()]?.state==='post' || fpts(p.projected)!=null));
+    const wp = (projectionsReady && meVal != null && opVal != null && (meVal + opVal) > 0) ? footballWinProb(starters, oppEff) : null;
     const pct = wp ? wp.prob : null;
     const tone = pct == null ? '' : pct >= 55 ? 'good' : pct >= 45 ? 'even' : 'bad';
     const rowsHTML = NFL_BUCKETS.map((b) => {
@@ -9445,7 +9520,7 @@ async function renderFootballLive() {
       <div class="ffp-cap">Each row is the <b style="color:var(--ink)">combined</b> projection for every starter at that position — all the names listed, not one player. ESPN's own projections, already scored to your league (half-PPR). ${synced ? esc(synced) + ' · ' : ''}${pct != null ? 'Win% is our estimate, not ESPN’s.' : 'Win% shows once both lineups carry projections.'}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button id="fbl-hq2" class="fan-btn" type="button">📊 Open Matchup HQ</button><button id="fbl-resync" class="fan-btn ghost">🔄 Refresh from ESPN</button></div></div>`;
   } else {
-    matchupHTML = `<div class="ffp-card"><div class="ffp-empty"><b>No matchup posted yet</b>${rec ? 'Season record: ' + esc(rec) + '.' : 'Your Week 1 opponent appears once the schedule is set.'}</div><button id="fbl-resync" class="fan-btn ghost">🔄 Refresh from ESPN</button></div>`;
+    matchupHTML = `<div class="ffp-card"><div class="ffp-empty"><b>Waiting for a complete matchup</b>${esc(matchupIssue || 'The full matchup has not loaded yet.')}</div><button id="fbl-resync" class="fan-btn ghost">🔄 Refresh from ESPN</button></div>`;
   }
 
   // --- Stat strip ---
@@ -9539,7 +9614,8 @@ async function renderFootballLive() {
     <div class="setup-card pp-hero">
       <div class="pp-kicker">🏈 ${esc(L.team || 'My Team')}</div>
       <div class="muted" style="margin-top:4px">Live ESPN league — points scoring, ${esc(NFL_SCORING)}.</div>
-      <div class="muted" style="margin-top:4px;font-size:11px">${esc(synced)}${synced ? ' · ' : ''}<span id="fbl-top-resync" role="button" tabindex="0" style="text-decoration:underline;cursor:pointer">🔄 Refresh from ESPN</span></div>
+      <div class="muted" style="margin-top:4px;font-size:11px">${esc(synced)}${synced ? ' · ' : ''}<button id="fbl-top-resync" class="fan-btn ghost" data-fantasy-refresh type="button">🔄 Refresh from ESPN</button></div>
+      <p class="ffp-cap" data-fantasy-sync-status role="status" aria-live="polite"></p>
       <div style="margin-top:10px"><button id="fbl-hq" class="fan-btn" type="button">📊 Matchup HQ — this week's full breakdown →</button></div>
     </div>
     ${stripHTML}
@@ -13041,7 +13117,17 @@ window.addEventListener('sportshub:fresh', (e) => {
      so sawStale) only tracks ESPN feeds, so when the only stale copies were
      fantasy ones this handler returned early and the Fantasy tab stayed on a
      week-old saved league (record 0-3 after week 4) with free agents missing. */
-  const fan = String((e && e.detail && e.detail.url) || '').includes('/api/fantasy/');
+  const u = (e && e.detail && e.detail.url) || '';
+  const football = u.includes('/api/fantasy/football/');
+  // Football publishes a complete network snapshot itself; a single raw
+  // endpoint must never invalidate it or trigger another whole-league pull.
+  if(football) return;
+  const nflSlate = u === `${SITE}/${LEAGUES.nfl.espnPath}/scoreboard`;
+  if(nflSlate && e.detail.data) {
+    fanState.nflSlate={json:e.detail.data,games:(e.detail.data.events || []).map(normEvent)};
+    if(currentTab==='fantasy' && fanState.footballView!=='prep') paintFootballView();
+  }
+  const fan = u.includes('/api/fantasy/');
   if (!sawStale && !fan) return;
   /* 🚨 A repaint alone is NOT enough for a view that copies the payload into
      its own state. Fantasy derives `fanState.league[sport]` from the roster
@@ -13051,7 +13137,6 @@ window.addEventListener('sportshub:fresh', (e) => {
      off the MEMORY cache, which now holds the fresh copy, so it costs no
      network. Anything else that caches derived state needs the same
      treatment; the raw-payload cache cannot see it. */
-  const u = (e && e.detail && e.detail.url) || '';
   if (u.includes('/api/fantasy/')) { try { fanState.synced = {}; } catch (_) {} }
   clearTimeout(freshTimer);
   freshTimer = setTimeout(() => {

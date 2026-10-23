@@ -3633,6 +3633,8 @@ details.md-fold .bs-detail { margin-top: 8px; }
 .mhq-brand .back { margin-left: auto; }
 .mhq-sub { margin: 0; color: var(--mhq-mu); font-size: 12px; line-height: 1.5; }
 .mhq-link { color: #93b4ff; text-decoration: underline; cursor: pointer; }
+.mhq button.mhq-link { border:0;background:none;padding:6px 0;font:inherit;min-height:44px;text-align:left; }
+.mhq button.mhq-link:disabled { cursor:wait;opacity:.7; }
 .mhq-tabs { display: flex; gap: 4px; flex-wrap: wrap; background: #0d1529; border: 1px solid var(--mhq-line); border-radius: 12px; padding: 4px; width: fit-content; max-width: 100%; }
 .mhq-tabs button { appearance: none; background: none; border: 0; padding: 8px 14px; border-radius: 9px; font: inherit; font-size: 13px; color: var(--mhq-mu); cursor: pointer; }
 .mhq-tabs button[aria-selected="true"] { color: #fff; background: linear-gradient(180deg, #1e3a8a, #1d4ed8); box-shadow: 0 0 0 1px #3b82f6 inset, 0 6px 18px rgba(59,130,246,.25); font-weight: 700; }
