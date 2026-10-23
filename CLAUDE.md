@@ -89,9 +89,10 @@ Supabase for durable, scheduled AI-pick capture and grading.
 
 The experience complements score/news apps with a daily brief, model
 forecasts and results, research, league-aware fantasy decisions, and a personal
-watchlist. Desktop uses a sidebar; mobile uses Today / Models / Research /
-Leagues / More. The Leagues hub opens NFL, CFB, NBA or the MLB model board, and
-NFL/CFB/NBA pages have a direct league switch. Fantasy remains in More and the
+watchlist. Desktop uses a sidebar; mobile uses Today / Models / Fantasy /
+Leagues / More. Fantasy is one tap away in the persistent phone dock. The
+Leagues hub opens NFL, CFB, NBA or the MLB model board, and NFL/CFB/NBA pages
+have a direct league switch. Research desk is in More → Go deeper and the
 desktop sidebar. More groups every existing destination by purpose, and global
 search finds features, current games and saved notes. News/team/golf content
 remains available in News & scores and the dedicated team pages.
@@ -670,7 +671,17 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v319** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v320** (backend **b17-fantasy-league-rules**).
+
+### v320 — One-tap Fantasy access
+
+The phone dock is Today / Models / Fantasy / Leagues / More. Fantasy replaces
+Research in the center slot and opens the existing Fantasy HQ directly;
+Fantasy section links also keep that tab selected. Research desk moves into
+More → Go deeper and remains in the desktop sidebar, search and Today promo.
+The five roomy touch targets, league shortcuts, Matchup HQ, saved league
+snapshot and background sync are preserved. This changes navigation only;
+there is no backend, model, collection or app-data change.
 
 ### v319 — Matchup HQ: the weekly matchup, analysed, inside the Fantasy tab
 The owner asked for the fantasy matchup dashboard he had been iterating on in chat (and a GPT mockup of it) to live in Sports Hub, where it reads the league live instead of from a snapshot. New `matchup-hq.js` (one global, `SportsHubMatchupHQ`: a PURE `.model` under `tests/matchup-hq.test.js`, plus `.render(box, ctx)`), reached from the live football page's "📊 Matchup HQ" buttons (hero and This Week card); `fanState.footballView = 'hq'`, and `paintFootballView()` now routes every post-sync repaint so a refresh never drops the owner out of the view he was on. Four tabs, all off the league object the tab already holds (`rosterFull`, `opponent.roster`, `matchup`, `season`) plus the NFL week slate with its ESPN lines (`scoreboard('nfl')`, the same read the NFL tab makes):
@@ -978,8 +989,10 @@ excluded 11 preseason events.
 
 NBA has a daily league page with date browsing, scores, all three forecast
 markets, conference standings, headlines, model weights and saved-game links.
-The mobile dock replaces Fantasy with Leagues; NFL/CFB/NBA also share a direct
-league switch. Fantasy stays available through More and the desktop sidebar.
+⚠️ SUPERSEDED in v320 for mobile navigation: Fantasy returns in Research's
+dock slot; Leagues stays in the dock, and Research desk moves into More.
+Originally, the mobile dock replaced Fantasy with Leagues; NFL/CFB/NBA also
+share a direct league switch.
 `nba-page.js` renders the page and NBA Model info. `_shared/nba-model.js` and
 `nba-model-config.js` are the identical browser/Edge/replay engine. The model
 uses season scoring, margin, win rate, recent form, rest, back-to-backs and home

@@ -156,7 +156,7 @@
     });
     const m = meta[name] || meta.home;
     $d('desk-page-title').textContent = m[0]; $d('desk-page-desc').textContent = m[1];
-    $d('desk-breadcrumb').textContent = ['home','predictions','research','leagues'].includes(activeGroup) ? ({ home:'Today', predictions:'Models', research:'Research', leagues:'Leagues' })[activeGroup] : 'Workspace';
+    $d('desk-breadcrumb').textContent = ({ home:'Today', predictions:'Models', fantasy:'Fantasy', leagues:'Leagues' })[activeGroup] || 'Workspace';
     document.title = `${m[0]} · Sports Hub`;
     $d('desk-page-title').tabIndex = -1;
     $d('desk-page-title').focus({preventScroll:true});
@@ -303,7 +303,7 @@
     const groups = [
       ['Make a decision','models/all/picks','models/all/results','models/all/trends','models/all/recent','watchlist','fantasy/gm','fantasy/lineup','pickem'],
       ['Follow your sports','eagles','redsox','nfl','cfb','nba','models/mlb/picks','news'],
-      ['Go deeper','nfl/research','cfb/research','fantasy/season','models/all/calibration','models/all/method','tools','about'],
+      ['Go deeper','research','nfl/research','cfb/research','fantasy/season','models/all/calibration','models/all/method','tools','about'],
     ];
     host.innerHTML=groups.map(([title,...paths])=>`<section class="desk-explore-section"><h2>${title}</h2><div class="desk-explore-grid">${paths.map(path=>links.find(x=>x[0]===path)).filter(Boolean).map(x=>tile(...x)).join('')}</div></section>`).join('');
   }

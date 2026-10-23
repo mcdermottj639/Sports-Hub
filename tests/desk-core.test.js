@@ -16,8 +16,12 @@ test('deep links round trip all model scopes and fantasy sections', () => {
     const path=`#/fantasy/${section}`;
     assert.equal(C.hashFor(C.route(path)),path);
   }
-  assert.equal(C.group(C.route('#/nfl/research')),'research');
-  assert.equal(C.group(C.route('#/cfb/research')),'research');
+  for (const section of ['', '/gm', '/lineup', '/matchup', '/roster', '/season', '/waivers']) {
+    assert.equal(C.group(C.route('#/fantasy' + section)), 'fantasy');
+  }
+  assert.equal(C.group(C.route('#/research')),'explore');
+  assert.equal(C.group(C.route('#/nfl/research')),'explore');
+  assert.equal(C.group(C.route('#/cfb/research')),'explore');
   assert.equal(C.route('#pk=important-pool-import'),null);
   assert.equal(C.route('#/not-a-destination'),null);
   assert.equal(C.route('#/models/invalid/bad').aiSport,'all');
