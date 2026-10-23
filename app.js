@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v318';
+const APP_VERSION = 'v319';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -8302,7 +8302,7 @@ async function renderFantasy() {
           // Something real is on screen, so nothing waits on the backend.
           done.then((ok) => {
             if (!ok || fanState.sport !== 'football' || fanState.footballView === 'prep') return;
-            renderFootballLive().then(() => { applySections('fantasy'); paintStaleNote(); });
+            paintFootballView().then(() => { applySections('fantasy'); paintStaleNote(); });
           }).catch(() => {});
         } else {
           // Nothing saved yet (first launch) — say what is happening instead
@@ -8311,7 +8311,7 @@ async function renderFantasy() {
           await done;
         }
       }
-      await renderFootballLive();
+      await paintFootballView();
       // Verify the remembered answer; drop back to prep if the league is gone.
       if (known === undefined) leagueConfig().then((c) => {
         if (!c.football && fanState.sport === 'football') renderFantasy();
@@ -9311,6 +9311,61 @@ function fbGMHTML(roster, freeAgents, leagueRosters, rules, meta = {}) {
   return `<div class="gm-hero"><div><div class="pp-kicker">GM COMMAND CENTER</div><h3>${first && first.score >= 15 ? `Priority: improve ${esc(first.pos)}` : 'Roster is balanced'}</h3><p>${first && first.score >= 15 ? esc(first.reason) + '. Waiver and trade lists are ranked around that need.' : 'No major hole is showing. Prioritize upside and injury insurance.'}</p></div><div class="gm-score"><b>${first ? first.score : 0}</b><span>top need</span></div></div><div class="gm-needs">${needRows}</div><div class="gm-grid"><section><h3>Waiver Plan</h3>${waiverRows || (faLoaded ? '<div class="ffp-empty"><b>No pickup beats your roster</b>None of the available players at a position you need clears your current options.</div>' : `<div class="ffp-empty"><b>Couldn't load free agents</b>The league didn't answer on the last sync — usually the free server waking up.${retryBtn}</div>`)}${savedNote(meta.faSavedAt)}<div class="ffp-cap">One primary add, then league-eligible flex options. Past scoring differences are not projected lineup gains.</div></section><section><h3>Trade Targets</h3>${trades || (rostersLoaded ? '<div class="ffp-empty"><b>No trade leads right now</b>No other roster has a usable player at your top need positions.</div>' : `<div class="ffp-empty"><b>Couldn't load league rosters</b>The other teams' rosters didn't come back on the last sync.${retryBtn}</div>`)}${savedNote(meta.rostersSavedAt)}<div class="ffp-cap">Conversation starters, not one-for-one values. Depth targets allocate your league’s bench spots; they are guidelines, not roster requirements. ${config.verified ? 'ESPN roster rules loaded.' : 'Standard roster assumptions until league rules load.'}</div></section></div>`;
 }
 
+// v319: the live football league has two views — the long GM page and
+// Matchup HQ, the weekly matchup analysis (matchup-hq.js). `fanState.
+// footballView` picks: 'live' (default), 'hq', or 'prep' (draft tools, handled
+// earlier in renderFantasy). Every repaint after a sync comes through here so
+// a refresh never drops the owner out of the view he was on.
+function paintFootballView() {
+  return fanState.footballView === 'hq' ? renderMatchupHQ() : renderFootballLive();
+}
+// Load League History's archive scripts ON DEMAND for the rivalry panel.
+// ⚠️ Linked, not copied (CLAUDE.md: the 13-season archive exists exactly once).
+// Both files expose one global each (`LeagueHistory`, `LeagueESPN`) and touch
+// nothing else; loaded once per session, never stored.
+const LEAGUE_HISTORY_ORIGIN = 'https://mcdermottj639.github.io/League-History/';
+let leagueHistoryLoad = null;
+function loadLeagueHistory() {
+  if (leagueHistoryLoad) return leagueHistoryLoad;
+  const one = (file) => new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = LEAGUE_HISTORY_ORIGIN + file; s.async = true;
+    s.onload = res; s.onerror = () => rej(new Error('League History script failed: ' + file));
+    document.head.appendChild(s);
+  });
+  leagueHistoryLoad = Promise.all([one('history.js'), one('espn.js')]).then(() => {
+    const LH = window.LeagueHistory, LE = window.LeagueESPN;
+    if (!LH || !LH._stats) throw new Error('LeagueHistory global missing');
+    const mgrFor = (team) => {
+      if (LE && typeof LE.mgrFor === 'function') { try { const m = LE.mgrFor(team); if (m) return m; } catch (_) {} }
+      const map = (LE && LE.MANAGERS) || {};
+      return map[String(team || '').toLowerCase().trim()] || null;
+    };
+    return { stats: LH._stats, mgrFor, career: typeof LH.career === 'function' ? (m) => { try { return LH.career(m); } catch (_) { return null; } } : null };
+  }).catch((e) => { leagueHistoryLoad = null; throw e; });
+  return leagueHistoryLoad;
+}
+let matchupHQPage = 'overview';
+async function renderMatchupHQ() {
+  const box = $('#fantasy-football');
+  if (!box) return;
+  const L = (fanState.league || {}).football || {};
+  if (!window.SportsHubMatchupHQ) { box.innerHTML = '<div class="ffp-card"><div class="ffp-empty"><b>Matchup HQ did not load</b>matchup-hq.js is missing from this build.</div></div>'; return; }
+  // The current NFL week with its lines — the same read the NFL tab makes.
+  let games = [], weekLabel = '';
+  try { const sb = await scoreboard('nfl'); games = sb.games || []; weekLabel = weekLabelOf(sb.json, games); } catch (_) { games = []; }
+  const season = Number(((games[0] || {}).season)) || new Date().getFullYear();
+  const resync = async () => { fanState.synced = fanState.synced || {}; fanState.synced.football = false; fanState.forceSync = true; await renderFantasy(); };
+  window.SportsHubMatchupHQ.render(box, {
+    L, games, weekLabel, season, page: matchupHQPage,
+    fetchJSON, timeAgo, loadHistory: loadLeagueHistory,
+    onPage: (p) => { matchupHQPage = p; },
+    onBack: () => { fanState.footballView = 'live'; renderFantasy(); },
+    onResync: resync,
+  });
+  injectJumpNav('fantasy');
+  window.dispatchEvent(new CustomEvent('sportshub:fantasy-rendered'));
+}
+
 async function renderFootballLive() {
   const box = $('#fantasy-football');
   if (!box) return;
@@ -9388,7 +9443,7 @@ async function renderFootballLive() {
         <div class="ffp-wp-track"><div class="ffp-wp-fill" style="width:${Math.max(2, Math.min(98, pct))}%"></div><div class="ffp-wp-mid"></div></div>
         <div class="ffp-wp-read ${tone}">${pct}% to win${wp && wp.remaining ? ` <span style="font-weight:400;font-size:11px;color:var(--gy)">· ${wp.remaining} still to play</span>` : ''}</div></div>` : ''}
       <div class="ffp-cap">Each row is the <b style="color:var(--ink)">combined</b> projection for every starter at that position — all the names listed, not one player. ESPN's own projections, already scored to your league (half-PPR). ${synced ? esc(synced) + ' · ' : ''}${pct != null ? 'Win% is our estimate, not ESPN’s.' : 'Win% shows once both lineups carry projections.'}</div>
-      <button id="fbl-resync" class="fan-btn ghost" style="margin-top:10px">🔄 Refresh from ESPN</button></div>`;
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button id="fbl-hq2" class="fan-btn" type="button">📊 Open Matchup HQ</button><button id="fbl-resync" class="fan-btn ghost">🔄 Refresh from ESPN</button></div></div>`;
   } else {
     matchupHTML = `<div class="ffp-card"><div class="ffp-empty"><b>No matchup posted yet</b>${rec ? 'Season record: ' + esc(rec) + '.' : 'Your Week 1 opponent appears once the schedule is set.'}</div><button id="fbl-resync" class="fan-btn ghost">🔄 Refresh from ESPN</button></div>`;
   }
@@ -9485,6 +9540,7 @@ async function renderFootballLive() {
       <div class="pp-kicker">🏈 ${esc(L.team || 'My Team')}</div>
       <div class="muted" style="margin-top:4px">Live ESPN league — points scoring, ${esc(NFL_SCORING)}.</div>
       <div class="muted" style="margin-top:4px;font-size:11px">${esc(synced)}${synced ? ' · ' : ''}<span id="fbl-top-resync" role="button" tabindex="0" style="text-decoration:underline;cursor:pointer">🔄 Refresh from ESPN</span></div>
+      <div style="margin-top:10px"><button id="fbl-hq" class="fan-btn" type="button">📊 Matchup HQ — this week's full breakdown →</button></div>
     </div>
     ${stripHTML}
     <h2 class="section-title" id="desk-fantasy-gm">What Should I Do?</h2>
@@ -9519,6 +9575,7 @@ async function renderFootballLive() {
   if (rt) rt.onclick = async () => { rt.textContent = '🔄 Refreshing…'; fanState.synced = fanState.synced || {}; fanState.synced.football = false; fanState.forceSync = true; await renderFantasy(); };
   const pp = box.querySelector('#fbl-prep');
   if (pp) pp.onclick = () => { fanState.footballView = 'prep'; renderFantasy(); };
+  box.querySelectorAll('#fbl-hq, #fbl-hq2').forEach((b) => { b.onclick = () => { fanState.footballView = 'hq'; renderFantasy(); }; });
   injectJumpNav('fantasy');
   applySections('fantasy');
   window.dispatchEvent(new CustomEvent('sportshub:fantasy-rendered'));

@@ -310,6 +310,7 @@ fantasy/golf data are not refreshed by this cycle.
   dark teal desktop sidebar and responsive dock; SVG icon
   sizing is scoped to desk components so existing analytical charts retain
   their dimensions. No theme switch or frontend build step.
+- `matchup-hq.js` — v319 Matchup HQ (weekly fantasy matchup analysis: model + renderer, loaded before app.js); `tests/matchup-hq.test.js` + `tests/fixtures/matchup-hq-week7.json`.
 - `app.js` (~12,000 lines) — main application logic. Top of file has `APP_VERSION`, `LEAGUES`, `EAGLES` config.
 - `nfl-model.js` — archived v239 NFL baseline arithmetic for comparison.
   It is loaded before `app.js` and required directly by the Node tests, so the
@@ -341,7 +342,7 @@ fantasy/golf data are not refreshed by this cycle.
 - `docs/AI_PICKS_V232_AUDIT.md` — findings, evidence schema and validation limits.
 - `tests/nfl-model.test.js` — focused Node tests for the fitted arithmetic and
   the production moneyline value-tier gate.
-- `styles.css` — legacy component styling, in NINE layers, and **order matters**: (1) the
+- `styles.css` — legacy component styling, in TWELVE layers (the `.mhq-` Matchup HQ layer is last, v319), and **order matters**: (1) the
   original dark `:root` vars and components; (2) the `:root[data-theme="light"]`
   "Editorial / Premium" block, which un-hardcodes the dark-only values (white
   hairline borders, dark gradients, chips, tracks); (3) the **token layer**
@@ -669,7 +670,17 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v318** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v319** (backend **b17-fantasy-league-rules**).
+
+### v319 — Matchup HQ: the weekly matchup, analysed, inside the Fantasy tab
+The owner asked for the fantasy matchup dashboard he had been iterating on in chat (and a GPT mockup of it) to live in Sports Hub, where it reads the league live instead of from a snapshot. New `matchup-hq.js` (one global, `SportsHubMatchupHQ`: a PURE `.model` under `tests/matchup-hq.test.js`, plus `.render(box, ctx)`), reached from the live football page's "📊 Matchup HQ" buttons (hero and This Week card); `fanState.footballView = 'hq'`, and `paintFootballView()` now routes every post-sync repaint so a refresh never drops the owner out of the view he was on. Four tabs, all off the league object the tab already holds (`rosterFull`, `opponent.roster`, `matchup`, `season`) plus the NFL week slate with its ESPN lines (`scoreboard('nfl')`, the same read the NFL tab makes):
+- **Overview** — scoreboard with records, banked vs projected-to-come bars, win chance; **paths to victory** (both finals' likelihood curves); **what decides the week** (each side's anchor, the game carrying most of your remaining points, the opponent's lowest Vegas team total, injury tags); slot-by-slot edges; spotlight; a **rooting guide** of every game with a starter on either side, by kickoff window (Eastern), with the line and O/U.
+- **Lineup lab** — scenario sliders for every unfinished starter on both sides; finals and win chance recompute live. Floor/projection/ceiling (P10/P50/P90). Starter-vs-bench by slot (bye and IR players are never offered).
+- **Player intel** — ESPN athlete game logs, read **browser-direct** from `site.web.api.espn.com/apis/common/v3/.../athletes/{id}/gamelog` (verified 23 Oct 2026 to send CORS for the app's origin; the v310 `/teams/{id}` block is site.api.espn.com and does not apply), cached 1h via `fetchJSON`. Touches/yards/TD by week, last-3 trend, matchup notes with the Vegas total and ESPN's `prk`, injury status as of the sync.
+- **History** — the rivalry panel reads **League History's own `history.js` + `espn.js`, loaded as `<script>` on demand** (`loadLeagueHistory`, `LeagueHistory._stats.PAIRS` / `.career`, `LeagueESPN.mgrFor`). ⚠️ **LINKED, NOT COPIED** — the banner at the top of this file says the archive exists exactly once, so nothing from it is stored here; a load failure says so. Plus weekly trend vs league average, consistency bands, playoff outlook (ESPN's own `playoffPct`; win/loss record placed against the current standings, other results not included), standings.
+- **Win chance method** (shared with the scenario lab and the P10/P90): projected margin over the combined spread of both teams' remaining points; each team's spread is the league's week-to-week scoring swing (SD of every team's scores around its own average, `leagueSd`) scaled by `sqrt(remaining/full projection)`. In-progress players count their points so far plus half of what is left of their projection. An estimate built on ESPN's projections, never ESPN's number — the page says so. It is NOT `footballWinProb` (the logistic heuristic on the This Week card); the two can disagree, and the HQ one is the documented one.
+- Styling is the new `.mhq-` layer (12) at the END of `styles.css`: a deliberately dark board inside the light app (owner's call), every colour scoped under `.mhq` so the shell's tokens and the board's never meet. Green = you, orange = opponent throughout.
+- Verified: 320/320 Node tests (`tests/matchup-hq.test.js` +12 against a real Week 7 fixture, `tests/fixtures/matchup-hq-week7.json`); headless Chromium at 390px drove all four tabs, a slider move (CMC to 30 → win chance 46.5% → 29.6%) and reset, the intel fetch and the rivalry load with stubs: no horizontal overflow, no console errors. Not yet checked on the owner's phone.
 
 ### v318 — CFB projected total loses its OVER lean (−2.6 pts)
 Jarvis model-watch flag, fix plan approved by the owner 21 Oct. The CFB total is the two teams' raw season PF/PA averaged (`(h.ppg+h.papg+a.ppg+a.papg)/2`) with no opponent adjustment. On all 64 `v239` CFB total rows saved before this change it sat **+2.58 above the book line** (SE 0.39) and 57 of 64 picks were OVER; the 45 graded went 19-26 (OVER 19-21, UNDER 0-5), projection minus final **+3.98** (SE 2.30) vs the book's +1.14.

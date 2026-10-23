@@ -1,0 +1,2264 @@
+{
+"L": {
+"team": "Death Dont Hurts Very Long",
+"record": {
+"wins": 2,
+"losses": 4,
+"ties": 0
+},
+"rosterFull": [
+{
+"id": "4047646",
+"name": "A.J. Brown",
+"pos": "UTIL",
+"lineupSlot": "WR",
+"status": "active",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "NE",
+"injuryStatus": "ACTIVE",
+"points": 6.3,
+"projected": 13.37,
+"avg": 4.87,
+"projAvg": 13.26,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 4.2,
+"proj": 10.59
+},
+{
+"w": 7,
+"pts": 6.3,
+"proj": 13.37
+}
+]
+},
+{
+"id": null,
+"name": "Jeremiyah Love",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"RB"
+],
+"proTeam": "ARI",
+"injuryStatus": "OUT",
+"points": null,
+"projected": 0.0,
+"avg": 9.12,
+"projAvg": 10.87,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 0.0,
+"proj": 0.0
+},
+{
+"w": 7,
+"pts": null,
+"proj": 0.0
+}
+]
+},
+{
+"id": "4432710",
+"name": "TreVeyon Henderson",
+"pos": "UTIL",
+"lineupSlot": "RB",
+"status": "active",
+"eligibleSlots": [
+"RB"
+],
+"proTeam": "NE",
+"injuryStatus": "ACTIVE",
+"points": 3.3,
+"projected": 6.62,
+"avg": 5.22,
+"projAvg": 6.77,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 2.5,
+"proj": 8.0
+},
+{
+"w": 7,
+"pts": 3.3,
+"proj": 6.62
+}
+]
+},
+{
+"id": "4432708",
+"name": "Marvin Harrison Jr.",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "HOU",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 6.25,
+"avg": 4.38,
+"projAvg": 6.02,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 4.9,
+"proj": 2.98
+},
+{
+"w": 7,
+"pts": null,
+"proj": 6.25
+}
+]
+},
+{
+"id": null,
+"name": "Michael Pittman Jr.",
+"pos": "UTIL",
+"lineupSlot": "IR",
+"status": "il",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "PIT",
+"injuryStatus": "INJURY_RESERVE",
+"points": null,
+"projected": 0.0,
+"avg": 4.13,
+"projAvg": 0.0,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 0.0,
+"proj": 0.0
+},
+{
+"w": 7,
+"pts": null,
+"proj": 0.0
+}
+]
+},
+{
+"id": "4361307",
+"name": "Trey McBride",
+"pos": "UTIL",
+"lineupSlot": "TE",
+"status": "active",
+"eligibleSlots": [
+"TE"
+],
+"proTeam": "ARI",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 12.34,
+"avg": 13.1,
+"projAvg": 13.05,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 8.8,
+"proj": 13.26
+},
+{
+"w": 7,
+"pts": null,
+"proj": 12.34
+}
+]
+},
+{
+"id": "4360761",
+"name": "Michael Wilson",
+"pos": "UTIL",
+"lineupSlot": "WR",
+"status": "active",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "ARI",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 10.14,
+"avg": 9.08,
+"projAvg": 10.74,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 5.2,
+"proj": 11.42
+},
+{
+"w": 7,
+"pts": null,
+"proj": 10.14
+}
+]
+},
+{
+"id": "4569587",
+"name": "Wan'Dale Robinson",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "TEN",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 6.61,
+"avg": 7.4,
+"projAvg": 7.15,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 3.7,
+"proj": 7.33
+},
+{
+"w": 7,
+"pts": null,
+"proj": 6.61
+}
+]
+},
+{
+"id": "4361050",
+"name": "Isaiah Likely",
+"pos": "UTIL",
+"lineupSlot": "RB/WR/TE",
+"status": "active",
+"eligibleSlots": [
+"TE"
+],
+"proTeam": "NYG",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 11.49,
+"avg": 14.97,
+"projAvg": 11.71,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 20.9,
+"proj": 12.03
+},
+{
+"w": 7,
+"pts": null,
+"proj": 11.49
+}
+]
+},
+{
+"id": "4431452",
+"name": "Drake Maye",
+"pos": "UTIL",
+"lineupSlot": "QB",
+"status": "active",
+"eligibleSlots": [
+"QB"
+],
+"proTeam": "NE",
+"injuryStatus": "ACTIVE",
+"points": 26.6,
+"projected": 19.94,
+"avg": 19.16,
+"projAvg": 20.86,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 23.4,
+"proj": 20.25
+},
+{
+"w": 7,
+"pts": 26.6,
+"proj": 19.94
+}
+]
+},
+{
+"id": null,
+"name": "Cam Little",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"K"
+],
+"proTeam": "JAX",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 0.0,
+"avg": 9.17,
+"projAvg": 8.84,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 10.0,
+"proj": 7.35
+},
+{
+"w": 7,
+"pts": null,
+"proj": 0.0
+}
+]
+},
+{
+"id": "4569603",
+"name": "Malik Washington",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "MIA",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 8.33,
+"avg": 7.74,
+"projAvg": 8.82,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": null,
+"proj": 0.0
+},
+{
+"w": 7,
+"pts": null,
+"proj": 8.33
+}
+]
+},
+{
+"id": null,
+"name": "Broncos D/ST",
+"pos": "UTIL",
+"lineupSlot": "D/ST",
+"status": "active",
+"eligibleSlots": [
+"D/ST"
+],
+"proTeam": "DEN",
+"injuryStatus": "NORMAL",
+"points": null,
+"projected": 7.38,
+"avg": 9.0,
+"projAvg": 4.66,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 12.0,
+"proj": 7.27
+},
+{
+"w": 7,
+"pts": null,
+"proj": 7.38
+}
+]
+},
+{
+"id": "4635008",
+"name": "Keon Coleman",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "BUF",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 0.0,
+"avg": 9.3,
+"projAvg": 5.38,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 13.9,
+"proj": 9.06
+},
+{
+"w": 7,
+"pts": null,
+"proj": 0.0
+}
+]
+},
+{
+"id": "4723820",
+"name": "Omar Cooper Jr.",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "NYJ",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 6.12,
+"avg": 11.4,
+"projAvg": 5.84,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 19.3,
+"proj": 1.69
+},
+{
+"w": 7,
+"pts": null,
+"proj": 6.12
+}
+]
+},
+{
+"id": "4427728",
+"name": "Bam Knight",
+"pos": "UTIL",
+"lineupSlot": "RB",
+"status": "active",
+"eligibleSlots": [
+"RB"
+],
+"proTeam": "ARI",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 6.79,
+"avg": 2.33,
+"projAvg": 6.79,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 10.8,
+"proj": 5.06
+},
+{
+"w": 7,
+"pts": null,
+"proj": 6.79
+}
+]
+},
+{
+"id": null,
+"name": "Ryan Fitzgerald",
+"pos": "UTIL",
+"lineupSlot": "K",
+"status": "active",
+"eligibleSlots": [
+"K"
+],
+"proTeam": "CAR",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 9.41,
+"avg": 9.6,
+"projAvg": 9.49,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 9.0,
+"proj": 8.33
+},
+{
+"w": 7,
+"pts": null,
+"proj": 9.41
+}
+]
+}
+],
+"matchup": {
+"me": {
+"team": "Death Dont Hurts Very Long",
+"score": 36.2
+},
+"opponent": {
+"team": "Pepperoni TDs",
+"score": 0.0
+}
+},
+"opponent": {
+"opponent": "Pepperoni TDs",
+"roster": [
+{
+"id": "3117251",
+"name": "Christian McCaffrey",
+"pos": "UTIL",
+"lineupSlot": "RB/WR/TE",
+"status": "active",
+"eligibleSlots": [
+"RB"
+],
+"proTeam": "SF",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 19.28,
+"avg": 18.0,
+"projAvg": 18.0,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 26.2,
+"proj": 19.15
+},
+{
+"w": 7,
+"pts": null,
+"proj": 19.28
+}
+]
+},
+{
+"id": null,
+"name": "Rashee Rice",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "KC",
+"injuryStatus": "OUT",
+"points": null,
+"projected": 0.0,
+"avg": 7.88,
+"projAvg": 11.44,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 0.0,
+"proj": 0.0
+},
+{
+"w": 7,
+"pts": null,
+"proj": 0.0
+}
+]
+},
+{
+"id": null,
+"name": "Travis Etienne Jr.",
+"pos": "UTIL",
+"lineupSlot": "IR",
+"status": "il",
+"eligibleSlots": [
+"RB"
+],
+"proTeam": "NO",
+"injuryStatus": "INJURY_RESERVE",
+"points": null,
+"projected": 0.0,
+"avg": 8.47,
+"projAvg": 12.24,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 0.0,
+"proj": 0.0
+},
+{
+"w": 7,
+"pts": null,
+"proj": 0.0
+}
+]
+},
+{
+"id": "4871023",
+"name": "Carnell Tate",
+"pos": "UTIL",
+"lineupSlot": "WR",
+"status": "active",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "TEN",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 8.95,
+"avg": 8.82,
+"projAvg": 9.56,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 16.0,
+"proj": 8.71
+},
+{
+"w": 7,
+"pts": null,
+"proj": 8.95
+}
+]
+},
+{
+"id": null,
+"name": "Brian Thomas Jr.",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "JAX",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 0.0,
+"avg": 3.5,
+"projAvg": 4.67,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 0.0,
+"proj": 5.4
+},
+{
+"w": 7,
+"pts": null,
+"proj": 0.0
+}
+]
+},
+{
+"id": "4038815",
+"name": "Rico Dowdle",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"RB"
+],
+"proTeam": "PIT",
+"injuryStatus": "QUESTIONABLE",
+"points": null,
+"projected": 7.02,
+"avg": 4.97,
+"projAvg": 6.76,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 6.4,
+"proj": 5.63
+},
+{
+"w": 7,
+"pts": null,
+"proj": 7.02
+}
+]
+},
+{
+"id": "4429096",
+"name": "Blake Corum",
+"pos": "UTIL",
+"lineupSlot": "RB",
+"status": "active",
+"eligibleSlots": [
+"RB"
+],
+"proTeam": "LAR",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 9.19,
+"avg": 7.98,
+"projAvg": 8.47,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 13.0,
+"proj": 8.36
+},
+{
+"w": 7,
+"pts": null,
+"proj": 9.19
+}
+]
+},
+{
+"id": "4360248",
+"name": "Kyle Pitts Sr.",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"TE"
+],
+"proTeam": "ATL",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 7.9,
+"avg": 7.07,
+"projAvg": 7.95,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 20.5,
+"proj": 7.16
+},
+{
+"w": 7,
+"pts": null,
+"proj": 7.9
+}
+]
+},
+{
+"id": null,
+"name": "Brian Robinson Jr.",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"RB"
+],
+"proTeam": "ATL",
+"injuryStatus": "OUT",
+"points": null,
+"projected": 0.0,
+"avg": 8.43,
+"projAvg": 6.26,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 2.0,
+"proj": 7.27
+},
+{
+"w": 7,
+"pts": null,
+"proj": 0.0
+}
+]
+},
+{
+"id": "4428557",
+"name": "Tyjae Spears",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"RB"
+],
+"proTeam": "TEN",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 5.45,
+"avg": 3.27,
+"projAvg": 5.56,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 1.3,
+"proj": 7.43
+},
+{
+"w": 7,
+"pts": null,
+"proj": 5.45
+}
+]
+},
+{
+"id": "4685247",
+"name": "Braelon Allen",
+"pos": "UTIL",
+"lineupSlot": "RB",
+"status": "active",
+"eligibleSlots": [
+"RB"
+],
+"proTeam": "NYJ",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 8.31,
+"avg": 8.73,
+"projAvg": 6.63,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 11.4,
+"proj": 13.19
+},
+{
+"w": 7,
+"pts": null,
+"proj": 8.31
+}
+]
+},
+{
+"id": null,
+"name": "Seahawks D/ST",
+"pos": "UTIL",
+"lineupSlot": "D/ST",
+"status": "active",
+"eligibleSlots": [
+"D/ST"
+],
+"proTeam": "SEA",
+"injuryStatus": "NORMAL",
+"points": null,
+"projected": 6.24,
+"avg": 9.5,
+"projAvg": 5.08,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 6.0,
+"proj": 6.86
+},
+{
+"w": 7,
+"pts": null,
+"proj": 6.24
+}
+]
+},
+{
+"id": null,
+"name": "Tyler Loop",
+"pos": "UTIL",
+"lineupSlot": "K",
+"status": "active",
+"eligibleSlots": [
+"K"
+],
+"proTeam": "BAL",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 8.94,
+"avg": 9.33,
+"projAvg": 8.74,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 3.0,
+"proj": 9.04
+},
+{
+"w": 7,
+"pts": null,
+"proj": 8.94
+}
+]
+},
+{
+"id": "4036378",
+"name": "Jordan Love",
+"pos": "UTIL",
+"lineupSlot": "QB",
+"status": "active",
+"eligibleSlots": [
+"QB"
+],
+"proTeam": "GB",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 19.42,
+"avg": 17.83,
+"projAvg": 18.11,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 20.2,
+"proj": 20.36
+},
+{
+"w": 7,
+"pts": null,
+"proj": 19.42
+}
+]
+},
+{
+"id": "4361411",
+"name": "Pat Freiermuth",
+"pos": "UTIL",
+"lineupSlot": "TE",
+"status": "active",
+"eligibleSlots": [
+"TE"
+],
+"proTeam": "PIT",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 8.36,
+"avg": 8.82,
+"projAvg": 7.58,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 2.1,
+"proj": 9.04
+},
+{
+"w": 7,
+"pts": null,
+"proj": 8.36
+}
+]
+},
+{
+"id": "4586312",
+"name": "Jaylin Noel",
+"pos": "UTIL",
+"lineupSlot": "WR",
+"status": "active",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "HOU",
+"injuryStatus": "ACTIVE",
+"points": null,
+"projected": 7.19,
+"avg": 9.42,
+"projAvg": 6.0,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 18.7,
+"proj": 4.07
+},
+{
+"w": 7,
+"pts": null,
+"proj": 7.19
+}
+]
+},
+{
+"id": null,
+"name": "Christian Kirk",
+"pos": "UTIL",
+"lineupSlot": "BE",
+"status": "bench",
+"eligibleSlots": [
+"WR"
+],
+"proTeam": "SF",
+"injuryStatus": "INJURY_RESERVE",
+"points": null,
+"projected": 6.72,
+"avg": 0.0,
+"projAvg": 3.54,
+"prk": null,
+"weeks": [
+{
+"w": 6,
+"pts": 0.0,
+"proj": 0.0
+},
+{
+"w": 7,
+"pts": null,
+"proj": 6.72
+}
+]
+}
+]
+},
+"season": {
+"sport": "football",
+"week": 7,
+"playoffTeams": 6,
+"regularSeasonWeeks": 14,
+"teams": [
+{
+"teamId": "1",
+"team": "Aarogant Fraudgers",
+"abbrev": "CMSH",
+"isMe": false,
+"wins": 3,
+"losses": 3,
+"ties": 0,
+"pointsFor": 659.4000000000001,
+"pointsAgainst": 638.4,
+"playoffPct": 38.65,
+"scores": [
+110.5,
+119.3,
+93.0,
+96.8,
+138.1,
+101.7,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+],
+"outcomes": [
+"W",
+"L",
+"W",
+"L",
+"L",
+"W",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U"
+],
+"schedule": [
+"6",
+"2",
+"7",
+"11",
+"12",
+"13",
+"5",
+"3",
+"10",
+"14",
+"4",
+"6",
+"2",
+"7"
+]
+},
+{
+"teamId": "2",
+"team": "Mortal Wombats",
+"abbrev": "jook",
+"isMe": false,
+"wins": 2,
+"losses": 4,
+"ties": 0,
+"pointsFor": 607.0,
+"pointsAgainst": 705.7,
+"playoffPct": 19.125,
+"scores": [
+93.3,
+134.1,
+84.1,
+107.1,
+108.6,
+79.8,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+],
+"outcomes": [
+"L",
+"W",
+"L",
+"L",
+"W",
+"L",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U"
+],
+"schedule": [
+"12",
+"1",
+"5",
+"3",
+"10",
+"14",
+"4",
+"6",
+"13",
+"7",
+"11",
+"12",
+"1",
+"5"
+]
+},
+{
+"teamId": "3",
+"team": "Slob on my Cobb",
+"abbrev": "WAS",
+"isMe": false,
+"wins": 2,
+"losses": 4,
+"ties": 0,
+"pointsFor": 618.4999999999999,
+"pointsAgainst": 607.2,
+"playoffPct": 32.75,
+"scores": [
+136.2,
+66.0,
+93.6,
+129.7,
+103.7,
+89.3,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+],
+"outcomes": [
+"W",
+"L",
+"L",
+"W",
+"L",
+"L",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U"
+],
+"schedule": [
+"14",
+"4",
+"6",
+"2",
+"7",
+"11",
+"12",
+"1",
+"5",
+"13",
+"10",
+"14",
+"4",
+"6"
+]
+},
+{
+"teamId": "4",
+"team": "Morning Woods",
+"abbrev": "WOOD",
+"isMe": false,
+"wins": 3,
+"losses": 3,
+"ties": 0,
+"pointsFor": 611.8,
+"pointsAgainst": 598.9,
+"playoffPct": 53.27499999999999,
+"scores": [
+123.8,
+80.0,
+103.5,
+99.8,
+103.4,
+101.3,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+],
+"outcomes": [
+"W",
+"W",
+"L",
+"W",
+"L",
+"L",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U"
+],
+"schedule": [
+"5",
+"3",
+"10",
+"14",
+"13",
+"6",
+"2",
+"7",
+"11",
+"12",
+"1",
+"5",
+"3",
+"10"
+]
+},
+{
+"teamId": "5",
+"team": "Gregs Morning Dew Dew",
+"abbrev": "Loon",
+"isMe": false,
+"wins": 3,
+"losses": 3,
+"ties": 0,
+"pointsFor": 616.4,
+"pointsAgainst": 635.2,
+"playoffPct": 62.675000000000004,
+"scores": [
+113.9,
+109.9,
+102.4,
+97.0,
+104.9,
+88.3,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+],
+"outcomes": [
+"L",
+"W",
+"W",
+"W",
+"L",
+"L",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U"
+],
+"schedule": [
+"4",
+"6",
+"2",
+"7",
+"11",
+"12",
+"1",
+"13",
+"3",
+"10",
+"14",
+"4",
+"6",
+"2"
+]
+},
+{
+"teamId": "6",
+"team": "Jared Goff Hits Women",
+"abbrev": "GHW",
+"isMe": false,
+"wins": 3,
+"losses": 3,
+"ties": 0,
+"pointsFor": 625.0,
+"pointsAgainst": 638.9,
+"playoffPct": 49.175000000000004,
+"scores": [
+70.9,
+84.1,
+109.1,
+134.0,
+112.4,
+114.5,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+],
+"outcomes": [
+"L",
+"L",
+"W",
+"L",
+"W",
+"W",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U"
+],
+"schedule": [
+"1",
+"5",
+"3",
+"10",
+"14",
+"4",
+"13",
+"2",
+"7",
+"11",
+"12",
+"1",
+"5",
+"3"
+]
+},
+{
+"teamId": "7",
+"team": "Death Dont Hurts Very Long",
+"abbrev": "McD",
+"isMe": true,
+"wins": 2,
+"losses": 4,
+"ties": 0,
+"pointsFor": 504.9,
+"pointsAgainst": 607.8,
+"playoffPct": 12.875,
+"scores": [
+73.1,
+68.0,
+59.7,
+91.0,
+125.1,
+88.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+],
+"outcomes": [
+"L",
+"L",
+"L",
+"L",
+"W",
+"W",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U"
+],
+"schedule": [
+"11",
+"12",
+"1",
+"5",
+"3",
+"10",
+"14",
+"4",
+"6",
+"2",
+"13",
+"11",
+"12",
+"1"
+]
+},
+{
+"teamId": "10",
+"team": "Joe Sleepin on Dee TeeTees",
+"abbrev": "KKK",
+"isMe": false,
+"wins": 3,
+"losses": 3,
+"ties": 0,
+"pointsFor": 687.1,
+"pointsAgainst": 666.5,
+"playoffPct": 55.875,
+"scores": [
+105.9,
+139.8,
+122.4,
+134.8,
+96.4,
+87.8,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+],
+"outcomes": [
+"L",
+"W",
+"W",
+"W",
+"L",
+"L",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U"
+],
+"schedule": [
+"13",
+"14",
+"4",
+"6",
+"2",
+"7",
+"11",
+"12",
+"1",
+"5",
+"3",
+"13",
+"14",
+"4"
+]
+},
+{
+"teamId": "11",
+"team": "Puka Atta Adonai",
+"abbrev": "ADON",
+"isMe": false,
+"wins": 5,
+"losses": 1,
+"ties": 0,
+"pointsFor": 721.1,
+"pointsAgainst": 596.9,
+"playoffPct": 93.22500000000001,
+"scores": [
+117.7,
+107.2,
+95.4,
+161.1,
+142.5,
+97.2,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+],
+"outcomes": [
+"W",
+"W",
+"L",
+"W",
+"W",
+"W",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U"
+],
+"schedule": [
+"7",
+"13",
+"12",
+"1",
+"5",
+"3",
+"10",
+"14",
+"4",
+"6",
+"2",
+"7",
+"13",
+"12"
+]
+},
+{
+"teamId": "12",
+"team": "Thurgood Marshall",
+"abbrev": "TM",
+"isMe": false,
+"wins": 5,
+"losses": 1,
+"ties": 0,
+"pointsFor": 744.3000000000001,
+"pointsAgainst": 594.8,
+"playoffPct": 95.7,
+"scores": [
+160.0,
+108.6,
+135.3,
+91.6,
+139.1,
+109.7,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+],
+"outcomes": [
+"W",
+"W",
+"W",
+"L",
+"W",
+"W",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U"
+],
+"schedule": [
+"2",
+"7",
+"11",
+"13",
+"1",
+"5",
+"3",
+"10",
+"14",
+"4",
+"6",
+"2",
+"7",
+"11"
+]
+},
+{
+"teamId": "13",
+"team": "Jefferson Airplane ",
+"abbrev": "RIZ",
+"isMe": false,
+"wins": 4,
+"losses": 2,
+"ties": 0,
+"pointsFor": 669.9,
+"pointsAgainst": 583.0,
+"playoffPct": 80.85,
+"scores": [
+142.2,
+97.5,
+137.5,
+111.7,
+107.5,
+73.5,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+],
+"outcomes": [
+"W",
+"L",
+"W",
+"W",
+"W",
+"L",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U"
+],
+"schedule": [
+"10",
+"11",
+"14",
+"12",
+"4",
+"1",
+"6",
+"5",
+"2",
+"3",
+"7",
+"10",
+"11",
+"14"
+]
+},
+{
+"teamId": "14",
+"team": "Pepperoni TDs",
+"abbrev": "8==D",
+"isMe": false,
+"wins": 1,
+"losses": 5,
+"ties": 0,
+"pointsFor": 513.4000000000001,
+"pointsAgainst": 705.5,
+"playoffPct": 5.825,
+"scores": [
+88.7,
+90.2,
+73.2,
+74.6,
+88.8,
+97.9,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+],
+"outcomes": [
+"L",
+"L",
+"L",
+"L",
+"L",
+"W",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U",
+"U"
+],
+"schedule": [
+"3",
+"10",
+"13",
+"4",
+"6",
+"2",
+"7",
+"11",
+"12",
+"1",
+"5",
+"3",
+"10",
+"13"
+]
+}
+],
+"allPlay": {
+"1": {
+"w": 38,
+"l": 28
+},
+"2": {
+"w": 28,
+"l": 38
+},
+"3": {
+"w": 29,
+"l": 37
+},
+"4": {
+"w": 32,
+"l": 34
+},
+"5": {
+"w": 32,
+"l": 34
+},
+"6": {
+"w": 38,
+"l": 28
+},
+"7": {
+"w": 14,
+"l": 52
+},
+"10": {
+"w": 37,
+"l": 29
+},
+"11": {
+"w": 46,
+"l": 20
+},
+"12": {
+"w": 50,
+"l": 16
+},
+"13": {
+"w": 38,
+"l": 28
+},
+"14": {
+"w": 14,
+"l": 52
+}
+}
+},
+"syncedAt": 1792782900000
+},
+"games": [
+{
+"id": "401873010",
+"date": "2026-10-23T00:15Z",
+"state": "post",
+"season": 2026,
+"seasonType": 2,
+"statusText": "Final",
+"home": {
+"abbr": "CHI",
+"score": "30"
+},
+"away": {
+"abbr": "NE",
+"score": "24"
+},
+"odds": null
+},
+{
+"id": "401873011",
+"date": "2026-10-25T13:30Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/25 - 9:30 AM EDT",
+"home": {
+"abbr": "NO",
+"score": "0"
+},
+"away": {
+"abbr": "PIT",
+"score": "0"
+},
+"odds": {
+"details": "PIT -3",
+"overUnder": 44.5
+}
+},
+{
+"id": "401873017",
+"date": "2026-10-25T17:00Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/25 - 1:00 PM EDT",
+"home": {
+"abbr": "ATL",
+"score": "0"
+},
+"away": {
+"abbr": "SF",
+"score": "0"
+},
+"odds": {
+"details": "SF -2.5",
+"overUnder": 49.5
+}
+},
+{
+"id": "401873013",
+"date": "2026-10-25T17:00Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/25 - 1:00 PM EDT",
+"home": {
+"abbr": "TEN",
+"score": "0"
+},
+"away": {
+"abbr": "CLE",
+"score": "0"
+},
+"odds": {
+"details": "CLE -1.5",
+"overUnder": 37.5
+}
+},
+{
+"id": "401873014",
+"date": "2026-10-25T17:00Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/25 - 1:00 PM EDT",
+"home": {
+"abbr": "MIN",
+"score": "0"
+},
+"away": {
+"abbr": "IND",
+"score": "0"
+},
+"odds": {
+"details": "MIN -6.5",
+"overUnder": 41.5
+}
+},
+{
+"id": "401873015",
+"date": "2026-10-25T17:00Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/25 - 1:00 PM EDT",
+"home": {
+"abbr": "NYJ",
+"score": "0"
+},
+"away": {
+"abbr": "MIA",
+"score": "0"
+},
+"odds": {
+"details": "NYJ -4.5",
+"overUnder": 39.5
+}
+},
+{
+"id": "401873018",
+"date": "2026-10-25T17:00Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/25 - 1:00 PM EDT",
+"home": {
+"abbr": "CAR",
+"score": "0"
+},
+"away": {
+"abbr": "TB",
+"score": "0"
+},
+"odds": {
+"details": "CAR -3",
+"overUnder": 44.5
+}
+},
+{
+"id": "401873012",
+"date": "2026-10-25T17:00Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/25 - 1:00 PM EDT",
+"home": {
+"abbr": "BAL",
+"score": "0"
+},
+"away": {
+"abbr": "CIN",
+"score": "0"
+},
+"odds": {
+"details": "BAL -1.5",
+"overUnder": 48.5
+}
+},
+{
+"id": "401873016",
+"date": "2026-10-25T17:00Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/25 - 1:00 PM EDT",
+"home": {
+"abbr": "HOU",
+"score": "0"
+},
+"away": {
+"abbr": "NYG",
+"score": "0"
+},
+"odds": {
+"details": "HOU -10.5",
+"overUnder": 42.5
+}
+},
+{
+"id": "401873019",
+"date": "2026-10-25T20:05Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/25 - 4:05 PM EDT",
+"home": {
+"abbr": "ARI",
+"score": "0"
+},
+"away": {
+"abbr": "DEN",
+"score": "0"
+},
+"odds": {
+"details": "DEN -4.5",
+"overUnder": 43.5
+}
+},
+{
+"id": "401873020",
+"date": "2026-10-25T20:25Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/25 - 4:25 PM EDT",
+"home": {
+"abbr": "DET",
+"score": "0"
+},
+"away": {
+"abbr": "GB",
+"score": "0"
+},
+"odds": {
+"details": "DET -3",
+"overUnder": 53.5
+}
+},
+{
+"id": "401873021",
+"date": "2026-10-25T20:25Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/25 - 4:25 PM EDT",
+"home": {
+"abbr": "LV",
+"score": "0"
+},
+"away": {
+"abbr": "LAR",
+"score": "0"
+},
+"odds": {
+"details": "LAR -3.5",
+"overUnder": 48.5
+}
+},
+{
+"id": "401873022",
+"date": "2026-10-26T00:20Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/25 - 8:20 PM EDT",
+"home": {
+"abbr": "SEA",
+"score": "0"
+},
+"away": {
+"abbr": "KC",
+"score": "0"
+},
+"odds": {
+"details": "SEA -3",
+"overUnder": 42.5
+}
+},
+{
+"id": "401873009",
+"date": "2026-10-27T00:15Z",
+"state": "pre",
+"season": 2026,
+"seasonType": 2,
+"statusText": "10/26 - 8:15 PM EDT",
+"home": {
+"abbr": "PHI",
+"score": "0"
+},
+"away": {
+"abbr": "DAL",
+"score": "0"
+},
+"odds": {
+"details": "DAL -4.5",
+"overUnder": 44.5
+}
+}
+],
+"gamelogMcBride": {
+"names": [
+"receptions",
+"receivingTargets",
+"receivingYards",
+"yardsPerReception",
+"receivingTouchdowns",
+"longReception",
+"rushingAttempts",
+"rushingYards",
+"yardsPerRushAttempt",
+"longRushing",
+"rushingTouchdowns",
+"fumbles",
+"fumblesLost",
+"fumblesForced",
+"kicksBlocked"
+],
+"events": {
+"0": {
+"week": 6,
+"opponent": {
+"abbreviation": "LAR"
+},
+"gameResult": "W"
+},
+"1": {
+"week": 5,
+"opponent": {
+"abbreviation": "DET"
+},
+"gameResult": "L"
+},
+"2": {
+"week": 4,
+"opponent": {
+"abbreviation": "NYG"
+},
+"gameResult": "L"
+},
+"3": {
+"week": 3,
+"opponent": {
+"abbreviation": "SF"
+},
+"gameResult": "L"
+},
+"4": {
+"week": 2,
+"opponent": {
+"abbreviation": "SEA"
+},
+"gameResult": "L"
+},
+"5": {
+"week": 1,
+"opponent": {
+"abbreviation": "LAC"
+},
+"gameResult": "W"
+}
+},
+"seasonTypes": [
+{
+"categories": [
+{
+"events": [
+{
+"eventId": "0",
+"stats": [
+"7",
+"9",
+"53",
+"7.6",
+"0",
+"26",
+"0",
+"0",
+"0.0",
+"0",
+"0",
+"0",
+"0",
+"0",
+"0"
+]
+},
+{
+"eventId": "1",
+"stats": [
+"9",
+"10",
+"66",
+"7.3",
+"1",
+"11",
+"0",
+"0",
+"0.0",
+"0",
+"0",
+"0",
+"0",
+"-",
+"-"
+]
+},
+{
+"eventId": "2",
+"stats": [
+"7",
+"12",
+"31",
+"4.4",
+"0",
+"9",
+"0",
+"0",
+"0.0",
+"0",
+"0",
+"0",
+"0",
+"-",
+"-"
+]
+},
+{
+"eventId": "3",
+"stats": [
+"9",
+"11",
+"75",
+"8.3",
+"0",
+"18",
+"0",
+"0",
+"0.0",
+"0",
+"0",
+"0",
+"0",
+"-",
+"-"
+]
+},
+{
+"eventId": "4",
+"stats": [
+"8",
+"10",
+"41",
+"5.1",
+"1",
+"9",
+"0",
+"0",
+"0.0",
+"0",
+"0",
+"0",
+"0",
+"-",
+"-"
+]
+},
+{
+"eventId": "5",
+"stats": [
+"9",
+"13",
+"95",
+"10.6",
+"1",
+"27",
+"0",
+"0",
+"0.0",
+"0",
+"0",
+"0",
+"0",
+"-",
+"-"
+]
+}
+]
+}
+]
+}
+]
+}
+}
