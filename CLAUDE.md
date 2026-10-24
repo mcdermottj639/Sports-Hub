@@ -332,6 +332,10 @@ fantasy/golf data are not refreshed by this cycle.
   twice-hourly capture schedule. Vault secret values are configured remotely.
 - `supabase/functions/sports-hub-ai/index.ts` — scheduled ESPN model runner,
   immutable market capture, final-score grading and job audit trail.
+- `supabase/functions/_shared/collector-budget.js` — per-run NBA work budget
+  for the scheduled collector (reuse saved games, cap new forecasts at 6,
+  soonest first); `tests/collector-budget.test.js`. See the collector-fix entry
+  under Current version.
 - `supabase/functions/_shared/prop-model.js` — identical server/browser/replay
   prop parser, empirical projections, quote ranking, grading and record math.
 - `supabase/functions/sports-hub-props/index.ts` — independent prop discovery,
@@ -679,6 +683,34 @@ Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
 Current version as of this writing: **v322** (backend **b17-fantasy-league-rules**).
+
+### Collector fix (no app release) — sports-hub-ai NBA work budget (collector label v323)
+From 20 Oct 2026 (the day the NBA pass went live) `sports-hub-ai` died at the Edge
+Function's **2 s CPU cap** (HTTP 546 "CPU Time exceeded", 23–31 s in) on 33% of
+runs, then 67%, then **72% on 23 Oct (31 of 43)**. Nothing was lost — every NFL
+Week 7 and Top-25 CFB game was saved in all three markets and priced, finals
+graded — because the stalls landed in the LAST pass (NBA, run 1805 saved NBA
+rows at +25 s before dying). Cause, measured by profiling the deployed index.ts
+under Node with real payloads: the NBA pass re-forecast EVERY eligible game on
+EVERY run (`SportsHubNBA.load` pulls four full-season team schedules per game;
+~80 downloads, ~91 MB JSON for 20 games, 0.86–1.05 s CPU) although
+`ai_predictions` is first-write-wins, so the work wrote nothing after the first
+observation. Fix, NBA only: new `supabase/functions/_shared/collector-budget.js`
+— one query reads the saved `nba-v1` markets for the eligible slate; a game
+whose needed markets are saved (or whose moneyline carries quality flags, so
+spread/total can never be written) is **reused** with no download or model run;
+the rest are forecast **soonest tip-off first, at most 6 per run**
+(`DEFAULT_CAP`), and the remainder **defer** to the next half-hourly run.
+`enrichPrices` still runs for every eligible game. The eligibility predicate is
+extracted verbatim as `pregameEligible` (tested) and `details.nba` gains
+`reused`/`deferred`/`cap`. **No change to any forecast, line, price, freeze
+rule, grading or any NFL/CFB/MLB path.** Local measurement before deploy: 2.2–2.7 s
+CPU per run → 1.50–1.60 s with nothing saved, 1.25–1.33 s once saved.
+Tests: `tests/collector-budget.test.js` (+7). ⚠️ The remaining headroom is
+thin: without NBA a run is still ~1.2–1.3 s (NFL ~0.6, CFB ~0.45 s re-fetching
+team schedules every run) — CFB is the next pass to budget if stalls return.
+Watch: `ai_job_runs` status='running' with no `finished_at` by ET day should fall
+under ~10%.
 
 ### v322 — Compact Matchup HQ and a complete mobile review
 

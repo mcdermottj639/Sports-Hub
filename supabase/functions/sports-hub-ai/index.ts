@@ -1,5 +1,6 @@
 import '../_shared/nba-model-config.js';
 import '../_shared/nba-model.js';
+import '../_shared/collector-budget.js';
 import {footballEvidence, researchRows} from './football-research.ts';
 import '../_shared/market-probability-config.js';
 import '../_shared/market-probability.js';
@@ -7,7 +8,8 @@ import {signalsEnabled, captureSignalQuotes, signalInputs, saveSignalDecision, s
 const MODEL_VERSION = 'v239'; // CFB/MLB and the retained NFL comparison.
 const NFL_LIVE = (globalThis as any).SportsHubNFLLive;
 const modelVersionFor = (sport:string) => NFL_LIVE.versionFor(sport);
-const APP_VERSION = 'v302';
+const APP_VERSION = 'v323';
+const BUDGET = (globalThis as any).SportsHubCollectorBudget;
 const SPORTS = ['nfl', 'cfb', 'mlb', 'nba'] as const;
 type Sport = typeof SPORTS[number];
 type Json = Record<string, any>;
@@ -317,7 +319,7 @@ Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return new Response('Method not allowed',{status:405});
   const started=new Date().toISOString();let run:any=null,captured=0,graded=0,skipped=0;
   const errors:any[]=[], signals:any={status:'disabled',written:0,evaluated:0,unpriced:0,missed:0,graded:0,errors:0};
-  const nba={model:'nba-v1',scanned:0,eligible:0,forecasts:0};
+  const nba={model:'nba-v1',scanned:0,eligible:0,forecasts:0,reused:0,deferred:0,cap:BUDGET.DEFAULT_CAP};
   let captureSignals=false;const research={captured:0,errors:0,pppCaptured:0,pppErrors:0,version:'nfl-v4-cfb-v2-ppp-v1'};
   const signalError=()=>{signals.errors++;signals.error_category='signals_step_failed';};
   try{
@@ -339,6 +341,17 @@ Deno.serve(async(req:Request)=>{
       try{
         const games=await slate(sport);
         if(sport==='nba')nba.scanned=games.length;
+        // NBA work budget (v323): forecast only games not yet saved, soonest first,
+        // at most BUDGET.DEFAULT_CAP per run. The rest are reused (already frozen)
+        // or deferred to the next half-hourly run. Prices still enrich for all.
+        let nbaForecast:Set<string>|null=null;
+        if(sport==='nba'){
+          const ids=games.filter((g:any)=>BUDGET.pregameEligible(g)).map((g:any)=>encodeURIComponent(String(g.id)));
+          const saved=ids.length?await db(`ai_predictions?event_id=in.(${ids.join(',')})&model_version=eq.${modelVersionFor('nba')}&select=event_id,market,quality`):[];
+          const planned=BUDGET.plan(games,saved||[],{oddsFor:(g:any)=>odds(g.odds,g)});
+          nbaForecast=new Set(planned.forecast.map((g:any)=>String(g.id)));
+          nba.reused=planned.reused.length;nba.deferred=planned.deferred.length;
+        }
         for(const g of games){
           let quotes:any[]=[],inputs:any=null;
           const watch=captureSignals&&(sport==='nfl'||sport==='cfb');
@@ -346,8 +359,9 @@ Deno.serve(async(req:Request)=>{
             try{signals.graded+=await settleSignalGame(db,g);signals.missed+=await missedSignalWindows(db,g);}catch(_){signalError();}
             try{quotes=await captureSignalQuotes(db,g,`ai:${run.id}`,g.observedAt);signals.written+=quotes.length;if(quotes.length)signals.last_observed_at=g.observedAt;}catch(_){signalError();}
           }
-          if(g.state!=='pre'||g.seasonType===1||!(Date.parse(g.date)>Date.now())||/postpon|cancel|suspend|delay/i.test(g.status)){skipped++;continue;}
+          if(!BUDGET.pregameEligible(g)){skipped++;continue;}
           if(sport==='nba')nba.eligible++;
+          if(nbaForecast&&!nbaForecast.has(String(g.id))){await enrichPrices(g);continue;}
           const evidencePromise=(sport==='nfl'||sport==='cfb')?footballEvidence(sport,g).catch(()=>null):Promise.resolve(null);
           const inputsPromise=watch?signalInputs(g).catch(()=>{signalError();return null;}):Promise.resolve(null);
           await enrichPrices(g);
