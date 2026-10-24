@@ -17,6 +17,11 @@
  *
  * `pregameEligible` is the collector's eligibility predicate, extracted verbatim
  * so it is testable; it is unchanged.
+ *
+ * CFB uses the same plan with no cap, and two extra guards: a game is reused only
+ * when its first research observation (`requireVersions`) is saved too, and never
+ * inside `protectMs` of kickoff — the research "near" window and the betting-signals
+ * decision window both need a fresh forecast there, so those games always compute.
  */
 (function(root){
  'use strict';
@@ -35,39 +40,50 @@
   if(o&&o.ou!=null)m.push('total');
   return m;
  }
- function savedIndex(rows){
+ function savedIndex(rows,officialVersion){
   const idx=new Map();
   for(const r of rows||[]){
    const id=String(r.event_id);
-   if(!idx.has(id))idx.set(id,{markets:new Set(),blocked:false});
-   const e=idx.get(id);e.markets.add(r.market);
+   if(!idx.has(id))idx.set(id,{markets:new Set(),versions:new Set(),blocked:false});
+   const e=idx.get(id);
+   if(r.model_version!=null)e.versions.add(String(r.model_version));
+   if(officialVersion&&r.model_version!=null&&String(r.model_version)!==officialVersion)continue;
+   e.markets.add(r.market);
    if(r.market==='moneyline'&&Array.isArray(r.quality)&&r.quality.length)e.blocked=true;
   }
   return idx;
  }
- function isComplete(entry,o){
+ function isComplete(entry,o,requireVersions){
   if(!entry||!entry.markets.has('moneyline'))return false;
+  if((requireVersions||[]).some(v=>!entry.versions.has(v)))return false;
   if(entry.blocked)return true;
   return neededMarkets(o).every(m=>entry.markets.has(m));
  }
- /* plan(games, savedRows, {cap, now, oddsFor})
-  *  games     — the slate (any state; ineligible games are ignored here)
-  *  savedRows — rows for this model version: {event_id, market, quality}
-  *  oddsFor   — g => normalized odds ({spread, ou}) or null
+ /* plan(games, savedRows, {cap, now, oddsFor, officialVersion, requireVersions, protectMs})
+  *  games           — the slate (any state; ineligible games are ignored here)
+  *  savedRows       — saved rows: {event_id, market, quality, model_version?}
+  *  oddsFor         — g => normalized odds ({spread, ou}) or null
+  *  cap             — max new forecasts per run (default 6; Infinity = no cap)
+  *  officialVersion — only rows of this version count as saved markets
+  *  requireVersions — a game is complete only if a row of each version exists
+  *  protectMs       — never reuse a game starting within this many ms
   * → {forecast:[g], reused:[g], deferred:[g], eligible:n}
   */
  function plan(games,savedRows,opts){
-  const o=opts||{},cap=Number.isInteger(o.cap)&&o.cap>=0?o.cap:DEFAULT_CAP,now=typeof o.now==='number'?o.now:Date.now(),oddsFor=typeof o.oddsFor==='function'?o.oddsFor:()=>null;
-  const idx=savedIndex(savedRows),reused=[],todo=[];
+  const o=opts||{},cap=o.cap===Infinity?Infinity:Number.isInteger(o.cap)&&o.cap>=0?o.cap:DEFAULT_CAP,now=typeof o.now==='number'?o.now:Date.now(),oddsFor=typeof o.oddsFor==='function'?o.oddsFor:()=>null;
+  const protectMs=Number.isFinite(o.protectMs)&&o.protectMs>0?o.protectMs:0;
+  const idx=savedIndex(savedRows,o.officialVersion?String(o.officialVersion):null),reused=[],todo=[];
   let eligible=0;
   for(const g of games||[]){
    if(!pregameEligible(g,now))continue;
    eligible++;
-   if(isComplete(idx.get(String(g.id)),oddsFor(g)))reused.push(g);else todo.push(g);
+   const protectedGame=protectMs>0&&Date.parse(g.date)-now<=protectMs;
+   if(!protectedGame&&isComplete(idx.get(String(g.id)),oddsFor(g),o.requireVersions))reused.push(g);else todo.push(g);
   }
   todo.sort((a,b)=>Date.parse(a.date)-Date.parse(b.date)||String(a.id).localeCompare(String(b.id)));
   return {forecast:todo.slice(0,cap),deferred:todo.slice(cap),reused,eligible};
  }
- const api={DEFAULT_CAP,pregameEligible,neededMarkets,plan};
+ const CFB_PROTECT_MS=90*60*1000;
+ const api={DEFAULT_CAP,CFB_PROTECT_MS,pregameEligible,neededMarkets,plan};
  root.SportsHubCollectorBudget=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

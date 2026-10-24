@@ -320,6 +320,7 @@ Deno.serve(async(req:Request)=>{
   const started=new Date().toISOString();let run:any=null,captured=0,graded=0,skipped=0;
   const errors:any[]=[], signals:any={status:'disabled',written:0,evaluated:0,unpriced:0,missed:0,graded:0,errors:0};
   const nba={model:'nba-v1',scanned:0,eligible:0,forecasts:0,reused:0,deferred:0,cap:BUDGET.DEFAULT_CAP};
+  const cfb={eligible:0,forecasts:0,reused:0,protectMinutes:BUDGET.CFB_PROTECT_MS/60000};
   let captureSignals=false;const research={captured:0,errors:0,pppCaptured:0,pppErrors:0,version:'nfl-v4-cfb-v2-ppp-v1'};
   const signalError=()=>{signals.errors++;signals.error_category='signals_step_failed';};
   try{
@@ -344,13 +345,21 @@ Deno.serve(async(req:Request)=>{
         // NBA work budget (v323): forecast only games not yet saved, soonest first,
         // at most BUDGET.DEFAULT_CAP per run. The rest are reused (already frozen)
         // or deferred to the next half-hourly run. Prices still enrich for all.
-        let nbaForecast:Set<string>|null=null;
-        if(sport==='nba'){
+        // CFB (same release): a ranked game whose official markets AND first research
+        // observation are saved is reused, with no cap, but never inside 90 minutes of
+        // kickoff — the research near window and the signals decision window need a
+        // fresh forecast there. NFL is untouched (its evidence feeds live signals).
+        let planForecast:Set<string>|null=null;
+        if(sport==='nba'||sport==='cfb'){
           const ids=games.filter((g:any)=>BUDGET.pregameEligible(g)).map((g:any)=>encodeURIComponent(String(g.id)));
-          const saved=ids.length?await db(`ai_predictions?event_id=in.(${ids.join(',')})&model_version=eq.${modelVersionFor('nba')}&select=event_id,market,quality`):[];
-          const planned=BUDGET.plan(games,saved||[],{oddsFor:(g:any)=>odds(g.odds,g)});
-          nbaForecast=new Set(planned.forecast.map((g:any)=>String(g.id)));
-          nba.reused=planned.reused.length;nba.deferred=planned.deferred.length;
+          const official=modelVersionFor(sport),early=`${(globalThis as any).SportsHubFootballResearch.versionFor(sport)}-early`;
+          const versions=sport==='cfb'?`in.(${official},${early})`:`eq.${official}`;
+          const saved=ids.length?await db(`ai_predictions?event_id=in.(${ids.join(',')})&model_version=${versions}&select=event_id,market,quality,model_version`):[];
+          const planned=BUDGET.plan(games,saved||[],sport==='nba'?{oddsFor:(g:any)=>odds(g.odds,g),officialVersion:official}
+            :{oddsFor:(g:any)=>odds(g.odds,g),officialVersion:official,requireVersions:[early],cap:Infinity,protectMs:BUDGET.CFB_PROTECT_MS});
+          planForecast=new Set(planned.forecast.map((g:any)=>String(g.id)));
+          if(sport==='nba'){nba.reused=planned.reused.length;nba.deferred=planned.deferred.length;}
+          else{cfb.eligible=planned.eligible;cfb.reused=planned.reused.length;cfb.forecasts=planned.forecast.length;}
         }
         for(const g of games){
           let quotes:any[]=[],inputs:any=null;
@@ -361,7 +370,7 @@ Deno.serve(async(req:Request)=>{
           }
           if(!BUDGET.pregameEligible(g)){skipped++;continue;}
           if(sport==='nba')nba.eligible++;
-          if(nbaForecast&&!nbaForecast.has(String(g.id))){await enrichPrices(g);continue;}
+          if(planForecast&&!planForecast.has(String(g.id))){await enrichPrices(g);await enrichProbabilities(g);continue;}
           const evidencePromise=(sport==='nfl'||sport==='cfb')?footballEvidence(sport,g).catch(()=>null):Promise.resolve(null);
           const inputsPromise=watch?signalInputs(g).catch(()=>{signalError();return null;}):Promise.resolve(null);
           await enrichPrices(g);
@@ -400,7 +409,7 @@ Deno.serve(async(req:Request)=>{
     if(captureSignals)try{signals.graded+=await reconcileSignals(db);}catch(_){signalError();}
     signals.status=signals.errors?'partial':captureSignals?'ok':'disabled';
     const status=(errors.length||research.errors)?(captured||graded?'partial':'error'):'ok',finished=new Date().toISOString();
-    await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:finished,status,captured,graded,skipped,errors,details:{model:MODEL_VERSION,nflModel:NFL_LIVE.VERSION,app:APP_VERSION,signals,research,nba}})});
+    await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:finished,status,captured,graded,skipped,errors,details:{model:MODEL_VERSION,nflModel:NFL_LIVE.VERSION,app:APP_VERSION,signals,research,nba,cfb}})});
     return Response.json({ok:status==='ok',status,captured,graded,skipped,errors,signals,research,run:run.id});
   }catch(error){
     if(run)await db(`ai_job_runs?id=eq.${run.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({finished_at:new Date().toISOString(),status:'error',captured,graded,skipped,errors:[...errors,{error:String(error)}],details:{model:MODEL_VERSION,nflModel:NFL_LIVE.VERSION,app:APP_VERSION,signals,research}})}).catch(()=>{});

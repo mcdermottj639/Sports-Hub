@@ -112,7 +112,9 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > ### Supabase (`supabase/`) — LIVE, powers automatic AI Picks history
 > Project `sports-hub` (`oqrfdhoyyogjmiqmjhnp`, us-east-2) is deliberately
 > separate from `family-survivor`. `sports-hub-ai` is a JWT-protected Edge
-> Function invoked by pg_cron at minutes 7 and 37 every hour. It reads ESPN,
+> Function invoked by pg_cron at minutes 7 and 37 every hour. Since 24 Oct 2026
+> the deployed entrypoint is a one-line shim importing the collector from this
+> repo at a pinned commit (see the collector-fix entry under Current version). It reads ESPN,
 > saves immutable first pregame NFL/Top-25-CFB/MLB/NBA observations in
 > `public.ai_predictions`, grades finals, and audits each run in
 > `public.ai_job_runs`. v244 adds an independent `sports-hub-odds` job and
@@ -706,11 +708,32 @@ extracted verbatim as `pregameEligible` (tested) and `details.nba` gains
 `reused`/`deferred`/`cap`. **No change to any forecast, line, price, freeze
 rule, grading or any NFL/CFB/MLB path.** Local measurement before deploy: 2.2–2.7 s
 CPU per run → 1.50–1.60 s with nothing saved, 1.25–1.33 s once saved.
-Tests: `tests/collector-budget.test.js` (+7). ⚠️ The remaining headroom is
-thin: without NBA a run is still ~1.2–1.3 s (NFL ~0.6, CFB ~0.45 s re-fetching
-team schedules every run) — CFB is the next pass to budget if stalls return.
-Watch: `ai_job_runs` status='running' with no `finished_at` by ET day should fall
-under ~10%.
+**Live result (24 Oct 02:39 UTC, run 1851):** ok in 30 s, 1,466 ms CPU vs
+1,587 ms for the old build's run two minutes earlier — NBA 8 eligible / 8 reused
+/ 0 forecasts. That saving was small because a quiet night has little NBA work;
+the ~1.45 s floor is the NFL evidence build + CFB passes, so the **same reuse
+rule was extended to CFB in the same release**: a ranked game is reused when its
+official v239 markets AND its `football-research-v2-early` row are saved, with
+NO cap, and **never inside 90 minutes of kickoff** (`CFB_PROTECT_MS`) — the
+research near window and the betting-signals decision window need a fresh
+forecast there. `details.cfb` records eligible/forecasts/reused. ⚠️ Side effect:
+for a reused CFB game more than 90 min out, `betting_signal_current` (the live
+match-state card) is not re-upserted that run; quotes are still captured, and
+decision rows are unaffected because they only exist inside the protected window.
+NFL is deliberately untouched — its per-run evidence feeds live signals.
+Tests: `tests/collector-budget.test.js` (+9). Watch: `ai_job_runs`
+status='running' with no `finished_at` by ET day should fall under ~10%.
+
+⚠️ **Deploy mechanism changed in this release.** The MCP deploy cannot carry the
+~160 KB bundle in one call, so the deployed `sports-hub-ai` entrypoint is a
+**one-line shim** that imports
+`https://raw.githubusercontent.com/mcdermottj639/Sports-Hub/<commit>/supabase/functions/sports-hub-ai/index.ts`
+at a PINNED commit; Deno resolves the collector's relative `../_shared/*` imports
+against that URL, so the bundled bytes are exactly the repository's at that
+commit (stronger provenance than hand-pasted files). **To release the collector:
+push `main`, then redeploy the shim with the new commit hash, JWT verification
+on.** `get_edge_function` readback shows only the shim; verify a release by the
+hash in it plus `details.app` on the next `ai_job_runs` row.
 
 ### v322 — Compact Matchup HQ and a complete mobile review
 
