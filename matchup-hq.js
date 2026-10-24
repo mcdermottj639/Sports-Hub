@@ -204,8 +204,8 @@
   // Each remaining starter against the best healthy bench option for that slot.
   function benchCompare(players) {
     const fits = (pos, slot) => slot === pos || (slot === 'FLEX' && ['RB', 'WR', 'TE'].includes(pos));
-    const bench = players.filter((p) => p.side === 'me' && p.bench && !p.played && !p.bye && !/Out|IR|Suspend/i.test(p.injury));
-    const starters = players.filter((p) => p.side === 'me' && p.starter && !p.played).sort((a, b) => (SLOT_ORDER[a.slot] ?? 9) - (SLOT_ORDER[b.slot] ?? 9));
+    const bench = players.filter((p) => p.side === 'me' && p.bench && !p.played && !p.live && !p.bye && p.projectionAvailable && !/Out|IR|Suspend/i.test(p.injury));
+    const starters = players.filter((p) => p.side === 'me' && p.starter && !p.played && !p.live && p.projectionAvailable).sort((a, b) => (SLOT_ORDER[a.slot] ?? 9) - (SLOT_ORDER[b.slot] ?? 9));
     return starters.map((s) => {
       const alt = bench.filter((b) => fits(b.pos, s.slot)).sort((a, b) => b.proj - a.proj)[0];
       const same = starters.filter((x) => x.slot === s.slot);
@@ -327,6 +327,7 @@
     // Repaints share this mount. Dispose old handlers so one refresh tap
     // cannot invoke every prior render's callback and start duplicate syncs.
     box._mhqEvents?.abort();
+    box._mhqResize?.disconnect();
     const events = new AbortController(); box._mhqEvents = events;
     const L = ctx.L || {}; const games = ctx.games || [];
     const players = buildPlayers(L, games);
@@ -341,7 +342,20 @@
     const snapshotIssue = globalThis.SportsHubFantasySync?.snapshotIssue(L) ||
       (!globalThis.SportsHubFantasySync ? 'Saved matchup validation is unavailable. Please reload the app.' : '');
     const weekLabel = snapshotIssue ? 'Saved matchup' : (ctx.weekLabel || '');
-    const state = { page: ctx.page || 'overview', over: {}, pick: null, logs: {}, hist: null };
+    // Keep exploration through background syncs, but never carry scenarios
+    // into a different matchup. No fantasy records are written here.
+    const stateKey = [ctx.season, M.week || ctx.weekLabel, meName, oppName].join('|');
+    const state = box._mhqState?.key === stateKey ? box._mhqState :
+      { key: stateKey, page: 'overview', over: {}, pick: null, logs: {}, hist: null, labSide: 'me' };
+    box._mhqState = state;
+    state.page = ctx.page || state.page;
+    if (state.logStamp !== L.coreSyncedAt && L.coreSyncedAt) { state.logs = {}; state.logStamp = L.coreSyncedAt; }
+    Object.keys(state.over).forEach(name => {
+      const p = players.find(p => p.player === name && p.starter && !p.played && !p.bye);
+      if (!p) delete state.over[name];
+      else if (p.live) state.over[name] = Math.max(state.over[name], p.points || 0);
+    });
+    let intelRequest = 0;
     const o0 = outlook(players, score, seasonTeams);
     const weekOK = games.length > 0;
     const anyProj = players.some((p) => p.proj > 0);
@@ -358,12 +372,12 @@
       const pill = o.me.winPct >= 65 ? 'You are favored' : o.me.winPct <= 35 ? 'They are favored' : 'Toss-up';
       const st = stacks(players)[0];
       const take = !anyProj ? 'ESPN has not posted this week’s projections yet, so the finals and win chance below are banked points only.'
-        : `${started ? (score.me > score.opp ? 'You lead' : score.me < score.opp ? 'You trail' : 'Level') + ' so far' : 'Nobody has kicked off yet'}; they have ${o.opp.left} starter${o.opp.left === 1 ? '' : 's'} still to play against your ${o.me.left}. ESPN projects a <b>${f1(o.me.projFinal)} to ${f1(o.opp.projFinal)}</b> finish, which puts your win chance at <b>${f1(o.me.winPct)}%</b>.${st ? ` ${st.share}% of what you have left rides on ${H(st.game)} (${H(st.kickoffET)}).` : ''}`;
+        : `${started ? (score.me > score.opp ? 'You lead' : score.me < score.opp ? 'You trail' : 'Level') + ' so far' : 'Nobody has kicked off yet'}. ${st ? `<b>${st.share}%</b> of your remaining projection rides on ${H(st.game)}.` : `You have ${o.me.left} starters left; they have ${o.opp.left}.`}`;
       return `<div class="mhq-board">
         <div class="mhq-brow">
-          <div class="mhq-team"><span class="nm">${H(meName)}</span><span class="rec">${H(recOf(meT))}</span><span class="sc me">${f1(score.me)}</span><span class="pj">Projected final <b>${f1(o.me.projFinal)}</b></span></div>
-          <div class="mhq-mid"><span class="mhq-pill">${pill}</span><span class="wp">${f1(o.me.winPct)}%</span><span class="lab">your win chance</span><span class="lab">projected margin ${fs(o.me.margin)}</span></div>
-          <div class="mhq-team right"><span class="nm">${H(oppName)}</span><span class="rec">${H(recOf(oppT))}</span><span class="sc opp">${f1(score.opp)}</span><span class="pj">Projected final <b>${f1(o.opp.projFinal)}</b></span></div>
+          <div class="mhq-team"><span class="mhq-side me">YOUR TEAM</span><span class="nm">${H(meName)}</span><span class="rec">${H(recOf(meT))}</span><span class="sc me">${f1(score.me)}</span><span class="score-label">Points scored</span><span class="pj">Projected final <b>${f1(o.me.projFinal)}</b></span></div>
+          <div class="mhq-mid"><span class="mhq-pill">${pill}</span><span class="wp">${f1(o.me.winPct)}%</span><span class="lab">estimated win chance</span><span class="lab">projected margin ${fs(o.me.margin)}</span></div>
+          <div class="mhq-team right"><span class="mhq-side opp">OPPONENT</span><span class="nm">${H(oppName)}</span><span class="rec">${H(recOf(oppT))}</span><span class="sc opp">${f1(score.opp)}</span><span class="score-label">Points scored</span><span class="pj">Projected final <b>${f1(o.opp.projFinal)}</b></span></div>
         </div>
         <div class="mhq-bars">
           <div class="mhq-bar"><div class="mhq-track"><i style="width:${(100 * o.me.banked / mx).toFixed(1)}%;background:${ME}"></i><i class="rem" style="width:${(100 * o.me.remaining / mx).toFixed(1)}%;background:${ME}"></i></div><span>${f1(o.me.banked)} scored · ${f1(o.me.remaining)} projected to come · ${o.me.left} left</span></div>
@@ -373,12 +387,12 @@
     };
 
     const overview = () => {
-      const ed = edges(players); const maxE = Math.max(...ed.map((r) => Math.abs(r.edge)), 1);
-      const edgeRows = ed.map((r) => `<tr><td>${H(r.slot)}</td><td>${H(r.mine)}${r.minePlayed ? ' <span class="mhq-fin">✓</span>' : ''}</td><td class="num">${f1(r.mineVal)}</td><td class="num ${r.edge > 0 ? 'good' : r.edge < 0 ? 'bad' : 'muted'}">${fs(r.edge)}</td><td><div class="mhq-eb"><i style="width:${(Math.abs(r.edge) / maxE * 50).toFixed(1)}%;left:${r.edge >= 0 ? (50 - Math.abs(r.edge) / maxE * 50).toFixed(1) : 50}%;background:${r.edge >= 0 ? ME : OPP}"></i></div></td><td class="num">${f1(r.theirsVal)}</td><td>${H(r.theirs)}${r.theirsPlayed ? ' <span class="mhq-fin">✓</span>' : ''}</td></tr>`).join('');
+      const ed = edges(players);
+      const edgeRows = ed.map((r) => `<div class="mhq-edge-row"><div class="mhq-edge-player"><b>${H(r.mine) || 'Empty slot'}</b><span>${f1(r.mineVal)} <small>${r.minePlayed ? 'FINAL' : players.find(p => p.player === r.mine)?.live ? 'LIVE' : 'PROJ'}</small></span></div><div class="mhq-edge-center"><span>${H(r.slot)}</span><strong class="${r.edge > 0 ? 'good' : r.edge < 0 ? 'bad' : 'muted'}">${fs(r.edge)}</strong></div><div class="mhq-edge-player theirs"><b>${H(r.theirs) || 'Empty slot'}</b><span>${f1(r.theirsVal)} <small>${r.theirsPlayed ? 'FINAL' : players.find(p => p.player === r.theirs)?.live ? 'LIVE' : 'PROJ'}</small></span></div></div>`).join('');
       const dr = drivers(players).map((d, i) => `<li><span class="ic" style="background:${d.side === 'me' ? ME : OPP}22;color:${d.side === 'me' ? ME : OPP}">${i + 1}</span><div><div class="hd">${H(d.title)}</div><div class="mhq-muted">${H(d.detail)}</div></div></li>`).join('') || '<li class="mhq-muted">Nothing to flag: no starters left to play.</li>';
       const spot = ['me', 'opp'].flatMap((s) => players.filter((p) => p.side === s && p.starter).sort((a, b) => val(b) - val(a)).slice(0, 4));
       const spMax = Math.max(...spot.map(val), 1);
-      const spotHTML = spot.map((p) => `<div class="mhq-sp"><span class="pos">${H(p.slot)}</span><div class="nm">${H(p.player)}<small>${p.side === 'me' ? 'You' : 'Them'} · ${H(p.nfl)} ${H(p.vs)} · ${p.played ? 'final' : p.live ? 'live' : 'projected'}</small></div><span class="pt">${f1(val(p))}</span><div class="bar"><i style="width:${(100 * val(p) / spMax).toFixed(1)}%;background:${p.side === 'me' ? ME : OPP};opacity:${p.played || p.live ? 1 : 0.45}"></i></div></div>`).join('');
+      const spotHTML = spot.map((p) => `<button type="button" class="mhq-sp" ${['D/ST','K'].includes(p.pos) ? 'disabled' : `data-inspect="${H(p.player)}"`} aria-label="${H(p.player)} player details"><span class="pos">${H(p.slot)}</span><div class="nm">${H(p.player)}<small>${p.side === 'me' ? 'You' : 'Them'} · ${H(p.nfl)} ${H(p.vs)} · ${p.played ? 'final' : p.live ? 'live' : 'projected'}</small></div><span class="pt">${f1(val(p))}</span><div class="bar"><i style="width:${(100 * val(p) / spMax).toFixed(1)}%;background:${p.side === 'me' ? ME : OPP};opacity:${p.played || p.live ? 1 : 0.45}"></i></div></button>`).join('');
       // Rooting guide: every game with a starter on either side, by window.
       const idx = gameIndex(games); const starters = players.filter((p) => p.starter);
       const wins = {};
@@ -389,68 +403,92 @@
       const bye = players.filter((p) => p.starter && p.bye);
       return `${board()}
         <div class="mhq-grid wide">
-          <article class="mhq-card"><h3>Paths to victory</h3><p class="mhq-note">Where each final is likely to land: banked points plus ESPN's projections for the rest. The spread is the league's week-to-week swing (${f1(o0.me.leagueSd)} pts) scaled to how much each team still has to play.</p><div class="mhq-legend"><span><i style="background:${ME}"></i>You</span><span><i style="background:${OPP}"></i>${H(oppName)}</span></div><div class="mhq-chart" data-chart="curves"></div></article>
+          <article class="mhq-card"><h3>Paths to victory</h3><p class="mhq-note">Estimated final-score ranges, based on remaining projections and the league's scoring variation.</p><div class="mhq-legend"><span><i style="background:${ME}"></i>You</span><span><i style="background:${OPP}"></i>${H(oppName)}</span></div><div class="mhq-chart" data-chart="curves"></div></article>
           <article class="mhq-card"><h3>What decides the week</h3><p class="mhq-note">From the remaining starters and the Vegas lines.</p><ul class="mhq-list">${dr}</ul>${bye.length ? `<p class="mhq-note bad">🛌 On bye in your lineup: ${bye.map((p) => H(p.player)).join(', ')}.</p>` : ''}</article>
         </div>
         <div class="mhq-grid wide">
-          <article class="mhq-card"><h3>Slot by slot</h3><p class="mhq-note">Final points where the game is over (✓), ESPN projection otherwise. Bars point toward the side that's ahead.</p><div class="mhq-tw"><table class="mhq-tbl"><thead><tr><th>Slot</th><th>You</th><th class="num">Pts</th><th class="num">Edge</th><th></th><th class="num">Pts</th><th>Them</th></tr></thead><tbody>${edgeRows}</tbody></table></div></article>
+          <article class="mhq-card"><h3>Slot by slot</h3><p class="mhq-note">Points scored for live/final players; projections for unplayed players. Edge is from your side.</p><div class="mhq-compare-labels"><span class="me">You</span><span>Edge</span><span class="opp">Opponent</span></div><div class="mhq-edges">${edgeRows}</div></article>
           <article class="mhq-card"><h3>Player spotlight</h3><p class="mhq-note">Biggest numbers on each side.</p><div class="mhq-spot">${spotHTML}</div></article>
         </div>
         <article class="mhq-card"><h3>Rooting guide</h3><p class="mhq-note">Every game with a starter on either side, in kickoff order (Eastern). Your players in bold.</p><div class="mhq-strip">${stripHTML}</div></article>`;
     };
 
+    const scenarioBase = (p) => p.live ? (p.points || 0) + Math.max(0, p.proj - (p.points || 0)) * 0.5 : p.proj;
+    const scenarioRange = (o) => {
+      const span = [Math.min(o.me.p10, o.opp.p10) - 5, Math.max(o.me.p90, o.opp.p90) + 5];
+      return rangeRow('You', o.me.p10, o.me.projFinal, o.me.p90, ME, span) + rangeRow('Opponent', o.opp.p10, o.opp.projFinal, o.opp.p90, OPP, span);
+    };
     const lab = () => {
       const o = outlook(players, score, seasonTeams, state.over);
       const changed = Object.keys(state.over).length > 0;
-      const rowsFor = (s) => players.filter((p) => p.side === s && p.starter && !p.played && !p.bye).sort((a, b) => b.proj - a.proj).map((p) => { const v = state.over[p.player] != null ? state.over[p.player] : (p.live ? Math.max(p.points || 0, p.proj) : p.proj); return `<div class="mhq-lr"><div class="nm">${H(p.player)}<small>${H(p.slot)} · ${H(p.vs)} · ESPN ${f1(p.proj)}${p.live ? ' · live ' + f1(p.points) : ''}</small></div><input type="range" min="0" max="${Math.max(30, Math.ceil(p.proj * 2.5))}" step="0.5" value="${v}" data-player="${H(p.player)}" data-base="${p.live ? Math.max(p.points || 0, p.proj) : p.proj}" aria-label="${H(p.player)} points"><span class="v${state.over[p.player] != null ? ' chg' : ''}">${f1(v)}</span></div>`; }).join('') || '<div class="mhq-muted">Nobody left to play.</div>';
-      const span = [Math.min(o.me.p10, o.opp.p10) - 5, Math.max(o.me.p90, o.opp.p90) + 5];
-      const bc = benchCompare(players);
-      const ups = bc.filter((r) => r.change != null && r.change > 0);
-      const bcRows = bc.map((r) => `<tr><td>${H(r.slot)}</td><td>${H(r.starter)}</td><td class="num">${f1(r.starterProj)}</td><td>${r.alt ? H(r.alt) + (r.altInjury && r.altInjury !== 'Active' ? ` <span class="mhq-tag warn">${H(r.altInjury)}</span>` : '') : '<span class="mhq-muted">none available</span>'}</td><td class="num">${r.alt ? f1(r.altProj) : ''}</td><td class="num ${r.change > 0 ? 'good' : r.change < 0 ? 'bad' : 'muted'}">${r.alt ? fs(r.change) : ''}</td></tr>`).join('');
+      const rowsFor = (side) => players.filter((p) => p.side === side && p.starter && !p.played && !p.bye).sort((a, b) => b.proj - a.proj).map((p) => {
+        const base = scenarioBase(p), v = state.over[p.player] ?? base;
+        return `<div class="mhq-lr"><div class="nm">${H(p.player)}<small>${H(p.slot)} · ${H(p.vs)} · ${p.live ? 'Live: ' + f1(p.points) + ' scored' : 'Projection ' + f1(p.proj)}</small></div><input type="range" min="${p.live ? Math.max(0, p.points || 0) : 0}" max="${Math.max(30, Math.ceil(p.proj * 2.5), Math.ceil(base + 15), Math.ceil(v))}" step="0.1" value="${v}" data-player="${H(p.player)}" data-base="${base}" aria-label="${H(p.player)} final points"><output class="v${state.over[p.player] != null ? ' chg' : ''}">${f1(v)}</output></div>`;
+      }).join('') || '<div class="mhq-empty">No remaining starters on this side.</div>';
+      const bc = benchCompare(players), ups = bc.filter(r => r.change > 0);
+      const bcRows = bc.map((r) => `<div class="mhq-bench-row"><span class="mhq-tag">${H(r.slot)}</span><div><b>${H(r.starter)}</b><small>${f1(r.starterProj)} projected</small></div><div>${r.alt ? `<b>${H(r.alt)}</b><small>${f1(r.altProj)} projected${r.altInjury !== 'Active' ? ' · ' + H(r.altInjury) : ''}</small>` : '<small>No eligible alternative</small>'}</div><strong class="${r.change > 0 ? 'good' : r.change < 0 ? 'muted' : ''}">${r.alt ? fs(r.change) : '–'}</strong></div>`).join('');
       return `<div class="mhq-grid wide">
-        <article class="mhq-card" id="mhq-scenario"><h3>Scenario lab</h3><p class="mhq-note">Drag any player who hasn't finished. The finals and win chance recompute from your numbers; ESPN's projections are the starting points.</p>
-          <div class="mhq-kpis"><div class="mhq-kpi"><span class="lab">Your final</span><span class="big me" data-k="me">${f1(o.me.projFinal)}</span><span class="sub" data-k="me-d">${changed ? fs(o.me.projFinal - o0.me.projFinal) + ' vs ESPN' : 'ESPN projection'}</span></div><div class="mhq-kpi"><span class="lab">Their final</span><span class="big opp" data-k="opp">${f1(o.opp.projFinal)}</span><span class="sub" data-k="opp-d">${changed ? fs(o.opp.projFinal - o0.opp.projFinal) + ' vs ESPN' : 'ESPN projection'}</span></div><div class="mhq-kpi"><span class="lab">Your win chance</span><span class="big win" data-k="win">${f1(o.me.winPct)}%</span><span class="sub" data-k="win-d">${changed ? fs(o.me.winPct - o0.me.winPct) + ' pts vs ESPN' : 'ESPN projection'}</span></div></div>
-          <button type="button" class="mhq-btn" data-act="reset">Reset to ESPN projections</button>
-          <div class="mhq-lab"><p class="mhq-note">Your remaining starters</p>${rowsFor('me')}</div>
-          <div class="mhq-lab"><p class="mhq-note">Their remaining starters</p>${rowsFor('opp')}</div></article>
+        <article class="mhq-card" id="mhq-scenario"><div class="mhq-section-head"><h3>What if?</h3><button type="button" class="mhq-btn" data-act="reset">Reset</button></div><p class="mhq-note">Adjust final player scores to explore the matchup. Completed players are locked.</p>
+          <div class="mhq-kpis"><div class="mhq-kpi"><span class="lab">Your final</span><span class="big me" data-k="me">${f1(o.me.projFinal)}</span><span class="sub" data-k="me-d">${changed ? fs(o.me.projFinal - o0.me.projFinal) + ' vs baseline' : 'Baseline projection'}</span></div><div class="mhq-kpi"><span class="lab">Their final</span><span class="big opp" data-k="opp">${f1(o.opp.projFinal)}</span><span class="sub" data-k="opp-d">${changed ? fs(o.opp.projFinal - o0.opp.projFinal) + ' vs baseline' : 'Baseline projection'}</span></div><div class="mhq-kpi"><span class="lab">Win estimate</span><span class="big win" data-k="win">${f1(o.me.winPct)}%</span><span class="sub" data-k="win-d">${changed ? fs(o.me.winPct - o0.me.winPct) + ' pp vs baseline' : 'HQ estimate'}</span></div></div>
+          <div class="mhq-segment" role="group" aria-label="Scenario team"><button type="button" data-lab-side="me" aria-pressed="${state.labSide === 'me'}">Your players</button><button type="button" data-lab-side="opp" aria-pressed="${state.labSide === 'opp'}">Opponent</button></div>
+          <div class="mhq-lab">${rowsFor(state.labSide)}</div><p class="mhq-note">Exploration only. Your ESPN lineup stays unchanged.</p></article>
         <div class="mhq-col">
-          <article class="mhq-card"><h3>Floor, projection, ceiling</h3><p class="mhq-note">10th, 50th and 90th percentile finals from the same model as the win chance.</p><div class="mhq-range">${rangeRow('You', o.me.p10, o.me.projFinal, o.me.p90, ME, span)}${rangeRow(oppName, o.opp.p10, o.opp.projFinal, o.opp.p90, OPP, span)}</div></article>
-          <article class="mhq-card"><h3>Starter vs bench</h3><p class="mhq-note">Each remaining starter against the best healthy bench option for that slot, by ESPN projection. Negative means your starter already projects higher.</p><div class="mhq-tw"><table class="mhq-tbl"><thead><tr><th>Slot</th><th>Starter</th><th class="num">Proj</th><th>Best bench</th><th class="num">Proj</th><th class="num">Change</th></tr></thead><tbody>${bcRows}</tbody></table></div><p class="mhq-note">${ups.length ? `ESPN projects an upgrade at ${ups.map((r) => H(r.slot)).join(', ')}. Check kickoff times and injury news before swapping.` : 'No bench player out-projects a starter: your lineup is already ESPN-optimal.'}</p></article>
+          <article class="mhq-card"><h3>Floor, projection, ceiling</h3><p class="mhq-note">Estimated 10th, 50th and 90th percentile finals. Updates with your scenario.</p><div class="mhq-range" data-scenario-range>${scenarioRange(o)}</div></article>
+          <article class="mhq-card"><h3>Starter vs bench</h3><p class="mhq-note">${ups.length ? `Higher projections at ${ups.map(r => H(r.slot)).join(', ')}.` : 'No projected upgrades among the eligible options.'} Each slot is evaluated separately; the same bench player may appear more than once.</p><div class="mhq-bench-labels"><span>Slot</span><span>Starter</span><span>Best bench</span><span>Δ</span></div><div>${bcRows || '<div class="mhq-empty">No unlocked starters to compare.</div>'}</div><p class="mhq-note">Live, completed, bye, reserve and out bench players are excluded. Check injury news before moving a player.</p></article>
         </div></div>`;
     };
 
+    const intelCandidates = () => players.filter(p => !['D/ST', 'K'].includes(p.pos)).sort((a, b) => (a.side === 'me' ? 0 : 1) - (b.side === 'me' ? 0 : 1) || (b.starter - a.starter) || b.proj - a.proj);
     const intel = () => {
-      const cands = players.filter((p) => p.id && !['D/ST', 'K'].includes(p.pos)).sort((a, b) => (a.side === 'me' ? 0 : 1) - (b.side === 'me' ? 0 : 1) || (b.starter - a.starter) || b.proj - a.proj);
+      const cands = intelCandidates();
       if (!cands.length) return '<article class="mhq-card"><div class="mhq-empty">No skill-position players to look up.</div></article>';
-      if (!state.pick || !cands.some((p) => p.player === state.pick)) state.pick = (cands.find((p) => p.side === 'me' && p.starter && !p.played) || cands[0]).player;
-      const btns = cands.map((p) => `<button type="button" class="mhq-chip" data-pick="${H(p.player)}" aria-pressed="${p.player === state.pick}">${H(p.player)}${p.starter ? '' : ' (bench)'}</button>`).join('');
-      return `<article class="mhq-card"><h3>Know the opportunity behind the points</h3><p class="mhq-note">Game logs from ESPN for every skill player on both rosters. Pick a player.</p><div class="mhq-ctl">${btns}</div><div id="mhq-intel-body"><div class="mhq-empty">Loading game log…</div></div></article>`;
+      if (!cands.some(p => p.player === state.pick)) state.pick = (cands.find(p => p.side === 'me' && p.starter && !p.played) || cands[0]).player;
+      const groups = [['me', 'Your'], ['opp', 'Opponent']].map(([side, label]) =>
+        [['starter','starters'], ['bench','bench'], ['reserve','reserve']].map(([kind, title]) => {
+          const list = cands.filter(p => p.side === side && (kind === 'reserve' ? !p.starter && !p.bench : p[kind]));
+          return list.length ? `<optgroup label="${label} ${title}">${list.map(p => `<option value="${H(p.player)}" ${p.player === state.pick ? 'selected' : ''}>${H(p.player)} · ${H(p.pos)} · ${H(p.nfl)}</option>`).join('')}</optgroup>` : '';
+        }).join('')).join('');
+      return `<article class="mhq-card mhq-intel"><div class="mhq-section-head"><h3>Player intel</h3><span class="mhq-note">Both rosters · ${cands.length} players</span></div><div class="mhq-player-picker"><label class="mhq-sr-only" for="mhq-player-select">Choose a player</label><select id="mhq-player-select">${groups}</select><button type="button" class="mhq-btn" data-act="prev-player" aria-label="Previous player">←</button><button type="button" class="mhq-btn" data-act="next-player" aria-label="Next player">→</button></div><div id="mhq-player-profile"></div><div id="mhq-intel-body" aria-busy="true"><div class="mhq-empty" role="status">Loading game log…</div></div></article>`;
     };
+    const playerProfile = (p) => `<div class="mhq-player-profile ${p.side}"><span class="mhq-position">${H(p.pos)}</span><div><h3>${H(p.player)}</h3><p>${p.side === 'me' ? 'Your team' : 'Opponent'} · ${H(p.nfl)} · ${p.starter ? H(p.slot) + ' starter' : p.bench ? 'Bench' : 'Reserve'}<br>${H(p.vs || 'Game unavailable')}${p.kickoffET ? ' · ' + H(p.kickoffET) + ' ET' : ''}</p></div><div class="mhq-profile-score"><b>${f1(p.played || p.live ? p.points : p.projectionAvailable ? p.proj : null)}</b><small>${p.played ? 'FINAL' : p.live ? 'LIVE' : 'PROJ'}</small></div></div>`;
     const intelBody = async () => {
       const body = box.querySelector('#mhq-intel-body'); if (!body) return;
       const p = players.find((x) => x.player === state.pick); if (!p) return;
-      let rows = state.logs[p.id];
+      const request = ++intelRequest;
+      const profile = box.querySelector('#mhq-player-profile'); if (profile) profile.innerHTML = playerProfile(p);
+      body.setAttribute('aria-busy', 'true');
+      body.innerHTML = '<div class="mhq-empty" role="status">Loading game log…</div>';
+      if (!p.id) { body.setAttribute('aria-busy','false'); body.innerHTML = '<div class="mhq-empty">Game-log link unavailable for this player. Their saved roster and matchup details are shown above.</div>'; return; }
+      let rows = state.logs[p.id], failed = false;
       if (!rows) {
         try { const json = await ctx.fetchJSON(`https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${encodeURIComponent(p.id)}/gamelog?season=${encodeURIComponent(ctx.season || new Date().getFullYear())}`, 60 * 60 * 1000, 15000); rows = parseGamelog(json); }
-        catch (e) { rows = null; }
-        state.logs[p.id] = rows || [];
-        if (state.pick !== p.player) return;
+        catch (e) { rows = null; failed = true; }
+        if (events.signal.aborted || request !== intelRequest || state.pick !== p.player || !body.isConnected) return;
+        if (!failed) state.logs[p.id] = rows || [];
       }
-      if (!rows || !rows.length) { body.innerHTML = `<div class="mhq-empty"><b>No game log for ${H(p.player)}</b>ESPN returned nothing for this season — a feed miss or no games played, not a zero.</div>`; return; }
-      const u = usage(rows); const c = p.side === 'me' ? ME : OPP; const W = Math.max(280, body.clientWidth - 24);
+      body.setAttribute('aria-busy', 'false');
+      if (!rows || !rows.length) { body.innerHTML = `<div class="mhq-empty" role="status"><b>${failed ? 'Game log unavailable' : 'No game log returned'}</b>${failed ? 'ESPN did not answer. Your player and matchup details are still here.' : 'No games were returned for this season; this is not a zero.'}<button type="button" class="mhq-btn" data-act="retry-intel">Retry game log</button></div>`; return; }
+      const u = usage(rows); const c = p.side === 'me' ? ME : OPP;
       const trend = u.touchesLast3 - u.touchesAvg;
       const notes = [
-        [trend > 1 ? 'Usage trending up' : trend < -1 ? 'Usage trending down' : 'Usage steady', `${u.qb ? 'Pass attempts' : 'Touches'} last 3 games ${f1(u.touchesLast3)} vs ${f1(u.touchesAvg)} on the season.`],
-        p.played ? [`Already played: ${f1(p.points)} points`, `Final for this week (${p.vs}).`] : [`This week: ${p.vs || 'no game'}${p.kickoffET ? ', ' + p.kickoffET : ''}`, `${p.implied == null ? 'No line yet. ' : `Vegas team total ${f1(p.implied)}, spread ${p.spread > 0 ? '+' : ''}${p.spread}. `}ESPN projects ${f1(p.proj)}${p.seasonAvg != null ? ` (season average ${f1(p.seasonAvg)})` : ''}.${p.prk ? ` Opponent ranks #${p.prk} vs ${p.pos} (1 = most generous).` : ''}`],
+        [trend > 1 ? 'Usage trending up' : trend < -1 ? 'Usage trending down' : 'Usage steady', `${u.qb ? 'Pass attempts' : 'Opportunities'} last 3 games ${f1(u.touchesLast3)} vs ${f1(u.touchesAvg)} on the season.`],
+        p.played ? [`Already played: ${f1(p.points)} points`, `Final for this week (${p.vs}).`] : [`This week: ${p.vs || 'no game'}${p.kickoffET ? ', ' + p.kickoffET : ''}`, `${p.implied == null ? 'No line yet. ' : `Vegas team total ${f1(p.implied)}, spread ${p.spread > 0 ? '+' : ''}${p.spread}. `}ESPN projects ${f1(p.proj)}${p.seasonAvg != null ? ` (season average ${f1(p.seasonAvg)})` : ''}.${p.prk ? ` ESPN position matchup rank: #${p.prk}.` : ''}`],
         [`Injury status: ${p.injury}`, `ESPN's listing as of the last sync. Verify before kickoff.`],
       ].map((n, i) => `<li><span class="ic">${i + 1}</span><div><div class="hd">${H(n[0])}</div><div class="mhq-muted">${H(n[1])}</div></div></li>`).join('');
       const log = rows.slice().reverse().map((r) => `<tr><td>${r.week}</td><td>${H(r.opp)} ${H(r.result)}</td><td class="num">${r.touches}</td><td class="num">${r.recYds}</td><td class="num">${r.rushYds}</td><td class="num">${r.passYds}</td><td class="num">${r.td}</td></tr>`).join('');
       body.innerHTML = `<div class="mhq-grid wide"><div class="mhq-col">
-          <div class="mhq-stat3"><div class="s"><span class="lab">${u.qb ? 'Pass attempts / game' : 'Touches / game'}</span><span class="big">${f1(u.touchesAvg)}</span><span class="lab">last 3: ${f1(u.touchesLast3)}</span></div><div class="s"><span class="lab">${u.qb ? 'Pass yards / game' : 'Yards / game'}</span><span class="big">${f1(u.ydsAvg)}</span><span class="lab">last 3: ${f1(u.ydsLast3)}</span></div><div class="s"><span class="lab">Touchdowns</span><span class="big">${u.tdTotal}</span><span class="lab">last 3: ${u.tdLast3}</span></div></div>
-          <div class="mhq-chart">${barsSVG(rows, (r) => r.touches, u.qb ? 'Pass attempts by week' : 'Touches by week (targets + carries)', c, W)}</div>
-          <div class="mhq-chart">${barsSVG(rows, (r) => u.qb ? r.passYds : r.recYds + r.rushYds, u.qb ? 'Passing yards by week' : 'Yards from scrimmage by week', c, W)}</div></div>
+          <div class="mhq-stat3"><div class="s"><span class="lab">${u.qb ? 'Pass attempts / game' : 'Opportunities / game'}</span><span class="big">${f1(u.touchesAvg)}</span><span class="lab">last 3: ${f1(u.touchesLast3)}</span></div><div class="s"><span class="lab">${u.qb ? 'Pass yards / game' : 'Yards / game'}</span><span class="big">${f1(u.ydsAvg)}</span><span class="lab">last 3: ${f1(u.ydsLast3)}</span></div><div class="s"><span class="lab">Touchdowns</span><span class="big">${u.tdTotal}</span><span class="lab">last 3: ${u.tdLast3}</span></div></div>
+          <div class="mhq-chart" data-usage-chart></div>
+          <div class="mhq-chart" data-yards-chart></div></div>
         <div class="mhq-col"><article class="mhq-card inner"><h3>Matchup notes</h3><ul class="mhq-list">${notes}</ul></article>
-          <article class="mhq-card inner"><h3>Game log</h3><div class="mhq-tw"><table class="mhq-tbl"><thead><tr><th>Wk</th><th>Opp</th><th class="num">Touches</th><th class="num">Rec yds</th><th class="num">Rush yds</th><th class="num">Pass yds</th><th class="num">TD</th></tr></thead><tbody>${log}</tbody></table></div><p class="mhq-note">Touches = targets + carries (pass attempts for a QB). TD = receiving + rushing + passing.</p></article></div></div>`;
+          <details class="mhq-fold"><summary>Full game log <span>${rows.length} games</span></summary><div class="mhq-tw"><table class="mhq-tbl"><thead><tr><th>Wk</th><th>Opp</th><th class="num">${u.qb ? 'Att' : 'Opps'}</th><th class="num">Rec yds</th><th class="num">Rush yds</th><th class="num">Pass yds</th><th class="num">TD</th></tr></thead><tbody>${log}</tbody></table></div><p class="mhq-note">Opportunities = targets + carries; quarterbacks show pass attempts. TD includes receiving, rushing and passing.</p></details></div></div>`;
+      const drawUsage = () => {
+        if (!body.isConnected || state.pick !== p.player || events.signal.aborted) return;
+        const a = body.querySelector('[data-usage-chart]'), b = body.querySelector('[data-yards-chart]');
+        if (a) a.innerHTML = barsSVG(rows, r => r.touches, u.qb ? 'Pass attempts by week' : 'Opportunities by week', c, Math.max(220, a.clientWidth));
+        if (b) b.innerHTML = barsSVG(rows, r => u.qb ? r.passYds : r.recYds + r.rushYds, u.qb ? 'Passing yards by week' : 'Scrimmage yards by week', c, Math.max(220, b.clientWidth));
+      };
+      state.drawUsage = drawUsage; drawUsage();
     };
 
     const history = () => {
@@ -460,13 +498,13 @@
       const rankIf = (w) => meT ? standings.filter((t) => !t.isMe && (t.wins > w || (t.wins === w && t.pointsFor > meT.pointsFor))).length + 1 : null;
       const po = meT ? `<div class="mhq-stat3"><div class="s"><span class="lab">Playoff odds now</span><span class="big">${meT.playoffPct != null ? f1(meT.playoffPct) + '%' : '–'}</span><span class="lab">ESPN's own number</span></div><div class="s"><span class="lab">With a win</span><span class="big">${meT.wins + 1}-${meT.losses}</span><span class="lab">about ${ord(rankIf(meT.wins + 1))} by record</span></div><div class="s"><span class="lab">With a loss</span><span class="big">${meT.wins}-${meT.losses + 1}</span><span class="lab">about ${ord(rankIf(meT.wins))} by record</span></div></div>` : '<div class="mhq-empty">Season standings have not loaded.</div>';
       const standRows = standings.map((t, i) => `<tr class="${t.isMe ? 'hl' : t.team === oppName ? 'hl2' : ''}"><td class="num">${i + 1}</td><td>${H(t.team)}</td><td class="num">${t.wins}</td><td class="num">${t.losses}</td><td class="num">${Math.round(t.pointsFor || 0)}</td><td class="num">${t.playoffPct != null ? f1(t.playoffPct) + '%' : '–'}</td></tr>`).join('');
-      return `<div class="mhq-grid wide">
+      return `<div class="mhq-history-summary"><div><span>Your last 3</span><b class="me">${f1(cs.me.last3)}</b><small>points / week</small></div><div><span>Their last 3</span><b class="opp">${f1(cs.opp.last3)}</b><small>points / week</small></div><div><span>Season sample</span><b>${cs.me.n}</b><small>scored weeks · you</small></div></div><div class="mhq-grid wide">
         <article class="mhq-card" id="mhq-rivalry"><h3>The rivalry</h3><p class="mhq-note">Postseason meetings from your League History archive (bracket games only; the archive holds no regular-season schedules).</p><div id="mhq-rivalry-body"><div class="mhq-empty">Loading League History…</div></div></article>
         <article class="mhq-card"><h3>Consistency</h3><p class="mhq-note">Each team's scoring range this season: 10th percentile, median, 90th percentile.</p><div class="mhq-range">${rangeRow('You', cs.me.p10, cs.me.p50, cs.me.p90, ME, span)}${rangeRow(oppName, cs.opp.p10, cs.opp.p50, cs.opp.p90, OPP, span)}</div><h3 style="margin-top:12px">Playoff outlook</h3><p class="mhq-note">Where each result would put your record against the current standings; other teams' results this week are not included.</p>${po}</article>
         </div>
         <div class="mhq-grid wide">
         <article class="mhq-card"><h3>Weekly scoring trend</h3><div class="mhq-legend"><span><i style="background:${ME}"></i>You</span><span><i style="background:${OPP}"></i>${H(oppName)}</span><span><i style="background:transparent;border-top:2px dashed #5b6c92;height:0;border-radius:0"></i>League avg</span></div><div class="mhq-chart" data-chart="trend"></div></article>
-        <article class="mhq-card"><h3>Standings</h3><div class="mhq-tw"><table class="mhq-tbl"><thead><tr><th class="num">#</th><th>Team</th><th class="num">W</th><th class="num">L</th><th class="num">PF</th><th class="num">Playoff %</th></tr></thead><tbody>${standRows}</tbody></table></div></article></div>`;
+        <article class="mhq-card"><h3>Standings</h3><div class="mhq-tw"><table class="mhq-tbl mhq-standings"><thead><tr><th class="num">#</th><th>Team</th><th class="num">W</th><th class="num">L</th><th class="num">PF</th><th class="num">Playoff %</th></tr></thead><tbody>${standRows}</tbody></table></div></article></div>`;
     };
     const rivalryBody = async () => {
       const body = box.querySelector('#mhq-rivalry-body'); if (!body) return;
@@ -474,7 +512,7 @@
         if (!state.hist) state.hist = await ctx.loadHistory();
         const { stats, mgrFor, career } = state.hist;
         const me = mgrFor(meName), them = mgrFor(oppName);
-        if (!me || !them) { body.innerHTML = `<div class="mhq-empty"><b>Owner not matched</b>League History knows no manager for ${H(!me ? meName : oppName)}; add the team name to its espn.js MANAGERS map.</div>`; return; }
+        if (!me || !them) { body.innerHTML = `<div class="mhq-empty"><b>Owner not matched</b>League History knows no manager for ${H(!me ? meName : oppName)}; this team name has not been linked to a manager in the archive yet.</div>`; return; }
         const rv = rivalry(stats, me, them);
         const cm = career ? career(me) : null, co = career ? career(them) : null;
         const rows = rv.games.map((g) => `<tr class="${g.kind === 'fin' ? 'hl' : ''}"><td>${g.year}</td><td>${H(roundLabel(g.kind, g.round))}</td><td class="num ${g.winner === me ? 'good' : ''}">${f1(g.aScore)}</td><td class="num ${g.winner === them ? 'good' : ''}">${f1(g.bScore)}</td><td>${g.winner === me ? 'You' : H(them)}</td></tr>`).join('');
@@ -493,21 +531,42 @@
           <p class="mhq-sub">${H(meName)} vs ${H(oppName)} · ESPN league data${L.syncedAt ? ' saved ' + H(ctx.timeAgo ? ctx.timeAgo(L.coreSyncedAt || L.syncedAt) : '') : ''}. <button type="button" class="mhq-link" data-act="resync" data-fantasy-refresh ${ctx.syncStatus?.().busy ? 'disabled' : ''}>${ctx.syncStatus?.().busy ? '🔄 Refreshing…' : '🔄 Refresh from ESPN'}</button></p>
           <p class="mhq-note" data-fantasy-sync-status role="status" aria-live="polite" ${ctx.syncStatus?.().message ? '' : 'hidden'}>${H(ctx.syncStatus?.().message || '')}</p>
           ${L.carried?.season ? `<p class="mhq-note">Season history and standings are saved from ${H(ctx.timeAgo ? ctx.timeAgo(L.carried.season) : new Date(L.carried.season).toLocaleDateString())}; those details have not refreshed yet.</p>` : ''}
-          <div class="mhq-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" data-page="${k}" aria-selected="${k === page}">${l}</button>`).join('')}</div></div>
-        <div class="mhq-page">${dataIssue ? `<div class="mhq-empty" role="status"><b>Waiting for a complete matchup</b>${H(dataIssue)}</div>` : ''}${dataIssue && ['overview','lab'].includes(page) ? '' : page === 'overview' ? overview() : page === 'lab' ? lab() : page === 'intel' ? intel() : history()}</div>
-        <p class="mhq-note">Win chance method: projected margin divided by the combined spread of both teams' remaining points, each team's spread being the league's week-to-week scoring swing scaled by the share of its projection still to play. In-progress players count their points so far plus half of what's left of their projection. An estimate built on ESPN's projections, not ESPN's number.</p></div>`;
-      const cur = box.querySelector('[data-chart="curves"]'); if (cur) cur.innerHTML = curvesSVG(o0, Math.max(280, cur.clientWidth || 360));
-      const tr = box.querySelector('[data-chart="trend"]'); if (tr) tr.innerHTML = lineSVG(weekly(seasonTeams, meName, oppName), Math.max(280, tr.clientWidth || 360));
+          <div class="mhq-tabs" role="tablist" aria-label="Matchup dashboard">${tabs.map(([k, l]) => `<button type="button" role="tab" id="mhq-tab-${k}" aria-controls="mhq-panel" tabindex="${k === page ? 0 : -1}" data-page="${k}" aria-selected="${k === page}">${l}</button>`).join('')}</div></div>
+        <div class="mhq-page" id="mhq-panel" role="tabpanel" aria-labelledby="mhq-tab-${page}">${dataIssue ? `<div class="mhq-empty" role="status"><b>Waiting for a complete matchup</b>${H(dataIssue)}</div>` : ''}${dataIssue && ['overview','lab'].includes(page) ? '' : page === 'overview' ? overview() : page === 'lab' ? lab() : page === 'intel' ? intel() : history()}</div>
+        <details class="mhq-fold mhq-method"><summary>How the estimates work</summary><p class="mhq-note">Win chance method: projected margin divided by the combined spread of both teams' remaining points, each team's spread being the league's week-to-week scoring swing scaled by the share of its projection still to play. In-progress players count their points so far plus half of what's left of their projection. This is an uncalibrated estimate built on ESPN's projections, not ESPN's number. Player correlations are not modeled.</p></details></div>`;
+      drawCharts();
       if (page === 'intel') intelBody();
       if (page === 'history') rivalryBody();
     };
+    const drawCharts = () => {
+      const cur = box.querySelector('[data-chart="curves"]'); if (cur) cur.innerHTML = curvesSVG(o0, Math.max(220, cur.clientWidth || 360));
+      const tr = box.querySelector('[data-chart="trend"]'); if (tr) tr.innerHTML = lineSVG(weekly(seasonTeams, meName, oppName), Math.max(220, tr.clientWidth || 360));
+      if (state.page === 'intel') state.drawUsage?.();
+    };
+    const pickPlayer = (name) => {
+      if (!intelCandidates().some(p => p.player === name)) return;
+      state.pick = name;
+      const sel = box.querySelector('#mhq-player-select'); if (sel) sel.value = name;
+      intelBody();
+    };
+    const openPage = (page, focus = false) => { state.page = page; ctx.onPage?.(page); paint(); if (focus) box.querySelector(`[data-page="${page}"]`)?.focus({preventScroll:true}); };
     box.addEventListener('click', (ev) => {
-      const t = ev.target.closest('[data-page],[data-act],[data-pick]'); if (!t || !box.contains(t)) return;
-      if (t.dataset.page) { state.page = t.dataset.page; if (ctx.onPage) ctx.onPage(state.page); paint(); return; }
-      if (t.dataset.pick) { state.pick = t.dataset.pick; box.querySelectorAll('[data-pick]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pick === state.pick))); intelBody(); return; }
+      const t = ev.target.closest('[data-page],[data-act],[data-lab-side],[data-inspect]'); if (!t || !box.contains(t)) return;
+      if (t.dataset.page) { openPage(t.dataset.page, true); return; }
+      if (t.dataset.inspect) { state.pick = t.dataset.inspect; openPage('intel'); box.querySelector('#mhq-player-select')?.focus({preventScroll:true}); return; }
+      if (t.dataset.labSide) { state.labSide = t.dataset.labSide; paint(); box.querySelector(`[data-lab-side="${state.labSide}"]`)?.focus({preventScroll:true}); return; }
       if (t.dataset.act === 'back' && ctx.onBack) { ctx.onBack(); return; }
       if (t.dataset.act === 'resync' && ctx.onResync) { if(t.disabled || ctx.syncStatus?.().busy) return; t.disabled=true; t.textContent = '🔄 Refreshing…'; ctx.onResync(); return; }
-      if (t.dataset.act === 'reset') { state.over = {}; paint(); }
+      if (t.dataset.act === 'reset') { state.over = {}; paint(); box.querySelector('[data-act="reset"]')?.focus({preventScroll:true}); }
+      if (t.dataset.act === 'retry-intel') { const p = players.find(p => p.player === state.pick); if (p) delete state.logs[p.id]; intelBody(); }
+      if (['prev-player','next-player'].includes(t.dataset.act)) { const c = intelCandidates(), i = c.findIndex(p => p.player === state.pick); pickPlayer(c[(i + (t.dataset.act === 'next-player' ? 1 : c.length - 1)) % c.length].player); }
+    }, {signal:events.signal});
+    box.addEventListener('change', ev => { if (ev.target.id === 'mhq-player-select') pickPlayer(ev.target.value); }, {signal:events.signal});
+    box.addEventListener('keydown', ev => {
+      if (!ev.target.matches('[role="tab"]') || !['ArrowLeft','ArrowRight','Home','End'].includes(ev.key)) return;
+      ev.preventDefault(); const i = tabs.findIndex(([key]) => key === state.page);
+      const next = ev.key === 'Home' ? 0 : ev.key === 'End' ? tabs.length - 1 : (i + (ev.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+      openPage(tabs[next][0], true);
     }, {signal:events.signal});
     box.addEventListener('input', (ev) => {
       const inp = ev.target; if (!(inp instanceof HTMLInputElement) || inp.type !== 'range' || !inp.dataset.player) return;
@@ -517,9 +576,15 @@
       const o = outlook(players, score, seasonTeams, state.over); const changed = Object.keys(state.over).length > 0;
       const set = (k, txt) => { const e = box.querySelector(`[data-k="${k}"]`); if (e) e.textContent = txt; };
       set('me', f1(o.me.projFinal)); set('opp', f1(o.opp.projFinal)); set('win', f1(o.me.winPct) + '%');
-      set('me-d', changed ? fs(o.me.projFinal - o0.me.projFinal) + ' vs ESPN' : 'ESPN projection'); set('opp-d', changed ? fs(o.opp.projFinal - o0.opp.projFinal) + ' vs ESPN' : 'ESPN projection'); set('win-d', changed ? fs(o.me.winPct - o0.me.winPct) + ' pts vs ESPN' : 'ESPN projection');
+      const range = box.querySelector('[data-scenario-range]'); if (range) range.innerHTML = scenarioRange(o);
+      set('me-d', changed ? fs(o.me.projFinal - o0.me.projFinal) + ' vs baseline' : 'Baseline projection'); set('opp-d', changed ? fs(o.opp.projFinal - o0.opp.projFinal) + ' vs baseline' : 'Baseline projection'); set('win-d', changed ? fs(o.me.winPct - o0.me.winPct) + ' pp vs baseline' : 'HQ estimate');
     }, {signal:events.signal});
     paint();
+    if (typeof ResizeObserver !== 'undefined') {
+      let width = box.clientWidth;
+      box._mhqResize = new ResizeObserver(() => { if (box.clientWidth === width || events.signal.aborted) return; width = box.clientWidth; drawCharts(); });
+      box._mhqResize.observe(box);
+    }
     return { state, players, outlook: o0 };
   }
 

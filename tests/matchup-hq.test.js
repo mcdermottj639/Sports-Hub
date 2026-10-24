@@ -138,3 +138,15 @@ test('release wiring: script tag, version and service worker agree', () => {
   assert.match(app, /footballView === 'hq' \? renderMatchupHQ\(\)/);
   assert.match(fs.readFileSync(path.join(root, 'styles.css'), 'utf8'), /\.mhq \{/);
 });
+
+test('bench options exclude live games and missing projections on either side of a swap', () => {
+  const p = players();
+  const starter = p.find(x => x.player === 'Michael Wilson');
+  const bench = p.find(x => x.player === 'Malik Washington');
+  starter.live = true;
+  assert.ok(!M.benchCompare(p).some(r => r.starter === starter.player), 'live starter is locked');
+  starter.live = false; bench.live = true;
+  assert.ok(!M.benchCompare(p).some(r => r.alt === bench.player), 'live bench player is locked');
+  bench.live = false; bench.projectionAvailable = false;
+  assert.ok(!M.benchCompare(p).some(r => r.alt === bench.player), 'missing projection cannot be ranked as zero');
+});
