@@ -399,7 +399,15 @@
       Object.values(idx).forEach((g) => { if (wins[g.game] !== undefined) return; const who = starters.filter((p) => p.game === g.game); if (!who.length) { wins[g.game] = null; return; } wins[g.game] = { g, who }; });
       const byWin = {};
       Object.values(wins).filter(Boolean).forEach(({ g, who }) => { const w = byWin[g.window] = byWin[g.window] || { window: g.window, order: g.windowOrder, done: g.state === 'post', games: [] }; w.games.push({ g, who }); });
-      const stripHTML = Object.values(byWin).sort((a, b) => a.order - b.order).map((w) => `<div class="mhq-slot${w.done ? ' done' : ''}"><div class="w">${H(w.window)}</div>${w.games.map(({ g, who }) => `<div class="g"><span class="gm">${H(g.game.replace(' @ ', '@'))}</span><span class="who">${who.sort((a, b) => (a.side === 'me' ? 0 : 1) - (b.side === 'me' ? 0 : 1)).map((p) => { const nm = p.player.replace(/ (Jr|Sr)\.?$/, '').replace(' D/ST', ' D'); return p.side === 'me' ? `<b>${H(nm)}</b>` : H(nm); }).join(', ')}</span></div><div class="mhq-muted">${g.state === 'post' ? H(g.score || 'Final') : g.state === 'in' ? H(g.statusText || 'Live') + (g.score ? ' · ' + H(g.score) : '') : (g.lineText ? H(g.lineText) + (g.total != null ? ' · O/U ' + g.total : '') : 'no line yet')}</div>`).join('')}</div>`).join('') || '<div class="mhq-empty">Could not load this week’s NFL slate, so the rooting guide is empty. This is a failed feed, not a bye week for everyone.</div>';
+      const stripHTML = Object.values(byWin).sort((a, b) => a.order - b.order).map((w) => `<section class="mhq-slot${w.games.every(({ g }) => g.state === 'post') ? ' done' : ''}"><h4 class="w">${H(w.window)} <span>ET</span></h4>${w.games.map(({ g, who }) => {
+        const sides = ['me', 'opp'].map((side) => {
+          const names = who.filter((p) => p.side === side).map((p) => `<span class="mhq-root-player">${H(p.player.replace(/ (Jr|Sr)\.?$/, '').replace(' D/ST', ' D'))}</span>`).join('');
+          return names ? `<div class="mhq-root-side ${side}"><span class="mhq-root-label">${side === 'me' ? 'Yours' : 'Opponent'}</span><div class="mhq-root-names">${names}</div></div>` : '';
+        }).join('');
+        const status = g.state === 'post' ? 'Final' : g.state === 'in' ? 'Live' : '';
+        const detail = g.state === 'post' ? H(g.score || 'Score unavailable') : g.state === 'in' ? H(g.statusText || 'In progress') + (g.score ? ' · ' + H(g.score) : '') : [g.lineText ? H(g.lineText) : '', g.total != null ? 'O/U ' + H(g.total) : ''].filter(Boolean).join(' · ') || 'Line unavailable';
+        return `<div class="mhq-root-game"><div class="mhq-root-heading"><strong>${H(g.game)}</strong>${status ? `<span class="mhq-root-status ${g.state}">${status}</span>` : ''}</div><div class="mhq-root-detail">${detail}</div>${sides}</div>`;
+      }).join('')}</section>`).join('') || '<div class="mhq-empty">Could not load this week’s NFL slate, so the rooting guide is empty. This is a failed feed, not a bye week for everyone.</div>';
       const bye = players.filter((p) => p.starter && p.bye);
       return `${board()}
         <div class="mhq-grid wide">
@@ -410,7 +418,7 @@
           <article class="mhq-card"><h3>Slot by slot</h3><p class="mhq-note">Points scored for live/final players; projections for unplayed players. Edge is from your side.</p><div class="mhq-compare-labels"><span class="me">You</span><span>Edge</span><span class="opp">Opponent</span></div><div class="mhq-edges">${edgeRows}</div></article>
           <article class="mhq-card"><h3>Player spotlight</h3><p class="mhq-note">Biggest numbers on each side.</p><div class="mhq-spot">${spotHTML}</div></article>
         </div>
-        <article class="mhq-card"><h3>Rooting guide</h3><p class="mhq-note">Every game with a starter on either side, in kickoff order (Eastern). Your players in bold.</p><div class="mhq-strip">${stripHTML}</div></article>`;
+        <article class="mhq-card"><h3>Rooting guide</h3><p class="mhq-note">Your starters and your opponent’s, grouped by kickoff. All times Eastern.</p><div class="mhq-strip">${stripHTML}</div></article>`;
     };
 
     const scenarioBase = (p) => p.live ? (p.points || 0) + Math.max(0, p.proj - (p.points || 0)) * 0.5 : p.proj;

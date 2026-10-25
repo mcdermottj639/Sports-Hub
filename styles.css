@@ -3694,12 +3694,25 @@ details.md-fold .bs-detail { margin-top: 8px; }
 .mhq-sp .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .mhq-sp .nm small { color: var(--mhq-mu); display: block; }
 .mhq-sp .pt { text-align: right; font-weight: 800; }
 .mhq-sp .bar { height: 8px; border-radius: 4px; background: #1b2744; overflow: hidden; } .mhq-sp .bar i { display: block; height: 100%; border-radius: 4px; }
-.mhq-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: 8px; }
-.mhq-slot { padding: 8px 10px; display: grid; gap: 4px; font-size: 11.5px; min-width: 0; box-shadow: none; }
-.mhq-slot.done { background: linear-gradient(180deg, #0f1a2e, #0c1426); border-color: #1b2744; }
-.mhq-slot .w { font-weight: 800; font-size: 13px; color: #cfe0ff; }
-.mhq-slot .g { display: grid; grid-template-columns: auto 1fr; gap: 6px; align-items: baseline; }
-.mhq-slot .g .gm { font-weight: 700; white-space: nowrap; } .mhq-slot .g .who { color: var(--mhq-mu); overflow-wrap: anywhere; } .mhq-slot .g .who b { color: var(--mhq-fg); font-weight: 700; }
+.mhq-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 14px; align-items: start; }
+.mhq-slot { padding: 0 14px; min-width: 0; box-shadow: none; overflow: hidden; }
+.mhq-slot.done { background: linear-gradient(180deg, #0f1a2e, #0c1426); border-color: #283954; }
+.mhq-slot .w { margin: 0; padding: 12px 0; font-weight: 800; font-size: 14px; color: #cfe0ff; border-bottom: 1px solid var(--mhq-line); }
+.mhq-slot .w span { font-size: 10px; font-weight: 500; color: #adbbd2; margin-left: 4px; }
+.mhq-root-game { padding: 12px 0; min-width: 0; }
+.mhq-root-game + .mhq-root-game { border-top: 1px solid var(--mhq-line); }
+.mhq-root-heading { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; line-height: 1.4; }
+.mhq-root-status { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; background: #26334c; color: #c8d5e9; }
+.mhq-root-status.in { color: #9ff1df; background: #153e3a; }
+.mhq-root-detail { color: #adbbd2; font-size: 12px; line-height: 1.5; margin: 3px 0 9px; }
+.mhq-root-side { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 7px; align-items: baseline; margin-top: 6px; }
+.mhq-root-label { font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
+.mhq-root-side.me .mhq-root-label { color: #60e0e4; }
+.mhq-root-side.opp .mhq-root-label { color: #d5b8ff; }
+.mhq-root-names { display: flex; flex-wrap: wrap; gap: 4px 12px; min-width: 0; }
+.mhq-root-player { font-size: 13px; line-height: 1.5; color: #dce5f4; overflow-wrap: anywhere; }
+.mhq-root-side.me .mhq-root-player { font-weight: 700; color: #f0f6ff; }
+@media (max-width: 600px) { .mhq-strip { grid-template-columns: minmax(0, 1fr); gap: 10px; } }
 .mhq-ctl { display: flex; flex-wrap: wrap; gap: 6px; }
 .mhq-chip, .mhq-btn { font: inherit; font-size: 12px; padding: 6px 11px; border-radius: 999px; border: 1px solid #2f4a86; background: #0f172b; color: #cfe0ff; cursor: pointer; }
 .mhq-btn { border-radius: 9px; }

@@ -684,7 +684,7 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v324** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v325** (backend **b17-fantasy-league-rules**).
 
 ### Collector fix (no app release) — sports-hub-ai NBA work budget (collector label v323)
 From 20 Oct 2026 (the day the NBA pass went live) `sports-hub-ai` died at the Edge
@@ -8065,3 +8065,7 @@ collector with `_shared/nfl-ppp-shadow.js` and preserve JWT verification.
 
 ### v324 — College football live situation
 NFL and CFB game details share the football situation renderer (possession, down/distance, field strip, red-zone tag and last play when provided by ESPN). CFB previously fell through to generic last-play text. Summary and scoreboard fallback regression tests cover both leagues. Frontend/cache release only; model math, saved forecasts and collector untouched.
+
+### v325 — Readable Fantasy rooting guide
+
+Rooting guide uses full-width kickoff groups on phones and top-aligned wider groups on desktop. Each game keeps matchup, live/final status, score or odds together, followed by labeled Yours/Opponent player rows. Names wrap independently with higher contrast; no stretched empty space between games. Display only; roster sync, projections, saved data and backend unchanged.
