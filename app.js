@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v322';
+const APP_VERSION = 'v324';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1309,7 +1309,8 @@ const gradeHue = (letter) =>
   : letter[0] === 'C' ? 'var(--wm)' : letter[0] === 'D' ? 'var(--neg2)' : 'var(--neg)';
 
 // Live game situation panel — baseball gets a bases diamond with count/outs;
-// other sports show the last play. Pulls from the summary feed (freshest),
+// NFL/CFB share the football field; other sports show the last play.
+// Pulls from the summary feed (freshest),
 // falling back to the scoreboard situation carried on the game object.
 function liveSituationHTML(sport, data, comp, g) {
   const sit = data.situation || comp.situation || g?.situation;
@@ -1336,7 +1337,7 @@ function liveSituationHTML(sport, data, comp, g) {
       ${(batter || pitcher) ? `<div class="sit-mu">${pitcher ? `Pitching: <b>${esc(pitcher)}</b>` : ''}${pitcher && batter ? ' · ' : ''}${batter ? `At bat: <b>${esc(batter)}</b>` : ''}</div>` : ''}
       ${last ? `<div class="sit-last">Last play: ${last}</div>` : ''}`;
   }
-  if (sport === 'nfl') return footballSituation(sit, comp);
+  if (sport === 'nfl' || sport === 'cfb') return footballSituation(sit, comp);
   // basketball & anything else: last play text (no positional widget exists)
   const last = sit.lastPlay?.text;
   if (!last) return '';

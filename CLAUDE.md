@@ -684,7 +684,7 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v322** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v324** (backend **b17-fantasy-league-rules**).
 
 ### Collector fix (no app release) — sports-hub-ai NBA work budget (collector label v323)
 From 20 Oct 2026 (the day the NBA pass went live) `sports-hub-ai` died at the Edge
@@ -8062,3 +8062,6 @@ same-time baseline/PPP snapshots, first-capture immutability, kickoff gates and
 research-only separation. `scripts/validate-nfl-ppp-shadow.js` evaluates future
 settled rows; do not promote based merely on reaching 150 games. Deploy the
 collector with `_shared/nfl-ppp-shadow.js` and preserve JWT verification.
+
+### v324 — College football live situation
+NFL and CFB game details share the football situation renderer (possession, down/distance, field strip, red-zone tag and last play when provided by ESPN). CFB previously fell through to generic last-play text. Summary and scoreboard fallback regression tests cover both leagues. Frontend/cache release only; model math, saved forecasts and collector untouched.

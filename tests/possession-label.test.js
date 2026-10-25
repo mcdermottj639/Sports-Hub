@@ -11,7 +11,7 @@ function load() {
     esc: (v) => String(v),
   };
   vm.createContext(s);
-  const start = src.indexOf('function possessionAbbr(');
+  const start = src.indexOf('function liveSituationHTML(');
   const end = src.indexOf('function renderGameDetail(');
   vm.runInContext(src.slice(start, end), s);
   const r0 = src.indexOf('function mgcFootball(');
@@ -47,3 +47,18 @@ test('missing possession id shows no team instead of guessing from the spot', ()
   assert.doesNotMatch(html, /ball ·/);
   assert.match(html, /3rd & 5/);
 });
+
+for (const sport of ['nfl', 'cfb']) {
+  test(`${sport} live detail renders possession, down/distance and field from the summary`, () => {
+    const html = load().liveSituationHTML(sport, { situation: { ...sit, lastPlay: { text: 'False start. NO PLAY' } } }, comp, null);
+    assert.match(html, /<b>ATL<\/b> ball/);
+    assert.match(html, /3rd & 5/);
+    assert.match(html, /class="ff-field/);
+    assert.match(html, /False start. NO PLAY/);
+  });
+  test(`${sport} uses scoreboard fallback and handles missing situation`, () => {
+    const s = load();
+    assert.match(s.liveSituationHTML(sport, {}, comp, { situation: sit }), /class="ff-field/);
+    assert.equal(s.liveSituationHTML(sport, {}, comp, null), '');
+  });
+}
