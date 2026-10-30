@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v325';
+const APP_VERSION = 'v326';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1692,6 +1692,7 @@ async function renderLiveRail() {
   });
 
   const wrap = $('#rail-wrap');
+  globalThis.SportsHubTicker?.setScores(shown);
   rail.innerHTML = '';
   if (!shown.length) {
     // Empty feeds and saved filters must never remove the way back to scores.
@@ -13315,6 +13316,8 @@ if (pkReadLink()) {
 // The live rail is chrome, not a tab — it starts here and refreshes itself on
 // a timer (paused while the page is hidden) so it stays current no matter
 // which tab you're on.
+globalThis.SportsHubTicker?.init({ fetchJSON, SITE, LEAGUES, openGameDetail, gameState, isFav,
+  when: railWhen, sports: () => sortedSports({ teamOnly: true }) });
 startLiveRail();
 
 // Drop NFL preseason results (see the note on clearNflPreseason). Runs before

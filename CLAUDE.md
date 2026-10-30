@@ -280,7 +280,8 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 
 Every 30 seconds while visible and online, `refreshLiveScores` awaits fresh ESPN
 scoreboards, updates score/status fields in mounted game/model cards, updates
-Today/watchlist games, and repaints the score rail. It also runs on return to the
+Today/watchlist games, and repaints the score rail (which also feeds the v326
+top ticker). It also runs on return to the
 app and reconnect. One cycle at a time; failed feeds retain existing values.
 Forecasts, saved odds, disclosures and page scroll are preserved. The open game report also refreshes its score, clock and live situation from a
 fresh summary on the same cycle (v293), preserving its disclosure state and
@@ -305,6 +306,9 @@ fantasy/golf data are not refreshed by this cycle.
 - `supabase/functions/sports-hub-ai/signals.ts`, `sports-hub-odds/index.ts` — evidence hook and independent lightweight collector.
 - `supabase/schedule-betting-signals.sql` — Vault-backed five-minute cron installation; actual source polling adapts to kickoff.
 
+- `ticker.js`, `ticker.css` — v326 rolling top ticker (scores, model picks,
+  results, updates, news). Loads before app.js; pure builders under
+  `SportsHubTicker._pure` are tested by `tests/ticker.test.js`.
 - `index.html` — single page, all destinations. Asset URLs carry `?v=N`
   cache-busting. `#tabs` is the desktop sidebar; `#botbar` is the five-button
   mobile navigation. `#rail-wrap` holds the optional score rail (closed by
@@ -684,7 +688,36 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v325** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v326** (backend **b17-fantasy-league-rules**).
+
+### v326 — Rolling top ticker: scores, model picks, results, updates, news
+
+Jack asked for the scores to become a rolling ticker fixed to the top of the
+screen, with sports news, model picks and updates in it. `#ticker` is the first
+element in `<body>`, `position: fixed` at the top of every screen (34px desktop,
+30px phone, `--tk-h`); `ticker.css` pads the body and moves the desktop sidebar
+down by that height. z-index 49: above the sidebar (48), below the game modal
+(50). It scrolls continuously (CSS translate loop over a duplicated run, ~55
+px/s), pauses on hover/touch, and goes static/swipeable under
+`prefers-reduced-motion` or when everything fits.
+- **Sections, in order:** SCORES (live → upcoming → final, your teams first,
+  max 40; respects the rail's league filter) · MODEL PICKS (pending official
+  cloud picks starting within 30h, tiered first, max 14) · RESULTS (current-version
+  picks graded in the last 24h, ✓/✗/=) · UPDATES (24h W-L-P and the last
+  `ai_job_runs` row) · NEWS (ESPN league headlines, deduped, newest first, links
+  open ESPN). Empty sections are dropped.
+- **Sources:** scores come from `renderLiveRail` (`SportsHubTicker.setScores(shown)`)
+  on the existing 30s cycle, so the ticker makes no scoreboard calls of its own.
+  Picks/results/run are three small windowed read-only Supabase queries every
+  5 min (current cohorts only: `nfl-football-v1`, `nba-v1`, `v239` for CFB/MLB).
+  News uses `fetchJSON` with the same 10-min cache as Home headlines.
+- **No mid-read jumps:** same item set → text updated in place; a changed set
+  rebuilds at the end of the current loop (immediately during the first 20s
+  after launch, and at most 4 min later otherwise).
+- Tapping a score, pick or result opens that game's report.
+- The existing Scores button and detailed rail cards are unchanged.
+- Display only: no model, collector, grading or storage change.
+  Tests: `tests/ticker.test.js`.
 
 ### Collector fix (no app release) — sports-hub-ai NBA work budget (collector label v323)
 From 20 Oct 2026 (the day the NBA pass went live) `sports-hub-ai` died at the Edge
