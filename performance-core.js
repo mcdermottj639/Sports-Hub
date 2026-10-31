@@ -159,6 +159,36 @@
         bias:errors.length?errors.reduce((a,b)=>a+b,0)/errors.length:null};
     });
   }
+  // Underdog flips: the model's moneyline pick is priced at plus money by the
+  // book (the book's underdog) while the model's own saved probability makes
+  // that same side the favorite. Example: book +140, model 60% (fair −150).
+  // Read-only over saved picks; the price is the immutable pregame price.
+  function fairAmerican(prob) {
+    const p=A.number(prob);
+    if(p==null||p<=0||p>=1)return null;
+    return p>=.5?-100*p/(1-p):100*(1-p)/p;
+  }
+  const isFlip = r => r?.market==='moneyline' && A.american(r.price)>0 && (A.number(r.model_probability)??0)>.5;
+  const FLIP_STRENGTH = [
+    ['lean','Lean · −101 to −124'],
+    ['solid','Solid · −125 to −149'],
+    ['strong','Strong · −150+'],
+  ];
+  // Bucket edges are the implied probabilities of −125 (.5556) and −150 (.6).
+  function flipStrength(r) {
+    const p=A.number(r.model_probability);
+    return p==null?null:p>=.6-1e-9?'strong':p>=125/225-1e-9?'solid':'lean';
+  }
+  function flips(rows, now = Date.now()) {
+    const all=(rows||[]).filter(isFlip), bets=all.filter(r=>r.result!=='void');
+    const group=(key,labels)=>labels.map(([k,label])=>({key:k,label,...summary(bets.filter(r=>key(r)===k))})).filter(g=>g.n||g.pending);
+    const upcoming=bets.filter(r=>r.result==='pending'&&Date.parse(r.starts_at)>now).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at));
+    const latest=bets.filter(settled).sort((a,b)=>Date.parse(b.starts_at)-Date.parse(a.starts_at));
+    return {rows:all,summary:summary(bets),
+      bySport:group(r=>r.sport,SPORTS.map(s=>[s,s.toUpperCase()])),
+      byStrength:group(flipStrength,FLIP_STRENGTH),
+      upcoming,latest};
+  }
   function games(rows, now = Date.now()) {
     const groups=new Map();for(const r of rows){const k=gameKey(r);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);}
     return [...groups.values()].sort((a,b)=>{
@@ -168,5 +198,5 @@
       })
       .map(rs=>rs.sort((a,b)=>MARKETS.indexOf(a.market)-MARKETS.indexOf(b.market)));
   }
-  return Object.freeze({SPORTS,MARKETS,legacy,valid,select,qualified,settled,summary,profit,series,weekly,benchmarks,splits,calibration,forecastErrors,games});
+  return Object.freeze({SPORTS,MARKETS,legacy,valid,select,qualified,settled,summary,profit,series,weekly,benchmarks,splits,calibration,forecastErrors,games,fairAmerican,isFlip,flipStrength,flips});
 });

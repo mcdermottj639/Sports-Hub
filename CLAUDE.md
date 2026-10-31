@@ -296,7 +296,7 @@ fantasy/golf data are not refreshed by this cycle.
 - `nba-page.js`, `_shared/nba-model.js`, `_shared/nba-model-config.js` — NBA league UI and shared fitted model; the shared files live under `supabase/functions/`.
 - `scripts/nba-data.py`, `scripts/nba-features.js`, `scripts/fit-nba.py`, `data/nba-history.json`, `data/nba-validation.json`, `docs/NBA_MODEL.md` — reproducible NBA evidence, chronological fitting and validation.
 
-- `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. Models exposes Performance / Trends / Game history / Model info / Calibration beside Forecasts. Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Game history uses team-specific spread/projection labels, omits inapplicable moneyline fields, and shows newest played games first, with upcoming games below in kickoff order, and exposes immutable projections, outcomes and inputs, with search and result/date/market/version filters.
+- `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. Models exposes Performance / Trends / Game history / Model info / Calibration beside Forecasts. Performance includes the v327 Underdog flips record (book plus money, model > 50%). Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Game history uses team-specific spread/projection labels, omits inapplicable moneyline fields, and shows newest played games first, with upcoming games below in kickoff order, and exposes immutable projections, outcomes and inputs, with search and result/date/market/version filters.
 
 - `forecast-lock.js` — persistent pregame display snapshots (`sportshub:forecast-lock:v1`, latest 300 events within a 1 MiB UTF-16 budget), shared across model surfaces and restored after reload.
 
@@ -688,7 +688,28 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v326** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v327** (backend **b17-fantasy-league-rules**).
+
+### v327 — Underdog-flip record on Performance
+
+Jack asked to track the record when the model picks a team the book has as the
+underdog (book +140, model −150). Models → Performance now has a **🐶 Underdog
+flips** section (`#ph-flips`, after the by-sport/by-market list):
+- **Definition** (`SportsHubPerformance.isFlip`): a saved pregame **moneyline**
+  pick whose saved `price` is plus money (≥ +100) while its saved
+  `model_probability` for that same side is **> 50%**. A row with no saved
+  probability is NOT a flip — it can't be shown the model favored them.
+- `C.flips(rows)` → overall `summary`, `bySport`, `byStrength` (model's fair
+  price: Lean −101 to −124 · Solid −125 to −149 · Strong −150 or shorter;
+  edges are p = .5556 and .6), `upcoming` (pending, kickoff order) and `latest`
+  (settled, newest first). `C.fairAmerican(p)` turns 60% into −150.
+- UI: stats tiles, the two tables, an Upcoming flips list and a collapsed
+  Latest settled flips list. Each row shows Book vs Model price and the result
+  in units. Hidden when the market filter is Spread/Totals; follows the same
+  window and model-version filters as the rest of the page.
+- Read-only over existing `ai_predictions` rows. No collector, model, capture,
+  grading or schema change. Starting record (current cohorts, 31 Oct 2026):
+  46 flips, 19-21 with 6 pending, +3.80u. Tests in `tests/performance-core.test.js` (+2).
 
 ### v326 — Rolling top ticker: scores, model picks, results, updates, news
 

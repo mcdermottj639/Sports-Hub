@@ -67,9 +67,23 @@
     const games=C.games(selected);
     return `<div class="ph-section-head"><h3>Game history</h3><span>${games.length} games · newest played first; upcoming below</span></div><p class="ph-caption">Each game opens its saved picks, original lines, projections and model inputs.</p>${games.length?games.slice(0,limit).map(gameCard).join(''):'<div class="ph-empty">No saved games match this view. Try a wider date range or another model version.</div>'}${games.length>limit?'<button type="button" class="ph-more" data-ph-more>Show 12 more games</button>':''}`;
   }
+  const fair=p=>{const v=C.fairAmerican(p);return v==null?'—':`${v<0?'−':'+'}${Math.round(Math.abs(v))}`;};
+  const team=r=>String(r.selection||'').replace(/\s+ML$/i,'');
+  function flipRow(r) {
+    const p=C.profit(r),res={win:'Won',loss:'Lost',push:'Push'}[r.result];
+    const when=r.result==='pending'?(Date.parse(r.starts_at)>Date.now()?timestamp(r.starts_at)+' ET':'Awaiting result'):date(r.starts_at);
+    return `<div class="ph-flip ph-flip-${e(r.result)}"><span class="ph-flip-game"><b>${e(team(r))}</b><small>${names[r.sport]} · ${e(r.matchup||'')} · ${e(when)}</small></span><span class="ph-flip-odds"><span><small>Book</small><b>${sign(r.price,0)}</b></span><i aria-hidden="true">→</i><span><small>Model</small><b>${fair(r.model_probability)}</b></span></span><span class="ph-flip-res">${res?`<b class="${tone(p)}">${res}</b><small class="${tone(p)}">${p==null?'':sign(p)+'u'}</small>`:'<b>Pending</b><small>'+fmt(r.model_probability*100,0)+'% model</small>'}</span></div>`;
+  }
+  function flipsSection(rows,sport) {
+    if(prefs.market&&prefs.market!=='moneyline')return '';
+    const f=C.flips(rows),s=f.summary;
+    const head=`<div class="ph-section-head" id="ph-flips"><h3>🐶 Underdog flips</h3><span>Book has them as the dog · our model has them favored</span></div>`;
+    if(!f.rows.length)return `${head}<div class="ph-empty">No underdog flips in this view yet. They appear when a moneyline pick is plus money at the book but over 50% in the model.</div>`;
+    return `<section class="ph-flips">${head}${stats(s)}${sport==='all'&&f.bySport.length>1?table(f.bySport.map(g=>({...g,label:names[g.key]})),'Sport'):''}${table(f.byStrength,'Model price')}${f.upcoming.length?`<div class="ph-flip-list"><h4>Upcoming flips · ${f.upcoming.length}</h4>${f.upcoming.slice(0,8).map(flipRow).join('')}</div>`:''}${f.latest.length?`<details class="ph-detail"${f.upcoming.length?'':' open'}><summary>Latest settled flips <span>${f.latest.length} games · newest first</span></summary><div class="ph-flip-list">${f.latest.slice(0,15).map(flipRow).join('')}</div></details>`:''}<details class="ph-detail"><summary>How flips are counted</summary><p>A flip is a saved pregame moneyline pick whose saved book price is plus money while the model's saved win probability for that same team is above 50%. "Model" shows that probability as a fair price (60% = −150). Paper profit risks 1 unit at the saved book price. Pushes return the stake; voids are excluded. Uses the same window and model-version filters as above. Small samples swing hard; this is a record, not a validated strategy.</p></details></section>`;
+  }
   function overview(rows,sport) {
     const s=C.summary(rows);
-    return `${stats(s)}<p class="ph-caption">All saved model picks · 1 unit per priced bet · ${s.n<30?'Early sample; trends are still developing.':'Past results; multiple markets on one game are correlated.'}</p>${chart(C.series(rows),'All model picks · cumulative profit')}<div class="ph-section-head"><h3>${sport==='all'?'By sport':'By market'}</h3><span>Tap a row to inspect trends</span></div><div class="ph-sport-list">${(sport==='all'?C.SPORTS:C.MARKETS).map(k=>{const rs=rows.filter(r=>sport==='all'?r.sport===k:r.market===k),v=C.summary(rs);return `<button type="button" ${sport==='all'?`data-desk-route="${route(k,'trends')}"`:`data-ph-market="${k}"`}><span><b>${names[k]}</b><small>${v.n} settled · ${v.priced} priced${v.n<30?' · early':''}</small></span><strong>${record(v)}</strong><span class="${tone(v.units)}">${v.priced?`${sign(v.units)}u · ${sign(v.roi*100,1)}%`:'Collecting'} →</span></button>`;}).join('')}</div><div class="ph-section-head"><h3>Latest settled games</h3>${link(sport,'recent','Full game history')}</div>${C.games(rows.filter(C.settled)).slice(0,5).map(gameCard).join('')||'<p class="ph-empty">No settled games in this view yet.</p>'}`;
+    return `${stats(s)}<p class="ph-caption">All saved model picks · 1 unit per priced bet · ${s.n<30?'Early sample; trends are still developing.':'Past results; multiple markets on one game are correlated.'}</p>${chart(C.series(rows),'All model picks · cumulative profit')}<div class="ph-section-head"><h3>${sport==='all'?'By sport':'By market'}</h3><span>Tap a row to inspect trends</span></div><div class="ph-sport-list">${(sport==='all'?C.SPORTS:C.MARKETS).map(k=>{const rs=rows.filter(r=>sport==='all'?r.sport===k:r.market===k),v=C.summary(rs);return `<button type="button" ${sport==='all'?`data-desk-route="${route(k,'trends')}"`:`data-ph-market="${k}"`}><span><b>${names[k]}</b><small>${v.n} settled · ${v.priced} priced${v.n<30?' · early':''}</small></span><strong>${record(v)}</strong><span class="${tone(v.units)}">${v.priced?`${sign(v.units)}u · ${sign(v.roi*100,1)}%`:'Collecting'} →</span></button>`;}).join('')}</div>${flipsSection(rows,sport)}<div class="ph-section-head"><h3>Latest settled games</h3>${link(sport,'recent','Full game history')}</div>${C.games(rows.filter(C.settled)).slice(0,5).map(gameCard).join('')||'<p class="ph-empty">No settled games in this view yet.</p>'}`;
   }
   function panel({sport='all',view='record',versionFor,cache,officialHTML=''}) {
     const host=document.createElement('section');host.className='ph-hub';
@@ -84,5 +98,5 @@
     host.addEventListener('click',ev=>{const more=ev.target.closest('[data-ph-more]'),market=ev.target.closest('[data-ph-market]');if(more){prefs.limit+=12;paint();}if(market){prefs.market=market.dataset.phMarket;root.SportsHubDesk?.navigate?.(route(sport,'trends'));}});
     paint();return host;
   }
-  root.SportsHubPerformanceUI=Object.freeze({panel,chart,gameCard});
+  root.SportsHubPerformanceUI=Object.freeze({panel,chart,gameCard,flipsSection,flipRow});
 })(globalThis);

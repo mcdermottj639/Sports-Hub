@@ -89,3 +89,25 @@
 .bs-side-sample th,.bs-side-sample td { white-space:normal; }
 .bs-side-sample td small { display:block; font-size:10px; color:var(--gy,#657571); margin-top:4px; }
 @media(max-width:600px) { .bs-side-sample th,.bs-side-sample td { padding:8px 5px; font-size:11px; } }
+
+/* Underdog flips: book has them plus money, model has them favored. */
+.ph-flips .ph-table-wrap { margin-top:10px; }
+.ph-flip-list { border:1px solid #d8e2db; border-radius:12px; overflow:hidden; background:#fff; margin-top:10px; }
+.ph-flip-list h4 { margin:0; padding:10px 14px; font-size:12px; letter-spacing:.4px; text-transform:uppercase; color:#426152; background:#edf3e9; }
+.ph-detail .ph-flip-list { margin:8px 0 4px; }
+.ph-flip { display:grid; grid-template-columns:minmax(0,1fr) auto 76px; align-items:center; gap:12px; padding:11px 14px; border-top:1px solid #e6ece6; }
+.ph-flip-list h4+.ph-flip, .ph-flip-list>.ph-flip:first-child { border-top:0; }
+.ph-flip-game { min-width:0; } .ph-flip-game b { display:block; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ph-flip small { display:block; font-size:11px; color:#657571; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ph-flip-odds { display:flex; align-items:center; gap:8px; text-align:center; }
+.ph-flip-odds>span { min-width:48px; padding:5px 6px; border-radius:8px; background:#f3f6f1; }
+.ph-flip-odds>span:last-child { background:#e3efd9; }
+.ph-flip-odds small { margin:0 0 2px; font-size:9px; text-transform:uppercase; letter-spacing:.4px; }
+.ph-flip-odds b { font-size:14px; font-variant-numeric:tabular-nums; } .ph-flip-odds i { font-style:normal; color:#7a8a83; }
+.ph-flip-res { text-align:right; } .ph-flip-res b { font-size:13px; } .ph-flip-res small { margin-top:2px; }
+.ph-flip-win { box-shadow:inset 3px 0 #126b53; } .ph-flip-loss { box-shadow:inset 3px 0 #b43845; } .ph-flip-push { box-shadow:inset 3px 0 #b48a2c; }
+@media(max-width:700px) {
+  .ph-flip { grid-template-columns:minmax(0,1fr) auto; gap:6px 10px; padding:10px 12px; }
+  .ph-flip-game { grid-column:1 / -1; }
+  .ph-flip-odds>span { min-width:44px; padding:4px 5px; }
+}

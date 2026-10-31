@@ -90,3 +90,32 @@ test('untiered Lions loss is counted consistently in record, trend and calibrati
  const lion=base({market:'moneyline',tier:null,result:'loss',price:-185});
  assert.equal(C.summary([lion]).l,1);assert.equal(C.series([lion])[0].units,-1);assert.equal(C.weekly([lion])[0].l,1);assert.equal(C.calibration([lion])[0].actual,0);
 });
+
+test('underdog flips: plus-money book price on a side the model favors, graded at the saved price',()=>{
+ const ml=(x={})=>base({market:'moneyline',line:null,projection:null,selection:'Chicago Bears',selection_home:false,...x});
+ const rows=[
+  ml({event_id:'a',price:140,model_probability:.6,result:'win'}),           // book +140, model −150 → strong
+  ml({event_id:'b',price:120,model_probability:.56,result:'loss'}),         // model −127 → solid
+  ml({event_id:'c',price:105,model_probability:.51,result:'push'}),         // lean
+  ml({event_id:'d',price:-130,model_probability:.6,result:'win'}),          // favorite at the book: not a flip
+  ml({event_id:'e',price:150,model_probability:null,result:'win'}),         // no saved model probability: not provable
+  ml({event_id:'f',price:110,model_probability:.55,result:'void'}),         // void: listed but not counted
+  ml({event_id:'g',price:130,model_probability:.58,result:'pending',starts_at:'2099-01-01T00:00:00Z',captured_at:'2098-12-31T00:00:00Z'}),
+  base({event_id:'h',price:150,model_probability:.6}),                      // spread at plus money: not a flip
+ ];
+ const f=C.flips(rows,Date.parse('2026-10-05T00:00:00Z'));
+ assert.deepEqual(f.rows.map(r=>r.event_id),['a','b','c','f','g']);
+ assert.equal(f.summary.w,1);assert.equal(f.summary.l,1);assert.equal(f.summary.pushes,1);assert.equal(f.summary.pending,1);
+ assert.ok(Math.abs(f.summary.units-(1.4-1))<1e-9);
+ assert.deepEqual(f.byStrength.map(g=>[g.key,g.n]),[['lean',1],['solid',1],['strong',1]]);
+ assert.deepEqual(f.upcoming.map(r=>r.event_id),['g']);assert.deepEqual(f.latest.map(r=>r.event_id).sort(),['a','b','c']);
+ assert.equal(Math.round(C.fairAmerican(.6)),-150);assert.equal(Math.round(C.fairAmerican(.4)),150);assert.equal(C.fairAmerican(null),null);
+ assert.equal(C.flipStrength({model_probability:125/225}),'solid');assert.equal(C.flipStrength({model_probability:.6}),'strong');
+});
+test('underdog flip section renders book vs model prices and hides under other market filters',()=>{
+ global.SportsHubPerformance=C;require('../performance-ui.js');const ui=global.SportsHubPerformanceUI;
+ const r=base({market:'moneyline',matchup:'CHI @ SEA',selection:'Chicago Bears',selection_home:false,price:140,model_probability:.6,result:'win',line:null,projection:null});
+ const html=ui.flipsSection([r],'all');
+ assert.match(html,/Underdog flips/);assert.match(html,/<b>\+140<\/b>/);assert.match(html,/<b>−150<\/b>/);assert.match(html,/Won/);assert.match(html,/\+1\.40u/);
+ assert.match(ui.flipsSection([],'nfl'),/No underdog flips in this view yet/);
+});
