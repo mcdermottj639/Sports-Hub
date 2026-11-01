@@ -133,11 +133,39 @@
     if (margin != null && total != null && total > 0) {
       if (Math.abs(margin) < 1) proj = `Proj. about even · ${Math.round(total)} total`;
       else {
-        const home = (total + margin) / 2, away = (total - margin) / 2, r1 = v => Math.round(v * 10) / 10;
+        const home = (total + margin) / 2, away = (total - margin) / 2, r1 = v => (Math.round(v * 10) / 10).toFixed(1);
         proj = margin > 0 ? `Proj. ${ab(true)} ${r1(home)} – ${ab(false)} ${r1(away)}` : `Proj. ${ab(false)} ${r1(away)} – ${ab(true)} ${r1(home)}`;
       }
     }
-    return { line, moneyline, chips, edge, flip, proj, hot: HOT.includes(ml?.tier) };
+    // v329 — the chips are the SAVED pregame read; the line row is TODAY's.
+    // Stamp when the forecast was saved, and where today's number has moved
+    // off the saved one, say whether the saved projection still clears it.
+    const caps = [ml, sp, tot].map(r => Date.parse(r?.captured_at)).filter(Number.isFinite);
+    const savedAt = caps.length ? new Date(Math.min(...caps)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }) : null;
+    const moves = [], r1 = v => (Math.round(v * 10) / 10).toFixed(1), same = (a, b) => Math.abs(a - b) < 0.01;
+    const sLine = num(sp?.line);
+    if (sp && sLine != null && s != null && !same(sLine, s)) {
+      const home = !!sp.selection_home, side = v => { const x = home ? v : -v; return x > 0 ? `+${x}` : x < 0 ? `\u2212${Math.abs(x)}` : 'PK'; };
+      const cushion = margin == null ? null : (home ? margin + s : -(margin + s));
+      moves.push({ market: 'spread', text: `Spread ${ab(home)} ${side(sLine)} \u2192 ${side(s)} now${cushion == null ? '' : cushion >= 0 ? ` \u00b7 still covers by ${r1(cushion)}` : ` \u00b7 now short by ${r1(-cushion)}`}`, ok: cushion == null ? null : cushion >= 0 });
+    }
+    const tLine = num(tot?.line);
+    if (tot && tLine != null && ou != null && !same(tLine, ou)) {
+      const over = /^over/i.test(String(tot.selection || ''));
+      const cushion = total == null ? null : (over ? total - ou : ou - total);
+      moves.push({ market: 'total', text: `Total ${over ? 'O' : 'U'} ${tLine} \u2192 ${ou} now${cushion == null ? '' : cushion >= 0 ? ` \u00b7 still ${over ? 'over' : 'under'} by ${r1(cushion)}` : ` \u00b7 now short by ${r1(-cushion)}`}`, ok: cushion == null ? null : cushion >= 0 });
+    }
+    const hP = num(odds?.hML), aP = num(odds?.aML), savedP = num(ml?.price);
+    if (ml && hP != null && aP != null && savedP != null) {
+      const home = !!ml.selection_home, nowP = home ? hP : aP;
+      if (!same(nowP, savedP)) {
+        const imp = v => (v < 0 ? -v / (-v + 100) : 100 / (v + 100));
+        const fair = imp(home ? hP : aP) / (imp(hP) + imp(aP));
+        const edgeNow = mp == null ? null : Math.round((mp - fair) * 1000) / 10;
+        moves.push({ market: 'moneyline', text: `ML ${ab(home)} ${signed(savedP)} \u2192 ${signed(nowP)} now${edgeNow == null ? '' : ` \u00b7 edge now ${edgeNow > 0 ? '+' : edgeNow < 0 ? '\u2212' : ''}${Math.abs(edgeNow).toFixed(1)}`}`, ok: edgeNow == null ? null : edgeNow > 0 });
+      }
+    }
+    return { line, moneyline, chips, edge, flip, proj, savedAt, moves, hot: HOT.includes(ml?.tier) };
   }
   function slateSummary(reads) {
     const list = reads || [];

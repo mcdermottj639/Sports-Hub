@@ -127,3 +127,43 @@ test('v328 games-ahead read: line, chips, edge, flip and projected score', () =>
   assert.equal(C.gameRead(undefined,null,{home:{},away:{}}).line,null);
   assert.deepEqual(C.slateSummary([a,r,none]),{games:3,edges:1,flips:1});
 });
+
+test('v329 games-ahead read: saved date, line moves and whether the saved projection still clears today', () => {
+  const at = '2026-10-27T03:37:00Z';
+  // TEN @ CIN: saved CIN -10, projected CIN by 15; today CIN -13.5.
+  const cin = new Map([
+    ['moneyline',{selection_home:true,confidence:86,price:-600,model_probability:0.856994,market_probability:0.822335,captured_at:at,snapshot:{forecast:{total:45.5,margin:15}}}],
+    ['spread',{selection:'CIN -10',selection_home:true,line:-10,projection:15,captured_at:at}],
+    ['total',{selection:'UNDER 46.5',tier:'edge',line:46.5,projection:45.5,captured_at:at}],
+  ]);
+  const c = C.gameRead(cin,{spread:-13.5,ou:46.5,hML:-900,aML:600},{home:{abbr:'CIN'},away:{abbr:'TEN'}});
+  assert.equal(c.savedAt,'Oct 26');
+  assert.equal(c.proj,'Proj. CIN 30.3 – TEN 15.3');
+  const spread = c.moves.find(m=>m.market==='spread');
+  assert.equal(spread.text,'Spread CIN −10 → −13.5 now · still covers by 1.5');
+  assert.equal(spread.ok,true);
+  assert.equal(c.moves.some(m=>m.market==='total'),false); // total unchanged -> no note
+  assert.match(c.moves.find(m=>m.market==='moneyline').text,/^ML CIN −600 → −900 now · edge now /);
+
+  // ARI @ DAL: saved ARI +6.5 (home line -6.5), DAL by 5.2; today DAL -7.
+  const ari = new Map([
+    ['moneyline',{selection_home:true,confidence:68,price:-298,model_probability:0.679479,market_probability:0.717971,captured_at:at,snapshot:{forecast:{total:46.8,margin:5.2}}}],
+    ['spread',{selection:'ARI +6.5',selection_home:false,line:-6.5,projection:5.2,captured_at:at}],
+  ]);
+  const a = C.gameRead(ari,{spread:-7,ou:54.5},{home:{abbr:'DAL'},away:{abbr:'ARI'}});
+  assert.equal(a.proj,'Proj. DAL 26.0 – ARI 20.8');
+  assert.equal(a.moves[0].text,'Spread ARI +6.5 → +7 now · still covers by 1.8');
+
+  // A move that the saved projection no longer clears.
+  const short = C.gameRead(new Map([['spread',{selection:'CIN -10',selection_home:true,line:-10,projection:15}],['total',{selection:'UNDER 46.5',line:46.5,projection:45.5}]]),
+    {spread:-16,ou:44.5},{home:{abbr:'CIN'},away:{abbr:'TEN'}});
+  assert.equal(short.moves.find(m=>m.market==='spread').text,'Spread CIN −10 → −16 now · now short by 1.0');
+  assert.equal(short.moves.find(m=>m.market==='total').text,'Total U 46.5 → 44.5 now · now short by 1.0');
+  assert.equal(short.moves.every(m=>m.ok===false),true);
+  assert.equal(short.savedAt,null);
+
+  // BAL @ BUF ML: saved -192, today -162/+136 -> edge vs today's no-vig price.
+  const buf = C.gameRead(new Map([['moneyline',{selection_home:true,price:-192,model_probability:0.68936,market_probability:0.63094}]]),
+    {hML:-162,aML:136},{home:{abbr:'BUF'},away:{abbr:'BAL'}});
+  assert.equal(buf.moves[0].text,'ML BUF −192 → −162 now · edge now +9.6');
+});

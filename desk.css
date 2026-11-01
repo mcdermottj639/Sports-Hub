@@ -539,3 +539,8 @@ body[data-desk-panel="home"] #desk-follow-teams { display:grid;grid-template-col
 .desk-read-note { margin-top:10px;font-size:11px;color:var(--mu);line-height:1.5; }
 .desk-read-note summary { cursor:pointer;color:var(--gy);font-weight:600;min-height:32px;display:flex;align-items:center; }
 @media(max-width:380px){ .desk-chip{padding:5px 6px}.desk-chip b{font-size:12px}.desk-slate-strip button{margin-left:0} }
+/* v329 — saved-vs-now line moves under the chips */
+.desk-moves { display:flex;flex-direction:column;gap:3px;margin-top:6px;font-size:11px;line-height:1.4;color:var(--gy); }
+.desk-moves span { padding-left:9px;border-left:2px solid #c5d4b8; }
+.desk-moves span.ok { border-left-color:#799c17; }
+.desk-moves span.off { border-left-color:#c0533a;color:#8a3a25; }

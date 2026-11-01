@@ -315,7 +315,8 @@ fantasy/golf data are not refreshed by this cycle.
   default, existing device preference respected). `#home-board` remains under
   a remembered disclosure on Today. The former home content lives in `#pulse`.
 - `desk-core.js` — dependency-free route, bookmark, saved-history summary,
-  game-radar, games-ahead read (`gameRead`, `slateSummary`, v328) and search
+  game-radar, games-ahead read (`gameRead` incl. v329 saved-vs-now `moves`,
+  `slateSummary`, v328) and search
   utilities, tested by `tests/desk-core.test.js`. `gameForecasts` and
   `savedSummary` take a version string OR a `sport => version` function; the
   desk passes `SportsHubNFLLive.versionFor` so NFL (`nfl-football-v1`) and NBA
@@ -692,7 +693,26 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v328** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v329** (backend **b17-fantasy-league-rules**).
+
+### v329 — Games ahead: saved vs now
+
+Jack checked v328 on his phone: every number matched the saved records, but the
+chips are the SAVED pregame read (BAL@BUF etc. saved 26 Oct ET) while the line
+row is TODAY's ESPN line, and nothing said so — TEN@CIN showed a `CIN −10`
+chip beside a `CIN −13.5` line. Now:
+- Foot line reads `Model saved <date ET>` (earliest `captured_at` of the
+  game's official rows) before the projected score.
+- `gameRead().moves` — one note per market whose saved line differs from
+  today's: Spread `CIN −10 → −13.5 now · still covers by 1.5` (cushion =
+  saved projected margin vs today's spread, picked side), Total `U 46.5 →
+  44.5 now · still under by …`, ML `BUF −192 → −162 now · edge now +9.6`
+  (model probability vs TODAY's no-vig price). Green rule = still clears /
+  positive, red = now short / negative. No note when the line is unchanged.
+- The points badge stays the saved-price edge (tooltip + read note say so).
+- Projected score always shows one decimal (`DAL 26.0`, was `DAL 26`).
+- Files: `desk-core.js`, `desk.js`, `desk.css`, `tests/desk-core.test.js` (+1).
+  Display-only; no collector, model, capture or grading change.
 
 ### v328 — "The games ahead" rows carry lines and the model read
 

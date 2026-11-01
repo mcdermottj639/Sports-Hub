@@ -218,13 +218,14 @@
     const lineRow = read.line ? `<span class="desk-line"><span>${escape(read.line)}</span>${book.pregame?'<small>pregame line</small>':''}</span>` : '';
     const chips = read.chips.length ? `<span class="desk-chips">${read.chips.map(chip).join('')}</span>`
       : '<span class="desk-read-none">No saved forecast for this game yet</span>';
-    const foot = [read.proj].filter(Boolean);
-    return `${lineRow}${chips}${foot.length?`<span class="desk-read-foot">${foot.map(t=>`<span>${escape(t)}</span>`).join('')}</span>`:''}`;
+    const foot = [read.chips.length && read.savedAt ? `Model saved ${read.savedAt}` : '', read.proj].filter(Boolean);
+    const moves = (read.moves || []).length ? `<span class="desk-moves" aria-label="Line moved since the model saved">${read.moves.map(m=>`<span class="${m.ok===false?'off':m.ok?'ok':''}">${escape(m.text)}</span>`).join('')}</span>` : '';
+    return `${lineRow}${chips}${foot.length?`<span class="desk-read-foot">${foot.map(t=>`<span>${escape(t)}</span>`).join('')}</span>`:''}${moves}`;
   }
   function edgeBadge(read) {
     const parts = [];
     if (read.flip) parts.push('<span class="desk-badge flip" title="Saved price was plus money; model gave them over 50%">Dog flip</span>');
-    if (read.edge) parts.push(`<span class="desk-badge${read.edge.hot?' hot':''}" title="Model win chance minus the no-vig book chance, same side">${escape(read.edge.tier ? read.edge.tier+' ' : 'Model ')}${read.edge.pts>0?'+':read.edge.pts<0?'\u2212':''}${escape(Math.abs(read.edge.pts).toFixed(1))} pts</span>`);
+    if (read.edge) parts.push(`<span class="desk-badge${read.edge.hot?' hot':''}" title="Model win chance minus the no-vig book chance at the saved price, same side">${escape(read.edge.tier ? read.edge.tier+' ' : 'Model ')}${read.edge.pts>0?'+':read.edge.pts<0?'\u2212':''}${escape(Math.abs(read.edge.pts).toFixed(1))} pts</span>`);
     return parts.join('');
   }
   async function loadAgenda(force = false) {
@@ -269,7 +270,7 @@
       addWatchControl(row,sport,g); host.appendChild(row);
     });
     if (list.length > agendaLimit) host.insertAdjacentHTML('beforeend',`<button class="desk-show-more" type="button" data-agenda-more>Show ${Math.min(12,list.length-agendaLimit)} more games <span>(${list.length} in this view)</span></button>`);
-    if (all.length) host.insertAdjacentHTML('beforeend','<details class="desk-read-note"><summary>How to read these rows</summary>Lines are ESPN\'s. Model chips are the official saved pregame forecasts (NFL football model, NBA model, v239 elsewhere); green means the model tiered it Edge, Best or Alert. Points = model win chance minus the no-vig book chance for the same side. Dog flip = the saved price was plus money but the model gave that side over 50% (same rule as Performance; today\'s book price may have moved). Projected score comes from the saved margin and total. For fun — not betting advice.</details>');
+    if (all.length) host.insertAdjacentHTML('beforeend','<details class="desk-read-note"><summary>How to read these rows</summary>Lines are ESPN\'s. Model chips are the official saved pregame forecasts (NFL football model, NBA model, v239 elsewhere); green means the model tiered it Edge, Best or Alert. Chips and the points badge are the saved forecast at the saved price; the line row is today\'s. When today\'s line has moved, a note shows the move and whether the saved projection still clears it (edge now = model win chance vs today\'s no-vig price). Dog flip = the saved price was plus money but the model gave that side over 50% (same rule as Performance; today\'s book price may have moved). Projected score comes from the saved margin and total. For fun — not betting advice.</details>');
   }
   function paintBrief() {
     const cloud = root.SportsHubCloudAI?.cached?.() || {rows:[]};
