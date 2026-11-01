@@ -167,3 +167,15 @@ test('v329 games-ahead read: saved date, line moves and whether the saved projec
     {hML:-162,aML:136},{home:{abbr:'BUF'},away:{abbr:'BAL'}});
   assert.equal(buf.moves[0].text,'ML BUF −192 → −162 now · edge now +9.6');
 });
+
+test('v335: no clubhouse banner on Today; Eagles and Red Sox live on the Leagues tab', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'desk.css'), 'utf8');
+  assert.doesNotMatch(html, /id="desk-follow-teams"/);
+  const leagues = html.slice(html.indexOf('<section id="leagues"'), html.indexOf('</section>', html.indexOf('<section id="leagues"')));
+  assert.match(leagues, /data-desk-route="eagles"/);
+  assert.match(leagues, /data-desk-route="redsox"/);
+  assert.match(css, /body\[data-desk-panel="home"\] \.desk-page-heading \{ position:absolute!important/);
+  assert.match(html, /class="desk-agenda-refresh" data-desk-refresh/);
+});

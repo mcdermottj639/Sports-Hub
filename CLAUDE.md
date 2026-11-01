@@ -696,7 +696,24 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v334** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v335** (backend **b17-fantasy-league-rules**).
+
+### v335 — Today drops the clubhouse banner; Eagles / Red Sox move to Leagues
+
+Jack: "remove your clubhouse too — I can get to those through the league tab,
+or at least I should be able to". He couldn't: the Leagues grid only had
+NFL / CFB / NBA / MLB.
+- Today: `.desk-page-heading` is visually hidden on `body[data-desk-panel="home"]`
+  (kept in the DOM so Today still has its h1 and the route focus target).
+  `#desk-follow-teams` markup removed (`paintClubs` already returns without it).
+  Page title is now "Today" (desk.js `meta.home`, index.html h1).
+- The heading's Refresh button is hidden with it, so The Games Ahead header
+  gets its own `.desk-agenda-refresh[data-desk-refresh]` (same delegated
+  `refresh()`).
+- Leagues grid: Eagles and Red Sox cards first (`data-desk-route="eagles"` /
+  `"redsox"`), in club colours.
+- Test in `tests/desk-core.test.js`. Checked at 390px: Today starts with The
+  Games Ahead at 94px from the top; both new Leagues cards route correctly.
 
 ### v334 — Live score rail removed; the ticker gets its own filter
 

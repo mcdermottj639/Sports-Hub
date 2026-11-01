@@ -13,12 +13,12 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=334" />
-  <link rel="stylesheet" href="betting-signals.css?v=334" />
-  <link rel="stylesheet" href="desk.css?v=334" />
-  <link rel="stylesheet" href="performance.css?v=334" />
-  <link rel="stylesheet" href="player-props.css?v=334" />
-  <link rel="stylesheet" href="ticker.css?v=334" />
+  <link rel="stylesheet" href="styles.css?v=335" />
+  <link rel="stylesheet" href="betting-signals.css?v=335" />
+  <link rel="stylesheet" href="desk.css?v=335" />
+  <link rel="stylesheet" href="performance.css?v=335" />
+  <link rel="stylesheet" href="player-props.css?v=335" />
+  <link rel="stylesheet" href="ticker.css?v=335" />
 </head>
 <body class="desk-shell">
   <a class="desk-skip" href="#main-content">Skip to content</a>
@@ -67,13 +67,12 @@
   </nav>
 
   <div class="desk-page-heading">
-    <div><p class="desk-eyebrow">JACK’S CLUBHOUSE <span class="desk-edition">PERSONAL EDITION</span></p><h1 id="desk-page-title">Your clubhouse</h1><p id="desk-page-desc">Your daily brief. Every angle. All yours.</p></div>
-    <section class="desk-follow-card desk-clubhouse-teams" aria-label="Your teams"><div id="desk-follow-teams"></div></section>
+    <div><p class="desk-eyebrow">JACK’S CLUBHOUSE <span class="desk-edition">PERSONAL EDITION</span></p><h1 id="desk-page-title">Today</h1><p id="desk-page-desc">Your daily brief. Every angle. All yours.</p></div>
     <div id="desk-heading-art" class="desk-heading-art" aria-label="Your teams"></div><div class="desk-heading-side"><span id="desk-date"></span><button type="button" class="desk-refresh" data-desk-refresh><span data-desk-icon="refresh"></span>Refresh</button></div>
   </div>
   <main id="main-content" tabindex="-1">
     <section id="home" class="tab-panel active" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
-      <section class="desk-card desk-agenda-card"><div class="desk-card-heading"><div><p class="desk-eyebrow">ON YOUR RADAR</p><h2>The games ahead</h2></div><button type="button" class="desk-link" data-desk-route="watchlist">Watchlist <span data-desk-icon="arrow"></span></button></div><p class="desk-caption desk-agenda-scope">NFL &amp; CFB this week · MLB &amp; NBA today · times are local</p><div class="desk-filter-row" id="desk-agenda-filters" role="group" aria-label="Filter game radar"></div><div id="desk-agenda"><div class="desk-empty" role="status">Loading your game radar…</div></div></section>
+      <section class="desk-card desk-agenda-card"><div class="desk-card-heading"><div><p class="desk-eyebrow">ON YOUR RADAR</p><h2>The games ahead</h2></div><div class="desk-agenda-actions"><button type="button" class="desk-agenda-refresh" data-desk-refresh aria-label="Refresh Today"><span data-desk-icon="refresh"></span></button><button type="button" class="desk-link" data-desk-route="watchlist">Watchlist <span data-desk-icon="arrow"></span></button></div></div><p class="desk-caption desk-agenda-scope">NFL &amp; CFB this week · MLB &amp; NBA today · times are local</p><div class="desk-filter-row" id="desk-agenda-filters" role="group" aria-label="Filter game radar"></div><div id="desk-agenda"><div class="desk-empty" role="status">Loading your game radar…</div></div></section>
       <div class="desk-intro-strip"><span class="desk-status" id="desk-capture">Checking saved history</span><span>Models. Decisions. Your game.</span></div>
       <div class="desk-stats" id="desk-stats"></div>
       <div class="desk-home-grid">
@@ -102,7 +101,10 @@
     <section id="watchlist" class="tab-panel" role="tabpanel" aria-labelledby="tab-watchlist" tabindex="0"><div class="desk-watch-info"><p>Saved games and notes stay on this browser. Bookmarks are personal reminders; they do not log a bet or alter the model record.</p><button type="button" class="desk-link" data-desk-route="today">Find games <span data-desk-icon="arrow"></span></button></div><div id="desk-watch-items" class="desk-watch-grid"></div></section>
     <section id="explore" class="tab-panel" role="tabpanel" aria-labelledby="tab-explore" tabindex="0"><div class="desk-explore-lead"><h2>What would you like to do?</h2><button type="button" class="desk-secondary" data-desk-search><span data-desk-icon="search"></span>Search the whole hub</button></div><div id="desk-explore-grid"></div><div class="desk-external"><div><b>The league’s shared home</b><p>History, rankings, the Oracle and parlay live in your separate league app.</p></div><a href="https://mcdermottj639.github.io/League-History/" target="_blank" rel="noopener">Open League History ↗</a></div></section>
     <section id="leagues" class="tab-panel" role="tabpanel" aria-labelledby="tab-leagues" tabindex="0">
+      <!-- v335: the Today clubhouse banner is gone; your teams live here. -->
       <div class="desk-league-grid">
+        <button type="button" class="desk-league-club desk-league-eagles" data-desk-route="eagles"><span data-desk-icon="eagles"></span><b>Eagles</b><small>Next game · news · roster · season</small></button>
+        <button type="button" class="desk-league-club desk-league-redsox" data-desk-route="redsox"><span data-desk-icon="redsox"></span><b>Red Sox</b><small>Schedule · news · roster · season</small></button>
         <button type="button" data-desk-route="nfl"><span data-desk-icon="nfl"></span><b>NFL</b><small>Weekly games · picks · research</small></button>
         <button type="button" data-desk-route="cfb"><span data-desk-icon="cfb"></span><b>College football</b><small>Top 25 · picks · research</small></button>
         <button type="button" data-desk-route="nba"><span data-desk-icon="nba"></span><b>NBA</b><small>Daily games · model · standings</small></button>
@@ -338,41 +340,41 @@
 
   <button id="to-top" class="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
-  <script src="supabase-config.js?v=334" defer></script>
-  <script src="cloud-ai.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/prop-model.js?v=334" defer></script>
-  <script src="player-props.js?v=334" defer></script>
-  <script src="ai-model-utils.js?v=334" defer></script>
-  <script src="performance-core.js?v=334" defer></script>
-  <script src="performance-ui.js?v=334" defer></script>
-  <script src="nfl-model.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/betting-signals-core.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/research-situations.js?v=334" defer></script>
-  <script src="cloud-signals.js?v=334" defer></script>
-  <script src="betting-signals-ui.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/market-probability-config.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/market-probability.js?v=334" defer></script>
-  <script src="mobile-chrome.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/football-research-core.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/nfl-football.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/nfl-football-config.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/nfl-validation.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/nfl-evidence.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/nfl-live.js?v=334" defer></script>
-  <script src="nfl-live-client.js?v=334" defer></script>
-  <script src="nfl-football-ui.js?v=334" defer></script>
-  <script src="football-development.js?v=334" defer></script>
-  <script src="forecast-lock.js?v=334" defer></script>
-  <script src="saved-game-report.js?v=334" defer></script>
-  <script src="football-field.js?v=334" defer></script>
-  <script src="desk-core.js?v=334" defer></script>
-  <script src="desk.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/nba-model-config.js?v=334" defer></script>
-  <script src="supabase/functions/_shared/nba-model.js?v=334" defer></script>
-  <script src="nba-page.js?v=334" defer></script>
-  <script src="fantasy-sync.js?v=334" defer></script>
-  <script src="matchup-hq.js?v=334" defer></script>
-  <script src="ticker.js?v=334" defer></script>
-  <script src="app.js?v=334" defer></script>
+  <script src="supabase-config.js?v=335" defer></script>
+  <script src="cloud-ai.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/prop-model.js?v=335" defer></script>
+  <script src="player-props.js?v=335" defer></script>
+  <script src="ai-model-utils.js?v=335" defer></script>
+  <script src="performance-core.js?v=335" defer></script>
+  <script src="performance-ui.js?v=335" defer></script>
+  <script src="nfl-model.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/betting-signals-core.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/research-situations.js?v=335" defer></script>
+  <script src="cloud-signals.js?v=335" defer></script>
+  <script src="betting-signals-ui.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/market-probability-config.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/market-probability.js?v=335" defer></script>
+  <script src="mobile-chrome.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/football-research-core.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/nfl-football.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/nfl-football-config.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/nfl-validation.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/nfl-evidence.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/nfl-live.js?v=335" defer></script>
+  <script src="nfl-live-client.js?v=335" defer></script>
+  <script src="nfl-football-ui.js?v=335" defer></script>
+  <script src="football-development.js?v=335" defer></script>
+  <script src="forecast-lock.js?v=335" defer></script>
+  <script src="saved-game-report.js?v=335" defer></script>
+  <script src="football-field.js?v=335" defer></script>
+  <script src="desk-core.js?v=335" defer></script>
+  <script src="desk.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/nba-model-config.js?v=335" defer></script>
+  <script src="supabase/functions/_shared/nba-model.js?v=335" defer></script>
+  <script src="nba-page.js?v=335" defer></script>
+  <script src="fantasy-sync.js?v=335" defer></script>
+  <script src="matchup-hq.js?v=335" defer></script>
+  <script src="ticker.js?v=335" defer></script>
+  <script src="app.js?v=335" defer></script>
 </body>
 </html>

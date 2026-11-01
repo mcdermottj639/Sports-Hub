@@ -647,3 +647,15 @@ body[data-desk-panel="home"] #desk-follow-teams { display:grid;grid-template-col
 .gr-mkt .gr-grid2 + .gr-more, .gr-mkt .gr-flag + .gr-more { margin-top:0; }
 .gr-more > summary { min-height:26px; }
 #md-report .gr-mkt + .gr-mkt { margin-top:8px; }
+
+/* v335 — no clubhouse banner on Today (Jack: reach Eagles / Red Sox via Leagues).
+   The heading stays in the DOM, visually hidden, so Today keeps its h1 and the
+   route focus target. */
+body[data-desk-panel="home"] .desk-page-heading { position:absolute!important;width:1px!important;height:1px!important;min-height:0!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;border:0!important; }
+.desk-agenda-actions { display:flex;align-items:center;gap:6px; }
+.desk-agenda-refresh { width:40px;height:40px;border:1px solid var(--desk-line,#e0e8e6);border-radius:10px;background:#fff;color:#146d60;display:flex;align-items:center;justify-content:center; }
+.desk-agenda-refresh svg { width:18px;height:18px; }
+.desk-league-grid > .desk-league-club { background:linear-gradient(140deg,#0f4a3c,#103f36);color:#f3f8ec;border-color:#0f4a3c; }
+.desk-league-grid > .desk-league-redsox { background:linear-gradient(140deg,#6b1f2a,#4a1720);border-color:#6b1f2a; }
+.desk-league-grid > .desk-league-club > span { color:#d6f66a; }
+.desk-league-grid > .desk-league-club small { color:#dbe7d3; }
