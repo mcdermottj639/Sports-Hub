@@ -696,7 +696,34 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v333** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v334** (backend **b17-fantasy-league-rules**).
+
+### v334 — Live score rail removed; the ticker gets its own filter
+
+Jack: "remove these live scores since we have games ahead and the ticker now"
+… "still give me filter options for the ticker".
+- Gone: the rail cards (`liveRailCard`, `mgcBaseball/mgcFootball/mgcGeneric`),
+  the league bubbles (`paintRailLeagues`, `sportshub:railoff`), the SCORES
+  toggle (`paintRailToggle`, `sportshub:railhidden`) and the `#rail-wrap` /
+  `#live-rail` / `#rail-toggle` markup. Rail CSS (`.lrc*`, `.rail-*`) is now
+  dead weight and safe to delete.
+- Kept: `renderLiveRail()` — same name, same callers — is now a data-only 30s
+  slate refresh. It hands EVERY followed league's games to
+  `SportsHubTicker.setScores(all)` (unfiltered) and drives `paintLivePips` /
+  `liveFavSports`. The ticker owns all filtering now.
+- Ticker filter (ticker.js, `#ticker-filter` header button → `#tk-filter`
+  panel): Leagues (NFL/CFB/MLB/NBA), Show (Scores, Model picks, Results,
+  Updates, News) and "Live scores only". Saved in
+  `sportshub:ticker:filter:v1`; first run migrates `sportshub:railoff` leagues.
+  Updates have no league so a league filter never hides them; news items now
+  carry `sport`. The button reads "Ticker · N" when N filters are on. Changes
+  rebuild the strip immediately. Pure `applyFilter/normFilter/filterCount` are
+  exported in `_pure` and tested.
+- 🚨 The panel re-renders on each toggle, which detaches the clicked button —
+  `onPanelClick` stops propagation so the document "click outside" handler
+  doesn't close the panel.
+- Tests: `tests/live-rail.test.js` rewritten for the data-only refresh;
+  `tests/ticker.test.js` +2; the rail case in `possession-label.test.js` removed.
 
 ### v333 — Box score moves above the Game Report, live/final only
 

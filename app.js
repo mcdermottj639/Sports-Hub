@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v333';
+const APP_VERSION = 'v334';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1599,164 +1599,24 @@ let liveRailTimer = null;
 // (those tabs pip for their own game only, not for any game in the league).
 let liveFavSports = new Set();
 
-// Baseball: the diamond, the count, the outs. sit fields are all optional —
-// ESPN drops them between innings — so every read is defensive.
-function mgcBaseball(g, sit) {
-  const on = (k) => (sit && sit[k] ? ' on' : '');
-  const b = sit?.balls ?? 0, st = sit?.strikes ?? 0, o = clamp(Number(sit?.outs) || 0, 0, 3);
-  const dots = [0, 1, 2].map((i) => `<u class="${i < o ? 'on' : ''}"></u>`).join('');
-  return `<div class="lrc-dia">
-      <i class="b2${on('onSecond')}"></i><i class="b3${on('onThird')}"></i>
-      <i class="b1${on('onFirst')}"></i><i class="hp"></i></div>
-    <div style="display:flex;align-items:center;gap:6px">
-      <span class="lrc-cnt">${b}–${st}</span><span class="lrc-outs">${dots}</span></div>`;
-}
-
-// Football: a field strip with the ball spot, plus possession + down/distance.
-// v330: away end LEFT, home end RIGHT (x = 100 − yardLine), matching the game
-// screen's football-field.js. Before v330 both used yardLine as the left %.
-function mgcFootball(g, sit) {
-  const yl = Number(sit?.yardLine);
-  const dd = sit?.shortDownDistanceText || sit?.downDistanceText || '';
-  const poss = possessionAbbr(sit, [g.home, g.away]);
-  const rz = !!sit?.isRedZone;
-  let field = '';
-  if (isFinite(yl)) {
-    // Red-zone band goes on whichever half the ball sits in — the end they're
-    // near is the end they're attacking often enough for a 72px strip.
-    // v330: away goal LEFT, home goal RIGHT, same as the game screen's field
-    // (football-field.js). ESPN yardLine counts from the HOME goal → x = 100 − yl.
-    const x = 100 - yl;
-    const band = rz ? `<span class="rz" style="${x >= 50 ? 'right:11%' : 'left:11%'}"></span>` : '';
-    field = `<div class="lrc-fld"><span class="ez l"></span><span class="ez r"></span>${band}
-      <s style="left:33%"></s><s style="left:50%"></s><s style="left:67%"></s>
-      <b style="left:${clamp(x, 2, 98)}%"></b></div>`;
-  }
-  const line = [poss, dd].filter(Boolean).join(' ');
-  return `${field}${line ? `<div class="lrc-dd">${esc(line)}</div>` : ''}
-    ${rz ? '<div class="lrc-rz">RED ZONE</div>' : ''}`;
-}
-
-// Everything else: pull a clock out of the status text and show the period
-// above it. If there's no clock to find, the status line alone carries it.
-function mgcGeneric(g) {
-  const t = g.statusText || '';
-  const m = t.match(/(\d{1,2}:\d{2})/);
-  if (!m) return '';
-  const per = t.replace(m[1], '').replace(/[-–·]/g, ' ').replace(/\s+/g, ' ').trim();
-  return `${per ? `<div class="lrc-big">${esc(per.length > 8 ? per.slice(0, 8) : per)}</div>` : ''}
-    <div class="lrc-cnt" style="font-size:13px">${esc(m[1])}</div>`;
-}
-
-// One rail card. Live games get their sport's gamecast; scheduled games get
-// the start time and TV; finals get the result with the winner highlighted.
-function liveRailCard(sport, g) {
-  const cfg = LEAGUES[sport];
-  const st = gameState(g);
-  const sit = g.situation || null;
-  const win = winnerName(g);
-  const card = el('div', `lrc lrc-${st}` + (isFav(sport, g) ? ' fav' : ''));
-  const hs = g.home.score, as = g.away.score;
-  const lead = (t, o) => st === 'final'
-    ? (win && win !== 'TIE' && win === t.name)
-    : (t.score != null && o != null && t.score > o);
-  const row = (t, other) => `<div class="lrc-row${lead(t, other) ? ' lead' : ''}">${logoHTML(t).replace('class="logo', 'class="lrc-lo logo')}
-      <span class="lrc-nm">${esc(t.name || 'TBD')}</span>
-      <span class="lrc-sc">${st === 'scheduled' ? '–' : (t.score ?? '–')}</span></div>`;
-
-  let gc = '', tag;
-  if (st === 'live') {
-    gc = sport === 'mlb' ? mgcBaseball(g, sit)
-      : (sport === 'nfl' || sport === 'cfb') ? mgcFootball(g, sit)
-      : mgcGeneric(g);
-    // The status line (inning / quarter+clock) anchors the column, and it's the
-    // only thing left if the situation feed is empty.
-    gc += g.statusText ? `<div class="lrc-st">${esc(g.statusText)}</div>` : '';
-    tag = `<div class="lrc-tag"><span class="lrc-dot"></span>LIVE · ${cfg.label}</div>`;
-  } else if (st === 'final') {
-    gc = `<div class="lrc-big">FINAL</div>`;
-    tag = `<div class="lrc-tag off">${cfg.emoji} ${cfg.label} · FINAL</div>`;
-  } else {
-    const info = normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
-    const tv = (g.tv || '').split(',').slice(0, 2).join(',').trim();
-    gc = `<div class="lrc-when">${esc(railWhen(g))}</div>`
-      + (tv ? `<div class="lrc-st">📺 ${esc(tv)}</div>` : '')
-      + (info?.details ? `<div class="lrc-st">${esc(info.details)}</div>` : '');
-    tag = `<div class="lrc-tag off">${cfg.emoji} ${cfg.label}</div>`;
-  }
-  // v187: the model's tier badge + pick on the rail card. It comes from the
-  // read The Board already computed (MODEL_TODAY), so the rail costs nothing
-  // extra and can't disagree with the board about the same game.
-  const mdl = g.id ? MODEL_TODAY.byGame.get(String(g.id)) : null;
-  const mdlHTML = mdl
-    ? `<div class="lrc-mdl"><span class="lrc-tier ${mdl.cls}">${esc(mdl.label)}</span>
-        <span class="lrc-pick">${esc(mdl.pick)}</span></div>`
-    : '';
-  card.innerHTML = `<span class="lrc-stripe"></span>
-    <div class="lrc-l">${tag}${row(g.away, hs)}${row(g.home, as)}${mdlHTML}</div>
-    <div class="lrc-gc">${gc}</div>`;
-  if (g.id) card.onclick = () => openGameDetail(sport, g.id, g);
-  return card;
-}
-
-// League filter (v166). One small bubble per league with games today, sitting
-// directly under the rail. Filled = showing, hollow = hidden. Only the OFF
-// leagues are stored, so a league you've never touched — including one whose
-// season starts next week — is on by default.
-const RAIL_OFF_KEY = 'sportshub:railoff';
-const getRailOff = () => { try { return new Set(JSON.parse(localStorage.getItem(RAIL_OFF_KEY) || '[]')); } catch (_) { return new Set(); } };
-const setRailOff = (set) => { try { localStorage.setItem(RAIL_OFF_KEY, JSON.stringify([...set])); } catch (_) {} };
-
-function paintRailLeagues(sportsToday, counts) {
-  const box = $('#rail-leagues');
-  if (!box) return;
-  const off = getRailOff();
-  // A saved filter may hide today's only league. Keep its recovery button.
-  if (sportsToday.length < 2 && !sportsToday.some((sp) => off.has(sp))) {
-    box.hidden = true; box.innerHTML = ''; return;
-  }
-  box.innerHTML = '';
-  sportsToday.forEach((sp) => {
-    const cfg = LEAGUES[sp];
-    const on = !off.has(sp);
-    const b = el('button', 'rl-pill' + (on ? ' on' : ''),
-      `${cfg.label}${counts[sp] ? ` <span class="rl-n">${counts[sp]}</span>` : ''}`);
-    b.type = 'button';
-    b.setAttribute('aria-pressed', String(on));
-    b.title = `${on ? 'Hide' : 'Show'} ${cfg.label} games`;
-    b.onclick = () => {
-      const cur = getRailOff();
-      if (cur.has(sp)) cur.delete(sp); else cur.add(sp);
-      setRailOff(cur);
-      renderLiveRail();
-    };
-    box.appendChild(b);
-  });
-  box.hidden = false;
-}
-
-// The rail carries the WHOLE day (v166), not just live games — live first, then
-// what's coming up, then finals. It replaced the Home tab's "Today's Games"
-// section, so it has to hold everything that section did; leaving it live-only
-// would have meant a morning with no games showing anywhere.
+// v334: the visible score rail (cards, league bubbles, SCORES toggle) is GONE —
+// Jack: "we have games ahead and the ticker now". This keeps its job as the
+// 30s slate refresh: today's games for every followed league feed the top
+// ticker (SportsHubTicker.setScores) and the live pips on the tabs. League /
+// item filtering now lives in the ticker's own filter panel (ticker.js).
+// The name stays because refreshLiveScores and the boot path call it.
 const RAIL_SPORT_CAP = 30;   // a college Saturday can't fan out unbounded
 async function renderLiveRail() {
-  const rail = $('#live-rail');
-  if (!rail) return;
   const sports = sortedSports({ teamOnly: true });
   // getGames goes through fetchJSON's URL cache, so this shares the slate the
   // Home tab and the Board just pulled rather than doubling the traffic.
   const res = await Promise.allSettled(sports.map((s) => getGames(s, ymd(sportsDate()))));
   const all = [];
-  const liveSports = new Set(), favLive = new Set(), counts = {};
-  const sportsToday = [];
+  const liveSports = new Set(), favLive = new Set();
   res.forEach((r, i) => {
     if (r.status !== 'fulfilled' || !r.value.length) return;
     const sp = sports[i];
-    const list = r.value.slice(0, RAIL_SPORT_CAP);
-    sportsToday.push(sp);
-    counts[sp] = list.length;
-    list.forEach((g) => {
+    r.value.slice(0, RAIL_SPORT_CAP).forEach((g) => {
       if (gameState(g) === 'live') {
         liveSports.add(sp);
         if (isFav(sp, g)) favLive.add(sp);
@@ -1766,43 +1626,7 @@ async function renderLiveRail() {
   });
   liveFavSports = favLive;
   paintLivePips(liveSports);
-  paintRailLeagues(sportsToday, counts);
-
-  const off = getRailOff();
-  const shown = all.filter(({ sport }) => !off.has(sport));
-  // Live first (your teams ahead of the rest), then upcoming by start time,
-  // then finals — the same live → upcoming → finished order the old Home slate
-  // used, so nothing about the reading order changed when it moved up here.
-  const rank = { live: 0, scheduled: 1, final: 2 };
-  shown.sort((a, b) => {
-    const d = rank[gameState(a.g)] - rank[gameState(b.g)];
-    if (d) return d;
-    const f = (isFav(b.sport, b.g) ? 1 : 0) - (isFav(a.sport, a.g) ? 1 : 0);
-    if (f) return f;
-    return new Date(a.g.date || 0) - new Date(b.g.date || 0);
-  });
-
-  const wrap = $('#rail-wrap');
-  globalThis.SportsHubTicker?.setScores(shown);
-  rail.innerHTML = '';
-  if (!shown.length) {
-    // Empty feeds and saved filters must never remove the way back to scores.
-    const failed = res.some((r) => r.status === 'rejected');
-    rail.hidden = false;
-    if (wrap) wrap.hidden = false;
-    rail.appendChild(el('div', 'lrc-none', all.length
-      ? 'All leagues hidden — tap a league beside the scores to bring its games back.'
-      : failed ? 'Scores temporarily unavailable — retrying automatically.'
-        : 'No games scheduled today. Scores update automatically.'));
-    if (typeof paintRailToggle === 'function') paintRailToggle();
-    return;
-  }
-  shown.forEach(({ sport, g }) => rail.appendChild(liveRailCard(sport, g)));
-  rail.hidden = false;
-  if (wrap) wrap.hidden = false;
-  // The collapse state is the owner's, so re-assert it after every repaint —
-  // otherwise the 30s refresh would quietly re-open a rail they folded.
-  if (typeof paintRailToggle === 'function') paintRailToggle();
+  globalThis.SportsHubTicker?.setScores(all);
 }
 
 // 🔴 pip on the tab of any sport with a game in progress, so the rail isn't the
@@ -13284,7 +13108,7 @@ function wheelScrollsSideways(sel) {
     }, { passive: false });
   });
 }
-wheelScrollsSideways('.tabs, .live-rail, .rail-leagues');
+wheelScrollsSideways('.tabs');
 
 // The tab buttons wrap an icon and a label span (v163), so a tap lands on the
 // span, not the button — resolve to the button before reading its dataset.
@@ -13335,33 +13159,8 @@ if (homeVerEl) homeVerEl.textContent = APP_VERSION;
    change. The dark GROUND is gone — the Onyx token block is deleted and
    nothing can set the attribute — which is what "remove dark mode" means. */
 
-// --- rail collapse ----------------------------------------------------------
-// The rail is the single biggest piece of chrome on the screen. On a phone
-// it's ~99px of the ~224px above the content, so it gets a switch — collapsed
-// it still says how many games it's holding, which is the part you'd miss.
-const RAIL_HIDE_KEY = 'sportshub:railhidden';
-let railHidden = true;
-try { railHidden = localStorage.getItem(RAIL_HIDE_KEY) !== '0'; } catch (e) {}
-function paintRailToggle() {
-  const wrap = $('#rail-wrap'), btn = $('#rail-toggle');
-  const n = document.querySelectorAll('#live-rail .lrc').length;
-  // Keep the control available even when filters or a failed feed leave zero
-  // cards. Counting only .lrc used to hide both the rail and its recovery UI.
-  if (btn) {
-    btn.hidden = false;
-    btn.textContent = railHidden
-      ? (n ? `⌄ ${n} GAME${n === 1 ? '' : 'S'}` : '⌄ SHOW SCORES')
-      : '⌃ SCORES';
-    btn.title = railHidden ? 'Show scores' : 'Hide scores';
-    btn.setAttribute('aria-expanded', String(!railHidden));
-  }
-  if (wrap) wrap.hidden = railHidden;
-}
-$('#rail-toggle')?.addEventListener('click', () => {
-  railHidden = !railHidden;
-  try { localStorage.setItem(RAIL_HIDE_KEY, railHidden ? '1' : '0'); } catch (e) {}
-  paintRailToggle();
-});
+// v334: the SCORES toggle (paintRailToggle, sportshub:railhidden) went with
+// the score rail; the header button now opens the ticker filter (ticker.js).
 
 // v192: the 💰 masthead toggle is GONE. It hid the sharp-money read app-wide,
 // but it was an unlabelled emoji competing with two text buttons, and because

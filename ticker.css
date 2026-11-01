@@ -65,3 +65,17 @@ body.desk-shell { padding-top: var(--tk-h); }
   .ticker .tk-it { padding: 0 12px; }
   .ticker .tk-it + .tk-it:not(.tk-head)::before { top: 9px; bottom: 9px; }
 }
+
+/* v334 — ticker filter panel (header "Ticker" button → #tk-filter) */
+.tk-filter { position: fixed; right: 12px; left: auto; width: min(340px, calc(100vw - 24px)); z-index: 60;
+  background: #fff; color: #182c30; border: 1px solid #d3ddd3; border-radius: 14px; padding: 12px 14px 14px;
+  box-shadow: 0 12px 32px #052e2133; font-family: 'Archivo', system-ui, sans-serif; }
+.tk-filter[hidden] { display: none; }
+.tk-filter .tkf-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.tk-filter .tkf-head b { font-size: 15px; }
+.tk-filter .tkf-x { border: 0; background: #eef3e6; color: #2f4f3e; width: 36px; height: 36px; border-radius: 9px; font-size: 14px; }
+.tk-filter .tkf-lbl { font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: #667e82; margin: 10px 0 6px; }
+.tk-filter .tkf-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tk-filter .tkf-pill { border: 1px solid #c5d4b8; background: #fff; color: #3c624b; border-radius: 8px; min-height: 36px; padding: 0 12px; font-size: 12px; font-weight: 700; }
+.tk-filter .tkf-pill.on { background: #103f36; border-color: #103f36; color: #efffc8; }
+.tk-filter .tkf-reset { margin-top: 12px; border: 0; background: none; color: #146d60; font-size: 12px; font-weight: 700; padding: 6px 0; min-height: 32px; }

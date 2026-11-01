@@ -77,6 +77,30 @@ test('ticker is wired: markup first in body, assets versioned, rail feeds it', (
   assert.ok(html.indexOf('id="ticker"') < html.indexOf('<header class="topbar"'));
   assert.match(html, new RegExp(`ticker\\.js\\?v=${v}`)); assert.match(html, new RegExp(`ticker\\.css\\?v=${v}`));
   assert.ok(html.indexOf('ticker.js') < html.indexOf('<script src="app.js'));
-  assert.match(app, /SportsHubTicker\?\.setScores\(shown\)/);
+  assert.match(app, /SportsHubTicker\?\.setScores\(all\)/);   // v334: rail is data-only
   assert.match(app, /SportsHubTicker\?\.init\(/);
+});
+
+test('v334 filter: leagues, sections and live-only scores', () => {
+  const by = {
+    scores: [{ k: 's1', sport: 'nfl', state: 'live' }, { k: 's2', sport: 'nfl', state: 'scheduled' }, { k: 's3', sport: 'nba', state: 'live' }],
+    picks: [{ k: 'p1', sport: 'nba' }, { k: 'p2', sport: 'cfb' }],
+    results: [{ k: 'r1', sport: 'nfl' }],
+    updates: [{ k: 'u1' }],
+    news: [{ k: 'n1', sport: 'nba' }, { k: 'n2', sport: 'mlb' }],
+  };
+  const keys = (f) => T.compose(T.applyFilter(by, f)).filter((i) => i.kind !== 'head').map((i) => i.k);
+  assert.deepEqual(keys({}), ['s1', 's2', 's3', 'p1', 'p2', 'r1', 'u1', 'n1', 'n2']);
+  assert.deepEqual(keys({ off: ['nba'] }), ['s1', 's2', 'p2', 'r1', 'u1', 'n2']);           // updates have no league
+  assert.deepEqual(keys({ hide: ['news', 'updates'] }), ['s1', 's2', 's3', 'p1', 'p2', 'r1']);
+  assert.deepEqual(keys({ liveOnly: true }), ['s1', 's3', 'p1', 'p2', 'r1', 'u1', 'n1', 'n2']);
+  assert.deepEqual(T.normFilter({ off: ['nfl', 'xfl', 'nfl'], hide: ['bogus'], liveOnly: 'yes' }), { off: ['nfl'], hide: [], liveOnly: false });
+  assert.equal(T.filterCount({ off: ['nfl', 'cfb'], hide: ['news'], liveOnly: true }), 4);
+  // Section heads only appear for sections with items left.
+  assert.ok(!T.compose(T.applyFilter(by, { off: ['nfl', 'nba', 'cfb', 'mlb'], hide: ['updates'] })).length);
+});
+
+test('v334: news items carry their league so the filter can hide them', () => {
+  const items = T.buildNewsItems([{ sport: 'nfl', articles: [{ headline: 'A', published: '2026-11-01T12:00:00Z' }] }]);
+  assert.equal(items[0].sport, 'nfl');
 });

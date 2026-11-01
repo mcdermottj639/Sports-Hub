@@ -1,35 +1,37 @@
+'use strict';
+// v334: the visible score rail is gone. renderLiveRail is now a data-only
+// slate refresh that feeds the ticker and the tab pips — and the ticker owns
+// all league/section filtering (tests/ticker.test.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-const src = require('node:fs').readFileSync(require.resolve('../app.js'),'utf8');
-function load(off=[],hidden=false,fail=false,games=[{id:'1'}]) {
- const el=(tag,className='',textContent='')=>({className,textContent,children:[],hidden:false,set innerHTML(v){this.children=[]},appendChild(c){this.children.push(c)},setAttribute(){},addEventListener(){}});
- const n=Object.fromEntries(['rail-wrap','rail-toggle','rail-leagues','live-rail'].map(k=>['#'+k,el()]));
- const saved={'sportshub:railoff':JSON.stringify(off),'sportshub:railhidden':hidden?'1':'0'};
- const s={$:k=>n[k],el,LEAGUES:{mlb:{label:'MLB'}},localStorage:{getItem:k=>saved[k],setItem:(k,v)=>saved[k]=v},document:{querySelectorAll:()=>n['#live-rail'].children.filter(c=>c.className==='lrc')},sortedSports:()=>['mlb'],getGames:async()=>{if(fail)throw Error('offline');return games},ymd:()=>'',sportsDate:()=>new Date(),gameState:()=> 'live',isFav:()=>false,paintLivePips(){},liveRailCard:()=>el('div','lrc')};
- vm.createContext(s);
- vm.runInContext(src.slice(src.indexOf('const RAIL_OFF_KEY'),src.indexOf('// 🔴 pip on the tab')),s);
- vm.runInContext(src.slice(src.indexOf('const RAIL_HIDE_KEY'),src.indexOf('// v192: the 💰')),s);
- return {s,n};
+const src = require('node:fs').readFileSync(require.resolve('../app.js'), 'utf8');
+function load(fail = false, games = [{ id: '1' }, { id: '2' }]) {
+  const fed = [], pips = [];
+  const s = { sortedSports: () => ['mlb', 'nfl'], getGames: async (sp) => { if (fail) throw Error('offline'); return games.map((g) => ({ ...g, sp })); },
+    ymd: () => '', sportsDate: () => new Date(), gameState: (g) => (g.id === '1' ? 'live' : 'scheduled'), isFav: () => false,
+    paintLivePips: (x) => pips.push(JSON.parse(JSON.stringify([...x]))) };
+  s.SportsHubTicker = { setScores: (l) => fed.push(JSON.parse(JSON.stringify(l))) };
+  vm.createContext(s);
+  const a = src.indexOf('const RAIL_SPORT_CAP'), b = src.indexOf('// 🔴 pip on the tab');
+  vm.runInContext('let liveFavSports;' + src.slice(a, b), s);
+  return { s, fed, pips };
 }
-test('hidden single league retains working recovery controls',async()=>{
- const {s,n}=load(['mlb']);await s.renderLiveRail();
- assert.equal(n['#rail-wrap'].hidden,false);assert.equal(n['#rail-leagues'].hidden,false);
- assert.match(n['#live-rail'].children[0].textContent,/All leagues hidden/);
- n['#rail-leagues'].children[0].onclick();await s.renderLiveRail();
- assert.equal(n['#live-rail'].children[0].className,'lrc');
+test('every followed league goes to the ticker unfiltered; live leagues pip', async () => {
+  const { s, fed, pips } = load();
+  await s.renderLiveRail();
+  assert.equal(fed.length, 1);
+  assert.deepEqual(fed[0].map((x) => `${x.sport}:${x.g.id}`), ['mlb:1', 'mlb:2', 'nfl:1', 'nfl:2']);
+  assert.deepEqual(pips[0], ['mlb', 'nfl']);
 });
-test('collapsed filtered scores keep the expand button',async()=>{
- const {s,n}=load(['mlb'],true);await s.renderLiveRail();
- assert.equal(n['#rail-wrap'].hidden,true);assert.equal(n['#rail-toggle'].hidden,false);
- assert.match(n['#rail-toggle'].textContent,/SHOW SCORES/);
+test('a failed feed still updates the ticker (empty) instead of throwing', async () => {
+  const { s, fed } = load(true);
+  await s.renderLiveRail();
+  assert.deepEqual(fed[0], []);
 });
-test('empty schedule and failed feed have distinct visible messages',async()=>{
- for(const fail of [false,true]){const {s,n}=load([],false,fail,[]);await s.renderLiveRail();
- assert.equal(n['#rail-wrap'].hidden,false);
- assert.match(n['#live-rail'].children[0].textContent,fail?/temporarily unavailable/:/No games scheduled/);}
-});
-test('normal scores respect saved collapse preference',async()=>{
- for(const hidden of [false,true]){const {s,n}=load([],hidden);await s.renderLiveRail();
- assert.equal(n['#live-rail'].children[0].className,'lrc');assert.equal(n['#rail-wrap'].hidden,hidden);assert.equal(n['#rail-toggle'].hidden,false);}
+test('no rail DOM, league bubbles or SCORES toggle remain', () => {
+  const html = require('node:fs').readFileSync(require.resolve('../index.html'), 'utf8');
+  assert.doesNotMatch(html, /id="live-rail"|id="rail-wrap"|id="rail-toggle"/);
+  assert.match(html, /id="ticker-filter"/);
+  assert.doesNotMatch(src, /function liveRailCard|function paintRailLeagues|function paintRailToggle/);
 });

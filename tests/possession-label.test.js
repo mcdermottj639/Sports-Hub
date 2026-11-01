@@ -15,9 +15,6 @@ function load() {
   const start = src.indexOf('function liveSituationHTML(');
   const end = src.indexOf('function renderGameDetail(');
   vm.runInContext(src.slice(start, end), s);
-  const r0 = src.indexOf('function mgcFootball(');
-  const r1 = src.indexOf('// Everything else: pull a clock');
-  vm.runInContext(src.slice(r0, r1), s);
   return s;
 }
 
@@ -33,13 +30,6 @@ test('game report labels the team with the ball, not the side of the field', () 
   const html = s.footballSituation(sit, comp);
   assert.match(html, /ATL ball/);
   assert.doesNotMatch(html, /BAL ball/);
-});
-
-test('score rail uses the same possession', () => {
-  const s = load();
-  const g = { home: { id: '1', abbr: 'ATL' }, away: { id: '33', abbr: 'BAL' } };
-  const html = s.mgcFootball(g, sit);
-  assert.match(html, /ATL 3rd &amp; 5|ATL 3rd & 5/);
 });
 
 test('missing possession id shows no team instead of guessing from the spot', () => {
