@@ -696,7 +696,28 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v330** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v331** (backend **b17-fantasy-league-rules**).
+
+### v331 — Player box score replaces Key Players on the game screen
+
+Jack asked to remove NFL "Key Players" and add a box score for every game.
+- `nflKeyHTML` is deleted (it read scoreboard season leaders and showed
+  "Season stats appear once the season starts" on live games). Top Performers
+  stays skipped for NFL (v316) — the box score carries those leaders in full.
+- `boxScoreHTML(sport, data, id, side)` (app.js) renders ESPN summary
+  `boxscore.players` for NFL, CFB, NBA and MLB inside
+  `#md-boxscore[data-acc-boundary]`, after Team Stats. Away team first even when
+  ESPN lists home first. CSS-only radio toggle (away/home) shows one team at a
+  time. Football: Passing/Rushing/Receiving up front, everything else in a
+  "Defense, kicking and returns" fold; MLB Batting + Pitching (subs indented);
+  NBA one Players table plus a "Did not play" line. Groups with no players are
+  skipped; team totals as a tfoot. Names use ESPN `shortName`, else
+  "R. Bateman" from displayName. Wide tables scroll inside `.bx-scroll` with the
+  player column sticky — the page itself never scrolls sideways.
+- `refreshOpenGameDetail` re-renders the box score on each live poll, keeping
+  the chosen team and an opened fold. Pregame: nothing renders.
+- Tests: `tests/boxscore.test.js` on trimmed real ESPN summaries in
+  `tests/fixtures/boxscore-2026-11.json` (NFL BAL@BUF, NBA POR@UTAH, MLB PHI@NYM).
 
 ### v330 — Football live field (game screen + live games-ahead rows)
 

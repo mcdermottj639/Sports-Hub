@@ -573,3 +573,31 @@ body[data-desk-panel="home"] #desk-follow-teams { display:grid;grid-template-col
 .ffx-strip { display:block;width:100%;height:auto; }
 .ffx-compact .ffx-meta { display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--gy);margin-top:4px; }
 .ffx-compact .ffx-win-model { margin-top:4px; }
+
+/* v331 — player box score (boxScoreHTML in app.js), every league */
+.bx { position:relative;margin:6px 0 4px; }
+.bx-r { position:absolute;opacity:0;pointer-events:none;width:1px;height:1px; }
+.bx-seg { display:inline-flex;gap:4px;padding:3px;border-radius:9px;background:#eef3e6;margin-bottom:10px; }
+.bx-seg label { min-width:64px;min-height:36px;display:flex;align-items:center;justify-content:center;padding:0 12px;border-radius:7px;font-size:13px;font-weight:700;color:#3c624b;cursor:pointer; }
+.bx-r.a:checked ~ .bx-seg label.a, .bx-r.h:checked ~ .bx-seg label.h { background:#103f36;color:#efffc8; }
+.bx-r.a:focus-visible ~ .bx-seg label.a, .bx-r.h:focus-visible ~ .bx-seg label.h { outline:3px solid #398aef;outline-offset:2px; }
+.bx-pane { display:none; }
+.bx-r.a:checked ~ .bx-pane.a, .bx-r.h:checked ~ .bx-pane.h { display:block; }
+.bx-group { margin-bottom:14px; }
+.bx-gt { font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--gy);margin-bottom:4px; }
+.bx-scroll { max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;border:1px solid var(--desk-line,#e0e8e6);border-radius:8px; }
+.bx-t { border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap; }
+.bx-t th, .bx-t td { padding:6px 8px;text-align:right;border-bottom:1px solid #edf2ef; }
+.bx-t thead th { font-size:10px;font-weight:700;color:var(--mu);background:#f7f9f6; }
+.bx-t th[scope=row], .bx-t thead th:first-child { position:sticky;left:0;z-index:1;text-align:left;background:#fff;font-weight:600;color:var(--ink);max-width:132px;overflow:hidden;text-overflow:ellipsis;box-shadow:1px 0 0 #edf2ef; }
+.bx-t thead th:first-child { background:#f7f9f6;color:var(--mu); }
+.bx-t th[scope=row] small { font-size:10px;font-weight:400;color:var(--mu); }
+.bx-t tfoot th, .bx-t tfoot td { font-weight:700;background:#f7f9f6;border-bottom:0; }
+.bx-t tfoot th[scope=row] { background:#f7f9f6; }
+.bx-t tr.bx-sub th[scope=row] { padding-left:16px;font-weight:400; }
+.bx-dnp { font-size:11px;color:var(--mu);margin:4px 0 0; }
+.bx-more { margin-top:4px; }
+.bx-more > summary { cursor:pointer;min-height:40px;display:flex;align-items:center;font-size:12px;font-weight:600;color:var(--ac,#146d60); }
+.desk-shell .bx-t { margin:0; }
+.desk-shell .bx-t tbody th, .desk-shell .bx-t tfoot th { text-transform:none;letter-spacing:0;font-size:12px; }
+.desk-shell .bx-t thead th { letter-spacing:.3px; }

@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v330';
+const APP_VERSION = 'v331';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1093,6 +1093,19 @@ async function refreshOpenGameDetail(updates = []) {
       if (note) { note.hidden = false; note.textContent = host.innerHTML ? 'Last available play · waiting for a live situation update.' : 'Waiting for a live situation update.'; }
       return;
     }
+    // v331: keep the player box score current while the game is live.
+    const bx = $('#md-boxscore');
+    if (bx) {
+      const bxHtml = boxScoreHTML(active.sport, data, comp.id || active.id, bx.querySelector('.bx-r.h:checked') ? 'h' : 'a');
+      if (bx.dataset.boxHtml !== bxHtml && bxHtml) {
+        const bxOpen = bx.querySelector('.md-section-title')?.classList.contains('open') ?? true;
+        const openMore = bx.querySelector('.bx-pane .bx-more[open]') != null;
+        bx.innerHTML = bxHtml; bx.dataset.boxHtml = bxHtml;
+        if (openMore) bx.querySelectorAll('.bx-more').forEach((d) => { d.open = true; });
+        makeAccordion(bx, '.md-section-title', SEC_OPEN_ALL);
+        bx.querySelector('.md-section-title')?._accSet?.(bxOpen, false);
+      }
+    }
     if (note) note.hidden = true;
     if (host.dataset.liveHtml !== html) {
       host.innerHTML = html; host.dataset.liveHtml = html;
@@ -1147,9 +1160,9 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
     }
     if (g && sport === 'mlb') {
       extra += startersHTML(g) + (hitters ? hittersHTML(g, hitters[0], hitters[1]) : '');
-    } else if (g && sport === 'nfl') {
-      extra += nflKeyHTML(g);
     }
+    // v331: NFL "Key Players" (nflKeyHTML) removed at Jack's request — the
+    // player box score below (boxScoreHTML) covers every league instead.
     // v316: the signals section is one folded line until tapped — three
     // "not matched" cards plus a methodology note were most of the scroll.
     const signalSlot = ['nfl','cfb'].includes(sport) && signalsEnabled() ? '<details class="md-fold" id="md-signals-fold" data-acc-boundary><summary>Betting signals · checking…</summary><div id="md-signals" aria-live="polite"></div></details>' : '';
@@ -1467,8 +1480,8 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
         <div class="val">${top.displayValue || top.value || ''}</div></div>`);
     });
   });
-  // v316: NFL already lists the same leaders under Key Players (nflKeyHTML
-  // reads the scoreboard leaders, which are these). One list, not two.
+  // v316: NFL skips Top Performers (it duplicated Key Players). v331 removed
+  // Key Players; the player box score now carries the same leaders in full.
   if (leadersHTML.length && !(sport === 'nfl' && g)) html += `<div class="md-section-title">Top Performers</div>${leadersHTML.join('')}`;
 
   // team stats comparison — flatten nested categories (MLB) or flat list (NFL)
@@ -1493,10 +1506,63 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
     }
   }
 
+  // v331: player box score, every league (ESPN summary boxscore.players).
+  html += `<div id="md-boxscore" data-acc-boundary>${boxScoreHTML(sport, data, comp.id || g?.id)}</div>`;
+
   if (!aLine.length && !hLine.length && !leadersHTML.length && !teams.length) {
     html += '<div class="empty" style="margin-top:14px">Detailed stats will appear once the game is underway.</div>';
   }
   return html;
+}
+
+// v331 — Player box score for every league from ESPN's summary
+// `boxscore.players`: one block per team, each with stat groups (football:
+// passing/rushing/receiving up front, defense/kicking/returns folded; MLB:
+// batting + pitching; NBA: one player table). Away/home is a CSS-only radio
+// toggle so a phone shows one team at a time; wide tables scroll inside their
+// own box with the player column pinned, so the page never drifts sideways.
+const BOX_GROUP = { passing: 'Passing', rushing: 'Rushing', receiving: 'Receiving', defensive: 'Defense', interceptions: 'Interceptions',
+  fumbles: 'Fumbles', kickReturns: 'Kick returns', puntReturns: 'Punt returns', kicking: 'Kicking', punting: 'Punting', batting: 'Batting', pitching: 'Pitching' };
+const BOX_MAIN_FOOTBALL = new Set(['passing', 'rushing', 'receiving']);
+function boxScoreHTML(sport, data, id, side = 'a') {
+  const blocks = data?.boxscore?.players || [];
+  if (!blocks.length) return '';
+  const football = sport === 'nfl' || sport === 'cfb';
+  const teamAbbr = (b) => b.team?.abbreviation || b.team?.shortDisplayName || '';
+  const homeId = String((data.header?.competitions?.[0]?.competitors || []).find((c) => c.homeAway === 'home')?.team?.id ?? '');
+  const ordered = blocks.length === 2 && homeId && String(blocks[0].team?.id) === homeId ? [blocks[1], blocks[0]] : blocks.slice(0, 2);
+  const group = (st) => {
+    const labels = st.labels || [];
+    const key = st.name || st.type || '';
+    const played = (st.athletes || []).filter((a) => !a.didNotPlay && (a.stats || []).some((v) => v !== '' && v != null));
+    const dnp = (st.athletes || []).filter((a) => a.didNotPlay).map((a) => a.athlete?.shortName || a.athlete?.displayName).filter(Boolean);
+    if (!labels.length || !played.length) return null;
+    const name = (a) => {
+      const at = a.athlete || {};
+      const pos = at.position?.abbreviation;
+      // "Rashod Bateman" → "R. Bateman" when ESPN sends no shortName (NFL/CFB), so the pinned column stays narrow.
+      const full = String(at.displayName || '').trim(), parts = full.split(/\s+/);
+      const short = at.shortName || (parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(' ')}` : full) || '—';
+      return `<th scope="row" title="${esc(full || short)}">${esc(short)}${pos ? ` <small>${esc(pos)}</small>` : ''}</th>`;
+    };
+    const rows = played.map((a) => `<tr${a.starter === false && sport === 'mlb' ? ' class="bx-sub"' : ''}>${name(a)}${labels.map((_, i) => `<td>${esc(a.stats?.[i] ?? '')}</td>`).join('')}</tr>`).join('');
+    const tot = (st.totals || []).some((v) => v !== '' && v != null) ? `<tfoot><tr><th scope="row">Team</th>${labels.map((_, i) => `<td>${esc(st.totals[i] ?? '')}</td>`).join('')}</tr></tfoot>` : '';
+    const title = BOX_GROUP[key] || (sport === 'nba' ? 'Players' : String(st.text || key || 'Players').replace(/^.*\s(?=\S+$)/, ''));
+    return { key, html: `<div class="bx-group"><div class="bx-gt">${esc(title)}</div><div class="bx-scroll"><table class="bx-t"><thead><tr><th scope="col">Player</th>${labels.map((l) => `<th scope="col">${esc(l)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody>${tot}</table></div>${dnp.length ? `<p class="bx-dnp">Did not play: ${esc(dnp.join(', '))}</p>` : ''}</div>` };
+  };
+  const pane = (b, cls) => {
+    const groups = (b.statistics || []).map(group).filter(Boolean);
+    if (!groups.length) return `<div class="bx-pane ${cls}"><p class="bx-dnp">No player stats yet.</p></div>`;
+    const main = football ? groups.filter((x) => BOX_MAIN_FOOTBALL.has(x.key)) : groups;
+    const more = football ? groups.filter((x) => !BOX_MAIN_FOOTBALL.has(x.key)) : [];
+    return `<div class="bx-pane ${cls}">${main.map((x) => x.html).join('')}${more.length ? `<details class="bx-more"><summary>Defense, kicking and returns</summary>${more.map((x) => x.html).join('')}</details>` : ''}</div>`;
+  };
+  const uid = `bx-${String(id || 'g').replace(/[^\w-]/g, '')}`;
+  const [a, h] = ordered;
+  if (!a) return '';
+  const radios = `<input type="radio" class="bx-r a" name="${uid}" id="${uid}-a"${side !== 'h' ? ' checked' : ''}/>${h ? `<input type="radio" class="bx-r h" name="${uid}" id="${uid}-h"${side === 'h' ? ' checked' : ''}/>` : ''}`;
+  const seg = `<div class="bx-seg" role="group" aria-label="Choose team"><label for="${uid}-a" class="a">${esc(teamAbbr(a))}</label>${h ? `<label for="${uid}-h" class="h">${esc(teamAbbr(h))}</label>` : ''}</div>`;
+  return `<div class="md-section-title">Box Score</div><div class="bx">${radios}${seg}${pane(a, 'a')}${h ? pane(h, 'h') : ''}</div>`;
 }
 
 // --- demo fallback (only if the network is unavailable) -------------------
@@ -2460,20 +2526,6 @@ function hittersHTML(g, ht, at) {
   };
   const block = (label, arr) => `<div class="hit-team">${label}</div>${arr.length ? arr.map(line).join('') : '<div class="ai-why">Not available</div>'}`;
   return `<div class="md-section-title">Top 3 Hitters (OPS · healthy)</div>${block(g.away.abbr || 'Away', at)}${block(g.home.abbr || 'Home', ht)}`;
-}
-// NFL key players (QB/RB/WR leaders) from the scoreboard feed.
-function nflKeyHTML(g) {
-  const pick = (lead, re) => {
-    const c = (lead || []).find((x) => re.test(`${x.name}${x.displayName}`));
-    const t = c?.leaders?.[0];
-    return t ? { name: t.athlete?.displayName || t.athlete?.shortName, val: t.displayValue } : null;
-  };
-  const side = (lead) => [['QB', /passing/i], ['RB', /rushing/i], ['WR', /receiving/i]]
-    .map(([pos, re]) => { const p = pick(lead, re); return p ? { pos, ...p } : null; }).filter(Boolean);
-  const h = side(g.home.leaders), a = side(g.away.leaders);
-  if (!h.length && !a.length) return '<div class="md-section-title">Key Players</div><div class="ai-why">Season stats appear once the season starts.</div>';
-  const rows = (arr) => arr.length ? arr.map((p) => `<div class="hit-row"><span class="hit-n">${esc(p.pos)} · ${esc(p.name)}</span><span class="hit-s">${esc(p.val)}</span></div>`).join('') : '<div class="ai-why">Not available</div>';
-  return `<div class="md-section-title">Key Players</div><div class="hit-team">${g.away.abbr || 'Away'}</div>${rows(a)}<div class="hit-team">${g.home.abbr || 'Home'}</div>${rows(h)}`;
 }
 // Projected starting pitchers with their key stats (from the scoreboard feed).
 function startersHTML(g) {
