@@ -9,6 +9,7 @@ function load() {
   const s = {
     clamp: (v, lo, hi) => Math.min(hi, Math.max(lo, v)),
     esc: (v) => String(v),
+    SportsHubFootballField: require('../football-field.js'),
   };
   vm.createContext(s);
   const start = src.indexOf('function liveSituationHTML(');
@@ -30,8 +31,8 @@ const comp = { competitors: [
 test('game report labels the team with the ball, not the side of the field', () => {
   const s = load();
   const html = s.footballSituation(sit, comp);
-  assert.match(html, /<b>ATL<\/b> ball/);
-  assert.doesNotMatch(html, /<b>BAL<\/b> ball/);
+  assert.match(html, /ATL ball/);
+  assert.doesNotMatch(html, /BAL ball/);
 });
 
 test('score rail uses the same possession', () => {
@@ -44,21 +45,23 @@ test('score rail uses the same possession', () => {
 test('missing possession id shows no team instead of guessing from the spot', () => {
   const s = load();
   const html = s.footballSituation({ ...sit, possession: undefined }, comp);
-  assert.doesNotMatch(html, /ball ·/);
-  assert.match(html, /3rd & 5/);
+  assert.doesNotMatch(html, /(ATL|BAL) ball/);
+  assert.match(html, /3rd &amp; 5/);
 });
 
 for (const sport of ['nfl', 'cfb']) {
   test(`${sport} live detail renders possession, down/distance and field from the summary`, () => {
     const html = load().liveSituationHTML(sport, { situation: { ...sit, lastPlay: { text: 'False start. NO PLAY' } } }, comp, null);
-    assert.match(html, /<b>ATL<\/b> ball/);
-    assert.match(html, /3rd & 5/);
-    assert.match(html, /class="ff-field/);
+    assert.match(html, /ATL ball/);
+    assert.match(html, /3rd &amp; 5/);
+    assert.match(html, /class="ffx-svg"/);
     assert.match(html, /False start. NO PLAY/);
+    // v330: ESPN yardLine 55 = 55 yards from ATL's (home) goal = BAL 45; ATL going left.
+    assert.match(html, /aria-label="Field: ATL ball at BAL 45 going left"/);
   });
   test(`${sport} uses scoreboard fallback and handles missing situation`, () => {
     const s = load();
-    assert.match(s.liveSituationHTML(sport, {}, comp, { situation: sit }), /class="ff-field/);
+    assert.match(s.liveSituationHTML(sport, {}, comp, { situation: sit }), /class="ffx-svg"/);
     assert.equal(s.liveSituationHTML(sport, {}, comp, null), '');
   });
 }

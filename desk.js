@@ -222,6 +222,18 @@
     const moves = (read.moves || []).length ? `<span class="desk-moves" aria-label="Line moved since the model saved">${read.moves.map(m=>`<span class="${m.ok===false?'off':m.ok?'ok':''}">${escape(m.text)}</span>`).join('')}</span>` : '';
     return `${lineRow}${chips}${foot.length?`<span class="desk-read-foot">${foot.map(t=>`<span>${escape(t)}</span>`).join('')}</span>`:''}${moves}`;
   }
+  // v330: compact live field for NFL/CFB rows (football-field.js).
+  function liveField(sport, g, markets) {
+    const F = root.SportsHubFootballField;
+    if (!F || !['nfl','cfb'].includes(sport) || gameState(g) !== 'live' || !g.situation) return '';
+    const ml = markets?.get?.('moneyline');
+    const pct = ml ? (ml.confidence != null ? Number(ml.confidence) : ml.model_probability != null ? Number(ml.model_probability) * 100 : null) : null;
+    const pick = ml ? (ml.selection_home ? g.home : g.away) : null;
+    const m = F.build({ situation: g.situation, home: g.home, away: g.away,
+      winHome: g.situation.lastPlay?.probability?.homeWinPercentage,
+      model: pick?.abbr && Number.isFinite(pct) ? { abbr: pick.abbr, pct } : null });
+    return m ? F.stripHTML(m) : '';
+  }
   function edgeBadge(read) {
     const parts = [];
     if (read.flip) parts.push('<span class="desk-badge flip" title="Saved price was plus money; model gave them over 50%">Dog flip</span>');
@@ -266,7 +278,7 @@
       const status = gameState(g), started = status !== 'scheduled';
       const tag = status === 'live' ? (g.statusText || 'Live') : status === 'final' ? 'Final' : dateText(g.date);
       const ml = side => !started && read.moneyline[side] ? `<small class="desk-ml">ML ${escape(read.moneyline[side])}</small>` : '';
-      row.innerHTML = `<button type="button" class="desk-game-main" data-desk-game="${escape(sport+':'+g.id)}" aria-label="Open ${escape(g.away.name)} at ${escape(g.home.name)} game report"><span class="desk-game-meta"><span class="desk-sport">${escape(LEAGUES[sport].label)}</span><span class="${status==='live'?'desk-live':''}">${escape(tag)}</span>${edgeBadge(read)}</span><span class="desk-matchup"><span class="desk-match-team">${teamMark(g.away)}<span><b>${escape(g.away.abbr || g.away.name)}</b>${ml('away')||`<small>${escape(g.away.name)}</small>`}</span>${started?`<strong>${escape(g.away.score??'–')}</strong>`:''}</span><span class="desk-versus">${started?'–':'at'}</span><span class="desk-match-team">${teamMark(g.home)}<span><b>${escape(g.home.abbr || g.home.name)}</b>${ml('home')||`<small>${escape(g.home.name)}</small>`}</span>${started?`<strong>${escape(g.home.score??'–')}</strong>`:''}</span></span>${readHTML(read,book,status)}${gameContext(sport,g,markets)}</button>`;
+      row.innerHTML = `<button type="button" class="desk-game-main" data-desk-game="${escape(sport+':'+g.id)}" aria-label="Open ${escape(g.away.name)} at ${escape(g.home.name)} game report"><span class="desk-game-meta"><span class="desk-sport">${escape(LEAGUES[sport].label)}</span><span class="${status==='live'?'desk-live':''}">${escape(tag)}</span>${edgeBadge(read)}</span><span class="desk-matchup"><span class="desk-match-team">${teamMark(g.away)}<span><b>${escape(g.away.abbr || g.away.name)}</b>${ml('away')||`<small>${escape(g.away.name)}</small>`}</span>${started?`<strong>${escape(g.away.score??'–')}</strong>`:''}</span><span class="desk-versus">${started?'–':'at'}</span><span class="desk-match-team">${teamMark(g.home)}<span><b>${escape(g.home.abbr || g.home.name)}</b>${ml('home')||`<small>${escape(g.home.name)}</small>`}</span>${started?`<strong>${escape(g.home.score??'–')}</strong>`:''}</span></span>${liveField(sport,g,markets)}${readHTML(read,book,status)}${gameContext(sport,g,markets)}</button>`;
       addWatchControl(row,sport,g); host.appendChild(row);
     });
     if (list.length > agendaLimit) host.insertAdjacentHTML('beforeend',`<button class="desk-show-more" type="button" data-agenda-more>Show ${Math.min(12,list.length-agendaLimit)} more games <span>(${list.length} in this view)</span></button>`);

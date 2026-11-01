@@ -314,6 +314,9 @@ fantasy/golf data are not refreshed by this cycle.
   mobile navigation. `#rail-wrap` holds the optional score rail (closed by
   default, existing device preference respected). `#home-board` remains under
   a remembered disclosure on Today. The former home content lives in `#pulse`.
+- `football-field.js` — v330 shared NFL/CFB live field renderer (game screen
+  Live Situation + compact strip on live games-ahead rows); see the v330 entry
+  for ESPN's home-oriented yardLine. Tested by `tests/football-field.test.js`.
 - `desk-core.js` — dependency-free route, bookmark, saved-history summary,
   game-radar, games-ahead read (`gameRead` incl. v329 saved-vs-now `moves`,
   `slateSummary`, v328) and search
@@ -693,7 +696,41 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v329** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v330** (backend **b17-fantasy-league-rules**).
+
+### v330 — Football live field (game screen + live games-ahead rows)
+
+Jack shared ESPN's gamecast field and asked for something like it on Today and
+in the game screen's Live Situation. New `football-field.js`
+(`SportsHubFootballField`: `build`, `fullHTML`, `stripHTML`; tests in
+`tests/football-field.test.js`) is the ONE renderer for both:
+- 🚨 **Orientation.** ESPN `yardLine` (situation, play start/end, drive
+  start/end) is yards from the **HOME** goal line — verified 1 Nov 2026 on
+  LV @ NYJ (LV 16 → 84), MIN @ DET (DET 35 → 35) and a DET drive ending in the
+  MIN end zone (→ 100). We draw away LEFT / home RIGHT, so x = 100 − yardLine.
+  Pre-v330 the modal bar and the score-rail strip (`mgcFootball`) used
+  yardLine as the left % with both ends labelled "EZ", which put the ball on
+  the correct spot but drawn mirrored relative to every team-labelled view. The
+  rail strip now uses the same x = 100 − yardLine.
+- Game screen (`footballSituation(sit, comp, data, g, sport)` in app.js):
+  Down / Ball on / Drive tiles; field with team-color end zones (`teamObj`
+  now carries `color`), yard numbers, ball marker with possession abbr and
+  direction arrow, blue line of scrimmage, gold line to gain (goal line on
+  "& Goal"), drive line from `data.drives.current` (summary) or the
+  scoreboard `lastPlay.drive` ("Last drive · Touchdown" when it has a result,
+  else "This drive"), red-zone shading, last play, and **ESPN live win %**
+  (summary `winprobability` last entry, else scoreboard
+  `lastPlay.probability`) beside the saved pregame model pick
+  (`savedPregamePick`, official version per league).
+- Games ahead: live NFL/CFB rows get `stripHTML` — "BUF ball · 2nd & Goal at
+  BAL 5 · Red zone", a mini field, and "Live win (ESPN) BUF 88% · Model
+  pregame BUF 69%" — above the model chips.
+- ESPN flags kickoffs/timeouts `isRedZone: true` with `down: −1`; red zone is
+  only shaded on a real down (that is why the old bar turned all maroon).
+- No possession id → no team label and no direction (v304 rule kept).
+- `tests/possession-label.test.js` updated to the new markup; still asserts
+  the team WITH the ball is labelled, never the side of the field.
+- Display-only. No collector, model, capture or grading change.
 
 ### v329 — Games ahead: saved vs now
 

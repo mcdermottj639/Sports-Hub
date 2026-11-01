@@ -544,3 +544,32 @@ body[data-desk-panel="home"] #desk-follow-teams { display:grid;grid-template-col
 .desk-moves span { padding-left:9px;border-left:2px solid #c5d4b8; }
 .desk-moves span.ok { border-left-color:#799c17; }
 .desk-moves span.off { border-left-color:#c0533a;color:#8a3a25; }
+
+/* v330 — football live field (football-field.js): game screen + live rows */
+.ffx { margin:6px 0 4px;color:var(--ink); }
+.ffx-tiles { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));text-align:center;margin-bottom:10px; }
+.ffx-tile { padding:0 4px;min-width:0; }
+.ffx-tile + .ffx-tile { border-left:1px solid var(--desk-line,#e0e8e6); }
+.ffx-tile b { display:block;font-size:15px;line-height:1.25;font-weight:700;color:var(--ink); }
+.ffx-tile small { display:block;font-size:10px;color:var(--mu);margin-top:2px; }
+.ffx-svg { display:block;width:100%;height:auto;color:var(--ink);overflow:visible; }
+.ffx-legend { display:flex;flex-wrap:wrap;gap:4px 12px;font-size:10px;color:var(--mu);margin-top:2px; }
+.ffx-legend span::before { content:'';display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle;background:#2b7de9; }
+.ffx-legend .gain::before { background:#f2b31b; }
+.ffx-legend .drv::before { background:#9aa79f; }
+.ffx-legend .rz::before { background:#d9363e;opacity:.5;height:8px; }
+.ffx-last { font-size:13px;line-height:1.45;margin-top:8px;color:var(--ink2); }
+.ffx-last small { color:var(--mu);font-size:11px;margin-right:4px; }
+.ffx-win { margin-top:12px; }
+.ffx-win-head,.ffx-win-foot { display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--gy); }
+.ffx-win-foot { margin-top:3px;font-size:12px; }
+.ffx-win-foot .lead { font-weight:700;color:var(--ink); }
+.ffx-win-bar { display:flex;height:9px;border-radius:5px;overflow:hidden;margin-top:4px;background:#e6ece1; }
+.ffx-win-bar i { display:block;height:100%; }
+.ffx-win-model { display:block;font-size:11px;color:var(--gy);margin-top:8px; }
+.ffx-compact { display:block;margin-top:9px; }
+.ffx-compact .ffx-line { display:block;font-size:12px;font-weight:600;color:var(--ink2);margin-bottom:4px; }
+.ffx-compact .ffx-line em { font-style:normal;color:#b0282f;font-weight:700;margin-left:4px; }
+.ffx-strip { display:block;width:100%;height:auto; }
+.ffx-compact .ffx-meta { display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--gy);margin-top:4px; }
+.ffx-compact .ffx-win-model { margin-top:4px; }

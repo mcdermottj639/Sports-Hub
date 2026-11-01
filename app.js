@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v329';
+const APP_VERSION = 'v330';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -428,6 +428,7 @@ function teamObj(c) {
     name: t.displayName || t.name,
     abbr: t.abbreviation,
     logo: t.logo || t.logos?.[0]?.href || null,
+    color: t.color || null,          // v330: end-zone color on the live field
     score: c?.score != null && c.score !== '' ? Number(c.score) : null,
     winner: c?.winner === true,      // ESPN's result flag (covers shootout wins)
     probables: c?.probables || null, // MLB probable starters
@@ -1337,7 +1338,7 @@ function liveSituationHTML(sport, data, comp, g) {
       ${(batter || pitcher) ? `<div class="sit-mu">${pitcher ? `Pitching: <b>${esc(pitcher)}</b>` : ''}${pitcher && batter ? ' · ' : ''}${batter ? `At bat: <b>${esc(batter)}</b>` : ''}</div>` : ''}
       ${last ? `<div class="sit-last">Last play: ${last}</div>` : ''}`;
   }
-  if (sport === 'nfl' || sport === 'cfb') return footballSituation(sit, comp);
+  if (sport === 'nfl' || sport === 'cfb') return footballSituation(sit, comp, data, g, sport);
   // basketball & anything else: last play text (no positional widget exists)
   const last = sit.lastPlay?.text;
   if (!last) return '';
@@ -1357,24 +1358,43 @@ function possessionAbbr(sit, teams) {
   return t?.abbr || '';
 }
 
-// Football: a field-position bar with the ball spot, possession + down/distance.
-function footballSituation(sit, comp) {
-  const dd = sit.shortDownDistanceText || sit.downDistanceText;
-  const last = sit.lastPlay?.text;
+// v330 — Football: the shared field (football-field.js): labelled team end
+// zones (away left, home right), ball + direction, line of scrimmage, line to
+// gain, current/last drive, red zone, last play, ESPN live win % beside the
+// saved pregame model pick. ESPN yardLine is yards from the HOME goal line.
+function savedPregamePick(sport, id, teams) {
+  try {
+    const rows = globalThis.SportsHubCloudAI?.cached?.().rows;
+    const vf = (s) => globalThis.SportsHubNFLLive?.versionFor?.(s) || AI_MODEL_VERSION;
+    const ml = globalThis.SportsHubDeskCore?.gameForecasts(rows, vf).get(`${sport}:${id}`)?.get('moneyline');
+    if (!ml) return null;
+    const pct = ml.confidence != null ? Number(ml.confidence) : ml.model_probability != null ? Number(ml.model_probability) * 100 : null;
+    const team = ml.selection_home ? teams.home : teams.away;
+    return team?.abbr && Number.isFinite(pct) ? { abbr: team.abbr, pct } : null;
+  } catch (_) { return null; }
+}
+function footballSituation(sit, comp, data = {}, g = null, sport = 'nfl') {
+  const F = globalThis.SportsHubFootballField;
   const cs = comp.competitors || [];
-  const possAbbr = possessionAbbr(sit, cs.map((c) => ({ id: c.team?.id ?? c.id, abbr: c.team?.abbreviation })));
-  const yl = Number(sit.yardLine);
-  const rz = !!sit.isRedZone;
-  if (!dd && isNaN(yl) && !last) return '';
-  const field = !isNaN(yl) ? `<div class="ff-field ${rz ? 'rz' : ''}">
-      <div class="ez">EZ</div>
-      <div class="grass"><span class="fifty"></span><span class="ball" style="left:${clamp(yl, 1, 99)}%">🏈</span></div>
-      <div class="ez">EZ</div>
-    </div>` : '';
-  return `<div class="md-section-title acc-open">🔴 Live Situation</div>
-    ${dd ? `<div class="sit-mu">${possAbbr ? `<b>${possAbbr}</b> ball · ` : ''}${dd}${rz ? ` · <span class="rz-tag">RED ZONE</span>` : ''}</div>` : ''}
-    ${field}
-    ${last ? `<div class="sit-last">Last play: ${last}</div>` : ''}`;
+  const side = (ha) => {
+    const c = cs.find((x) => x.homeAway === ha);
+    if (c) return { id: c.team?.id ?? c.id, abbr: c.team?.abbreviation, color: c.team?.color };
+    const t = g?.[ha];
+    return t ? { id: t.id, abbr: t.abbr, color: t.color } : null;
+  };
+  const home = side('home'), away = side('away');
+  const cur = data.drives?.current;
+  const sbDrive = sit.lastPlay?.drive;
+  const drive = cur?.start ? { startYL: cur.start.yardLine, endYL: cur.end?.yardLine, description: cur.description, result: cur.displayResult || cur.result }
+    : sbDrive?.start ? { startYL: sbDrive.start.yardLine, endYL: sbDrive.end?.yardLine, description: sbDrive.description, result: sbDrive.result } : null;
+  const wp = Array.isArray(data.winprobability) && data.winprobability.length ? data.winprobability[data.winprobability.length - 1]?.homeWinPercentage
+    : sit.lastPlay?.probability?.homeWinPercentage;
+  const lastText = sit.lastPlay?.text || cur?.plays?.[cur.plays.length - 1]?.text || null;
+  const id = comp.id || g?.id;
+  const m = F?.build({ situation: sit, home, away, drive, winHome: wp, lastPlay: lastText,
+    model: id ? savedPregamePick(sport, id, { home, away }) : null });
+  if (!m) return '';
+  return `<div class="md-section-title acc-open">🔴 Live Situation</div>${F.fullHTML(m)}`;
 }
 
 function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
@@ -1525,8 +1545,8 @@ function mgcBaseball(g, sit) {
 }
 
 // Football: a field strip with the ball spot, plus possession + down/distance.
-// yardLine is mapped straight to a left percentage, matching what the modal's
-// footballSituation already does — approximate, but consistent between the two.
+// v330: away end LEFT, home end RIGHT (x = 100 − yardLine), matching the game
+// screen's football-field.js. Before v330 both used yardLine as the left %.
 function mgcFootball(g, sit) {
   const yl = Number(sit?.yardLine);
   const dd = sit?.shortDownDistanceText || sit?.downDistanceText || '';
@@ -1536,10 +1556,13 @@ function mgcFootball(g, sit) {
   if (isFinite(yl)) {
     // Red-zone band goes on whichever half the ball sits in — the end they're
     // near is the end they're attacking often enough for a 72px strip.
-    const band = rz ? `<span class="rz" style="${yl >= 50 ? 'right:11%' : 'left:11%'}"></span>` : '';
+    // v330: away goal LEFT, home goal RIGHT, same as the game screen's field
+    // (football-field.js). ESPN yardLine counts from the HOME goal → x = 100 − yl.
+    const x = 100 - yl;
+    const band = rz ? `<span class="rz" style="${x >= 50 ? 'right:11%' : 'left:11%'}"></span>` : '';
     field = `<div class="lrc-fld"><span class="ez l"></span><span class="ez r"></span>${band}
       <s style="left:33%"></s><s style="left:50%"></s><s style="left:67%"></s>
-      <b style="left:${clamp(yl, 2, 98)}%"></b></div>`;
+      <b style="left:${clamp(x, 2, 98)}%"></b></div>`;
   }
   const line = [poss, dd].filter(Boolean).join(' ');
   return `${field}${line ? `<div class="lrc-dd">${esc(line)}</div>` : ''}
