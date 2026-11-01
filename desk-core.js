@@ -64,7 +64,7 @@
     return { tone: 'good', title: 'Automatic capture active', at };
   }
   function savedSummary(rows, version, now = Date.now()) {
-    const eligible = (rows || []).filter(r => r.model_version === version && Date.parse(r.captured_at) < Date.parse(r.starts_at));
+    const eligible = (rows || []).filter(r => r.model_version === wanted(version, r.sport) && Date.parse(r.captured_at) < Date.parse(r.starts_at));
     const pending = eligible.filter(r => r.result === 'pending');
     const upcoming = pending.filter(r => Date.parse(r.starts_at) > now);
     const due = pending.filter(r => Date.parse(r.starts_at) <= now);
@@ -72,10 +72,14 @@
     const priced = upcoming.filter(r => r.price != null && String(r.price).trim() !== '' && Number.isFinite(Number(r.price)) && Math.abs(Number(r.price)) >= 100).length;
     return { upcoming: upcoming.length, games, priced, due: due.length };
   }
+  // `version` is either one version string or a function sport -> official
+  // version. v328: the desk passed the single string 'v239', so NFL
+  // (nfl-football-v1) and NBA (nba-v1) official forecasts never reached it.
+  const wanted = (version, sport) => (typeof version === 'function' ? version(sport) : version);
   function gameForecasts(rows, version) {
     const result = new Map();
     for (const r of rows || []) {
-      if (r.model_version !== version || r.result === 'void' || !SPORTS.includes(r.sport)
+      if (r.model_version !== wanted(version, r.sport) || r.result === 'void' || !SPORTS.includes(r.sport)
         || !['moneyline','spread','total'].includes(r.market)
         || !(Date.parse(r.captured_at) < Date.parse(r.starts_at))) continue;
       const k = key(r.sport, r.event_id);
@@ -84,6 +88,60 @@
       if (!result.get(k).has(r.market)) result.get(k).set(r.market, r);
     }
     return result;
+  }
+  // v328 — the "games ahead" read for one game. Display-only: everything here
+  // comes from the ESPN line already on the game and the official saved
+  // pregame forecast rows (`markets` = gameForecasts(...).get(key)). Nothing is
+  // predicted, recorded or graded here.
+  //   odds: normOdds() shape — spread is HOME-oriented (negative = home favored).
+  const HOT = ['alert', 'best', 'edge'];
+  const num = v => (v == null || String(v).trim() === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+  const signed = v => (v > 0 ? `+${v}` : v < 0 ? `−${Math.abs(v)}` : `${v}`);
+  const tierName = t => (t ? t[0].toUpperCase() + t.slice(1) : null);
+  function gameRead(markets, odds, g) {
+    const ab = home => { const t = home ? g?.home : g?.away; return t?.abbr || t?.name || (home ? 'Home' : 'Away'); };
+    const ml = markets?.get?.('moneyline') || null, sp = markets?.get?.('spread') || null, tot = markets?.get?.('total') || null;
+    // Book line.
+    const s = num(odds?.spread), ou = num(odds?.ou);
+    let spreadTxt = null;
+    if (s != null) spreadTxt = s === 0 ? 'Pick’em' : `${ab(s < 0)} −${Math.abs(s)}`;
+    else if (typeof odds?.details === 'string' && odds.details.trim() && num(odds?.hML) == null && num(odds?.aML) == null) spreadTxt = odds.details.trim();
+    const line = [spreadTxt, ou != null ? `O/U ${ou}` : null].filter(Boolean).join(' · ') || null;
+    const price = v => (num(v) == null ? null : signed(num(v)));
+    const moneyline = { away: price(odds?.aML), home: price(odds?.hML) };
+    // Model chips (official saved pregame rows only).
+    const chips = [];
+    if (ml) {
+      const pct = num(ml.confidence) ?? (num(ml.model_probability) != null ? num(ml.model_probability) * 100 : null);
+      chips.push({ market: 'winner', label: 'Winner', value: `${ab(!!ml.selection_home)}${pct != null ? ` ${Math.round(pct)}%` : ''}`, tier: ml.tier || null, hot: HOT.includes(ml.tier) });
+    }
+    if (sp) chips.push({ market: 'spread', label: 'Spread', value: String(sp.selection || '').replace(/ -(?=\d)/, ' −'), tier: sp.tier || null, hot: HOT.includes(sp.tier) });
+    if (tot) {
+      const over = /^over/i.test(String(tot.selection || ''));
+      chips.push({ market: 'total', label: 'Total', value: `${over ? 'O' : 'U'} ${num(tot.line) ?? String(tot.selection || '').replace(/^\D+/, '')}`, tier: tot.tier || null, hot: HOT.includes(tot.tier) });
+    }
+    // Edge: model win chance minus the no-vig market chance for the same side.
+    const mp = num(ml?.model_probability), mk = num(ml?.market_probability);
+    const edge = ml && mp != null && mk != null
+      ? { pts: Math.round((mp - mk) * 1000) / 10, tier: tierName(ml.tier), hot: HOT.includes(ml.tier) } : null;
+    // Underdog flip — same rule as Performance (v327): book has plus money, model > 50%.
+    const flip = !!(ml && num(ml.price) >= 100 && mp != null && mp > 0.5);
+    // Projected score from the saved forecast (margin is HOME-oriented).
+    const f = ml?.snapshot?.forecast || sp?.snapshot?.forecast || tot?.snapshot?.forecast || {};
+    const margin = num(f.margin) ?? num(sp?.projection), total = num(f.total) ?? num(tot?.projection);
+    let proj = null;
+    if (margin != null && total != null && total > 0) {
+      if (Math.abs(margin) < 1) proj = `Proj. about even · ${Math.round(total)} total`;
+      else {
+        const home = (total + margin) / 2, away = (total - margin) / 2, r1 = v => Math.round(v * 10) / 10;
+        proj = margin > 0 ? `Proj. ${ab(true)} ${r1(home)} – ${ab(false)} ${r1(away)}` : `Proj. ${ab(false)} ${r1(away)} – ${ab(true)} ${r1(home)}`;
+      }
+    }
+    return { line, moneyline, chips, edge, flip, proj, hot: HOT.includes(ml?.tier) };
+  }
+  function slateSummary(reads) {
+    const list = reads || [];
+    return { games: list.length, edges: list.filter(r => r?.hot).length, flips: list.filter(r => r?.flip).length };
   }
   function agenda(games, watch, filter = 'all', now = Date.now()) {
     const pinned = new Set(normalizeWatch(watch).map(r => key(r.sport, r.id)));
@@ -101,5 +159,5 @@
     const tokens = String(query || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
     return items.filter(x => tokens.every(t => `${x.title} ${x.description || ''} ${x.keywords || ''}`.toLowerCase().includes(t))).slice(0, 30);
   }
-  return Object.freeze({ route, hashFor, group, key, normalizeWatch, toggleWatch, captureStatus, savedSummary, gameForecasts, agenda, search });
+  return Object.freeze({ route, hashFor, group, key, normalizeWatch, toggleWatch, captureStatus, savedSummary, gameForecasts, gameRead, slateSummary, agenda, search });
 });

@@ -315,7 +315,11 @@ fantasy/golf data are not refreshed by this cycle.
   default, existing device preference respected). `#home-board` remains under
   a remembered disclosure on Today. The former home content lives in `#pulse`.
 - `desk-core.js` — dependency-free route, bookmark, saved-history summary,
-  game-radar and search utilities, tested by `tests/desk-core.test.js`.
+  game-radar, games-ahead read (`gameRead`, `slateSummary`, v328) and search
+  utilities, tested by `tests/desk-core.test.js`. `gameForecasts` and
+  `savedSummary` take a version string OR a `sport => version` function; the
+  desk passes `SportsHubNFLLive.versionFor` so NFL (`nfl-football-v1`) and NBA
+  (`nba-v1`) official rows are seen, not just `v239`.
 - `desk.js` — app navigation, brief, research landing, search dialog, grouped
   More directory, game bookmarks and local notes. Loads before app.js; init
   runs after app declarations. Uses existing collectors, math and adapters.
@@ -688,7 +692,38 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v327** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v328** (backend **b17-fantasy-league-rules**).
+
+### v328 — "The games ahead" rows carry lines and the model read
+
+Jack asked for more lines and model info on Today → The games ahead, and picked
+items 1–5 + 8 from a menu. Each non-final row now shows, all display-only:
+- **Book line** — ESPN spread (favorite-oriented, e.g. `BUF −3.5`) and O/U,
+  plus each side's moneyline under the team abbreviation. A started game uses
+  this device's pregame snapshot (`shownOdds`) and is labelled "pregame line".
+- **Model chips** — Winner (abbr + confidence %), Spread (saved selection),
+  Total (O/U + saved line) from the OFFICIAL saved pregame `ai_predictions`
+  rows. Green = that row's tier is Edge/Best/Alert. No saved row → "No saved
+  forecast for this game yet"; nothing is recomputed here.
+- **Edge badge** in the meta line — moneyline `model_probability −
+  market_probability` in points, prefixed with the tier name when tiered.
+- **Dog flip** badge (tooltip + read note explain it) — identical rule to v327 `isFlip` (saved
+  price ≥ +100 and model probability > 50%).
+- **Projected score** from the saved `snapshot.forecast` margin (home-oriented)
+  and total; |margin| < 1 reads "Proj. about even · N total" so it never
+  contradicts a coin-flip winner chip.
+- **Slate strip** above the list: games (non-final, current filter) · edges
+  (moneyline tier Edge/Best/Alert — same definition as the board's `isEdge`) ·
+  dog flips, and an **Edges only** toggle (edge OR flip; in-memory, resets on
+  reload). A collapsed "How to read these rows" note explains every number.
+- 🚨 **Bug fixed on the way:** the desk called `gameForecasts(rows, 'v239')`,
+  so NFL (`nfl-football-v1`) and NBA (`nba-v1`) official rows never reached
+  the radar or the brief's stat tiles. Both now pass `officialVersion`
+  (`SportsHubNFLLive.versionFor`). The brief's "Upcoming games / Saved
+  forecasts / Awaiting grading" counts rise accordingly — they were
+  undercounting, not the new numbers overcounting.
+- Files: `desk-core.js`, `desk.js`, `desk.css`, `tests/desk-core.test.js` (+2).
+  No collector, model, capture, grading or schema change.
 
 ### v327 — Underdog-flip record on Performance
 

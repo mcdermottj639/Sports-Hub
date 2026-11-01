@@ -72,3 +72,58 @@ test('search matches every query token across destination title and purpose', ()
   assert.equal(C.search(items,'  ROI   SAVED ')[0].title,items[1].title);
   assert.deepEqual(C.search(items,'waiver ROI'),[]);
 });
+
+test('v328 games-ahead read: official version per league reaches the desk', () => {
+  const base = {result:'pending',captured_at:'2026-11-01T12:00:00Z',starts_at:'2026-11-01T17:00:00Z'};
+  const rows = [
+    {...base,sport:'nfl',event_id:'1',market:'moneyline',model_version:'nfl-football-v1'},
+    {...base,sport:'nfl',event_id:'1',market:'spread',model_version:'football-research-nfl-v4-early'},
+    {...base,sport:'nba',event_id:'2',market:'total',model_version:'nba-v1'},
+    {...base,sport:'cfb',event_id:'3',market:'moneyline',model_version:'v239'},
+  ];
+  const versionFor = s => s==='nfl'?'nfl-football-v1':s==='nba'?'nba-v1':'v239';
+  const f = C.gameForecasts(rows, versionFor);
+  assert.deepEqual([...f.get('nfl:1').keys()], ['moneyline']);
+  assert.ok(f.get('nba:2').has('total'));
+  assert.ok(f.get('cfb:3').has('moneyline'));
+  // The old single-string call still works and still only sees v239.
+  assert.deepEqual([...C.gameForecasts(rows,'v239').keys()], ['cfb:3']);
+});
+
+test('v328 games-ahead read: line, chips, edge, flip and projected score', () => {
+  const g = {home:{abbr:'BUF',name:'Buffalo Bills'},away:{abbr:'BAL',name:'Baltimore Ravens'}};
+  const fc = {total:51.4,margin:5.3};
+  const markets = new Map([
+    ['moneyline',{selection:'Buffalo Bills',selection_home:true,confidence:69,tier:null,price:-192,model_probability:0.68936,market_probability:0.63094,snapshot:{forecast:fc}}],
+    ['spread',{selection:'BUF -3.5',selection_home:true,tier:null,line:-3.5,projection:5.3}],
+    ['total',{selection:'UNDER 53.5',tier:'edge',line:53.5,projection:51.4}],
+  ]);
+  const r = C.gameRead(markets,{spread:-3.5,ou:53.5,hML:-192,aML:160},g);
+  assert.equal(r.line,'BUF −3.5 · O/U 53.5');
+  assert.deepEqual(r.moneyline,{away:'+160',home:'−192'});
+  assert.deepEqual(r.chips.map(c=>c.value),['BUF 69%','BUF −3.5','U 53.5']);
+  assert.deepEqual(r.chips.map(c=>c.hot),[false,false,true]);
+  assert.equal(r.edge.pts,5.8);
+  assert.equal(r.flip,false);
+  assert.equal(r.hot,false);
+  assert.equal(r.proj,'Proj. BUF 28.4 – BAL 23.1');
+
+  // ATL @ TB: book has ATL +114, model 50.7% -> dog flip and an Edge tier.
+  const atl = new Map([['moneyline',{selection:'Atlanta Falcons',selection_home:false,confidence:51,tier:'edge',price:114,model_probability:0.506638,market_probability:0.448559,snapshot:{forecast:{total:43,margin:0.1}}}]]);
+  const a = C.gameRead(atl,{spread:-2.5,ou:46.5,hML:-135,aML:114},{home:{abbr:'TB'},away:{abbr:'ATL'}});
+  assert.equal(a.flip,true);
+  assert.equal(a.hot,true);
+  assert.equal(a.edge.tier,'Edge');
+  assert.equal(a.edge.pts,5.8);
+  assert.equal(a.line,'TB −2.5 · O/U 46.5');
+  assert.equal(a.proj,'Proj. about even · 43 total');
+
+  // Away favorite, no forecast, no odds: nothing invented.
+  const none = C.gameRead(undefined,{spread:3},{home:{abbr:'H'},away:{abbr:'A'}});
+  assert.equal(none.line,'A −3');
+  assert.deepEqual(none.chips,[]);
+  assert.equal(none.edge,null);
+  assert.equal(none.proj,null);
+  assert.equal(C.gameRead(undefined,null,{home:{},away:{}}).line,null);
+  assert.deepEqual(C.slateSummary([a,r,none]),{games:3,edges:1,flips:1});
+});

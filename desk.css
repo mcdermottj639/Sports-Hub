@@ -511,3 +511,31 @@ body[data-desk-panel="home"] #desk-follow-teams { display:grid;grid-template-col
 
 /* v311: version label at the foot of Today (sidebar badge is hidden on phones) */
 .desk-version-foot{margin:18px 0 8px;text-align:center;font-size:12px;letter-spacing:.04em;color:var(--muted)}
+
+/* v328 — games ahead: book line, model chips, edge badge, projected score,
+   dog flip, slate strip + Edges only. Display-only over saved forecasts. */
+.desk-slate-strip { display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:12px 0 4px;font-size:11px;color:var(--gy); }
+.desk-slate-strip>span { padding:5px 9px;border-radius:7px;background:#eef3e6;color:#3c624b;font-weight:600;line-height:1.2; }
+.desk-slate-strip>span.hot { background:#dcefc4;color:#245131; }
+.desk-slate-strip>span.flip { background:#f6e8cf;color:#7a4f12; }
+.desk-slate-strip button { margin-left:auto;border:1px solid #c5d4b8;background:#fff;color:#2f4f3e;border-radius:7px;padding:6px 11px;min-height:36px;font-size:11px;font-weight:600; }
+.desk-slate-strip button[aria-pressed=true] { background:#103f36;color:#efffc8;border-color:#103f36; }
+.desk-game-meta .desk-badge { margin-left:auto;padding:3px 7px;border-radius:5px;font-size:10px;font-weight:700;background:#eef1ee;color:#4b5f5a;white-space:nowrap; }
+.desk-game-meta .desk-badge + .desk-badge { margin-left:0; }
+.desk-game-meta .desk-badge.hot { background:#dcefc4;color:#245131; }
+.desk-game-meta .desk-badge.flip { background:#f6e8cf;color:#7a4f12; }
+.desk-shell .desk-match-team small.desk-ml { display:block;font-size:11px;font-weight:600;color:var(--ink2);margin-top:2px;white-space:nowrap; }
+.desk-line { display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-top:10px;padding:7px 0;border-top:1px solid #e6ece1;border-bottom:1px solid #e6ece1;font-size:12px;font-weight:600;color:var(--ink2); }
+.desk-line small { font-size:10px;font-weight:400;color:var(--mu); }
+.desk-chips { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px; }
+.desk-chip { display:block;min-width:0;padding:6px 8px;border-radius:7px;background:#f3f6ef;line-height:1.25; }
+.desk-chip small { display:block;font-size:10px;color:var(--mu); }
+.desk-chip b { display:block;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.desk-chip.hot { background:#dcefc4; }
+.desk-chip.hot small,.desk-chip.hot b { color:#245131; }
+.desk-read-none { display:block;margin-top:8px;font-size:11px;color:var(--mu); }
+.desk-read-foot { display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:7px;font-size:11px;color:var(--gy);line-height:1.4; }
+.desk-game-hot { box-shadow:inset 3px 0 0 #799c17;padding-left:10px; }
+.desk-read-note { margin-top:10px;font-size:11px;color:var(--mu);line-height:1.5; }
+.desk-read-note summary { cursor:pointer;color:var(--gy);font-weight:600;min-height:32px;display:flex;align-items:center; }
+@media(max-width:380px){ .desk-chip{padding:5px 6px}.desk-chip b{font-size:12px}.desk-slate-strip button{margin-left:0} }

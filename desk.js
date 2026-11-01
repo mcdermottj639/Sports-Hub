@@ -93,7 +93,7 @@
     ['tools', 'Tools & experiments', 'Mock drafts, trivia and workout tools', 'labs'],
     ['about', 'About & data', 'Data sources, collection and cached responses', 'about'],
   ];
-  let games = [], agendaFilter = 'all', agendaLimit = 6, agendaErrors = [], agendaLoaded = false;
+  let games = [], agendaFilter = 'all', agendaEdges = false, agendaLimit = 6, agendaErrors = [], agendaLoaded = false;
   let agendaPending = null, agendaAt = 0, boardPending = null, boardAt = 0;
   let currentRoute = { panel: 'home' }, routing = false, searchItems = [], searchInvoker = null;
   let toastTimer, cloudFailed = false, undoItem = null, sectionPending = false;
@@ -193,12 +193,39 @@
       sectionPending = false;
     }
   }
-  function gameContext(sport, g) {
-    const rows = C.gameForecasts(root.SportsHubCloudAI?.cached?.().rows, AI_MODEL_VERSION).get(C.key(sport,g.id));
+  // v328: official version per league (NFL nfl-football-v1, NBA nba-v1, else v239).
+  const officialVersion = sport => root.SportsHubNFLLive?.versionFor?.(sport) || AI_MODEL_VERSION;
+  function gameContext(sport, g, rows) {
     const parts = [];
     if (rows?.size) parts.push(`<span class="desk-saved-signal">${rows.size} saved ${rows.size===1?'forecast':'forecasts'}</span>`);
     if (g.tv) parts.push(`<span>${escape(Array.isArray(g.tv) ? g.tv.join(' · ') : g.tv)}</span>`);
     return parts.length ? `<span class="desk-game-context">${parts.join('')}</span>` : '';
+  }
+  // ESPN's line for the card. A started game falls back to this device's
+  // pregame snapshot (shownOdds), and says so.
+  function bookFor(sport, g) {
+    try {
+      if (typeof normOdds !== 'function') return { info:null, pregame:false };
+      const live = normOdds(g.odds, g.home.name, g.away.name, g.home.abbr, g.away.abbr);
+      if (typeof shownOdds !== 'function') return { info:live, pregame:false };
+      const s = shownOdds(sport, g, live);
+      return { info:s.info, pregame:!!s.pregame };
+    } catch (_) { return { info:null, pregame:false }; }
+  }
+  function readHTML(read, book, status) {
+    if (status === 'final') return '';
+    const chip = c => `<span class="desk-chip${c.hot?' hot':''}"><small>${escape(c.label)}</small><b>${escape(c.value)}</b></span>`;
+    const lineRow = read.line ? `<span class="desk-line"><span>${escape(read.line)}</span>${book.pregame?'<small>pregame line</small>':''}</span>` : '';
+    const chips = read.chips.length ? `<span class="desk-chips">${read.chips.map(chip).join('')}</span>`
+      : '<span class="desk-read-none">No saved forecast for this game yet</span>';
+    const foot = [read.proj].filter(Boolean);
+    return `${lineRow}${chips}${foot.length?`<span class="desk-read-foot">${foot.map(t=>`<span>${escape(t)}</span>`).join('')}</span>`:''}`;
+  }
+  function edgeBadge(read) {
+    const parts = [];
+    if (read.flip) parts.push('<span class="desk-badge flip" title="Saved price was plus money; model gave them over 50%">Dog flip</span>');
+    if (read.edge) parts.push(`<span class="desk-badge${read.edge.hot?' hot':''}" title="Model win chance minus the no-vig book chance, same side">${escape(read.edge.tier ? read.edge.tier+' ' : 'Model ')}${read.edge.pts>0?'+':read.edge.pts<0?'\u2212':''}${escape(Math.abs(read.edge.pts).toFixed(1))} pts</span>`);
+    return parts.join('');
   }
   async function loadAgenda(force = false) {
     if (agendaPending) return agendaPending;
@@ -217,26 +244,36 @@
   }
   function paintAgenda() {
     const host = $d('desk-agenda'); if (!host) return;
-    const list = C.agenda(games,readWatch(),agendaFilter);
+    const forecasts = C.gameForecasts(root.SportsHubCloudAI?.cached?.().rows, officialVersion);
+    const all = C.agenda(games,readWatch(),agendaFilter).map(x => {
+      const markets = forecasts.get(C.key(x.sport,x.g.id)), book = bookFor(x.sport,x.g);
+      return { ...x, markets, book, read: C.gameRead(markets, book.info, x.g) };
+    });
+    const open = all.filter(x => gameState(x.g) !== 'final');
+    const sum = C.slateSummary(open.map(x => x.read));
+    const list = agendaEdges ? all.filter(x => x.read.hot || x.read.flip) : all;
     const filters = [['all','All'],['watchlist','Saved'],['nfl','NFL'],['cfb','CFB'],['mlb','MLB'],['nba','NBA']];
     const chips = $d('desk-agenda-filters');
     chips.innerHTML = filters.map(([k,label]) => `<button type="button" data-agenda-filter="${k}" aria-pressed="${agendaFilter===k}">${label}</button>`).join('');
     if (!agendaLoaded) { host.innerHTML='<div class="desk-empty" role="status">Loading your game radar…</div>'; return; }
     host.replaceChildren();
     if (agendaErrors.length) host.insertAdjacentHTML('beforeend',`<div class="desk-inline-note">${escape(agendaErrors.join(', '))} feed unavailable. <button type="button" data-desk-refresh>Retry</button></div>`);
-    if (!list.length) host.insertAdjacentHTML('beforeend',`<div class="desk-empty"><b>${agendaFilter==='watchlist' ? 'Give your radar a personal touch.' : agendaErrors.length ? 'Waiting for the schedule.' : 'No games in this view.'}</b><p>${agendaFilter==='watchlist' ? 'Save a game with the bookmark icon. It will be easy to find here and in your watchlist.' : agendaErrors.length ? 'Your saved results and notes are still available.' : 'Football covers this week; baseball and basketball cover today. Try another league or explore saved model results.'}</p>${button('models/all/results','View performance')}</div>`);
-    list.slice(0,agendaLimit).forEach(({sport,g}) => {
-      const row = document.createElement('div'); row.className = 'desk-game';
+    if (all.length) host.insertAdjacentHTML('beforeend',`<div class="desk-slate-strip" role="group" aria-label="Slate summary"><span>${sum.games} ${sum.games===1?"game":"games"}</span><span class="hot">${sum.edges} ${sum.edges===1?'edge':'edges'}</span><span class="flip">${sum.flips} dog ${sum.flips===1?'flip':'flips'}</span><button type="button" data-agenda-edges aria-pressed="${agendaEdges}">Edges only</button></div>`);
+    if (!list.length) host.insertAdjacentHTML('beforeend',`<div class="desk-empty"><b>${agendaEdges && all.length ? 'No edges or dog flips in this view.' : agendaFilter==='watchlist' ? 'Give your radar a personal touch.' : agendaErrors.length ? 'Waiting for the schedule.' : 'No games in this view.'}</b><p>${agendaEdges && all.length ? 'Turn off Edges only to see every game.' : agendaFilter==='watchlist' ? 'Save a game with the bookmark icon. It will be easy to find here and in your watchlist.' : agendaErrors.length ? 'Your saved results and notes are still available.' : 'Football covers this week; baseball and basketball cover today. Try another league or explore saved model results.'}</p>${button('models/all/results','View performance')}</div>`);
+    list.slice(0,agendaLimit).forEach(({sport,g,markets,book,read}) => {
+      const row = document.createElement('div'); row.className = 'desk-game' + (read.hot ? ' desk-game-hot' : '');
       const status = gameState(g), started = status !== 'scheduled';
       const tag = status === 'live' ? (g.statusText || 'Live') : status === 'final' ? 'Final' : dateText(g.date);
-      row.innerHTML = `<button type="button" class="desk-game-main" data-desk-game="${escape(sport+':'+g.id)}" aria-label="Open ${escape(g.away.name)} at ${escape(g.home.name)} game report"><span class="desk-game-meta"><span class="desk-sport">${escape(LEAGUES[sport].label)}</span><span class="${status==='live'?'desk-live':''}">${escape(tag)}</span></span><span class="desk-matchup"><span class="desk-match-team">${teamMark(g.away)}<span><b>${escape(g.away.abbr || g.away.name)}</b><small>${escape(g.away.name)}</small></span>${started?`<strong>${escape(g.away.score??'–')}</strong>`:''}</span><span class="desk-versus">${started?'–':'at'}</span><span class="desk-match-team">${teamMark(g.home)}<span><b>${escape(g.home.abbr || g.home.name)}</b><small>${escape(g.home.name)}</small></span>${started?`<strong>${escape(g.home.score??'–')}</strong>`:''}</span></span>${gameContext(sport,g)}</button>`;
+      const ml = side => !started && read.moneyline[side] ? `<small class="desk-ml">ML ${escape(read.moneyline[side])}</small>` : '';
+      row.innerHTML = `<button type="button" class="desk-game-main" data-desk-game="${escape(sport+':'+g.id)}" aria-label="Open ${escape(g.away.name)} at ${escape(g.home.name)} game report"><span class="desk-game-meta"><span class="desk-sport">${escape(LEAGUES[sport].label)}</span><span class="${status==='live'?'desk-live':''}">${escape(tag)}</span>${edgeBadge(read)}</span><span class="desk-matchup"><span class="desk-match-team">${teamMark(g.away)}<span><b>${escape(g.away.abbr || g.away.name)}</b>${ml('away')||`<small>${escape(g.away.name)}</small>`}</span>${started?`<strong>${escape(g.away.score??'–')}</strong>`:''}</span><span class="desk-versus">${started?'–':'at'}</span><span class="desk-match-team">${teamMark(g.home)}<span><b>${escape(g.home.abbr || g.home.name)}</b>${ml('home')||`<small>${escape(g.home.name)}</small>`}</span>${started?`<strong>${escape(g.home.score??'–')}</strong>`:''}</span></span>${readHTML(read,book,status)}${gameContext(sport,g,markets)}</button>`;
       addWatchControl(row,sport,g); host.appendChild(row);
     });
     if (list.length > agendaLimit) host.insertAdjacentHTML('beforeend',`<button class="desk-show-more" type="button" data-agenda-more>Show ${Math.min(12,list.length-agendaLimit)} more games <span>(${list.length} in this view)</span></button>`);
+    if (all.length) host.insertAdjacentHTML('beforeend','<details class="desk-read-note"><summary>How to read these rows</summary>Lines are ESPN\'s. Model chips are the official saved pregame forecasts (NFL football model, NBA model, v239 elsewhere); green means the model tiered it Edge, Best or Alert. Points = model win chance minus the no-vig book chance for the same side. Dog flip = the saved price was plus money but the model gave that side over 50% (same rule as Performance; today\'s book price may have moved). Projected score comes from the saved margin and total. For fun — not betting advice.</details>');
   }
   function paintBrief() {
     const cloud = root.SportsHubCloudAI?.cached?.() || {rows:[]};
-    const summary = C.savedSummary(cloud.rows,AI_MODEL_VERSION);
+    const summary = C.savedSummary(cloud.rows,officialVersion);
     const known = !!cloud.at;
     const capture = C.captureStatus(cloud.run);
     const watch = readWatch();
@@ -370,6 +407,7 @@
       const game=e.target.closest('[data-desk-game]');if(game){openSavedGame(game.dataset.deskGame);return;}
       const filter=e.target.closest('[data-agenda-filter]');if(filter){agendaFilter=filter.dataset.agendaFilter;agendaLimit=6;paintAgenda();$d('desk-agenda-filters').querySelector(`[data-agenda-filter="${agendaFilter}"]`)?.focus();return;}
       if(e.target.closest('[data-agenda-more]')){agendaLimit+=12;paintAgenda();return;}
+      if(e.target.closest('[data-agenda-edges]')){agendaEdges=!agendaEdges;agendaLimit=6;paintAgenda();document.querySelector('[data-agenda-edges]')?.focus();return;}
       if(e.target.closest('[data-desk-refresh]')){refresh();return;}
       const remove=e.target.closest('[data-watch-remove]');if(remove){const list=readWatch(),item=list.find(r=>C.key(r.sport,r.id)===remove.dataset.watchRemove);if(saveWatch(list.filter(r=>r!==item))){undoItem=item;toast('Removed from your watchlist.',true);}}
       if(e.target.closest('[data-watch-undo]')&&undoItem){const list=readWatch();if(list.length>=80){toast('Your watchlist is full. Remove another game to restore this one.');return;}if(saveWatch([undoItem,...list.filter(r=>C.key(r.sport,r.id)!==C.key(undoItem.sport,undoItem.id))])){undoItem=null;toast('Game and note restored.');}}
