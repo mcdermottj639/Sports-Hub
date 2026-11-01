@@ -696,7 +696,28 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v331** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v332** (backend **b17-fantasy-league-rules**).
+
+### v332 — Condensed Game Report cards and player prop cards
+
+Jack: props and the game report "take up far too much room". Measured at 390px
+on live BAL @ BUF: Game Report 630 → 426 px, Top player props 680 → 328 px.
+Nothing was removed — it moved behind a tap.
+- Game Report `card()` (gameReportHTML): still `class="gr-mkt"` (tests count
+  it) plus `data-mkt="moneyline|spread|total"`. Model / Book each sit on one
+  line; money-lean `.gr-flag` lines stay visible; every other extra (break-even
+  math, money bars, under-the-play-bar and NFL no-bet reasons, experimental
+  probabilities) folds into a per-card `<details class="gr-more">Details`. The
+  spread/total second lines ("projects BUF by 5.3", "model total → Under")
+  are hidden — the pill already says it. The standalone "Incomplete model
+  inputs — grades withheld." line moved into the notes toggle (the Moneyline
+  pill already says "grades withheld"). Locked line shortened to "Locked
+  pregame forecast · saved …".
+- Prop `card()` (player-props.js, used in the game screen AND the props page):
+  name + "#1 · NYJ" and status on one line, the pick, then one numbers line
+  (Proj · L5 · Hit · Model % · +EV/Lean chip). Model-estimate sentence, book
+  and saved time moved inside "Why this prop".
+- CSS in desk.css (v332 blocks). Display-only.
 
 ### v331 — Player box score replaces Key Players on the game screen
 

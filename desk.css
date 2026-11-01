@@ -601,3 +601,49 @@ body[data-desk-panel="home"] #desk-follow-teams { display:grid;grid-template-col
 .desk-shell .bx-t { margin:0; }
 .desk-shell .bx-t tbody th, .desk-shell .bx-t tfoot th { text-transform:none;letter-spacing:0;font-size:12px; }
 .desk-shell .bx-t thead th { letter-spacing:.3px; }
+
+/* v332 — condensed Game Report market cards */
+.gr-mkt { padding:9px 12px 10px; }
+.gr-mkt .gr-mkt-h { margin-bottom:5px; }
+.gr-mkt .gr-pill { font-size:11px;padding:2px 8px; }
+.gr-mkt .gr-grid2 { gap:8px; }
+.gr-mkt .gr-cell { display:flex;flex-wrap:wrap;align-items:baseline;column-gap:6px;row-gap:1px; }
+.gr-mkt .gr-lbl { font-size:9.5px; }
+.gr-mkt .gr-big { font-size:16px; }
+.gr-mkt .gr-sm { flex-basis:100%;font-size:11px;margin-top:0; }
+.gr-mkt .gr-sm .gr-prob { display:none; }
+.gr-mkt .gr-flag { margin-top:6px; }
+.gr-more { margin-top:6px; }
+.gr-more > summary { cursor:pointer;font-size:11px;font-weight:700;color:var(--gy);min-height:30px;display:flex;align-items:center;list-style:none; }
+.gr-more > summary::-webkit-details-marker { display:none; }
+.gr-more > summary::after { content:'\25BE';margin-left:5px;font-size:10px; }
+.gr-more[open] > summary::after { content:'\25B4'; }
+.gr-more > *:not(summary) { font-size:12px; }
+.gr-locked { font-size:12px;margin-bottom:6px; }
+
+/* v332 — condensed player prop cards (game screen and props page) */
+.prop-card.prop-c { padding:10px 12px;border-radius:12px;box-shadow:none; }
+.prop-c-head { display:flex;justify-content:space-between;align-items:baseline;gap:8px; }
+.prop-c-who { min-width:0; }
+.prop-c-who b { font-size:15px;color:#123f35; }
+.prop-c-who small { font-size:10px;color:#58716b;margin-left:3px;white-space:nowrap; }
+.prop-c-head .prop-result { font-size:10px;letter-spacing:.04em;white-space:nowrap; }
+.prop-c .prop-selection { font-size:13px;line-height:1.35;margin-top:2px; }
+.prop-c-nums { display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin-top:6px;font-size:12px; }
+.prop-c-nums small { font-size:10px;color:#60746d; }
+.prop-c-nums b { font-size:13px;color:#123f35; }
+.prop-c-ev { margin-left:auto;font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;background:#eef1ee;color:#4b5f5a; }
+.prop-c-ev.pos { background:#dcefc4;color:#245131; }
+.prop-c .prop-actual { margin:6px 0 0;font-size:12px; }
+.prop-c .prop-evidence { border-top:0;padding-top:0;margin-top:4px; }
+.prop-c .prop-evidence summary { font-size:11px;min-height:30px;display:flex;align-items:center;color:#2f5d50; }
+.prop-c .prop-evidence .prop-meta { margin:2px 0 6px; }
+.prop-game-report .prop-grid { gap:8px; }
+.prop-game-report > h3 { font-size:15px;margin:0 0 8px; }
+/* v332 — spread/total second lines repeat the pill ("projects BUF by 5.3", "model total → Under") */
+.gr-mkt[data-mkt=spread] .gr-cell:first-child .gr-sm, .gr-mkt[data-mkt=total] .gr-cell:first-child .gr-sm { display:none; }
+.gr-mkt .gr-sm:empty { display:none; }
+.gr-mkt { padding:8px 12px 4px; }
+.gr-mkt .gr-grid2 + .gr-more, .gr-mkt .gr-flag + .gr-more { margin-top:0; }
+.gr-more > summary { min-height:26px; }
+#md-report .gr-mkt + .gr-mkt { margin-top:8px; }

@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v331';
+const APP_VERSION = 'v332';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -3555,7 +3555,7 @@ function gameReportHTML(sport, g, pred, info, report, data) {
   const abbr = (t) => esc(t?.abbr || t?.name || '');
   if (pred?.locked) parts.push(pred.savedFallback
     ? `<div class="ai-why">Saved pregame forecast${lineAtLabel(pred.lockedAt) ? ` · ${esc(lineAtLabel(pred.lockedAt))}` : ''}. Today's live inputs couldn't be loaded, so this is the official read the scheduled collector already saved.${sport === 'nfl' && g && globalThis.SportsHubNFLLiveClient?.diagnostic(g) ? ` <span class="muted">Source check: ${esc(globalThis.SportsHubNFLLiveClient.diagnostic(g))}</span>` : ''}</div>`
-    : `<div class="ai-why">Locked pregame forecast${lineAtLabel(pred.lockedAt) ? ` · saved ${esc(lineAtLabel(pred.lockedAt))}` : ''}. Model lines do not update during play.</div>`);
+    : `<div class="ai-why gr-locked">Locked pregame forecast${lineAtLabel(pred.lockedAt) ? ` · saved ${esc(lineAtLabel(pred.lockedAt))}` : ''}</div>`);
 
   // ---- shared pieces -------------------------------------------------------
   const mv = lineMoves(sport, g, report);
@@ -3583,12 +3583,21 @@ function gameReportHTML(sport, g, pred, info, report, data) {
   const leanOf = (rows) => rows.filter((r) => pct(r.handle) != null && pct(r.bets) != null && r.handle - r.bets >= 7)
     .sort((a, b) => (b.handle - b.bets) - (a.handle - a.bets))[0] || null;
   const flag = (txt) => `<div class="gr-flag">💰 ${txt}</div>`;
-  const card = (label, pill, model, book, extra) => `<div class="gr-mkt">
+  // v332: condensed. Model and book sit on one line each; money-lean flags stay
+  // visible; everything else (break-even math, money bars, no-bet / play-bar
+  // reasons, experimental probabilities) folds into a per-card Details toggle.
+  const FLAG_RE = /<div class="gr-flag">[\s\S]*?<\/div>/g;
+  const card = (label, pill, model, book, extra) => {
+    const x = String(extra || '');
+    const flags = (x.match(FLAG_RE) || []).join('');
+    const rest = x.replace(FLAG_RE, '').trim();
+    return `<div class="gr-mkt" data-mkt="${String(label).toLowerCase()}">
     <div class="gr-mkt-h"><span class="gr-mkt-lbl">${label}</span>${pill || ''}</div>
     <div class="gr-grid2">
       <div class="gr-cell"><div class="gr-lbl">Model</div>${model}</div>
       <div class="gr-cell"><div class="gr-lbl">Book</div>${book}</div>
-    </div>${extra || ''}</div>`;
+    </div>${flags}${rest ? `<details class="gr-more"><summary>Details</summary>${rest}</details>` : ''}</div>`;
+  };
   const bookName = esc(report?.splits?.book || 'DraftKings');
   // v316: on a final, every card grades its own read off the score — the
   // locked numbers stay, the result sits beside them.
@@ -3641,7 +3650,9 @@ function gameReportHTML(sport, g, pred, info, report, data) {
         ...(pred.notes || []).filter((n) => /^(SP:|SP form|Team OPS:|Starter innings)/.test(n)),
       ] : []),
     ].map((n) => esc(n)));
-    if (pred.thin || pred.blockedReasons?.length) parts.push('<div class="gr-unavail">Incomplete model inputs — grades withheld.</div>');
+    // v332: the Moneyline pill already says "grades withheld"; the reason
+    // lives in the notes toggle instead of its own line between the cards.
+    if (pred.thin || pred.blockedReasons?.length) notes.push('Incomplete model inputs — grades withheld.');
 
     // ---- Spread --------------------------------------------------------------
     if (ATS_SPORTS.has(sport) && pred.projMargin != null && info?.spread != null) {
