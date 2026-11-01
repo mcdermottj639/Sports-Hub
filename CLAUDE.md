@@ -696,7 +696,20 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v332** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v333** (backend **b17-fantasy-league-rules**).
+
+### v333 — Box score moves above the Game Report, live/final only
+
+Jack: move the box score above the Game Report, and show it only once a game
+goes live. `#md-boxscore` now renders right after `#md-live-situation` /
+`#md-live-note` and before the Game Report, filled only when the summary
+status is `in` or `post` (the empty slot is always present). In
+`refreshOpenGameDetail` the box-score refresh now runs before the
+"no live situation" early return, so a modal opened pregame fills in at
+kickoff and between-plays polls still update it. Test in
+`tests/boxscore.test.js` locks the order and the gate. Checked at 390px:
+live BAL @ BUF shows Live Situation → Box Score → Game Report; pregame
+LAC @ LAR shows no box score.
 
 ### v332 — Condensed Game Report cards and player prop cards
 
@@ -727,7 +740,8 @@ Jack asked to remove NFL "Key Players" and add a box score for every game.
   stays skipped for NFL (v316) — the box score carries those leaders in full.
 - `boxScoreHTML(sport, data, id, side)` (app.js) renders ESPN summary
   `boxscore.players` for NFL, CFB, NBA and MLB inside
-  `#md-boxscore[data-acc-boundary]`, after Team Stats. Away team first even when
+  `#md-boxscore[data-acc-boundary]` (⚠️ SUPERSEDED in v333: now directly under
+  Live Situation, above the Game Report, live/final only). Away team first even when
   ESPN lists home first. CSS-only radio toggle (away/home) shows one team at a
   time. Football: Passing/Rushing/Receiving up front, everything else in a
   "Defense, kicking and returns" fold; MLB Batting + Pitching (subs indented);

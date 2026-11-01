@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v332';
+const APP_VERSION = 'v333';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1089,13 +1089,10 @@ async function refreshOpenGameDetail(updates = []) {
     // ESPN can omit situation between plays. Only a confirmed final clears it.
     // A scheduled game has no situation to wait for (v317: the note showed pregame).
     if (st.state === 'pre') { if (note) note.hidden = true; return; }
-    if (!html && st.state !== 'post') {
-      if (note) { note.hidden = false; note.textContent = host.innerHTML ? 'Last available play · waiting for a live situation update.' : 'Waiting for a live situation update.'; }
-      return;
-    }
-    // v331: keep the player box score current while the game is live.
+    // v331/v333: keep the player box score current once live or final — before
+    // the no-situation early return, so a between-plays poll still updates it.
     const bx = $('#md-boxscore');
-    if (bx) {
+    if (bx && ['in', 'post'].includes(st.state)) {
       const bxHtml = boxScoreHTML(active.sport, data, comp.id || active.id, bx.querySelector('.bx-r.h:checked') ? 'h' : 'a');
       if (bx.dataset.boxHtml !== bxHtml && bxHtml) {
         const bxOpen = bx.querySelector('.md-section-title')?.classList.contains('open') ?? true;
@@ -1105,6 +1102,10 @@ async function refreshOpenGameDetail(updates = []) {
         makeAccordion(bx, '.md-section-title', SEC_OPEN_ALL);
         bx.querySelector('.md-section-title')?._accSet?.(bxOpen, false);
       }
+    }
+    if (!html && st.state !== 'post') {
+      if (note) { note.hidden = false; note.textContent = host.innerHTML ? 'Last available play · waiting for a live situation update.' : 'Waiting for a live situation update.'; }
+      return;
     }
     if (note) note.hidden = true;
     if (host.dataset.liveHtml !== html) {
@@ -1438,6 +1439,10 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
   // Order: 🔴 Live Situation on top when the game is live (most timely), then
   // Betting Odds, then the Game Report, then the model's read + box-score detail.
   html += `<div id="md-live-situation" data-acc-boundary>${live ? liveSituationHTML(sport, data, comp, g) : ''}</div><div id="md-live-note" class="ai-why" data-acc-boundary hidden></div>`;
+  // v333: player box score sits right under Live Situation, above the Game
+  // Report, and only once the game is live or final. The empty slot is always
+  // rendered so refreshOpenGameDetail can fill it the moment a game kicks off.
+  html += `<div id="md-boxscore" data-acc-boundary>${['in', 'post'].includes(st.state) ? boxScoreHTML(sport, data, comp.id || g?.id) : ''}</div>`;
 
   const rawO = (data.pickcenter || []).find((x) => x.spread != null || x.details || x.homeTeamOdds) || (data.odds || [])[0] || g?.odds;
   let oddsInfo = normOdds(rawO, home.team?.displayName, away.team?.displayName, home.team?.abbreviation, away.team?.abbreviation);
@@ -1505,9 +1510,6 @@ function renderGameDetail(sport, data, pred, extra, g, report, signals = '') {
       html += '</tbody></table>';
     }
   }
-
-  // v331: player box score, every league (ESPN summary boxscore.players).
-  html += `<div id="md-boxscore" data-acc-boundary>${boxScoreHTML(sport, data, comp.id || g?.id)}</div>`;
 
   if (!aLine.length && !hLine.length && !leadersHTML.length && !teams.length) {
     html += '<div class="empty" style="margin-top:14px">Detailed stats will appear once the game is underway.</div>';

@@ -59,3 +59,12 @@ test('home-first feed is reordered so the away team is always the first toggle',
   const h = load()('nfl', swapped, '9');
   assert.ok(h.indexOf('class="a">BAL') > 0 && h.indexOf('class="h">BUF') > h.indexOf('class="a">BAL'));
 });
+
+test('v333: box score sits under Live Situation, above the Game Report, and only once live or final', () => {
+  const fn = src.slice(src.indexOf('function renderGameDetail('), src.indexOf('const BOX_GROUP'));
+  const box = fn.indexOf('id="md-boxscore"'), live = fn.indexOf('id="md-live-situation"'), report = fn.indexOf("html += report || ''");
+  assert.ok(live > 0 && box > live && report > box, 'order: live situation, box score, game report');
+  assert.match(fn, /\['in', 'post'\]\.includes\(st\.state\) \? boxScoreHTML\(/);
+  const refresh = src.slice(src.indexOf('async function refreshOpenGameDetail('), src.indexOf('function liveSituationHTML('));
+  assert.ok(refresh.indexOf("const bx = $('#md-boxscore')") < refresh.indexOf("if (!html && st.state !== 'post')"), 'box score refresh runs before the no-situation return');
+});
