@@ -79,3 +79,23 @@ body.desk-shell { padding-top: var(--tk-h); }
 .tk-filter .tkf-pill { border: 1px solid #c5d4b8; background: #fff; color: #3c624b; border-radius: 8px; min-height: 36px; padding: 0 12px; font-size: 12px; font-weight: 700; }
 .tk-filter .tkf-pill.on { background: #103f36; border-color: #103f36; color: #efffc8; }
 .tk-filter .tkf-reset { margin-top: 12px; border: 0; background: none; color: #146d60; font-size: 12px; font-weight: 700; padding: 6px 0; min-height: 32px; }
+
+/* v337 — bigger ticker (Jack: "enlarge the ticker"). ~1.4× on phones
+   (30 → 42px tall, 14 → 18px type) and 34 → 44px / 15 → 19px on desktop.
+   Everything is driven by --tk-h, so the page and sidebar offsets follow. */
+:root { --tk-h: 44px; }
+.ticker { font-size: 19px; }
+.ticker .tk-it { gap: 8px; padding: 0 18px; }
+.ticker .tk-it + .tk-it:not(.tk-head)::before { top: 13px; bottom: 13px; }
+.ticker .tk-sec { font-size: 14px; line-height: 26px; padding: 0 10px; }
+.ticker .tk-lg, .ticker .tk-upd { font-size: 14px; }
+.ticker .tk-live, .ticker .tk-final, .ticker .tk-when { font-size: 16px; }
+.ticker .tk-live i { width: 9px; height: 9px; }
+.ticker .tk-tier { font-size: 12px; line-height: 19px; padding: 0 6px; }
+.ticker .tk-res { font-size: 15px; }
+@media (max-width: 760px) {
+  :root { --tk-h: 42px; }
+  .ticker { font-size: 18px; }
+  .ticker .tk-it { padding: 0 14px; }
+  .ticker .tk-it + .tk-it:not(.tk-head)::before { top: 12px; bottom: 12px; }
+}

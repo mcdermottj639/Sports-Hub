@@ -696,7 +696,16 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v336** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v337** (backend **b17-fantasy-league-rules**).
+
+### v337 — Bigger ticker
+
+Jack: "enlarge the ticker". ticker.css v337 block (last in the file, so it
+wins): phones `--tk-h` 30 → 42px and type 14 → 18px; desktop 34 → 44px and
+15 → 19px; section badges, league tags, clock/status, tier and result chips
+and the live dot all scaled ~1.3×. Page padding and the desktop sidebar
+already follow `--tk-h`. Checked at 390px (ticker 42px, header starts at
+42px, no sideways overflow) and 1280px (44px, sidebar top 44px).
 
 ### v336 — Model history cache moves to IndexedDB (storage full fix)
 
