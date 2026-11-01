@@ -6,10 +6,53 @@
 
   let memory = null;
   const eventRequests = new Map();
+
+  // 🚨 v336 — the history cache lives in IndexedDB, NOT localStorage.
+  // Jack hit "Could not save: this browser's storage is full" saving a game.
+  // Measured 1 Nov 2026: this key held 1,271 rows ≈ 4.0M characters (~8 MB as
+  // UTF-16; snapshot.features alone ≈ 70%) against Safari's ~5 MB per-origin
+  // localStorage quota, so every other write on the origin failed — bookmarks,
+  // forecast locks, the ESPN disk cache. IndexedDB has a far larger quota.
+  // cached() stays synchronous: it serves `memory`, which is filled from
+  // IndexedDB at boot (then 'sportshub:cloud-ai' fires so screens repaint) and
+  // by every sync(). A legacy localStorage copy is read once, moved to
+  // IndexedDB, then DELETED — that delete is what frees the quota.
+  const IDB = root.indexedDB || null;
+  function idb(mode, fn) {
+    return new Promise((resolve, reject) => {
+      const open = IDB.open('sportshub', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('kv');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        let req;
+        try { const tx = db.transaction('kv', mode); req = fn(tx.objectStore('kv'));
+          tx.oncomplete = () => { db.close(); resolve(req?.result); };
+          tx.onerror = tx.onabort = () => { db.close(); reject(tx.error); };
+        } catch (e) { db.close(); reject(e); }
+      };
+    });
+  }
+  const idbGet = (k) => idb('readonly', (st) => st.get(k));
+  const idbSet = (k, v) => idb('readwrite', (st) => st.put(v, k));
+  function dropLegacy() { try { localStorage.removeItem(CACHE_KEY); } catch (_) {} }
   function cached() {
     if (memory) return memory;
-    try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null') || empty(); }
-    catch (_) { return empty(); }
+    try {
+      const legacy = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+      if (legacy) {
+        memory = legacy;
+        if (IDB) idbSet(CACHE_KEY, legacy).then(dropLegacy).catch(() => {});
+        return legacy;
+      }
+    } catch (_) {}
+    return empty();
+  }
+  if (IDB) {
+    try { if (localStorage.getItem(CACHE_KEY) != null) cached(); } catch (_) {}
+    idbGet(CACHE_KEY).then((v) => {
+      if (v && !memory) { memory = v; root.dispatchEvent(new CustomEvent('sportshub:cloud-ai', { detail: v })); }
+    }).catch(() => {});
   }
   function dateNum(value) { return Number(String(value || '').slice(0, 10).replace(/-/g, '')); }
   function keyFor(row) {
@@ -83,7 +126,8 @@
     ]);
     const value = { at: new Date().toISOString(), rows, run: runs[0] || null };
     memory = value;
-    try { localStorage.setItem(CACHE_KEY, JSON.stringify(value)); } catch (_) {}
+    if (IDB) idbSet(CACHE_KEY, value).then(dropLegacy).catch(() => {});
+    else { try { localStorage.setItem(CACHE_KEY, JSON.stringify(value)); } catch (_) {} }
     root.dispatchEvent(new CustomEvent('sportshub:cloud-ai', { detail: value }));
     return value;
   }

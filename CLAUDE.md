@@ -696,7 +696,31 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v335** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v336** (backend **b17-fantasy-league-rules**).
+
+### v336 — Model history cache moves to IndexedDB (storage full fix)
+
+Jack: saving a game showed "Could not save: this browser's storage is full or
+unavailable." Measured 1 Nov 2026 after a normal session: localStorage held
+~10 MB (UTF-16) — `sportshub:cloud-ai:v1` alone was 1,271 `ai_predictions`
+rows ≈ 4.0M characters (`snapshot.features` ≈ 70% of each row). Safari allows
+~5 MB per origin, so EVERY other write failed (bookmarks, forecast locks, the
+ESPN disk cache, `sportshub:aitally`).
+- cloud-ai.js now persists the history to IndexedDB (db `sportshub`, store
+  `kv`, key `sportshub:cloud-ai:v1`). `cached()` stays synchronous via
+  `memory`, filled from IndexedDB at boot (then `sportshub:cloud-ai` fires so
+  screens repaint) and by every `sync()`. A legacy localStorage copy is read
+  once, written to IndexedDB, then deleted — the delete frees the quota on the
+  first load of v336. No IndexedDB (tests, odd browsers) → old behaviour.
+- desk.js `saveWatch`: on a quota error it clears the ESPN disk cache
+  (`dcClear`, refills on the next fetch) and retries once before showing the
+  toast — your saved games outrank throwaway payloads.
+- ⚠️ Do NOT put the history (or anything row-shaped from Supabase) back into
+  localStorage.
+- Test: `tests/cloud-ai.test.js` (fake IndexedDB: migrate, delete, sync never
+  rewrites the key). Browser check: a 4.09M-char legacy key was migrated
+  (1,271 rows in IndexedDB), removed from localStorage, and a watchlist save
+  then succeeded.
 
 ### v335 — Today drops the clubhouse banner; Eagles / Red Sox move to Leagues
 

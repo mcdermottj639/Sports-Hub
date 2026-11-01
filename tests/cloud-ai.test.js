@@ -71,3 +71,37 @@ test('promotion isolates official games and keeps every replaced row in the vers
  assert.equal(Object.keys(load(settled,live).maps().tally).length,1);
  assert.equal(Object.keys(load(settled,live).maps(true).tally).length,2);
 });
+
+test('v336: legacy localStorage history moves to IndexedDB and the big key is deleted', async () => {
+  const values = new Map([['sportshub:cloud-ai:v1', JSON.stringify({ at: '2026-11-01T00:00:00Z', rows: [{ ...base, market: 'moneyline', result: 'pending' }], run: null })], ['sportshub:desk:watch:v1', '[]']]);
+  const store = new Map(), events = [];
+  const later = (fn) => setTimeout(fn, 0);
+  const fakeIDB = { open() {
+    const open = {}; later(() => {
+      open.result = { close() {}, transaction() {
+        const tx = {}; const st = {
+          get(k) { const r = {}; later(() => { r.result = store.get(k); tx.oncomplete?.(); }); return r; },
+          put(v, k) { const r = {}; later(() => { store.set(k, JSON.parse(JSON.stringify(v))); tx.oncomplete?.(); }); return r; },
+        }; tx.objectStore = () => st; return tx; } };
+      open.onsuccess?.();
+    }); return open; } };
+  const root = {
+    SportsHubNFLLive: undefined, indexedDB: fakeIDB,
+    SPORTS_HUB_SUPABASE: { url: 'https://example.supabase.co', key: 'publishable' },
+    localStorage: { getItem: (k) => values.get(k) ?? null, setItem: (k, v) => values.set(k, v), removeItem: (k) => values.delete(k) },
+    dispatchEvent: (e) => events.push(e), CustomEvent: class { constructor(t, o) { this.type = t; this.detail = o?.detail; } },
+    fetch: async () => ({ ok: true, json: async () => [{ ...base, market: 'total', result: 'pending' }] }),
+  };
+  root.globalThis = root;
+  vm.runInNewContext(source, root);
+  const api = root.SportsHubCloudAI;
+  assert.equal(api.cached().rows.length, 1);                 // served immediately from the legacy copy
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(values.has('sportshub:cloud-ai:v1'), false);   // quota freed
+  assert.equal(store.get('sportshub:cloud-ai:v1').rows.length, 1);
+  assert.equal(values.get('sportshub:desk:watch:v1'), '[]');   // other keys untouched
+  await api.sync();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(values.has('sportshub:cloud-ai:v1'), false);   // sync never writes the big key back
+  assert.equal(store.get('sportshub:cloud-ai:v1').rows[0].market, 'total');
+});

@@ -101,8 +101,14 @@
     try { return C.normalizeWatch(JSON.parse(localStorage.getItem(WATCH_KEY) || '[]')); } catch (_) { return []; }
   }
   function saveWatch(value) {
-    try { localStorage.setItem(WATCH_KEY, JSON.stringify(C.normalizeWatch(value))); }
-    catch (_) { toast('Could not save: this browser’s storage is full or unavailable.'); return false; }
+    const data = JSON.stringify(C.normalizeWatch(value));
+    try { localStorage.setItem(WATCH_KEY, data); }
+    catch (_) {
+      // v336: your saved games outrank throwaway ESPN payloads. Clear the disk
+      // cache (app.js dcClear — it refills on the next fetch) and retry once.
+      try { if (typeof root.dcClear === 'function') root.dcClear(); localStorage.setItem(WATCH_KEY, data); }
+      catch (__) { toast('Could not save: this browser’s storage is full or unavailable.'); return false; }
+    }
     paintWatchButtons(); paintWatchlist(); paintBrief(); paintAgenda(); return true;
   }
   function toast(message, undo = false) {
