@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v338';
+const APP_VERSION = 'v339';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -13258,6 +13258,12 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// v339: a situation's tables are built the first time it is opened (toggle does not bubble → capture).
+document.addEventListener('toggle',e=>{
+ const d=e.target;if(!d.matches?.('details.bs-situation')||!d.open)return;
+ const body=d.querySelector('[data-situation-body]');if(!body||body.dataset.filled)return;
+ body.dataset.filled='1';body.innerHTML=globalThis.SportsHubSignalsUI.situationBodyHTML(d.dataset.situationId);
+},true);
 // Situation search is local: keep the currently loaded evidence and open matching categories.
 document.addEventListener('input',e=>{
  if(!e.target.matches('[data-bs-situation-search]'))return;

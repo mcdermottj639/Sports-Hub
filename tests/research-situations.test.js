@@ -28,7 +28,8 @@ test('international return, road sequence and previous margin require explicit s
 test('coverage deduplicates games and does not mutate rows or manufacture settlements',()=>{
  const d=row(),before=JSON.stringify(d);assert.equal(S.coverage([d,{...d,id:'ml',market:'moneyline'}],'postbye').games,1);
  const html=UI.systemResultsHTML({state:'ready',filters:{scope:'situations'},decisions:[d],settlements:[]});
- assert.match(html,/25 situations/);assert.match(html,/Awaiting results/);assert.match(html,/Matching games · newest first/);
+ assert.match(html,/Find a situation/);assert.match(html,/awaiting results/);assert.doesNotMatch(html,/Matching games/);
+ assert.match(UI.situationBodyHTML('postbye'),/Matching games · newest first/);
  assert.doesNotMatch(html,/100\.0%/);assert.equal(JSON.stringify(d),before);
 });
 test('v338 situation rows show record + win % per market; team rows combine home and road',()=>{
@@ -38,12 +39,12 @@ test('v338 situation rows show record + win % per market; team rows combine home
  const html=UI.systemResultsHTML({state:'ready',filters:{scope:'situations'},decisions:[a,b,c],settlements:[{decision_id:'a',result:'win'},{decision_id:'b',result:'loss'},{decision_id:'c',result:'win'}]});
  const bye=html.match(/data-situation-id="postbye"[\s\S]*?<\/summary>/)[0];
  assert.match(bye,/<b>ML<\/b> 1-0<i>100%<\/i>/);assert.match(bye,/<b>ATS<\/b> 1-1<i>50%<\/i>/);
- assert.match(html,/Quick view: record and win %/);
+ assert.match(html,/ML ignores price/);
 });
 test('original fixed-rule cards hide old collection and keep internals inside details',()=>{
  const d={...row(),rule_id:'nfl_divisional_under'},old={...d,id:'old',model_context:{engine:'scheduled-v239'}};
  const html=UI.systemResultsHTML({state:'ready',filters:{scope:'rules'},decisions:[d,old]});
- assert.doesNotMatch(html,/scheduled-v239<\/p>/);assert.match(html,/1 games · 1 saved rule evaluations/);
+ assert.doesNotMatch(html,/scheduled-v239<\/p>/);assert.match(html,/1 games/);
  assert.match(html,/<summary>Rule &amp; collection details<\/summary>/);
 });
 test('collector saves actual venue and prior completed schedule facts without future leakage',async()=>{
@@ -62,12 +63,11 @@ test('team situations label rows by the team being bet, not a bare home/away sid
  const away=row({away_previous_game_at:'2026-09-20T17:00:00Z'}),home={...row({matchup:'NYG @ SF',home_previous_game_at:'2026-09-20T17:00:00Z',away_previous_game_at:'2026-09-27T17:00:00Z'}),id:'h',event_id:'2',rule_id:'nfl_research_spread_home',selection_side:'home'};
  const ml={...away,id:'m',rule_id:'nfl_research_moneyline_away',market:'moneyline'};
  const html=UI.systemResultsHTML({state:'ready',filters:{scope:'situations'},decisions:[away,home,ml],settlements:[{decision_id:'d',result:'win'},{decision_id:'h',result:'loss'},{decision_id:'m',result:'win'}]});
- const long=html.slice(html.indexOf('data-situation-id="long"'),html.indexOf('data-situation-id="restedge"'));
- assert.match(long,/Bets on the rested team \(10\+ days\) only · split home and road/);
+ assert.match(html,/data-situation-id="long"/);const long=UI.situationBodyHTML('long');
  assert.match(long,/<th>Rested team \(10\+ days\) · home<\/th>/);assert.match(long,/<th>Rested team \(10\+ days\) · road<\/th>/);
  assert.match(long,/<th>Bet on<\/th>/);assert.match(long,/1 priced bet · early sample/);
  assert.doesNotMatch(long,/Matching team sides only|<th>Home team<\/th>|priced results/);
- const dog=html.slice(html.indexOf('data-situation-id="westeast"'),html.indexOf('data-situation-id="westearly"'));
+ const dog=UI.situationBodyHTML('westeast');
  assert.match(dog,/<th>West Coast team traveling east · road<\/th>/);
  assert.ok(S.defs.filter(d=>!d.bet).every(d=>['intl','neutral','division','nondivision','prime'].includes(d.id)));
 });

@@ -58,3 +58,19 @@
 .bs-q-down{background:#fbe6e4;border-color:#eab0aa}.bs-q-down i{color:#b3261e}
 .bs-q-key{margin-top:-4px}
 @media(max-width:600px){.bs-situation>summary{align-items:stretch;flex-direction:column;gap:6px}.bs-sit-head>span{text-align:right}}
+
+/* v339 — research screen: results first, explainers folded */
+.bs-topline{margin:10px 0 6px;font-size:13px;color:var(--muted)}
+.bs-topline strong{color:var(--ink,inherit)}
+.bs-results .bs-filter-fold{margin:8px 0 12px}
+.bs-results .bs-filter-fold>summary,.bs-results .bs-about>summary{text-decoration:none;font-weight:700;font-size:14px}
+.bs-loading{margin:14px 0;font-size:14px;color:var(--muted)}
+.bs-results .bs-about{margin:18px 0 4px;border-top:1px solid var(--line);padding-top:4px}
+.bs-results .bs-about p{font-size:13px;line-height:1.5}
+.bs-situations .bs-situation-search{margin:6px 0 8px}
+.bs-situations .bs-situation-search input{font-size:16px}
+.bs-visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.bs-results p.bs-q-key{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 10px;font-size:12px;color:var(--muted)}
+.bs-q-key .bs-q{padding:1px 7px}
+.bs-situation-body>.bs-source:first-child{margin:2px 0 8px}
+.bs-games-fold{margin:10px 0 0}.bs-results .bs-games-fold>summary{text-decoration:none;font-weight:700;font-size:14px}.bs-games-fold .bs-recent>h4{display:none}

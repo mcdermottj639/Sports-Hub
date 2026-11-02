@@ -696,7 +696,35 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v338** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v339** (backend **b17-fantasy-league-rules**).
+
+### v339 — Research screen: results first, and the situations freeze fixed
+
+Jack: "clean up all the slop … the real info is far down, and this screen seems
+to freeze the app while it loads".
+- 🚨 **Freeze:** `SportsHubSituations.coverage` ran `dimensions()` twice per row
+  per situation, and every call built a new `Intl.DateTimeFormat` — 25 × 2 ×
+  420 rows ≈ 21k formatter constructions, one ~10 s main-thread block on a
+  phone (measured 45.8 s at 4× CPU throttle). Now one shared formatter,
+  `dimensions` memoized per row object (WeakMap), and coverage is a single
+  pass. Same results; the expanded tables were checked against v338's.
+- **Lazy situation bodies:** rows render collapsed with only the quick-view
+  chips; tables + matching games are built on first open
+  (`SportsHubSignalsUI.situationBodyHTML(id)`, filled by a capture-phase
+  `toggle` listener in app.js). DOM for the view 13,130 → 470 nodes.
+  Measured after: under 1 s of main-thread work at 4× throttle.
+- **Cleanup (all three research views):** heading + view buttons, then one
+  line "70 games · Oct 2 – Nov 1 · N filters on", then a collapsed
+  "Filters & dates" fold (auto-open when filters are active), then results.
+  The intro paragraph, research-not-strategy note, saved-dates note, "too
+  early" note, "What the numbers mean" and the model-page shortcuts all moved
+  into one closing "About these numbers" fold. Situational trends drops the
+  "25 situations" heading/paragraph and the raw "Inspect saved test entries"
+  table; the v338 key is now a two-chip legend. Opened situations drop the
+  "Bets on the … only" subline (the row label says it) and fold the matching
+  games list behind "N matching games".
+- Tests updated (betting-research, performance-core, research-situations);
+  371/371. Checked at 390/1280px, no overflow, no page errors.
 
 ### v338 — Situational trends rows show record + win %
 
@@ -713,6 +741,7 @@ collapsed row now carries one chip per market under its name — `ML 8-2 80%`,
   samples are never added together (one sample per market as of 1 Nov 2026).
 - Win % excludes pushes. Tone: green ≥55%, red ≤45%, only with 5+ decided
   bets. A one-line key above the list says moneyline % ignores price.
+  ⚠️ SUPERSEDED in v339: the key is a two-chip legend; bodies render lazily.
 - CSS: v338 block at the end of betting-signals.css. Display-only.
 - Test: `tests/research-situations.test.js` (+1). Checked at 390/1280px on
   live data; chips matched every expanded table checked.

@@ -14,9 +14,14 @@ function scheduleContext(g){const v=g.venue||{},intl=international(v),home=baseZ
  const venueZone=intl===true?null:east.includes(state)?'Eastern':west.includes(state)?'Pacific':g.neutral===false&&intl===false?home:null;
  return {venue_name:v.fullName||null,venue_country:v.address?.country||null,venue_state:v.address?.state||null,international:intl,venue_zone:venueZone,home_base_zone:home,away_base_zone:away,context_version:'situations-v1'};
 }
-function dimensions(d){const C=root.SportsHubSignalsCore,i=d.inputs||{},x=C.researchDimensions(d),t=x.team;
+// v339: one formatter, and dimensions memoized per saved row. Before this, 25 situations × 2 passes × every
+// row each built a new Intl.DateTimeFormat (~21k calls for 420 rows) and froze the phone for ~10 s.
+let etFormat=null;const memo=new WeakMap();
+function dimensions(d){if(d&&typeof d==='object'&&memo.has(d))return memo.get(d);const out=computeDimensions(d);if(d&&typeof d==='object')memo.set(d,out);return out;}
+function computeDimensions(d){const C=root.SportsHubSignalsCore,i=d.inputs||{},x=C.researchDimensions(d),t=x.team;
  const start=i.scheduled_start_at||d.scheduled_start_at,valid=Number.isFinite(Date.parse(start));
- const parts=valid?new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',weekday:'short',hour:'numeric',hourCycle:'h23'}).formatToParts(new Date(start)):[];
+ etFormat=etFormat||new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',weekday:'short',hour:'numeric',hourCycle:'h23'});
+ const parts=valid?etFormat.formatToParts(new Date(start)):[];
  const hour=Number(parts.find(p=>p.type==='hour')?.value),day=parts.find(p=>p.type==='weekday')?.value;
  const abbr=String(i.matchup||'').split(/\s+@\s+/);const tz=t?(i[t+'_base_zone']||((d.sport||i.sport)==='nfl'?baseZone(t==='away'?abbr[0]:abbr[1]):null)):null;
  // Historical non-neutral games can be classified only from known frozen team identities.
@@ -64,6 +69,6 @@ const defs=[
  ['bigwin','Previous result','After a 14+ point win','Selected team won its previous game by at least 14 points.',x=>team(x,()=>known(x.previousMargin,v=>v>=14))]
 ].map(([id,category,name,description,test])=>({id,category,name,description,test,...(bettor[id]?{bet:bettor[id][0],betSide:bettor[id][1]}:{})}));
 function select(rows,id){const def=defs.find(x=>x.id===id);return def?rows.filter(d=>def.test(dimensions(d))===true):rows;}
-function coverage(rows,id){const def=defs.find(x=>x.id===id);const matches=select(rows,id),unknown=def?rows.filter(d=>def.test(dimensions(d))==null):[];const count=ds=>new Set(ds.map(d=>[d.sport,d.event_id,d.schedule_instance].join('|'))).size;return {matches,games:count(matches),unknown:count(unknown)};}
+function coverage(rows,id){const def=defs.find(x=>x.id===id);if(!def)return {matches:rows,games:new Set(rows.map(d=>[d.sport,d.event_id,d.schedule_instance].join('|'))).size,unknown:0};const matches=[],unknown=[];for(const d of rows){const r=def.test(dimensions(d));if(r===true)matches.push(d);else if(r==null)unknown.push(d);}const count=ds=>new Set(ds.map(d=>[d.sport,d.event_id,d.schedule_instance].join('|'))).size;return {matches,games:count(matches),unknown:count(unknown)};}
 return {defs,dimensions,select,coverage,scheduleContext,international,baseZone};
 });

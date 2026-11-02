@@ -79,7 +79,7 @@ test('legacy research stays available explicitly and CFB is unaffected',()=>{
  const current={...old,event_id:'current',model_context:{engine:'scheduled-nfl-football-v1'}};
  const vm={state:'ready',decisions:[old,current],groups:[],filters:{scope:'explore'}};
  const html=UI.systemResultsHTML(vm);
- assert.match(html,/1 games · 1 saved side observations/);
+ assert.match(html,/<p class="bs-topline">1 games/);
  assert.doesNotMatch(html,/data-bs-report="legacy"/);
  assert.equal(vm.decisions.length,2);
  assert.match(UI.systemResultsHTML({...vm,decisions:[old],filters:{scope:'explore',cohort:'scheduled-v239'}}),/data-bs-report="legacy"/);
