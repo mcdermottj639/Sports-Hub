@@ -44,3 +44,17 @@
 .bs-situation-category{margin:12px 0;border:1px solid var(--line);border-radius:12px;overflow:hidden}.bs-situation-category>summary{padding:12px 14px;font-weight:750;background:var(--card)}
 .bs-situation-list{padding:0 12px}.bs-situation{border-top:1px solid var(--line)}.bs-situation>summary{padding:12px 2px;display:flex;justify-content:space-between;gap:16px;align-items:center;min-height:44px;box-sizing:border-box}.bs-situation>summary span{color:var(--muted);font-size:12px;text-align:right}.bs-situation-body{padding:0 0 12px}.bs-situation-body>.bs-paired{margin:10px 0}.bs-situation[hidden],.bs-situation-category[hidden]{display:none}.bs-rule-card .bs-record{font-size:22px}.bs-rule-card details{margin-top:8px}.bs-scope{flex-wrap:wrap}
 @media(max-width:600px){.bs-situation>summary{align-items:flex-start;flex-direction:column;gap:4px}.bs-situation>summary span{text-align:left}}
+
+/* v338 — Situational trends quick view: record + win % per market on each row */
+.bs-results .bs-situation>summary{flex-direction:column;align-items:stretch;gap:6px;text-decoration:none}
+.bs-sit-head strong{text-decoration:underline;text-underline-offset:2px}
+.bs-sit-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-width:0}
+.bs-sit-head>span{color:var(--muted);font-size:12px;text-align:right;white-space:nowrap}
+.bs-sit-quick{display:flex;flex-wrap:wrap;gap:6px}
+.bs-q{display:inline-flex;align-items:baseline;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--ink,inherit);white-space:nowrap}
+.bs-q b{font-weight:750;font-size:11px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted)}
+.bs-q i{font-style:normal;font-weight:800}
+.bs-q-up{background:#e3f4e6;border-color:#9fd3a8}.bs-q-up i{color:#1f7a34}
+.bs-q-down{background:#fbe6e4;border-color:#eab0aa}.bs-q-down i{color:#b3261e}
+.bs-q-key{margin-top:-4px}
+@media(max-width:600px){.bs-situation>summary{align-items:stretch;flex-direction:column;gap:6px}.bs-sit-head>span{text-align:right}}

@@ -31,6 +31,15 @@ test('coverage deduplicates games and does not mutate rows or manufacture settle
  assert.match(html,/25 situations/);assert.match(html,/Awaiting results/);assert.match(html,/Matching games · newest first/);
  assert.doesNotMatch(html,/100\.0%/);assert.equal(JSON.stringify(d),before);
 });
+test('v338 situation rows show record + win % per market; team rows combine home and road',()=>{
+ // SF @ NYG, SF off a bye (road). Second game: NYG off a bye at home. Both SF and NYG bet on.
+ const g1=row(),g2={...row({matchup:'DAL @ NYG',away_post_bye:false,home_post_bye:true}),event_id:'2',selection_side:'home',rule_id:'nfl_research_spread_home'};
+ const a={...g1,id:'a'},b={...g2,id:'b'},c={...g1,id:'c',market:'moneyline',rule_id:'nfl_research_moneyline_away',selected_price:150};
+ const html=UI.systemResultsHTML({state:'ready',filters:{scope:'situations'},decisions:[a,b,c],settlements:[{decision_id:'a',result:'win'},{decision_id:'b',result:'loss'},{decision_id:'c',result:'win'}]});
+ const bye=html.match(/data-situation-id="postbye"[\s\S]*?<\/summary>/)[0];
+ assert.match(bye,/<b>ML<\/b> 1-0<i>100%<\/i>/);assert.match(bye,/<b>ATS<\/b> 1-1<i>50%<\/i>/);
+ assert.match(html,/Quick view: record and win %/);
+});
 test('original fixed-rule cards hide old collection and keep internals inside details',()=>{
  const d={...row(),rule_id:'nfl_divisional_under'},old={...d,id:'old',model_context:{engine:'scheduled-v239'}};
  const html=UI.systemResultsHTML({state:'ready',filters:{scope:'rules'},decisions:[d,old]});

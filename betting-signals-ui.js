@@ -137,14 +137,45 @@
     if(!games.size)return '';
     return `<section class="bs-recent"><h4>${vm.recentLimit?'Matching games · newest first':'Recent research games'}</h4>${[...games.values()].slice(0,vm.recentLimit||6).map(ds=>{const d=ds[0];return `<details class="bs-paired"><summary><strong>${e(d.inputs?.matchup||d.event_id)}</strong> · ${e(time(d.scheduled_start_at))} · ${ds.length} observations</summary>${ds.map(x=>{const result=settles.get(String(x.id))||x.result||'pending';return `<div class="bs-recent-row"><span>${e(label(x))}</span><strong class="${result==='win'?'bs-positive':result==='loss'?'bs-negative':''}">${e(result)}</strong><span>${number(x.selection_line)} / ${number(x.selected_price,0)}</span></div>`;}).join('')}<button type="button" class="bs-link" data-bs-report="${e(d.event_id)}" data-bs-sport="${e(d.sport||'nfl')}">Open game &amp; saved evidence →</button></details>`;}).join('')}</section>`;
   }
+  // Quick-view record per market for a situation's summary row (v338). Team situations combine that team's
+  // home and road rows (same bet). Game-wide situations show the leading side, since home/away and over/under
+  // are the same games mirrored. If a market ever holds more than one sample, the largest settled one is used —
+  // samples are never added together.
+  function quickRecords(groups,def){
+    const team=!!def?.bet,markets=new Map();
+    for(const g of groups){
+      const m=String(g.rule_id).match(/(moneyline|spread|total)_(home|away|over|under)$/);if(!m)continue;
+      const [,market,side]=m,sample=[g.rule_version,g.decision_policy,g.engine,g.provider_id,g.source_quality].join('|');
+      if(!markets.has(market))markets.set(market,new Map());const ss=markets.get(market);
+      if(!ss.has(sample))ss.set(sample,new Map());const sides=ss.get(sample),k=team?'team':side;
+      const r=sides.get(k)||{side:k,w:0,l:0,p:0};r.w+=g.wins||0;r.l+=g.losses||0;r.p+=g.pushes||0;sides.set(k,r);
+    }
+    const out=[];
+    for(const market of ['moneyline','spread','total']){
+      const ss=markets.get(market);if(!ss)continue;
+      const size=sides=>[...sides.values()].reduce((a,r)=>a+r.w+r.l+r.p,0);
+      const sides=[...ss.values()].sort((a,b)=>size(b)-size(a))[0];
+      const rows=[...sides.values()].filter(r=>r.w+r.l+r.p>0);if(!rows.length)continue;
+      const pct=r=>r.w+r.l?r.w/(r.w+r.l):0.5;
+      const r=team?rows[0]:rows.sort((a,b)=>pct(b)-pct(a)||['home','over'].indexOf(b.side)-['home','over'].indexOf(a.side))[0];
+      const short=({moneyline:'ML',spread:'ATS',total:''})[market];
+      const label=market==='total'?(r.side==='under'?'Under':'Over'):team?short:`${r.side==='away'?'Road':'Home'} ${short}`;
+      out.push({market,label,w:r.w,l:r.l,p:r.p,pct:r.w+r.l?r.w/(r.w+r.l)*100:null});
+    }
+    return out;
+  }
+  function quickChips(q){
+    return q.map(x=>{const n=x.w+x.l,tone=x.pct==null||n<5?'':x.pct>=55?' bs-q-up':x.pct<=45?' bs-q-down':'';
+      return `<span class="bs-q${tone}"><b>${e(x.label)}</b> ${x.w}-${x.l}${x.p?`-${x.p}`:''}<i>${x.pct==null?'—':Math.round(x.pct)+'%'}</i></span>`;}).join('');
+  }
   function situationsHTML(vm) {
     const S=root.SportsHubSituations,C=root.SportsHubSignalsCore;
     if(!S||!C)return note('Situational research is unavailable. Refresh the app.');
     const rows=vm.decisions||[],categories=[...new Set(S.defs.map(d=>d.category))];
-    return `<section class="bs-situations"><div class="bs-heading"><h4>25 situations to explore</h4><span class="bs-tag">Saved game evidence</span></div><p>Open a situation for results by market and matching games. Team-specific situations track that team’s moneyline and spread; game-wide situations also show totals. Situations overlap; their records are not independent.</p><label class="bs-situation-search">Find a situation<input type="search" data-bs-situation-search placeholder="Travel, bye, underdog, loss…"></label><p data-situation-no-results hidden>No situations match that search.</p>${categories.map(category=>`<details class="bs-situation-category" data-situation-category open><summary>${e(category)}</summary><div class="bs-situation-list">${S.defs.filter(d=>d.category===category).map(def=>{
+    return `<section class="bs-situations"><div class="bs-heading"><h4>25 situations to explore</h4><span class="bs-tag">Saved game evidence</span></div><p>Open a situation for results by market and matching games. Team-specific situations track that team’s moneyline and spread; game-wide situations also show totals. Situations overlap; their records are not independent.</p><p class="bs-source bs-q-key">Quick view: record and win % (pushes excluded). Green 55%+, red 45% or lower (5+ decided bets). Game-wide rows show the leading side. Moneyline % ignores price — open a row for profit and ROI.</p><label class="bs-situation-search">Find a situation<input type="search" data-bs-situation-search placeholder="Travel, bye, underdog, loss…"></label><p data-situation-no-results hidden>No situations match that search.</p>${categories.map(category=>`<details class="bs-situation-category" data-situation-category open><summary>${e(category)}</summary><div class="bs-situation-list">${S.defs.filter(d=>d.category===category).map(def=>{
       const {matches,games,unknown}=S.coverage(rows,def.id),groups=C.performance(matches,vm.settlements||[]);
-      const settled=groups.some(g=>g.wins+g.losses+g.pushes>0);
-      return `<details class="bs-situation" data-situation-id="${e(def.id)}" data-situation-search="${e((def.name+' '+def.category+' '+def.description).toLowerCase())}"><summary><strong>${e(def.name)}</strong><span>${games?`${games} game${games===1?'':'s'}${settled?' · Results ready':' · Awaiting results'}`:unknown?'Needs saved context':'No matches yet'}</span></summary><div class="bs-situation-body"><p>${e(def.description)}</p><p class="bs-source">${games} matching game${games===1?'':'s'}${unknown?` · ${unknown} game${unknown===1?'':'s'} with missing context excluded`:''}. ${['intl','intlreturn','roadrepeat','win','loss','bigloss','bigwin'].includes(def.id)?'New context is captured before future games; past missing inputs are not reconstructed.':''}</p>${matches.length?pairedResults(groups,matches,def)+recentResearch({...vm,decisions:matches,recentLimit:matches.length}):note(unknown?'The required context was not saved for these games. Results will appear as qualifying pregame observations are captured.':'No saved games match this situation in the selected dates.')}</div></details>`;
+      const quick=quickRecords(groups,def);
+      return `<details class="bs-situation" data-situation-id="${e(def.id)}" data-situation-search="${e((def.name+' '+def.category+' '+def.description).toLowerCase())}"><summary><span class="bs-sit-head"><strong>${e(def.name)}</strong><span>${games?`${games} game${games===1?'':'s'}${quick.length?'':' · Awaiting results'}`:unknown?'Needs saved context':'No matches yet'}</span></span>${quick.length?`<span class="bs-sit-quick">${quickChips(quick)}</span>`:''}</summary><div class="bs-situation-body"><p>${e(def.description)}</p><p class="bs-source">${games} matching game${games===1?'':'s'}${unknown?` · ${unknown} game${unknown===1?'':'s'} with missing context excluded`:''}. ${['intl','intlreturn','roadrepeat','win','loss','bigloss','bigwin'].includes(def.id)?'New context is captured before future games; past missing inputs are not reconstructed.':''}</p>${matches.length?pairedResults(groups,matches,def)+recentResearch({...vm,decisions:matches,recentLimit:matches.length}):note(unknown?'The required context was not saved for these games. Results will appear as qualifying pregame observations are captured.':'No saved games match this situation in the selected dates.')}</div></details>`;
     }).join('')}</div></details>`).join('')}</section>`;
   }
 

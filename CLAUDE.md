@@ -696,7 +696,26 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v337** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v338** (backend **b17-fantasy-league-rules**).
+
+### v338 — Situational trends rows show record + win %
+
+Jack: "put record and % for these as a quick view so I can see which ones are
+worth looking at" (NFL Picks & Research → Situational trends). Each situation's
+collapsed row now carries one chip per market under its name — `ML 8-2 80%`,
+`ATS 5-5 50%` (game-wide rows add `Over`/`Under`) — replacing "· Results ready".
+- `quickRecords(groups, def)` in betting-signals-ui.js, over the same
+  `C.performance` groups the expanded tables use, so chips always equal the
+  tables. Team situations (`def.bet`) sum that team's home + road rows (same
+  bet). Game-wide situations show the LEADING side per market (Road ML, Home
+  ATS, Under…) because the two sides are the same games mirrored. If a market
+  ever holds more than one sample, the largest settled sample is shown —
+  samples are never added together (one sample per market as of 1 Nov 2026).
+- Win % excludes pushes. Tone: green ≥55%, red ≤45%, only with 5+ decided
+  bets. A one-line key above the list says moneyline % ignores price.
+- CSS: v338 block at the end of betting-signals.css. Display-only.
+- Test: `tests/research-situations.test.js` (+1). Checked at 390/1280px on
+  live data; chips matched every expanded table checked.
 
 ### v337 — Bigger ticker
 
@@ -1445,7 +1464,7 @@ Performance records, trends, weekly tables, splits, calibration and matched base
 
 ### v287 — Situational research and compact original tests
 
-NFL research has three views: Market sides, Situational trends, and Original rule tests. The searchable situations catalog contains 25 rest/bye, travel/venue, matchup/market, and previous-result definitions in `_shared/research-situations.js`. It reads the six existing research-side observations, not fixed-rule evaluations, and retains market/provider/version/quality separation. Team situations evaluate only that team's moneyline and spread; game-wide situations also evaluate totals. Each situation with a `bet` label (20 of 25; set in `research-situations.js`) titles its result rows by the team being bet (e.g. "Rested team (10+ days) · home / · road", or just "Road underdog" when the situation fixes the side); the five game-wide situations (international, neutral, division, non-division, primetime) keep Home team / Away team / Over / Under. Expanded rows show matching games newest first, actual saved-price records and ROI, plus explicit missing-context coverage. No strategy coefficients, picks, grading, or historical inputs change. Current collection is the default on all NFL views; legacy remains explicitly selectable.
+NFL research has three views: Market sides, Situational trends, and Original rule tests. The searchable situations catalog contains 25 rest/bye, travel/venue, matchup/market, and previous-result definitions in `_shared/research-situations.js`. It reads the six existing research-side observations, not fixed-rule evaluations, and retains market/provider/version/quality separation. Team situations evaluate only that team's moneyline and spread; game-wide situations also evaluate totals. Each collapsed situation row shows a record + win % chip per market (v338). Each situation with a `bet` label (20 of 25; set in `research-situations.js`) titles its result rows by the team being bet (e.g. "Rested team (10+ days) · home / · road", or just "Road underdog" when the situation fixes the side); the five game-wide situations (international, neutral, division, non-division, primetime) keep Home team / Away team / Over / Under. Expanded rows show matching games newest first, actual saved-price records and ROI, plus explicit missing-context coverage. No strategy coefficients, picks, grading, or historical inputs change. Current collection is the default on all NFL views; legacy remains explicitly selectable.
 
 The existing `sports-hub-ai` collector now freezes venue country/state, home-base geography, verified bye status, prior game's venue-country classification, home/away status, and final margin into the existing JSON inputs. Prior games must be completed before both capture and kickoff. Missing facts remain null. Coast-to-coast research can use frozen matchup identities for historical non-neutral NFL games; it describes home-base-to-venue geography, not actual travel itinerary. International, return-trip, previous-result and road-sequence facts collect forward only. The function must be deployed with its new shared dependency and existing JWT verification preserved. No schema migration is needed.
 
