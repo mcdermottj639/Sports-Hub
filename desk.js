@@ -93,6 +93,7 @@
     ['tools', 'Tools & experiments', 'Mock drafts, trivia and workout tools', 'labs'],
     ['about', 'About & data', 'Data sources, collection and cached responses', 'about'],
   ];
+  let todayGames = [], todayErrors = [];
   let games = [], agendaFilter = 'all', agendaEdges = false, agendaLimit = 6, agendaErrors = [], agendaLoaded = false;
   let agendaPending = null, agendaAt = 0, boardPending = null, boardAt = 0;
   let currentRoute = { panel: 'home' }, routing = false, searchItems = [], searchInvoker = null;
@@ -251,7 +252,12 @@
     if (!force && agendaLoaded && Date.now() - agendaAt < 60000) { paintAgenda(); return; }
     agendaPending = (async () => {
       const sports = ['nfl','cfb','mlb','nba'];
-      const results = await Promise.allSettled(sports.map(async sport => ({ sport, list: WEEK_SPORTS.has(sport) ? (await weekSlate(sport)).games : await getGames(sport,ymd(sportsDate())) })));
+      const weeklyPending = Promise.allSettled(sports.map(async sport => ({ sport, list: WEEK_SPORTS.has(sport) ? (await weekSlate(sport)).games : await getGames(sport,ymd(sportsDate())) })));
+      const daily = await Promise.allSettled(sports.map(async sport => ({ sport, list: (await scoreboard(sport,ymd(new Date()))).games })));
+      const results = await weeklyPending;
+      const dailyNext = [], dailyErrors = [];
+      daily.forEach((r,i) => { if (r.status === 'fulfilled') dailyNext.push(...r.value.list.map(g => ({ sport:r.value.sport,g }))); else dailyErrors.push(sports[i].toUpperCase()); });
+      todayGames = [...dailyNext,...todayGames.filter(x=>dailyErrors.includes(x.sport.toUpperCase()))]; todayErrors = dailyErrors;
       const next = [], errors = [];
       results.forEach((r,i) => { if (r.status === 'fulfilled') next.push(...r.value.list.map(g => ({ sport:r.value.sport,g }))); else errors.push(sports[i].toUpperCase()); });
       // Keep the last known schedule for an unavailable league and disclose it.
@@ -264,22 +270,26 @@
   function paintAgenda() {
     const host = $d('desk-agenda'); if (!host) return;
     const forecasts = C.gameForecasts(root.SportsHubCloudAI?.cached?.().rows, officialVersion);
-    const all = C.agenda(games,readWatch(),agendaFilter).map(x => {
+    const isToday = agendaFilter === 'today';
+    const errors = isToday ? todayErrors : agendaErrors;
+    const scope = document.querySelector('.desk-agenda-scope');
+    if (scope) scope.textContent = isToday ? 'Today · NFL, CFB (FBS), MLB & NBA · times are local' : 'NFL & CFB this week · MLB & NBA today · times are local';
+    const all = C.agenda(isToday ? todayGames : games,readWatch(),agendaFilter).map(x => {
       const markets = forecasts.get(C.key(x.sport,x.g.id)), book = bookFor(x.sport,x.g);
       return { ...x, markets, book, read: C.gameRead(markets, book.info, x.g) };
     });
     const open = all.filter(x => gameState(x.g) !== 'final');
     const sum = C.slateSummary(open.map(x => x.read));
     const list = agendaEdges ? all.filter(x => x.read.hot || x.read.flip) : all;
-    const filters = [['all','All'],['watchlist','Saved'],['nfl','NFL'],['cfb','CFB'],['mlb','MLB'],['nba','NBA']];
+    const filters = [['all','All'],['today','Today'],['watchlist','Saved'],['nfl','NFL'],['cfb','CFB'],['mlb','MLB'],['nba','NBA']];
     const chips = $d('desk-agenda-filters');
     chips.innerHTML = filters.map(([k,label]) => `<button type="button" data-agenda-filter="${k}" aria-pressed="${agendaFilter===k}">${label}</button>`).join('');
     if (!agendaLoaded) { host.innerHTML='<div class="desk-empty" role="status">Loading your game radar…</div>'; return; }
     host.replaceChildren();
-    if (agendaErrors.length) host.insertAdjacentHTML('beforeend',`<div class="desk-inline-note">${escape(agendaErrors.join(', '))} feed unavailable. <button type="button" data-desk-refresh>Retry</button></div>`);
-    if (all.length) host.insertAdjacentHTML('beforeend',`<div class="desk-slate-strip" role="group" aria-label="Slate summary"><span>${sum.games} ${sum.games===1?"game":"games"}</span><span class="hot">${sum.edges} ${sum.edges===1?'edge':'edges'}</span><span class="flip">${sum.flips} dog ${sum.flips===1?'flip':'flips'}</span><button type="button" data-agenda-edges aria-pressed="${agendaEdges}">Edges only</button></div>`);
-    if (!list.length) host.insertAdjacentHTML('beforeend',`<div class="desk-empty"><b>${agendaEdges && all.length ? 'No edges or dog flips in this view.' : agendaFilter==='watchlist' ? 'Give your radar a personal touch.' : agendaErrors.length ? 'Waiting for the schedule.' : 'No games in this view.'}</b><p>${agendaEdges && all.length ? 'Turn off Edges only to see every game.' : agendaFilter==='watchlist' ? 'Save a game with the bookmark icon. It will be easy to find here and in your watchlist.' : agendaErrors.length ? 'Your saved results and notes are still available.' : 'Football covers this week; baseball and basketball cover today. Try another league or explore saved model results.'}</p>${button('models/all/results','View performance')}</div>`);
-    list.slice(0,agendaLimit).forEach(({sport,g,markets,book,read}) => {
+    if (errors.length) host.insertAdjacentHTML('beforeend',`<div class="desk-inline-note">${escape(errors.join(', '))} feed unavailable. <button type="button" data-desk-refresh>Retry</button></div>`);
+    if (all.length) host.insertAdjacentHTML('beforeend',`<div class="desk-slate-strip" role="group" aria-label="Slate summary"><span>${isToday ? all.length : sum.games} ${(isToday ? all.length : sum.games)===1?"game":"games"}</span><span class="hot">${sum.edges} ${sum.edges===1?'edge':'edges'}</span><span class="flip">${sum.flips} dog ${sum.flips===1?'flip':'flips'}</span><button type="button" data-agenda-edges aria-pressed="${agendaEdges}">Edges only</button></div>`);
+    if (!list.length) host.insertAdjacentHTML('beforeend',`<div class="desk-empty"><b>${agendaEdges && all.length ? 'No edges or dog flips in this view.' : agendaFilter==='watchlist' ? 'Give your radar a personal touch.' : errors.length ? 'Waiting for the schedule.' : isToday ? 'No games scheduled today.' : 'No games in this view.'}</b><p>${agendaEdges && all.length ? 'Turn off Edges only to see every game.' : agendaFilter==='watchlist' ? 'Save a game with the bookmark icon. It will be easy to find here and in your watchlist.' : errors.length ? 'Your saved results and notes are still available.' : isToday ? 'Try All to see the upcoming football slate.' : 'Football covers this week; baseball and basketball cover today. Try another league or explore saved model results.'}</p>${button('models/all/results','View performance')}</div>`);
+    list.slice(0,isToday ? list.length : agendaLimit).forEach(({sport,g,markets,book,read}) => {
       const row = document.createElement('div'); row.className = 'desk-game' + (read.hot ? ' desk-game-hot' : '');
       const status = gameState(g), started = status !== 'scheduled';
       const tag = status === 'live' ? (g.statusText || 'Live') : status === 'final' ? 'Final' : dateText(g.date);
@@ -287,7 +297,7 @@
       row.innerHTML = `<button type="button" class="desk-game-main" data-desk-game="${escape(sport+':'+g.id)}" aria-label="Open ${escape(g.away.name)} at ${escape(g.home.name)} game report"><span class="desk-game-meta"><span class="desk-sport">${escape(LEAGUES[sport].label)}</span><span class="${status==='live'?'desk-live':''}">${escape(tag)}</span>${edgeBadge(read)}</span><span class="desk-matchup"><span class="desk-match-team">${teamMark(g.away)}<span><b>${escape(g.away.abbr || g.away.name)}</b>${ml('away')||`<small>${escape(g.away.name)}</small>`}</span>${started?`<strong>${escape(g.away.score??'–')}</strong>`:''}</span><span class="desk-versus">${started?'–':'at'}</span><span class="desk-match-team">${teamMark(g.home)}<span><b>${escape(g.home.abbr || g.home.name)}</b>${ml('home')||`<small>${escape(g.home.name)}</small>`}</span>${started?`<strong>${escape(g.home.score??'–')}</strong>`:''}</span></span>${liveField(sport,g,markets)}${readHTML(read,book,status)}${gameContext(sport,g,markets)}</button>`;
       addWatchControl(row,sport,g); host.appendChild(row);
     });
-    if (list.length > agendaLimit) host.insertAdjacentHTML('beforeend',`<button class="desk-show-more" type="button" data-agenda-more>Show ${Math.min(12,list.length-agendaLimit)} more games <span>(${list.length} in this view)</span></button>`);
+    if (!isToday && list.length > agendaLimit) host.insertAdjacentHTML('beforeend',`<button class="desk-show-more" type="button" data-agenda-more>Show ${Math.min(12,list.length-agendaLimit)} more games <span>(${list.length} in this view)</span></button>`);
     if (all.length) host.insertAdjacentHTML('beforeend','<details class="desk-read-note"><summary>How to read these rows</summary>Lines are ESPN\'s. Model chips are the official saved pregame forecasts (NFL football model, NBA model, v239 elsewhere); green means the model tiered it Edge, Best or Alert. Chips and the points badge are the saved forecast at the saved price; the line row is today\'s. When today\'s line has moved, a note shows the move and whether the saved projection still clears it (edge now = model win chance vs today\'s no-vig price). Dog flip = the saved price was plus money but the model gave that side over 50% (same rule as Performance; today\'s book price may have moved). Projected score comes from the saved margin and total. For fun — not betting advice.</details>');
   }
   function paintBrief() {
@@ -378,7 +388,7 @@
     $d('desk-search-count').textContent=`${searchItems.length} destination${searchItems.length===1?'':'s'}`;
   }
   async function openSavedGame(k) {
-    const item=games.find(x=>C.key(x.sport,x.g.id)===k);
+    const item=[...todayGames,...games].find(x=>C.key(x.sport,x.g.id)===k);
     if(item){openGameDetail(item.sport,item.g.id,item.g);return;}
     const saved=readWatch().find(x=>C.key(x.sport,x.id)===k);
     if(saved){
@@ -424,7 +434,7 @@
       if(e.target.closest('[data-search-close]')){closeSearch();return;}
       const sr=e.target.closest('[data-search-index]');if(sr){const x=searchItems[Number(sr.dataset.searchIndex)];closeSearch();if(x?.game)openSavedGame(x.game);else if(x)navigate(x.path);return;}
       const game=e.target.closest('[data-desk-game]');if(game){openSavedGame(game.dataset.deskGame);return;}
-      const filter=e.target.closest('[data-agenda-filter]');if(filter){agendaFilter=filter.dataset.agendaFilter;agendaLimit=6;paintAgenda();$d('desk-agenda-filters').querySelector(`[data-agenda-filter="${agendaFilter}"]`)?.focus();return;}
+      const filter=e.target.closest('[data-agenda-filter]');if(filter){agendaFilter=filter.dataset.agendaFilter;if(agendaFilter==='today')agendaEdges=false;agendaLimit=6;paintAgenda();$d('desk-agenda-filters').querySelector(`[data-agenda-filter="${agendaFilter}"]`)?.focus();return;}
       if(e.target.closest('[data-agenda-more]')){agendaLimit+=12;paintAgenda();return;}
       if(e.target.closest('[data-agenda-edges]')){agendaEdges=!agendaEdges;agendaLimit=6;paintAgenda();document.querySelector('[data-agenda-edges]')?.focus();return;}
       if(e.target.closest('[data-desk-refresh]')){refresh();return;}
@@ -464,6 +474,7 @@
     window.addEventListener('sportshub:live-scores', e => {
       const fresh = new Map(e.detail.map(x => [C.key(x.sport,x.g.id),x.g]));
       games = games.map(x => ({...x,g:fresh.get(C.key(x.sport,x.g.id)) || x.g}));
+      todayGames = todayGames.map(x => ({...x,g:fresh.get(C.key(x.sport,x.g.id)) || x.g}));
       if (currentTab === 'home' || currentTab === 'watchlist') { paintAgenda(); paintWatchlist(); paintClubs(); }
     });
     $d('desk-board-fold').addEventListener('toggle',e=>{try{localStorage.setItem('sportshub:desk:board-open',String(e.target.open));}catch(_){}});

@@ -179,3 +179,22 @@ test('v335: no clubhouse banner on Today; Eagles and Red Sox live on the Leagues
   assert.match(css, /body\[data-desk-panel="home"\] \.desk-page-heading \{ position:absolute!important/);
   assert.match(html, /class="desk-agenda-refresh" data-desk-refresh/);
 });
+
+test('Today includes the entire local calendar day across sports and statuses', () => {
+  const oldTZ = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    // Fall-back day is 25 hours: both 1:30 AM occurrences belong to today.
+    const now = Date.parse('2026-11-01T17:00:00Z');
+    const make = (id,date,state='pre',sport='nfl') => ({sport,g:{id,date,state,seasonType:2}});
+    const rows = [make('yesterday','2026-11-01T03:59:59Z'),
+      make('start','2026-11-01T04:00:00Z','post'),
+      make('first','2026-11-01T05:30:00Z','post','cfb'),
+      make('second','2026-11-01T06:30:00Z','post','mlb'),
+      make('live','2026-11-01T16:00:00Z','in','nba'),
+      make('end','2026-11-02T04:59:59Z'),
+      make('tomorrow','2026-11-02T05:00:00Z'),make('invalid','bad')];
+    assert.deepEqual(new Set(C.agenda([...rows,rows[1]],[],'today',now).map(x=>x.g.id)),new Set(['start','first','second','live','end']));
+    assert.equal(C.agenda(rows,[],'today',Date.parse('2026-11-02T05:00:00Z'))[0].g.id,'tomorrow');
+  } finally { if (oldTZ === undefined) delete process.env.TZ; else process.env.TZ = oldTZ; }
+});

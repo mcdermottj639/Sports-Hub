@@ -172,6 +172,8 @@
     return { games: list.length, edges: list.filter(r => r?.hot).length, flips: list.filter(r => r?.flip).length };
   }
   function agenda(games, watch, filter = 'all', now = Date.now()) {
+    const day = value => { const d = new Date(value); return Number.isFinite(d.getTime()) ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : null; };
+    const today = day(now);
     const pinned = new Set(normalizeWatch(watch).map(r => key(r.sport, r.id)));
     const unique = new Map();
     for (const item of games || []) {
@@ -180,7 +182,7 @@
       if (!unique.has(k)) unique.set(k, { ...item, pinned: pinned.has(k) });
     }
     const stateRank = g => g.state === 'in' ? 0 : g.state === 'pre' && Date.parse(g.date) >= now ? 1 : 2;
-    return [...unique.values()].filter(x => filter === 'all' || (filter === 'watchlist' ? x.pinned : x.sport === filter))
+    return [...unique.values()].filter(x => filter === 'all' || (filter === 'today' ? day(x.g.date) === today : filter === 'watchlist' ? x.pinned : x.sport === filter))
       .sort((a,b) => stateRank(a.g) - stateRank(b.g) || Number(b.pinned) - Number(a.pinned) || (Date.parse(a.g.date) || 0) - (Date.parse(b.g.date) || 0));
   }
   function search(items, query) {

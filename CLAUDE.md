@@ -697,7 +697,16 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v340** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v341** (backend **b17-fantasy-league-rules**).
+
+### v341 — Games Ahead Today option
+
+Games Ahead now has Today beside All. Today uses explicit date scoreboards for
+NFL, FBS CFB (including unranked teams), MLB and NBA, filtered by the device
+calendar day. Scheduled, live and final games are included; all rows are shown
+and selecting Today clears Edges only. All and league views retain their weekly
+football scope and compact pagination. Feed failures remain visible. This is a
+frontend-only release; collector deployment pins remain unchanged.
 
 ### v340 — Totals out of the headline records
 
