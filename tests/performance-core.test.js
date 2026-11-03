@@ -119,3 +119,12 @@ test('underdog flip section renders book vs model prices and hides under other m
  assert.match(html,/Underdog flips/);assert.match(html,/<b>\+140<\/b>/);assert.match(html,/<b>−150<\/b>/);assert.match(html,/Won/);assert.match(html,/\+1\.40u/);
  assert.match(ui.flipsSection([],'nfl'),/No underdog flips in this view yet/);
 });
+
+test('v340 headline records exclude totals unless Totals is the chosen market',()=>{
+ const rows=[base({event_id:'1',market:'moneyline',selection:'Home ML',result:'win'}),base({event_id:'2',market:'spread',result:'win'}),
+  base({event_id:'3',market:'total',selection:'OVER 45',line:45,result:'loss'}),base({event_id:'4',market:'total',selection:'UNDER 45',line:45,result:'loss'})];
+ assert.deepEqual(C.HEADLINE_MARKETS,['moneyline','spread']);
+ const h=C.summary(C.headline(rows));assert.equal(h.w,2);assert.equal(h.l,0);
+ assert.equal(C.summary(C.headline(rows,'total')).l,2);
+ assert.equal(C.summary(rows).n,4);
+});

@@ -75,11 +75,14 @@
   }
 
   // W-L-P over every current-version pick graded in the last 24h (not capped).
-  function recordSummary(rows, now = Date.now()) {
+  // v340: the headline excludes totals (they get their own line), matching
+  // Performance's winner + spread headline.
+  function recordSummary(rows, now = Date.now(), market = 'headline') {
     const s = { win: 0, loss: 0, push: 0 };
     (rows || []).forEach((r) => {
       const t = Date.parse(r.graded_at);
-      if (isCurrent(r) && s[r.result] != null && t > now - 24 * HR && t <= now + 60000) s[r.result] += 1;
+      const inMarket = market === 'headline' ? r.market !== 'total' : r.market === market;
+      if (inMarket && isCurrent(r) && s[r.result] != null && t > now - 24 * HR && t <= now + 60000) s[r.result] += 1;
     });
     return s;
   }
@@ -93,7 +96,12 @@
     const s = recordSummary(rows, now);
     if (s.win + s.loss + s.push) {
       out.push({ k: 'u:record', kind: 'update',
-        html: `<span class="tk-upd">MODEL</span> Last 24h: <b>${s.win}-${s.loss}${s.push ? `-${s.push}` : ''}</b> on graded picks` });
+        html: `<span class="tk-upd">MODEL</span> Last 24h: <b>${s.win}-${s.loss}${s.push ? `-${s.push}` : ''}</b> winner + spread` });
+    }
+    const tt = recordSummary(rows, now, 'total');
+    if (tt.win + tt.loss + tt.push) {
+      out.push({ k: 'u:totals', kind: 'update',
+        html: `<span class="tk-upd">TOTALS</span> Last 24h: <b>${tt.win}-${tt.loss}${tt.push ? `-${tt.push}` : ''}</b> (tracked separately)` });
     }
     if (run?.started_at) {
       const at = Date.parse(run.finished_at || run.started_at);

@@ -104,3 +104,16 @@ test('v334: news items carry their league so the filter can hide them', () => {
   const items = T.buildNewsItems([{ sport: 'nfl', articles: [{ headline: 'A', published: '2026-11-01T12:00:00Z' }] }]);
   assert.equal(items[0].sport, 'nfl');
 });
+
+test('v340 ticker headline excludes totals and shows them on their own line', () => {
+  const rows = [
+    row({ event_id: '1', result: 'win', graded_at: new Date(NOW - H).toISOString() }),
+    row({ event_id: '2', result: 'loss', market: 'total', selection: 'OVER 220.5', graded_at: new Date(NOW - H).toISOString() }),
+    row({ event_id: '3', result: 'loss', market: 'total', selection: 'UNDER 210.5', graded_at: new Date(NOW - H).toISOString() }),
+  ];
+  assert.deepEqual(T.recordSummary(rows, NOW), { win: 1, loss: 0, push: 0 });
+  assert.deepEqual(T.recordSummary(rows, NOW, 'total'), { win: 0, loss: 2, push: 0 });
+  const upd = T.buildUpdateItems(rows, null, NOW);
+  assert.match(upd[0].html, /1-0<\/b> winner \+ spread/);
+  assert.match(upd[1].html, /TOTALS.*0-2/);
+});

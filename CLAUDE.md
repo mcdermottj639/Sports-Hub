@@ -296,7 +296,7 @@ fantasy/golf data are not refreshed by this cycle.
 - `nba-page.js`, `_shared/nba-model.js`, `_shared/nba-model-config.js` — NBA league UI and shared fitted model; the shared files live under `supabase/functions/`.
 - `scripts/nba-data.py`, `scripts/nba-features.js`, `scripts/fit-nba.py`, `data/nba-history.json`, `data/nba-validation.json`, `docs/NBA_MODEL.md` — reproducible NBA evidence, chronological fitting and validation.
 
-- `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. Models exposes Performance / Trends / Game history / Model info / Calibration beside Forecasts. Performance includes the v327 Underdog flips record (book plus money, model > 50%). Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Game history uses team-specific spread/projection labels, omits inapplicable moneyline fields, and shows newest played games first, with upcoming games below in kickoff order, and exposes immutable projections, outcomes and inputs, with search and result/date/market/version filters.
+- `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. Models exposes Performance / Trends / Game history / Model info / Calibration beside Forecasts. Performance includes the v327 Underdog flips record (book plus money, model > 50%). Since v340 the headline/per-sport records exclude totals (`headline()`); totals have their own row. Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Game history uses team-specific spread/projection labels, omits inapplicable moneyline fields, and shows newest played games first, with upcoming games below in kickoff order, and exposes immutable projections, outcomes and inputs, with search and result/date/market/version filters.
 
 - `forecast-lock.js` — persistent pregame display snapshots (`sportshub:forecast-lock:v1`, latest 300 events within a 1 MiB UTF-16 budget), shared across model surfaces and restored after reload.
 
@@ -696,7 +696,29 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v339** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v340** (backend **b17-fantasy-league-rules**).
+
+### v340 — Totals out of the headline records
+
+Jack: "totals are awful … remove totals from the overall performance. You can
+still track that as an individual stat but I don't like that it brings down
+the numbers for each sport model."
+- `SportsHubPerformance.headline(rows, market)` drops `market === 'total'`
+  unless a market filter is set (`HEADLINE_MARKETS` = moneyline, spread).
+  Models → Performance (all-markets view): the top tiles, profit chart and
+  By-sport rows count winner + spread only, plus a separate "Totals · all
+  sports · Tracked separately" row. A single sport's By-market list still
+  shows Totals (marked "Not in headline"). Trends: the all-sport tiles/chart
+  and each sport's summary line exclude totals; each sport's own Totals
+  trends section is unchanged. Market: Totals still shows totals alone.
+- Ticker UPDATES: the 24h MODEL record is winner + spread; totals get their
+  own "TOTALS Last 24h" line.
+- Unchanged: capture, grading, Game history, flips (moneyline only), the
+  per-market evidence cards (already separate), and forecast error tables.
+- Effect on 3 Nov 2026 current cohorts: NFL 98-91-2 → 74-54-2 (−15.40u →
+  −0.15u); CFB 194-139-2 → 164-87-2; MLB 162-116-5 → 130-84; NBA 184-137 →
+  133-81 (+4.26u → +13.81u). Totals alone 137-177-5, −76.06u.
+- Tests: performance-core +1, ticker +1.
 
 ### v339 — Research screen: results first, and the situations freeze fixed
 

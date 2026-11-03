@@ -8,6 +8,12 @@
   const SPORTS = ['nfl','cfb','mlb','nba'];
   const MARKETS = ['moneyline','spread','total'];
   const settled = r => ['win','loss','push'].includes(r.result);
+  // v340 — Jack: totals drag every sport's headline record down. Headline
+  // (overall / per-sport) numbers count winner + spread picks only; totals
+  // keep their own record, trends and history. A Market filter of Totals
+  // shows totals alone, so this applies only to the all-markets view.
+  const HEADLINE_MARKETS = ['moneyline','spread'];
+  const headline = (rows, market) => market ? rows : (rows || []).filter(r => r.market !== 'total');
   const gameKey = r => [r.sport,r.event_id,r.starts_at,r.model_version].join('|');
   const key = r => `${gameKey(r)}|${r.market}`;
   function legacy(r) {
@@ -198,5 +204,5 @@
       })
       .map(rs=>rs.sort((a,b)=>MARKETS.indexOf(a.market)-MARKETS.indexOf(b.market)));
   }
-  return Object.freeze({SPORTS,MARKETS,legacy,valid,select,qualified,settled,summary,profit,series,weekly,benchmarks,splits,calibration,forecastErrors,games,fairAmerican,isFlip,flipStrength,flips});
+  return Object.freeze({SPORTS,MARKETS,HEADLINE_MARKETS,headline,legacy,valid,select,qualified,settled,summary,profit,series,weekly,benchmarks,splits,calibration,forecastErrors,games,fairAmerican,isFlip,flipStrength,flips});
 });
