@@ -304,6 +304,7 @@ fantasy/golf data are not refreshed by this cycle.
 - `cloud-signals.js`, `betting-signals-ui.js`, `betting-signals.css` — shared read-only NFL/CFB evidence panels; full research lives under each league's Picks & Research switch, with links from AI Picks and game reports.
 - `supabase/functions/_shared/betting-signals-core.js` — identical deterministic rule math in browser/Edge/tests.
 - `supabase/functions/sports-hub-ai/signals.ts`, `sports-hub-odds/index.ts` — evidence hook and independent lightweight collector.
+  Egress rules (Nov 2026 Supabase quota notice): `settleSignalGame` reads only the decision columns grading uses (`DECISION_FIELDS`) and a game's settlements in one `decision_id=in.(…)` batch — never `select=*` or one request per decision. The 5-minute odds job settles only live games and finals ≤8 h after kickoff (`settleHere`); older finals and score corrections are graded by sports-hub-ai (every 30 min + 7-day reconcile). Merging does NOT deploy these functions.
 - `supabase/schedule-betting-signals.sql` — Vault-backed five-minute cron installation; actual source polling adapts to kickoff.
 
 - `ticker.js`, `ticker.css` — v326 rolling top ticker (scores, model picks,
