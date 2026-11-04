@@ -78,6 +78,11 @@ async function worker(){
  await db('prop_runs','POST',{id:run});
  const finish=async(patch:J)=>{await db(`prop_games?${key}`,'PATCH',{checked_at:new Date().toISOString(),lease_until:null,...patch});await db(`prop_runs?id=eq.${encodeURIComponent(run)}`,'PATCH',{finished_at:new Date().toISOString(),status:patch.coverage_status==='source_error'?'error':'ok',details:{sport:job.sport,event:job.event_id,...patch}});return patch;};
  const later=(ms:number)=>new Date(Date.now()+ms).toISOString();
+ // Egress guard (Nov 2026 Supabase quota): back off repeated source errors instead of a flat 15-minute retry forever.
+ // Doubles from the last check (15 min floor, 6 h cap) but never sleeps through the last 15 minutes before kickoff.
+ const backoff=()=>{let wait=15*60000;if(job.coverage_status==='source_error'&&job.checked_at){const since=Date.now()-Date.parse(job.checked_at);if(since>0)wait=Math.min(6*3600000,Math.max(wait,2*since));}
+  const toStart=Date.parse(job.starts_at)-Date.now();if(toStart>0)wait=Math.min(wait,Math.max(15*60000,toStart-15*60000));return wait;};
+ const STALE=3*864e5;
  try{
   const {g,data}=await gameNow(job),saved=await db(`prop_picks?${key}&model_version=eq.${C.VERSION}&select=*`);
   const year=g.season||(new Date(g.date).getUTCFullYear()+(g.sport==='nba'&&new Date(g.date).getUTCMonth()>=8?1:0));
@@ -94,7 +99,7 @@ async function worker(){
     if(result)await db(`prop_picks?id=eq.${p.id}&result=eq.pending`,'PATCH',{result:result.result,actual:result.actual,settled_at:new Date().toISOString(),settlement_note:result.reason});
    }
    const pending=await db(`prop_picks?${key}&result=eq.pending&select=id`);
-   return finish({game:g,state:g.state,coverage_status:pending.length?'saved':'settled',coverage_note:pending.length?(g.state==='post'?'Waiting for final player statistics':'Selections and original lines are saved'):'Final prop results recorded',pick_count:saved.length,next_poll_at:pending.length?(Date.parse(g.date)>Date.now()?new Date(Date.parse(g.date)+2*3600000).toISOString():later(15*60000)):null});
+   return finish({game:g,state:g.state,coverage_status:pending.length?'saved':'settled',coverage_note:pending.length?(g.state==='post'?'Waiting for final player statistics':'Selections and original lines are saved'):'Final prop results recorded',pick_count:saved.length,next_poll_at:pending.length&&Date.parse(g.date)>Date.now()-STALE?(Date.parse(g.date)>Date.now()?new Date(Date.parse(g.date)+2*3600000).toISOString():later(15*60000)):null,...(pending.length&&Date.parse(g.date)<=Date.now()-STALE?{coverage_note:'Stopped waiting for final player statistics 3 days after the game'}:{})});
   }
   if(g.state!=='pre'||g.seasonType===1||Date.parse(g.date)<=Date.now()||/cancel|postpon|suspend|delay/i.test(g.status))return finish({state:g.state,coverage_status:g.seasonType===1?'preseason':'not_captured',coverage_note:g.seasonType===1?'Preseason props are excluded':'No pregame prop picks were saved',next_poll_at:null});
   if(Date.parse(g.date)!==Date.parse(job.starts_at))await db(`prop_games?${key}`,'PATCH',{starts_at:g.date,game:g});
@@ -113,12 +118,15 @@ async function worker(){
    }catch(_){failures++;return [];}
   })).flat();
   // Retry an incomplete scan; a temporary player-data failure must not choose the winner.
-  if(failures)return finish({coverage_status:'source_error',coverage_note:`Player data was unavailable for ${failures} athletes; retrying the full scan`,quote_count:quotes.length,modeled_count:candidates.length,next_poll_at:later(15*60000)});
+  if(failures)return finish({coverage_status:'source_error',coverage_note:`Player data was unavailable for ${failures} athletes; retrying the full scan`,quote_count:quotes.length,modeled_count:candidates.length,next_poll_at:later(backoff())});
   const chosen=C.select(candidates),captured=new Date().toISOString();
   if(Date.parse(g.date)<=Date.now())return finish({state:g.state,coverage_status:'not_captured',coverage_note:'Game started before the prop scan completed',next_poll_at:null});
   if(chosen.length)await db('prop_picks?on_conflict=sport,event_id,model_version,rank','POST',chosen.map((p:any)=>({...p,sport:g.sport,event_id:g.id,model_version:C.VERSION,starts_at:g.date,captured_at:captured,features:{...p.features,candidates_evaluated:candidates.length,quotes_observed:quotes.length,source_url:`https://www.espn.com/${g.sport==='cfb'?'college-football':g.sport}/odds/_/gameId/${g.id}`}})),'resolution=ignore-duplicates,return=minimal');
   return finish({state:g.state,coverage_status:chosen.length?'saved':'insufficient_data',coverage_note:chosen.length?`${chosen.length} ranked props saved from ${candidates.length} modeled selections`:'Posted props do not yet have enough verified player history',quote_count:quotes.length,modeled_count:candidates.length,pick_count:chosen.length,next_poll_at:chosen.length?new Date(Date.parse(g.date)+2*3600000).toISOString():later(refresh)});
- }catch(e){console.error('Prop scan failed',job.sport,job.event_id,String(e).slice(0,240));return finish({coverage_status:'source_error',coverage_note:'The prop data source is temporarily unavailable. Automatic collection will retry.',next_poll_at:later(15*60000)});}
+ }catch(e){console.error('Prop scan failed',job.sport,job.event_id,String(e).slice(0,240));
+  // A 404 or a game more than a day past its start will not come back: stop polling it.
+  const gone=/Source 404|Game identity mismatch/.test(String(e))||Date.parse(job.starts_at)<Date.now()-864e5;
+  return finish({coverage_status:'source_error',coverage_note:gone?'The prop data source no longer has this game. Collection stopped.':'The prop data source is temporarily unavailable. Automatic collection will retry.',next_poll_at:gone?null:later(backoff())});}
 }
 Deno.serve(async(req:Request)=>{
  if(req.method!=='POST')return new Response('Method not allowed',{status:405});
