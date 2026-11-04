@@ -82,15 +82,20 @@ test('provisional forecasts reach browser and collector with identical values an
  const e=L.evidence(g,changed,at),p=L.projection(e,g,at),browser=L.browser(e,g,at);
  assert.ok(e.candidate.provisional);assert.ok(p);assert.ok(browser.provisional);assert.equal(p.margin,browser.projMargin);assert.equal(p.p,browser.probHome);assert.equal(p.features.football.candidate.availabilityPolicy,'provisional-v1');assert.match(browser.notes.join(' '),/Questionable/);
 });
-test('v342 owner QB override names the starter, keeps the history minimum, and expires',()=>{
- const ids=Object.keys(history.qbIdentities),thin=ids.find(k=>state.qbs[history.qbIdentities[k].id]&&state.qbs[history.qbIdentities[k].id].n<25),
+test('v342/v343 owner QB override names the starter, projects a flagged low sample, and expires',()=>{
+ const ids=Object.keys(history.qbIdentities),
   deep=ids.find(k=>state.qbs[history.qbIdentities[k].id]?.n>=25&&history.qbIdentities[k].id!==state.teams[home].lastQB);
  const list=id=>({overrides:[{season:g.season,team:home,eventId:g.id,name:'Owner QB',athleteId:id,setAt:at,until:new Date(Date.parse(at)+864e5).toISOString()}]});
  const base=L.evidence(g,inputs,at),o=L.evidence(g,{...inputs,overrides:list(deep)},at);
  assert.equal(o.qb.home.name,'Owner QB');assert.equal(o.qb.home.athleteId,deep);assert.equal(o.qb.home.source,L.OVERRIDE_SOURCE);
  assert.equal(o.qb.home.confirmedStarter,true);assert.equal(o.qb.home.override.listedName,base.qb.home.name);
  assert.equal(o.qb.away.name,base.qb.away.name);assert.equal(o.candidate.available,true);assert.notEqual(o.candidate.margin,base.candidate.margin);
- const t=L.evidence(g,{...inputs,overrides:list(thin)},at);assert.equal(t.candidate.available,false);assert.ok(t.candidate.reasons.some(r=>/insufficient QB history/.test(r)));
+ const low=ids.find(k=>{const n=state.qbs[history.qbIdentities[k].id]?.n;return n>=10&&n<25;}),tiny=ids.find(k=>{const n=state.qbs[history.qbIdentities[k].id]?.n;return n>0&&n<10;});
+ const t=L.evidence(g,{...inputs,overrides:list(low)},at);assert.equal(t.candidate.available,true);assert.equal(t.candidate.provisional,true);
+ assert.ok(t.candidate.assumptions.some(a=>a.lowSample&&/low sample/.test(a.text)));assert.match(t.candidate.mainUncertainty,/low sample/);
+ if(tiny){const z=L.evidence(g,{...inputs,overrides:list(tiny)},at);assert.equal(z.candidate.available,false);assert.ok(z.candidate.reasons.some(r=>/insufficient QB history/.test(r)));}
+ const listed=structuredClone(inputs);listed.homeDepth.depthchart[0].positions.qb.athletes[0].id=low;
+ assert.equal(L.evidence(g,listed,at).candidate.available,false,'ESPN-listed thin QB still needs 25 plays');
  const later=new Date(Date.parse(at)+2*864e5-60000).toISOString();assert.equal(L.override(base.qb.home,list(deep),home,g.season,g.id,later),base.qb.home);
  assert.equal(L.override(base.qb.home,list(deep),home,g.season,'other-event',at),base.qb.home);
  assert.equal(L.override(base.qb.home,{overrides:[{...list(deep).overrides[0],season:g.season-1}]},home,g.season,g.id,at),base.qb.home);

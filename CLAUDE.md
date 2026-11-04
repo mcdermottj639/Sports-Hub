@@ -700,7 +700,18 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v342** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v343** (backend **b17-fantasy-league-rules**).
+
+### v343 — Owner-override QBs project from a small sample
+
+Jack: "Use the 20 plays." An owner-confirmed QB (v342 override, not a backup
+swap) now needs `OWNER_QB_MIN` = 10 measured plays instead of 25
+(`nfl-football.js` `candidate()`). Below 25 it adds a `lowSample` assumption,
+so the forecast is Provisional and the card foot reads "low sample, NAME has N
+measured plays (your QB override; usual minimum 25)". Same qbPrior shrinkage;
+no weight changes; ESPN-listed QBs still need 25. Week 9 check on current
+data: JAX @ BAL with Fagnano projects JAX 61.6% (JAX by 3.7) vs 59.9% with
+Huntley. Collector shim repinned. Tests: `tests/nfl-live.test.js`.
 
 ### v342 — Owner QB override for the NFL model
 

@@ -90,6 +90,7 @@
     const age=Date.parse(at)-Date.parse(history?.generatedAt);
     return history?.schema===1&&Number(history.currentSeason)===Number(season)&&Number.isFinite(age)&&age>=0&&age<=policy.maxSourceAgeDays*DAY&&history.coverage?.expected>=0&&(history.coverage.expected===0||history.coverage.available/history.coverage.expected>=.9);
   }
+  const OWNER_QB_MIN=10;
   function candidate(state,history,game,qb,config,context={}){
     const at=context.at||new Date().toISOString(),reasons=[],uncertainties=[],ids={},mapped={},scenarios=[],assumptions=[];
     if(!sourceReady(history,at,game.season))reasons.push('Play-by-play feed missing, stale or incomplete');
@@ -104,7 +105,12 @@
       if(useBackup)assumptions.push({side,name:q.backupName||'Backup',backup:true,text:`${side}: assumes ${q.backupName||'backup'} starts; ${q.name||'listed QB'} ${q.status}`});
       else if(q?.status&&!/^No current restriction found/.test(q.status))assumptions.push({side,name:q.name||'Listed QB',backup:false,text:`${side}: assumes ${q.name||'listed QB'} starts (${q.status})`});
       if(!q?.athleteId||!id||/^unknown$/i.test(q.status||''))reasons.push(`${side}: current QB evidence unavailable`);
-      if(!mapped[side]||mapped[side].n<25)reasons.push(`${side}: insufficient QB history`);
+      // v343: an owner-confirmed QB (data/nfl-qb-overrides.json) may project from a
+      // smaller measured sample (OWNER_QB_MIN plays). It is shrunk by the same qbPrior
+      // and flagged low-sample, which makes the forecast Provisional.
+      const owner=q?.source==='Owner QB override'&&q?.confirmedStarter===true&&!useBackup;
+      if(!mapped[side]||mapped[side].n<(owner?OWNER_QB_MIN:25))reasons.push(`${side}: insufficient QB history`);
+      else if(owner&&mapped[side].n<25)assumptions.push({side,name:q.name,backup:false,lowSample:true,text:`${side}: low sample, ${q.name} has ${Math.round(mapped[side].n)} measured plays (your QB override; usual minimum 25)`});
       if(q?.status&&!/^No current restriction found/.test(q.status))uncertainties.push(`${side}: ${q.name||'QB'} ${q.status}`);
     }
     const f=state&&features(state,game,ids),projection=ids.home&&ids.away?predict(f,config):null;
