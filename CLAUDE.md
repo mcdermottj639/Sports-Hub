@@ -299,7 +299,7 @@ fantasy/golf data are not refreshed by this cycle.
 - `nba-page.js`, `_shared/nba-model.js`, `_shared/nba-model-config.js` — NBA league UI and shared fitted model; the shared files live under `supabase/functions/`.
 - `scripts/nba-data.py`, `scripts/nba-features.js`, `scripts/fit-nba.py`, `data/nba-history.json`, `data/nba-validation.json`, `docs/NBA_MODEL.md` — reproducible NBA evidence, chronological fitting and validation.
 
-- `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. Models exposes Performance / Trends / Game history / Model info / Calibration beside Forecasts. Performance includes the v327 Underdog flips record (book plus money, model > 50%). Since v340 the headline/per-sport records exclude totals (`headline()`); totals have their own row. Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Game history uses team-specific spread/projection labels, omits inapplicable moneyline fields, and shows newest played games first, with upcoming games below in kickoff order, and exposes immutable projections, outcomes and inputs, with search and result/date/market/version filters.
+- `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. v345 adds closing line value (NFL/CFB spread + total picks vs the collector's last pregame DraftKings quote; see the v345 entry). Models exposes Performance / Trends / Game history / Model info / Calibration beside Forecasts. Performance includes the v327 Underdog flips record (book plus money, model > 50%). Since v340 the headline/per-sport records exclude totals (`headline()`); totals have their own row. Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Game history uses team-specific spread/projection labels, omits inapplicable moneyline fields, and shows newest played games first, with upcoming games below in kickoff order, and exposes immutable projections, outcomes and inputs, with search and result/date/market/version filters.
 
 - `forecast-lock.js` — persistent pregame display snapshots (`sportshub:forecast-lock:v1`, latest 300 events within a 1 MiB UTF-16 budget), shared across model surfaces and restored after reload.
 
@@ -710,7 +710,30 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v344** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v345** (backend **b17-fantasy-league-rules**).
+
+### v345 — Closing line value for the app's own picks
+
+Jack, after the Signals Lab review: "If u think we should then build it."
+Models → Performance now shows closing line value (CLV) for NFL and CFB
+spread and total picks: each saved pick line vs the odds collector's LAST
+PREGAME DraftKings quote for that event (`betting_quote_snapshots`, public
+SELECT, since 30 Sep 2026). Points are from the bettor's seat (+0.5 = the pick
+had a half-point better number than the market closed at); totals: over
+wants lower, under wants higher. `performance-core.js` `closingValue` /
+`clvSummary` are pure and tested (`tests/clv.test.js`). `cloud-ai.js`
+`lastPregameQuotes(sport, id, startsAt, provider)` makes ONE narrow request
+per event (≤6 rows, newest first, same book only); `performance-ui.js`
+reads settled events the device hasn't seen yet in batches of 20 after each
+paint and keeps the answer in `sportshub:clv:v1`, so every settled event is
+read once (misses retry after 24 h). Labelled "last pregame quote", never
+"closing" — BETTING_SIGNALS.md's rule stands — and quotes more than 60 min
+before kickoff are flagged "early quote" (CFB often is). Moneyline is not
+measured (price-based). The old "closing-line value is not available"
+coverage sentence is replaced. No schema, collector or Edge change; no model
+constant touched. ⚠️ SUPERSEDED in v345: the v240-era note that CLV cannot be
+shown because no closing quote is saved.
+
 
 ### v344 — Signals Lab: Action Network PRO signals graded against the close
 
@@ -8219,6 +8242,8 @@ rewrite.**
   44px touch-target floor; keyboard focus shows a `:focus-visible` ring.
 
 ## localStorage keys
+
+- `sportshub:clv:v1` — v345 last pregame quotes per settled NFL/CFB event (`sport|event_id|provider` → `{spread?, total?, at}` or `{miss, at}`), read once from `betting_quote_snapshots` for the Performance CLV section. Device cache only; safe to clear.
 
 - `sportshub:signals-lab:v1` — v344 Signals Lab games the owner logs by hand (array of seed-shaped rows: week, away/home team + signals, closing away spread, scores). Device-only research data; the 116-game seed lives in `data/an-signals.json`, not here.
 

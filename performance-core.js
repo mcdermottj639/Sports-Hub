@@ -195,6 +195,56 @@
       byStrength:group(flipStrength,FLIP_STRENGTH),
       upcoming,latest};
   }
+
+  // v345 — closing-line value against the LAST PREGAME QUOTE the odds
+  // collector saved for the same event, market and book (DraftKings), read
+  // from betting_quote_snapshots. BETTING_SIGNALS.md: "last observed is not
+  // certified closing", so every number here is labelled as the last quote
+  // and carries how many minutes before kickoff it was seen. Spread lines
+  // are home-oriented on both sides of the join; totals are the number.
+  // Points are from the bettor's seat: positive = the pick got a better
+  // number than the market closed at. Moneyline is price-based and not
+  // measured here.
+  const CLV_MARKETS = ['spread','total'];
+  const CLV_LATE_MIN = 60; // quotes older than this before kickoff are flagged
+  const quoteKey = r => `${r.sport}|${r.event_id}|${r.provider||''}`;
+  function closingValue(r, quote) {
+    if(!r||!CLV_MARKETS.includes(r.market))return null;
+    const q=quote?.[r.market];
+    const pick=A.number(r.line), close=A.number(q?.line);
+    if(pick==null||close==null)return {status:'unavailable'};
+    const start=Date.parse(r.starts_at), seen=Date.parse(q.observed_at);
+    const minutesBefore=Number.isFinite(start)&&Number.isFinite(seen)?Math.round((start-seen)/60000):null;
+    let points, pickSel, closeSel;
+    if(r.market==='spread'){
+      if(typeof r.selection_home!=='boolean')return {status:'unavailable'};
+      pickSel=r.selection_home?pick:-pick; closeSel=r.selection_home?close:-close;
+      points=pickSel-closeSel;
+    } else {
+      const over=/^over/i.test(String(r.selection||''));
+      if(!over&&!/^under/i.test(String(r.selection||'')))return {status:'unavailable'};
+      pickSel=pick; closeSel=close;
+      points=over?close-pick:pick-close;
+    }
+    return {status:'ok',points,pickLine:pickSel,closeLine:closeSel,minutesBefore,
+      stale:minutesBefore!=null&&minutesBefore>CLV_LATE_MIN,provider:q.provider_name||r.provider||null};
+  }
+  function clvSummary(rows, quotes) {
+    const out={};
+    for(const m of CLV_MARKETS){
+      const vals=[];
+      for(const r of rows||[]){
+        if(r.market!==m||!settled(r))continue;
+        const v=closingValue(r,quotes?.[quoteKey(r)]);
+        if(v?.status==='ok')vals.push(v);
+      }
+      const n=vals.length, sum=vals.reduce((t,v)=>t+v.points,0);
+      out[m]={n,avg:n?sum/n:null,beat:vals.filter(v=>v.points>0).length,tied:vals.filter(v=>v.points===0).length,
+        worse:vals.filter(v=>v.points<0).length,stale:vals.filter(v=>v.stale).length,
+        pending:(rows||[]).filter(r=>r.market===m&&settled(r)).length-n};
+    }
+    return out;
+  }
   function games(rows, now = Date.now()) {
     const groups=new Map();for(const r of rows){const k=gameKey(r);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);}
     return [...groups.values()].sort((a,b)=>{
@@ -204,5 +254,5 @@
       })
       .map(rs=>rs.sort((a,b)=>MARKETS.indexOf(a.market)-MARKETS.indexOf(b.market)));
   }
-  return Object.freeze({SPORTS,MARKETS,HEADLINE_MARKETS,headline,legacy,valid,select,qualified,settled,summary,profit,series,weekly,benchmarks,splits,calibration,forecastErrors,games,fairAmerican,isFlip,flipStrength,flips});
+  return Object.freeze({SPORTS,MARKETS,HEADLINE_MARKETS,headline,legacy,valid,select,qualified,settled,summary,profit,series,weekly,benchmarks,splits,calibration,forecastErrors,games,fairAmerican,isFlip,flipStrength,flips,CLV_MARKETS,CLV_LATE_MIN,quoteKey,closingValue,clvSummary});
 });

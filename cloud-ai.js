@@ -140,8 +140,23 @@
     eventRequests.set(key, entry);
     return entry.promise;
   }
+  // v345 — last pregame quote per market for one event, from the odds
+  // collector's immutable snapshots (public SELECT). One small request per
+  // event (≤6 narrow rows, newest first; the first row per market wins);
+  // callers cache the answer on device so each settled event is read once.
+  async function lastPregameQuotes(sport, id, startsAt, provider) {
+    if (!cfg?.url || !cfg?.key || !sport || !id || !Number.isFinite(Date.parse(startsAt))) return null;
+    const q = `betting_quote_snapshots?sport=eq.${encodeURIComponent(sport)}&event_id=eq.${encodeURIComponent(id)}`
+      + (provider ? `&provider_name=eq.${encodeURIComponent(provider)}` : '')
+      + `&market=in.(spread,total)&observed_at=lt.${encodeURIComponent(new Date(startsAt).toISOString())}`
+      + `&select=market,line,provider_name,observed_at&order=observed_at.desc&limit=6`;
+    const rows = await request(q);
+    const out = {};
+    for (const row of rows || []) if (row?.market && !out[row.market]) out[row.market] = row;
+    return out;
+  }
   function recordsFor(rows, version) {
     return Object.fromEntries(rows.filter(r => r.model_version === version && r.result !== 'void').map(r => [keyFor(r), legacy(r, r.result !== 'pending')]));
   }
-  root.SportsHubCloudAI = Object.freeze({ cached, maps, sync, eventRows, recordsFor });
+  root.SportsHubCloudAI = Object.freeze({ cached, maps, sync, eventRows, recordsFor, lastPregameQuotes });
 })(globalThis);
