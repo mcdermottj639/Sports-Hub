@@ -124,8 +124,10 @@ async function worker(){
   if(chosen.length)await db('prop_picks?on_conflict=sport,event_id,model_version,rank','POST',chosen.map((p:any)=>({...p,sport:g.sport,event_id:g.id,model_version:C.VERSION,starts_at:g.date,captured_at:captured,features:{...p.features,candidates_evaluated:candidates.length,quotes_observed:quotes.length,source_url:`https://www.espn.com/${g.sport==='cfb'?'college-football':g.sport}/odds/_/gameId/${g.id}`}})),'resolution=ignore-duplicates,return=minimal');
   return finish({state:g.state,coverage_status:chosen.length?'saved':'insufficient_data',coverage_note:chosen.length?`${chosen.length} ranked props saved from ${candidates.length} modeled selections`:'Posted props do not yet have enough verified player history',quote_count:quotes.length,modeled_count:candidates.length,pick_count:chosen.length,next_poll_at:chosen.length?new Date(Date.parse(g.date)+2*3600000).toISOString():later(refresh)});
  }catch(e){console.error('Prop scan failed',job.sport,job.event_id,String(e).slice(0,240));
-  // A 404 or a game more than a day past its start will not come back: stop polling it.
-  const gone=/Source 404|Game identity mismatch/.test(String(e))||Date.parse(job.starts_at)<Date.now()-864e5;
+  // A 404 after kickoff, or any error a day past the start, will not come back: stop polling it.
+  // Upcoming games keep backing off, since the source can 404 before it publishes a game.
+  const started=Date.parse(job.starts_at)<Date.now();
+  const gone=(started&&/Source 404|Game identity mismatch/.test(String(e)))||Date.parse(job.starts_at)<Date.now()-864e5;
   return finish({coverage_status:'source_error',coverage_note:gone?'The prop data source no longer has this game. Collection stopped.':'The prop data source is temporarily unavailable. Automatic collection will retry.',next_poll_at:gone?null:later(backoff())});}
 }
 Deno.serve(async(req:Request)=>{
