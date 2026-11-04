@@ -310,6 +310,16 @@ fantasy/golf data are not refreshed by this cycle.
   Egress rules (Nov 2026 Supabase quota notice): `settleSignalGame` reads only the decision columns grading uses (`DECISION_FIELDS`) and a game's settlements in one `decision_id=in.(…)` batch — never `select=*` or one request per decision. The 5-minute odds job settles only live games and finals ≤8 h after kickoff (`settleHere`); older finals and score corrections are graded by sports-hub-ai (every 30 min + 7-day reconcile). Merging does NOT deploy these functions.
 - `supabase/schedule-betting-signals.sql` — Vault-backed five-minute cron installation; actual source polling adapts to kickoff.
 
+- `signals-lab.html`, `signals-lab.js`, `signals-lab.css`, `data/an-signals.json` —
+  v344 Signals Lab (Labs link). Grades Action Network PRO's five spread
+  signals (Big Money, Sharp Action, Systems, Projections, Top Experts) against
+  the closing line: per-signal / alone / fav-dog / fade records, stacking,
+  pairs, disagreements, sharp move buckets, week by week. Seed JSON is the
+  owner's hand-read 2026 app weeks 1–8 (116 games, read-only); new games are
+  logged on-device (`sportshub:signals-lab:v1`) and finals can be filled from
+  the public ESPN scoreboard. Pure helpers under `SportsHubSignalsLab._pure`,
+  tested by `tests/signals-lab.test.js`. Research page only — nothing here
+  feeds a model.
 - `ticker.js`, `ticker.css` — v326 rolling top ticker (scores, model picks,
   results, updates, news). Loads before app.js; pure builders under
   `SportsHubTicker._pure` are tested by `tests/ticker.test.js`.
@@ -700,7 +710,25 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v343** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v344** (backend **b17-fantasy-league-rules**).
+
+### v344 — Signals Lab: Action Network PRO signals graded against the close
+
+Jack spent Nov 4 reading the PRO Signals screen for app weeks 1–8 and asked
+for the review to live in the app instead of chat. `signals-lab.html` is a
+standalone Labs page (same pattern as trivia/workout). Grading rule, one for
+every signal: the side a signal sits on "wins" when it covers the closing
+spread; pushes excluded; break-even 52.4% at -110. Seed result on 116 games:
+Big Money 25-27-2, Sharp 41-44-2, Systems 18-14-1, Projections 9-16-1,
+Experts 44-44-1; sides with zero signals 33-21-1; the side with more signals
+39-52-2. The page says in its method notes why none of this is proof
+(closing-line grading, ~40 cuts on a small sample). Sharp move counts and
+Strong/Good only exist for weeks 4–8 (read from game pages). Four Week 1
+games and IND@WAS (no line) are not in the seed. The seed test pins these
+records so a data edit that changes them fails loudly. No model constant,
+collector or Supabase table is touched; the ESPN call is the same public
+scoreboard the app already reads, on demand only.
+
 
 ### v343 — Owner-override QBs project from a small sample
 
@@ -8191,6 +8219,8 @@ rewrite.**
   44px touch-target floor; keyboard focus shows a `:focus-visible` ring.
 
 ## localStorage keys
+
+- `sportshub:signals-lab:v1` — v344 Signals Lab games the owner logs by hand (array of seed-shaped rows: week, away/home team + signals, closing away spread, scores). Device-only research data; the 116-game seed lives in `data/an-signals.json`, not here.
 
 - `sportshub:nfl-evidence:v1` — per-event immutable scouting observations, source URLs, fact/opinion tags, expiration timestamps; local only, exportable, zero automatic weight.
 

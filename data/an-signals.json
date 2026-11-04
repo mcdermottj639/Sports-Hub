@@ -1,0 +1,2224 @@
+{
+ "source": "Action Network PRO Signals screen (spread tab), read from screen recordings 2026-11-04; lines are the closing numbers shown. Scores: owner recordings (wk 4\u20138) and two public scoreboards (wk 1\u20133).",
+ "season": 2026,
+ "market": "spread",
+ "legend": {
+  "B": "Big Money",
+  "S": "Sharp Action",
+  "Y": "Systems",
+  "P": "Projections",
+  "E": "Top Experts"
+ },
+ "weekLabels": {
+  "1": "Sep 10\u201314",
+  "2": "Sep 17\u201321",
+  "3": "Sep 24\u201328",
+  "4": "Oct 1\u20135",
+  "5": "Oct 8\u201312",
+  "6": "Oct 15\u201319",
+  "7": "Oct 22\u201326",
+  "8": "Oct 29\u2013Nov 2"
+ },
+ "missing": [
+  "Wk1: NE@SEA, BAL@IND, NYJ@TEN, GB@MIN not in recording",
+  "Wk4: IND@WAS had no line shown"
+ ],
+ "games": [
+  {
+   "week": 1,
+   "away": {
+    "team": "SF",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "home": {
+    "team": "LA",
+    "signals": []
+   },
+   "spreadAway": 3.5,
+   "awayScore": 27,
+   "homeScore": 7
+  },
+  {
+   "week": 1,
+   "away": {
+    "team": "ATL",
+    "signals": [
+     "P"
+    ]
+   },
+   "home": {
+    "team": "PIT",
+    "signals": [
+     "B",
+     "E",
+     "S"
+    ]
+   },
+   "spreadAway": 6.5,
+   "awayScore": 13,
+   "homeScore": 20
+  },
+  {
+   "week": 1,
+   "away": {
+    "team": "CHI",
+    "signals": [
+     "S"
+    ]
+   },
+   "home": {
+    "team": "CAR",
+    "signals": [
+     "B",
+     "E",
+     "P"
+    ]
+   },
+   "spreadAway": -3.0,
+   "awayScore": 59,
+   "homeScore": 37
+  },
+  {
+   "week": 1,
+   "away": {
+    "team": "BUF",
+    "signals": []
+   },
+   "home": {
+    "team": "HOU",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "spreadAway": -1.5,
+   "awayScore": 36,
+   "homeScore": 31
+  },
+  {
+   "week": 1,
+   "away": {
+    "team": "MIA",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "home": {
+    "team": "LV",
+    "signals": []
+   },
+   "spreadAway": 3.0,
+   "awayScore": 13,
+   "homeScore": 27
+  },
+  {
+   "week": 1,
+   "away": {
+    "team": "WAS",
+    "signals": [
+     "E",
+     "S",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "PHI",
+    "signals": [
+     "B"
+    ]
+   },
+   "spreadAway": 6.0,
+   "awayScore": 22,
+   "homeScore": 24
+  },
+  {
+   "week": 1,
+   "away": {
+    "team": "TB",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "CIN",
+    "signals": []
+   },
+   "spreadAway": 3.5,
+   "awayScore": 27,
+   "homeScore": 33
+  },
+  {
+   "week": 1,
+   "away": {
+    "team": "NO",
+    "signals": []
+   },
+   "home": {
+    "team": "DET",
+    "signals": [
+     "B"
+    ]
+   },
+   "spreadAway": 7.0,
+   "awayScore": 30,
+   "homeScore": 31
+  },
+  {
+   "week": 1,
+   "away": {
+    "team": "DAL",
+    "signals": [
+     "S"
+    ]
+   },
+   "home": {
+    "team": "NYG",
+    "signals": []
+   },
+   "spreadAway": -3.0,
+   "awayScore": 20,
+   "homeScore": 28
+  },
+  {
+   "week": 1,
+   "away": {
+    "team": "DEN",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "KC",
+    "signals": [
+     "S",
+     "Y"
+    ]
+   },
+   "spreadAway": 2.5,
+   "awayScore": 10,
+   "homeScore": 31
+  },
+  {
+   "week": 1,
+   "away": {
+    "team": "CLE",
+    "signals": [
+     "S"
+    ]
+   },
+   "home": {
+    "team": "JAC",
+    "signals": [
+     "B"
+    ]
+   },
+   "spreadAway": 8.5,
+   "awayScore": 10,
+   "homeScore": 34
+  },
+  {
+   "week": 1,
+   "away": {
+    "team": "ARI",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "LAC",
+    "signals": [
+     "S"
+    ]
+   },
+   "spreadAway": 9.5,
+   "awayScore": 26,
+   "homeScore": 14
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "DET",
+    "signals": [
+     "P"
+    ]
+   },
+   "home": {
+    "team": "BUF",
+    "signals": [
+     "B",
+     "E",
+     "S"
+    ]
+   },
+   "spreadAway": 5.5,
+   "awayScore": 31,
+   "homeScore": 41
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "PIT",
+    "signals": []
+   },
+   "home": {
+    "team": "NE",
+    "signals": [
+     "E",
+     "S"
+    ]
+   },
+   "spreadAway": 4.5,
+   "awayScore": 3,
+   "homeScore": 20
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "CLE",
+    "signals": [
+     "S",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "TB",
+    "signals": [
+     "E"
+    ]
+   },
+   "spreadAway": 8.5,
+   "awayScore": 23,
+   "homeScore": 19
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "CAR",
+    "signals": [
+     "S"
+    ]
+   },
+   "home": {
+    "team": "ATL",
+    "signals": [
+     "B",
+     "P"
+    ]
+   },
+   "spreadAway": -2.5,
+   "awayScore": 34,
+   "homeScore": 3
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "SEA",
+    "signals": []
+   },
+   "home": {
+    "team": "ARI",
+    "signals": [
+     "B",
+     "E",
+     "S"
+    ]
+   },
+   "spreadAway": -4.0,
+   "awayScore": 31,
+   "homeScore": 7
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "GB",
+    "signals": []
+   },
+   "home": {
+    "team": "NYJ",
+    "signals": [
+     "B",
+     "E",
+     "S"
+    ]
+   },
+   "spreadAway": -3.5,
+   "awayScore": 20,
+   "homeScore": 17
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "LV",
+    "signals": [
+     "S",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "LAC",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "spreadAway": 6.5,
+   "awayScore": 26,
+   "homeScore": 14
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "JAC",
+    "signals": [
+     "B",
+     "P"
+    ]
+   },
+   "home": {
+    "team": "DEN",
+    "signals": [
+     "E",
+     "S"
+    ]
+   },
+   "spreadAway": 2.5,
+   "awayScore": 13,
+   "homeScore": 20
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "WAS",
+    "signals": [
+     "B",
+     "P"
+    ]
+   },
+   "home": {
+    "team": "DAL",
+    "signals": [
+     "E",
+     "S"
+    ]
+   },
+   "spreadAway": 4.5,
+   "awayScore": 20,
+   "homeScore": 37
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "NO",
+    "signals": []
+   },
+   "home": {
+    "team": "BAL",
+    "signals": []
+   },
+   "spreadAway": 8.5,
+   "awayScore": 24,
+   "homeScore": 17
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "NYG",
+    "signals": [
+     "S",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "LA",
+    "signals": [
+     "E"
+    ]
+   },
+   "spreadAway": 6.5,
+   "awayScore": 6,
+   "homeScore": 28
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "PHI",
+    "signals": [
+     "S"
+    ]
+   },
+   "home": {
+    "team": "TEN",
+    "signals": [
+     "E"
+    ]
+   },
+   "spreadAway": -7.0,
+   "awayScore": 24,
+   "homeScore": 20
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "MIN",
+    "signals": []
+   },
+   "home": {
+    "team": "CHI",
+    "signals": [
+     "S"
+    ]
+   },
+   "spreadAway": 4.5,
+   "awayScore": 9,
+   "homeScore": 3
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "MIA",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "home": {
+    "team": "SF",
+    "signals": [
+     "S"
+    ]
+   },
+   "spreadAway": 12.5,
+   "awayScore": 13,
+   "homeScore": 35
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "IND",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "home": {
+    "team": "KC",
+    "signals": [
+     "P"
+    ]
+   },
+   "spreadAway": 6.0,
+   "awayScore": 30,
+   "homeScore": 33
+  },
+  {
+   "week": 2,
+   "away": {
+    "team": "CIN",
+    "signals": [
+     "P",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "HOU",
+    "signals": [
+     "B"
+    ]
+   },
+   "spreadAway": 3.0,
+   "awayScore": 20,
+   "homeScore": 6
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "CIN",
+    "signals": []
+   },
+   "home": {
+    "team": "PIT",
+    "signals": [
+     "B",
+     "E",
+     "P",
+     "S",
+     "Y"
+    ]
+   },
+   "spreadAway": -3.5,
+   "awayScore": 27,
+   "homeScore": 30
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "ATL",
+    "signals": [
+     "B",
+     "E",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "GB",
+    "signals": []
+   },
+   "spreadAway": 4.5,
+   "awayScore": 35,
+   "homeScore": 14
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "MIN",
+    "signals": [
+     "S"
+    ]
+   },
+   "home": {
+    "team": "TB",
+    "signals": [
+     "B",
+     "E",
+     "P",
+     "Y"
+    ]
+   },
+   "spreadAway": -1.5,
+   "awayScore": 23,
+   "homeScore": 16
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "TEN",
+    "signals": [
+     "S",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "NYG",
+    "signals": []
+   },
+   "spreadAway": 2.5,
+   "awayScore": 7,
+   "homeScore": 12
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "KC",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "MIA",
+    "signals": [
+     "B",
+     "S",
+     "Y"
+    ]
+   },
+   "spreadAway": -9.5,
+   "awayScore": 24,
+   "homeScore": 10
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "NE",
+    "signals": []
+   },
+   "home": {
+    "team": "JAC",
+    "signals": [
+     "E"
+    ]
+   },
+   "spreadAway": 3.0,
+   "awayScore": 6,
+   "homeScore": 35
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "SEA",
+    "signals": [
+     "E",
+     "S"
+    ]
+   },
+   "home": {
+    "team": "WAS",
+    "signals": [
+     "P"
+    ]
+   },
+   "spreadAway": -8.5,
+   "awayScore": 31,
+   "homeScore": 33
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "LAC",
+    "signals": [
+     "E",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "BUF",
+    "signals": [
+     "S"
+    ]
+   },
+   "spreadAway": 7.0,
+   "awayScore": 16,
+   "homeScore": 24
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "CAR",
+    "signals": [
+     "S"
+    ]
+   },
+   "home": {
+    "team": "CLE",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "spreadAway": -2.5,
+   "awayScore": 18,
+   "homeScore": 21
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "HOU",
+    "signals": [
+     "S"
+    ]
+   },
+   "home": {
+    "team": "IND",
+    "signals": []
+   },
+   "spreadAway": -1.5,
+   "awayScore": 17,
+   "homeScore": 19
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "NYJ",
+    "signals": [
+     "P",
+     "S"
+    ]
+   },
+   "home": {
+    "team": "DET",
+    "signals": [
+     "B"
+    ]
+   },
+   "spreadAway": 7.0,
+   "awayScore": 24,
+   "homeScore": 31
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "ARI",
+    "signals": [
+     "S",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "SF",
+    "signals": [
+     "E"
+    ]
+   },
+   "spreadAway": 7.5,
+   "awayScore": 30,
+   "homeScore": 36
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "BAL",
+    "signals": [
+     "S"
+    ]
+   },
+   "home": {
+    "team": "DAL",
+    "signals": []
+   },
+   "spreadAway": -3.5,
+   "awayScore": 34,
+   "homeScore": 31
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "LV",
+    "signals": [
+     "B",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "NO",
+    "signals": [
+     "E"
+    ]
+   },
+   "spreadAway": 4.0,
+   "awayScore": 35,
+   "homeScore": 27
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "LA",
+    "signals": [
+     "E",
+     "S"
+    ]
+   },
+   "home": {
+    "team": "DEN",
+    "signals": [
+     "B"
+    ]
+   },
+   "spreadAway": 1.0,
+   "awayScore": 26,
+   "homeScore": 30
+  },
+  {
+   "week": 3,
+   "away": {
+    "team": "PHI",
+    "signals": [
+     "S"
+    ]
+   },
+   "home": {
+    "team": "CHI",
+    "signals": [
+     "E"
+    ]
+   },
+   "spreadAway": -3.5,
+   "awayScore": 7,
+   "homeScore": 27
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "PIT",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "CLE",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 6,
+    "sharpStrength": "Strong"
+   },
+   "spreadAway": -3.0,
+   "awayScore": 24,
+   "homeScore": 27
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "KC",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "LV",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": -5.0,
+   "awayScore": 30,
+   "homeScore": 27
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "JAC",
+    "signals": []
+   },
+   "home": {
+    "team": "CIN",
+    "signals": [
+     "E"
+    ]
+   },
+   "spreadAway": 2.5,
+   "awayScore": 22,
+   "homeScore": 17
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "DEN",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "SF",
+    "signals": []
+   },
+   "spreadAway": 3.0,
+   "awayScore": 14,
+   "homeScore": 24
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "DET",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 9,
+    "sharpStrength": "Strong"
+   },
+   "home": {
+    "team": "CAR",
+    "signals": [
+     "B",
+     "P"
+    ]
+   },
+   "spreadAway": -4.5,
+   "awayScore": 26,
+   "homeScore": 32
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "NYJ",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "CHI",
+    "signals": []
+   },
+   "spreadAway": 3.5,
+   "awayScore": 12,
+   "homeScore": 23
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "NE",
+    "signals": [
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "BUF",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 7.0,
+   "awayScore": 29,
+   "homeScore": 26
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "LA",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 9,
+    "sharpStrength": "Strong"
+   },
+   "home": {
+    "team": "PHI",
+    "signals": [
+     "B",
+     "P",
+     "Y"
+    ]
+   },
+   "spreadAway": -3.5,
+   "awayScore": 24,
+   "homeScore": 20
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "ARI",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 4,
+    "sharpStrength": "Strong"
+   },
+   "home": {
+    "team": "NYG",
+    "signals": [
+     "B",
+     "E",
+     "P"
+    ]
+   },
+   "spreadAway": -2.5,
+   "awayScore": 24,
+   "homeScore": 36
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "LAC",
+    "signals": [
+     "E",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "SEA",
+    "signals": []
+   },
+   "spreadAway": 7.0,
+   "awayScore": 23,
+   "homeScore": 30
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "ATL",
+    "signals": [
+     "B",
+     "E",
+     "S"
+    ]
+   },
+   "home": {
+    "team": "NO",
+    "signals": [
+     "P"
+    ]
+   },
+   "spreadAway": 1.5,
+   "awayScore": 45,
+   "homeScore": 24
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "GB",
+    "signals": []
+   },
+   "home": {
+    "team": "TB",
+    "signals": [
+     "B",
+     "E",
+     "S"
+    ],
+    "sharpMoves": 12,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": -2.5,
+   "awayScore": 17,
+   "homeScore": 14
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "MIA",
+    "signals": [
+     "B",
+     "E",
+     "S",
+     "Y"
+    ],
+    "sharpMoves": 4,
+    "sharpStrength": "Strong"
+   },
+   "home": {
+    "team": "MIN",
+    "signals": [
+     "P"
+    ]
+   },
+   "spreadAway": 10.0,
+   "awayScore": 10,
+   "homeScore": 15
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "TEN",
+    "signals": []
+   },
+   "home": {
+    "team": "BAL",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "spreadAway": 11.5,
+   "awayScore": 18,
+   "homeScore": 24
+  },
+  {
+   "week": 4,
+   "away": {
+    "team": "DAL",
+    "signals": []
+   },
+   "home": {
+    "team": "HOU",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 2,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 3.0,
+   "awayScore": 34,
+   "homeScore": 30
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "TB",
+    "signals": [
+     "E",
+     "S",
+     "Y"
+    ],
+    "sharpMoves": 3,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "DAL",
+    "signals": []
+   },
+   "spreadAway": 9.5,
+   "awayScore": 24,
+   "homeScore": 16
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "DET",
+    "signals": [
+     "B",
+     "E",
+     "S"
+    ],
+    "sharpMoves": 3,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "ARI",
+    "signals": []
+   },
+   "spreadAway": -5.5,
+   "awayScore": 45,
+   "homeScore": 21
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "NYG",
+    "signals": [
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "WAS",
+    "signals": [
+     "B",
+     "E",
+     "S"
+    ],
+    "sharpMoves": 2,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 3.5,
+   "awayScore": 27,
+   "homeScore": 27
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "IND",
+    "signals": []
+   },
+   "home": {
+    "team": "PIT",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 2,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 3.0,
+   "awayScore": 22,
+   "homeScore": 34
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "LV",
+    "signals": [
+     "E",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "NE",
+    "signals": []
+   },
+   "spreadAway": 3.5,
+   "awayScore": 17,
+   "homeScore": 45
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "SF",
+    "signals": []
+   },
+   "home": {
+    "team": "SEA",
+    "signals": [
+     "E",
+     "P"
+    ]
+   },
+   "spreadAway": 3.0,
+   "awayScore": 32,
+   "homeScore": 29
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "BUF",
+    "signals": []
+   },
+   "home": {
+    "team": "LA",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "spreadAway": 3.5,
+   "awayScore": 37,
+   "homeScore": 34
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "PHI",
+    "signals": [
+     "P"
+    ]
+   },
+   "home": {
+    "team": "JAC",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 2,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 7.5,
+   "awayScore": 17,
+   "homeScore": 19
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "HOU",
+    "signals": [
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "TEN",
+    "signals": [
+     "B",
+     "S"
+    ],
+    "sharpMoves": 28,
+    "sharpStrength": "Strong"
+   },
+   "spreadAway": -6.5,
+   "awayScore": 26,
+   "homeScore": 3
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "CLE",
+    "signals": [
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "NYJ",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 6,
+    "sharpStrength": "Strong"
+   },
+   "spreadAway": 2.5,
+   "awayScore": 12,
+   "homeScore": 17
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "MIN",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "NO",
+    "signals": [
+     "P"
+    ]
+   },
+   "spreadAway": -2.5,
+   "awayScore": 23,
+   "homeScore": 13
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "CIN",
+    "signals": [
+     "B"
+    ]
+   },
+   "home": {
+    "team": "MIA",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 13,
+    "sharpStrength": "Strong"
+   },
+   "spreadAway": -7.0,
+   "awayScore": 31,
+   "homeScore": 24
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "CHI",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 3,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "GB",
+    "signals": [
+     "E"
+    ]
+   },
+   "spreadAway": -1.5,
+   "awayScore": 7,
+   "homeScore": 31
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "DEN",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 2,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "LAC",
+    "signals": [
+     "P"
+    ]
+   },
+   "spreadAway": -3.5,
+   "awayScore": 23,
+   "homeScore": 17
+  },
+  {
+   "week": 5,
+   "away": {
+    "team": "BAL",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "ATL",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 6,
+    "sharpStrength": "Strong"
+   },
+   "spreadAway": 3.0,
+   "awayScore": 30,
+   "homeScore": 23
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "CHI",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 11,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "ATL",
+    "signals": [
+     "E"
+    ]
+   },
+   "spreadAway": -1.5,
+   "awayScore": 31,
+   "homeScore": 23
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "NYJ",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "NE",
+    "signals": [
+     "B"
+    ]
+   },
+   "spreadAway": 7.5,
+   "awayScore": 19,
+   "homeScore": 26
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "NO",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "NYG",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 3,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": -1.5,
+   "awayScore": 34,
+   "homeScore": 27
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "ARI",
+    "signals": [
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "LA",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 2,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 12.5,
+   "awayScore": 18,
+   "homeScore": 16
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "LAC",
+    "signals": [
+     "E",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "KC",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 7.5,
+   "awayScore": 6,
+   "homeScore": 22
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "DAL",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "GB",
+    "signals": [
+     "P",
+     "S"
+    ],
+    "sharpMoves": 2,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": -1.5,
+   "awayScore": 13,
+   "homeScore": 23
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "SEA",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "DEN",
+    "signals": []
+   },
+   "spreadAway": -2.5,
+   "awayScore": 14,
+   "homeScore": 17
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "BAL",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "CLE",
+    "signals": []
+   },
+   "spreadAway": -3.0,
+   "awayScore": 10,
+   "homeScore": 13
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "CAR",
+    "signals": [
+     "B"
+    ]
+   },
+   "home": {
+    "team": "PHI",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 3,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": -3.0,
+   "awayScore": 25,
+   "homeScore": 14
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "PIT",
+    "signals": []
+   },
+   "home": {
+    "team": "TB",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 4,
+    "sharpStrength": "Strong"
+   },
+   "spreadAway": -2.0,
+   "awayScore": 26,
+   "homeScore": 19
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "BUF",
+    "signals": []
+   },
+   "home": {
+    "team": "LV",
+    "signals": [
+     "E",
+     "Y"
+    ]
+   },
+   "spreadAway": -5.5,
+   "awayScore": 33,
+   "homeScore": 30
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "WAS",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "home": {
+    "team": "SF",
+    "signals": []
+   },
+   "spreadAway": 7.5,
+   "awayScore": 17,
+   "homeScore": 23
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "TEN",
+    "signals": [
+     "E",
+     "S",
+     "Y"
+    ],
+    "sharpMoves": 4,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "IND",
+    "signals": []
+   },
+   "spreadAway": 6.5,
+   "awayScore": 26,
+   "homeScore": 20
+  },
+  {
+   "week": 6,
+   "away": {
+    "team": "HOU",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "JAC",
+    "signals": []
+   },
+   "spreadAway": 2.5,
+   "awayScore": 34,
+   "homeScore": 31
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "NYG",
+    "signals": []
+   },
+   "home": {
+    "team": "HOU",
+    "signals": [
+     "B",
+     "E",
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 10.0,
+   "awayScore": 27,
+   "homeScore": 21
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "CLE",
+    "signals": []
+   },
+   "home": {
+    "team": "TEN",
+    "signals": [
+     "B",
+     "E",
+     "S"
+    ],
+    "sharpMoves": 7,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": -2.0,
+   "awayScore": 27,
+   "homeScore": 24
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "MIA",
+    "signals": [
+     "B",
+     "E",
+     "S"
+    ],
+    "sharpMoves": 4,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "NYJ",
+    "signals": []
+   },
+   "spreadAway": 3.5,
+   "awayScore": 28,
+   "homeScore": 25
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "NE",
+    "signals": []
+   },
+   "home": {
+    "team": "CHI",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 2,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 3.0,
+   "awayScore": 24,
+   "homeScore": 30
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "TB",
+    "signals": []
+   },
+   "home": {
+    "team": "CAR",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 3.0,
+   "awayScore": 43,
+   "homeScore": 13
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "GB",
+    "signals": []
+   },
+   "home": {
+    "team": "DET",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "spreadAway": 3.5,
+   "awayScore": 17,
+   "homeScore": 20
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "LA",
+    "signals": [
+     "B",
+     "E",
+     "P"
+    ]
+   },
+   "home": {
+    "team": "LV",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 6,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": -3.5,
+   "awayScore": 35,
+   "homeScore": 21
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "KC",
+    "signals": [
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "SEA",
+    "signals": [
+     "B",
+     "E",
+     "S"
+    ],
+    "sharpMoves": 2,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 3.0,
+   "awayScore": 3,
+   "homeScore": 20
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "SF",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "ATL",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "spreadAway": -2.5,
+   "awayScore": 20,
+   "homeScore": 29
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "IND",
+    "signals": []
+   },
+   "home": {
+    "team": "MIN",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 7.0,
+   "awayScore": 10,
+   "homeScore": 16
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "DEN",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "ARI",
+    "signals": []
+   },
+   "spreadAway": -4.5,
+   "awayScore": 30,
+   "homeScore": 16
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "PIT",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "NO",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 8,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": -3.0,
+   "awayScore": 16,
+   "homeScore": 10
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "CIN",
+    "signals": [
+     "B"
+    ]
+   },
+   "home": {
+    "team": "BAL",
+    "signals": [
+     "P"
+    ]
+   },
+   "spreadAway": -3.0,
+   "awayScore": 35,
+   "homeScore": 13
+  },
+  {
+   "week": 7,
+   "away": {
+    "team": "DAL",
+    "signals": [
+     "B"
+    ]
+   },
+   "home": {
+    "team": "PHI",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 3,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": -4.5,
+   "awayScore": 38,
+   "homeScore": 21
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "CHI",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "SEA",
+    "signals": []
+   },
+   "spreadAway": 3.5,
+   "awayScore": 34,
+   "homeScore": 17
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "LV",
+    "signals": [
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "NYJ",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 5,
+    "sharpStrength": "Strong"
+   },
+   "spreadAway": 1.5,
+   "awayScore": 38,
+   "homeScore": 33
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "PHI",
+    "signals": [
+     "E"
+    ]
+   },
+   "home": {
+    "team": "WAS",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 5.5,
+   "awayScore": 10,
+   "homeScore": 27
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "NE",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 6,
+    "sharpStrength": "Strong"
+   },
+   "home": {
+    "team": "MIA",
+    "signals": []
+   },
+   "spreadAway": -7.0,
+   "awayScore": 24,
+   "homeScore": 19
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "KC",
+    "signals": []
+   },
+   "home": {
+    "team": "DEN",
+    "signals": [
+     "E"
+    ]
+   },
+   "spreadAway": -0.5,
+   "awayScore": 24,
+   "homeScore": 28
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "TEN",
+    "signals": [
+     "P"
+    ]
+   },
+   "home": {
+    "team": "CIN",
+    "signals": [
+     "B",
+     "E"
+    ]
+   },
+   "spreadAway": 13.5,
+   "awayScore": 36,
+   "homeScore": 43
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "IND",
+    "signals": [
+     "E",
+     "P"
+    ]
+   },
+   "home": {
+    "team": "JAC",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 10.5,
+   "awayScore": 7,
+   "homeScore": 42
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "CLE",
+    "signals": [
+     "E",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "PIT",
+    "signals": [
+     "B"
+    ]
+   },
+   "spreadAway": 3.5,
+   "awayScore": 6,
+   "homeScore": 27
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "LAC",
+    "signals": [
+     "E",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "LA",
+    "signals": []
+   },
+   "spreadAway": 6.5,
+   "awayScore": 9,
+   "homeScore": 24
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "ARI",
+    "signals": []
+   },
+   "home": {
+    "team": "DAL",
+    "signals": [
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 7.5,
+   "awayScore": 33,
+   "homeScore": 30
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "ATL",
+    "signals": []
+   },
+   "home": {
+    "team": "TB",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 5,
+    "sharpStrength": "Strong"
+   },
+   "spreadAway": 2.0,
+   "awayScore": 0,
+   "homeScore": 16
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "MIN",
+    "signals": []
+   },
+   "home": {
+    "team": "DET",
+    "signals": [
+     "E",
+     "S"
+    ],
+    "sharpMoves": 1,
+    "sharpStrength": "Good"
+   },
+   "spreadAway": 3.5,
+   "awayScore": 15,
+   "homeScore": 19
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "CAR",
+    "signals": [
+     "B",
+     "S",
+     "Y"
+    ],
+    "sharpMoves": 2,
+    "sharpStrength": "Good"
+   },
+   "home": {
+    "team": "GB",
+    "signals": []
+   },
+   "spreadAway": 3.5,
+   "awayScore": 19,
+   "homeScore": 27
+  },
+  {
+   "week": 8,
+   "away": {
+    "team": "BAL",
+    "signals": [
+     "B",
+     "E",
+     "Y"
+    ]
+   },
+   "home": {
+    "team": "BUF",
+    "signals": []
+   },
+   "spreadAway": 3.0,
+   "awayScore": 10,
+   "homeScore": 36
+  }
+ ]
+}
