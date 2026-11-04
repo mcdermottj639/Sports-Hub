@@ -146,7 +146,10 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > grading run without opening the app. Delayed or unavailable game logs fall
 > back to confirmed final box scores matched by event, team and athlete (v299).
 > MLB total bases can use linked final at-bat results checked against hit totals;
-> missing or inconsistent data stays pending. See `docs/PLAYER_PROPS.md` for markets,
+> missing or inconsistent data stays pending. Source errors back off (15 min doubling
+> to 6 h, never past kickoff); a Source 404 or a game over a day old stops polling, and
+> pending picks stop waiting 3 days after the game (Nov 2026 Supabase egress cut).
+> See `docs/PLAYER_PROPS.md` for markets,
 > source/role gates, immutable snapshots, paper settlement rules and validation.
 
 > ### Optional backend (`server/`) — LIVE, powers the Fantasy tab
