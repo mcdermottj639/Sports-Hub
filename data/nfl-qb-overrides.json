@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "about": "Owner-confirmed NFL starting QBs. Each entry replaces ESPN's listed starter for that team (and event, if given) from setAt until 'until'. It changes who starts, not any model weight.",
+  "overrides": [
+    {
+      "season": 2026,
+      "week": 9,
+      "team": "BAL",
+      "eventId": "401873037",
+      "name": "Joe Fagnano",
+      "athleteId": "4429582",
+      "setAt": "2026-11-04T20:38:13Z",
+      "until": "2026-11-06T06:00:00Z",
+      "note": "Owner: emergency QB starts Thu vs JAX"
+    },
+    {
+      "season": 2026,
+      "week": 9,
+      "team": "ARI",
+      "eventId": "401873048",
+      "name": "Gardner Minshew II",
+      "athleteId": "4038524",
+      "setAt": "2026-11-04T20:38:21Z",
+      "until": "2026-11-09T03:00:00Z",
+      "note": "Owner: starts Sun at SEA"
+    }
+  ]
+}

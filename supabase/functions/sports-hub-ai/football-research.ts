@@ -23,6 +23,13 @@ async function footballHistory() {
   const data=source('https://raw.githubusercontent.com/mcdermottj639/Sports-Hub/main/data/nfl-football-live.json');
   footballCache={at:Date.now(),data};return data;
 }
+let overrideCache:{at:number,data:Promise<any>}|null=null;
+async function qbOverrides() {
+  // v342: owner QB overrides live on main so a new call needs no redeploy.
+  if(overrideCache&&Date.now()-overrideCache.at<5*60000)return overrideCache.data;
+  const data=source('https://raw.githubusercontent.com/mcdermottj639/Sports-Hub/main/data/nfl-qb-overrides.json');
+  overrideCache={at:Date.now(),data};return data;
+}
 export function primeNFLHistory(efficiency:any) {
   if(!Number.isInteger(efficiency?.season))return;
   const saved=completedHistory.get(efficiency.season)||new Map();
@@ -52,8 +59,8 @@ export async function footballEvidence(sport:string,g:Json) {
     return {at,fpi:{source:url,updatedAt:ratings.updatedAt,season:year,home:ratings.ratings[g.home.id]??null,away:ratings.ratings[g.away.id]??null},candidateMargin:C.collegeMargin(ratings,g.home.id,g.away.id,g.neutral)};
   }
   const base='https://site.api.espn.com/apis/site/v2/sports/football/nfl';
-  const [h,a,injuries,history,summary]=await Promise.all([source(`${base}/teams/${g.home.id}/depthcharts`),source(`${base}/teams/${g.away.id}/depthcharts`),source(`${base}/injuries`),footballHistory(),source(`${base}/summary?event=${g.id}`)]);
-  const evidence=(globalThis as any).SportsHubNFLLive.evidence(g,{homeDepth:h,awayDepth:a,injuries,history,summary});
+  const [h,a,injuries,history,summary,overrides]=await Promise.all([source(`${base}/teams/${g.home.id}/depthcharts`),source(`${base}/teams/${g.away.id}/depthcharts`),source(`${base}/injuries`),footballHistory(),source(`${base}/summary?event=${g.id}`),qbOverrides()]);
+  const evidence=(globalThis as any).SportsHubNFLLive.evidence(g,{homeDepth:h,awayDepth:a,injuries,history,summary,overrides});
   // Collector-only shadow evidence. Missing inputs must not affect live picks.
   try { evidence.ppp=(globalThis as any).SportsHubNFLPPPShadow.project(history,{home:g.home.abbr,away:g.away.abbr,date:g.date,season:year},evidence.at); }
   catch (_) { evidence.ppp={available:false,reason:'PPP evidence unavailable'}; }

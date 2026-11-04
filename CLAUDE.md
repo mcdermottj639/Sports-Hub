@@ -697,7 +697,25 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v341** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v342** (backend **b17-fantasy-league-rules**).
+
+### v342 — Owner QB override for the NFL model
+
+Jack follows lineups closer than ESPN's depth chart (Week 9: ESPN still listed
+Huntley for BAL; Jack: emergency QB Fagnano starts). New
+`data/nfl-qb-overrides.json`: each entry (season, team abbr, optional eventId,
+name, ESPN athleteId, setAt, until) replaces the listed starter in
+`SportsHubNFLLive.evidence()` as an owner-confirmed QB (`source: 'Owner QB
+override'`, `confirmedStarter: true`, original listing kept under `override`).
+If the override names the listed backup, the listed QB becomes the backup.
+It changes WHO starts, never a weight: the 25-play QB-history minimum still
+applies, so a thin-history starter (Fagnano: 20 plays) withholds the forecast
+instead of projecting with the wrong QB. Entries expire at `until`. The
+collector reads the file from `main` via raw.githubusercontent (5-min cache), so
+a new override is a data-only commit with no redeploy; the browser reads
+`data/nfl-qb-overrides.json` and the source check says "your override".
+Immutable first-pregame `ai_predictions` rows are never rewritten.
+Collector shim repinned to this release. Tests: `tests/nfl-live.test.js` (+2).
 
 ### v341 — Games Ahead Today option
 

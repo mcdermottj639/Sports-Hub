@@ -6,10 +6,30 @@
   const ACTIVATED_AT='2026-10-03T04:48:39Z';
   const versionFor=sport=>sport==='nfl'?VERSION:sport==='nba'?'nba-v1':BASELINE;
   const states=new Map();
-  function evidence(g,{homeDepth,awayDepth,injuries,history,summary},at=new Date().toISOString()){
+  /* v342: owner QB override (data/nfl-qb-overrides.json). The owner follows
+     lineups more closely than ESPN's depth chart; an unexpired entry for this
+     season, team (and event, when given) replaces the listed starter as an
+     owner-confirmed QB. It changes WHO starts, never a model weight: the same
+     QB-history minimum still applies, so a thin-history starter withholds. */
+  const OVERRIDE_SOURCE='Owner QB override';
+  function override(q,list,team,year,eventId,at){
+    const now=Date.parse(at);
+    const o=(Array.isArray(list?.overrides)?list.overrides:[]).filter(x=>x&&Number(x.season)===Number(year)
+      &&String(x.team||'').toUpperCase()===String(team||'').toUpperCase()&&(!x.eventId||String(x.eventId)===String(eventId))
+      &&x.name&&x.athleteId&&Number.isFinite(Date.parse(x.setAt))&&Date.parse(x.setAt)<=now&&now<Date.parse(x.until))
+      .sort((a,b)=>Date.parse(b.setAt)-Date.parse(a.setAt))[0];
+    if(!o)return q;
+    const id=String(o.athleteId),swap=q?.backupId&&String(q.backupId)===id;
+    return {...q,source:OVERRIDE_SOURCE,name:o.name,athleteId:id,status:'No current restriction found; owner-confirmed starter',
+      confirmedStarter:true,needsReview:false,
+      backupId:swap?(q.athleteId||null):(q?.backupId??null),backupName:swap?(q.name||null):(q?.backupName??null),backupStatus:swap?(q.status||'unknown'):(q?.backupStatus??'unknown'),
+      override:{setAt:o.setAt,until:o.until,note:o.note||null,listedName:q?.name||null,listedStatus:q?.status||null}};
+  }
+  function evidence(g,{homeDepth,awayDepth,injuries,history,summary,overrides},at=new Date().toISOString()){
     const F=root.SportsHubNFLFootball,C=root.SportsHubFootballResearch,E=root.SportsHubNFLEvidence;
     const year=Number(g.season)||Number(history?.currentSeason),key=`${history?.generatedAt}:${at.slice(0,13)}`;
-    const qb={home:C.quarterback(homeDepth,injuries,g.home.id,year,at),away:C.quarterback(awayDepth,injuries,g.away.id,year,at)};
+    const qb={home:override(C.quarterback(homeDepth,injuries,g.home.id,year,at),overrides,g.home.abbr,year,g.id,at),
+      away:override(C.quarterback(awayDepth,injuries,g.away.id,year,at),overrides,g.away.abbr,year,g.id,at)};
     let state=states.get(key);if(!state){state=F.build(history,at);states.clear();states.set(key,state);}
     const game={home:F.alias(g.home.abbr),away:F.alias(g.away.abbr),date:g.date,season:year,neutral:!!(g.neutral??g.neutralSite)};
     const context={at,personnel:E.personnel({home:homeDepth,away:awayDepth},injuries,{home:g.home.id,away:g.away.id},year,at),weather:E.weather(summary,g.id,at),coaching:E.coaching(state,game.home,game.away)};
@@ -37,6 +57,6 @@
       features:p.features,football:e,promotion:p.promotion,evidence:'Owner-selected football model; prospective accuracy and profitability remain unproven'};
   }
   function current(row){return (row?.q?.v??row?.model_version)===versionFor(row?.s||row?.sport);}
-  const api=Object.freeze({VERSION,BASELINE,ACTIVATED_AT,versionFor,evidence,projection,browser,current});
+  const api=Object.freeze({VERSION,BASELINE,ACTIVATED_AT,OVERRIDE_SOURCE,versionFor,override,evidence,projection,browser,current});
   root.SportsHubNFLLive=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);

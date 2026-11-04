@@ -12,10 +12,10 @@
     if(old&&Date.now()-old.at<4*60000)return old.data;
     const entry={at:Date.now(),data:null,evidence:null};
     entry.data=(async()=>{
-      const [homeDepth,awayDepth,injuries,history,summary]=await Promise.all([
+      const [homeDepth,awayDepth,injuries,history,summary,overrides]=await Promise.all([
         source(`${base}/teams/${g.home.id}/depthcharts`),source(`${base}/teams/${g.away.id}/depthcharts`),source(`${base}/injuries`),
-        source('data/nfl-football-live.json'),source(`${base}/summary?event=${g.id}`)]);
-      entry.evidence=root.SportsHubNFLLive.evidence(g,{homeDepth,awayDepth,injuries,history,summary});
+        source('data/nfl-football-live.json'),source(`${base}/summary?event=${g.id}`),source('data/nfl-qb-overrides.json')]);
+      entry.evidence=root.SportsHubNFLLive.evidence(g,{homeDepth,awayDepth,injuries,history,summary,overrides});
       return entry.evidence;
     })();games.set(key,entry);return entry.data;
   }
@@ -35,6 +35,7 @@
     const e=games.get(`${g.id}:${g.date}`)?.evidence;if(!e)return '';
     const age=t=>{const ms=Date.now()-Date.parse(t);if(!Number.isFinite(ms))return null;const d=Math.floor(ms/864e5);return d>=1?`${d}d old`:`${Math.max(1,Math.round(ms/36e5))}h old`;};
     const side=(abbr,status,q)=>{
+      if(q?.override)return `${abbr} QB: ${q.name} (your override${q.override.listedName&&q.override.listedName!==q.name?`; ESPN lists ${q.override.listedName}`:''})`;
       if(status!==200)return `${abbr} depth chart: request ${status==='unavailable'?'failed':`returned ${status}`}`;
       const a=q?.depthUpdatedAt?age(q.depthUpdatedAt):null;
       const stale=q?.depthUpdatedAt&&Date.now()-Date.parse(q.depthUpdatedAt)>=2*864e5;
