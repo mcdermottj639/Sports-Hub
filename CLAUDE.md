@@ -710,7 +710,29 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v346** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v347** (backend **b17-fantasy-league-rules**).
+
+### v347 — System cards everywhere a record is shown
+
+Jack, on the v346 Systems cards: "Beautiful now. Can u use this for the other
+research tabs or where ever. In model info it's appropriate." One card layout
+(title + sub-line, win % and ROI top right, active/pending picks, W-L record,
+cumulative-units sparkline) now carries every record list:
+- Research → Market sides and each Situational trend body:
+  `betting-signals-ui.js` `sysCard()` replaces the per-side table rows
+  (`pairedResults`); the sparkline uses only that side's own cohort
+  (`decisionKey(d) === g.key`). Situation quick chips on the collapsed list are
+  unchanged. Rules still use `resultCard` → `sysCard`.
+- Models → Performance: `performance-ui.js` `sysCard()` replaces the By
+  sport / By market rows (same tap targets), the Underdog-flip sport and
+  model-price tables, and the Trends "Where the model wins and loses" split
+  tables (`splitCards`). Sparklines are `C.series` cumulative units. The
+  top stat tiles, profit chart, week-by-week, baseline comparison and
+  calibration tables stay as tables (time series / paired comparisons).
+`sportRow` is deleted. Same numbers as before — layout only; win % excludes
+pushes, ROI is paper ROI on priced picks. Tests: situation labels now assert
+card titles (`<h4>`), not table headers.
+
 
 ### v346 — Four more frozen NFL rules + Action Network-style system cards
 

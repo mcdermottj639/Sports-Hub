@@ -93,3 +93,11 @@
 .bs-spark-line.up,.bs-spark-fill.up{stroke:var(--accent);fill:var(--accent)}
 .bs-spark-line.down,.bs-spark-fill.down{stroke:#ff7b80;fill:#ff7b80}
 .bs-spark-fill{opacity:.18;stroke:none}
+
+/* v347 — the same card for market sides and situation sides */
+.bs-sys-grid{display:grid;grid-template-columns:1fr;gap:10px;margin:8px 0}
+@media (min-width:640px){.bs-sys-grid{grid-template-columns:1fr 1fr}}
+.bs-sys-compact{padding:12px 14px}
+.bs-sys-compact .bs-sys-title h4{font-size:14px}
+.bs-sys-compact .bs-sys-stats > span{font-size:17px}
+.bs-sys-compact .bs-spark{width:96px;height:28px}

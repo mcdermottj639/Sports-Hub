@@ -64,10 +64,10 @@ test('team situations label rows by the team being bet, not a bare home/away sid
  const ml={...away,id:'m',rule_id:'nfl_research_moneyline_away',market:'moneyline'};
  const html=UI.systemResultsHTML({state:'ready',filters:{scope:'situations'},decisions:[away,home,ml],settlements:[{decision_id:'d',result:'win'},{decision_id:'h',result:'loss'},{decision_id:'m',result:'win'}]});
  assert.match(html,/data-situation-id="long"/);const long=UI.situationBodyHTML('long');
- assert.match(long,/<th>Rested team \(10\+ days\) · home<\/th>/);assert.match(long,/<th>Rested team \(10\+ days\) · road<\/th>/);
- assert.match(long,/<th>Bet on<\/th>/);assert.match(long,/1 priced bet · early sample/);
- assert.doesNotMatch(long,/Matching team sides only|<th>Home team<\/th>|priced results/);
+ assert.match(long,/<h4>Rested team \(10\+ days\) · home<\/h4>/);assert.match(long,/<h4>Rested team \(10\+ days\) · road<\/h4>/);
+ assert.match(long,/Bet on · Spread/);assert.match(long,/1W · 0L · early sample/);
+ assert.doesNotMatch(long,/Matching team sides only|<h4>Home team<\/h4>|priced results/);
  const dog=UI.situationBodyHTML('westeast');
- assert.match(dog,/<th>West Coast team traveling east · road<\/th>/);
+ assert.match(dog,/<h4>West Coast team traveling east · road<\/h4>/);
  assert.ok(S.defs.filter(d=>!d.bet).every(d=>['intl','neutral','division','nondivision','prime'].includes(d.id)));
 });
