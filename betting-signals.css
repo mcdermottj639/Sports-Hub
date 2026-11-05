@@ -118,3 +118,9 @@
 .bs-sit-foot .bs-sit-quick{flex:1 1 auto;min-width:0}
 .bs-sit-foot .bs-spark{width:84px;height:26px}
 .bs-situation.bs-sit-card[open]>.bs-situation-body{padding:0 12px 12px}
+
+/* v350 — sort + minimum games for situational trends */
+.bs-sit-sort{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+.bs-sit-sort label{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:700;color:var(--muted);flex:1 1 140px;min-width:0}
+.bs-sit-sort select{font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--text);min-height:40px;width:100%}
+.bs-sit-flat{padding:0}

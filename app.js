@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v349';
+const APP_VERSION = 'v350';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -13265,12 +13265,55 @@ document.addEventListener('toggle',e=>{
  body.dataset.filled='1';body.innerHTML=globalThis.SportsHubSignalsUI.situationBodyHTML(d.dataset.situationId);
 },true);
 // Situation search is local: keep the currently loaded evidence and open matching categories.
+// v350: plus sort + minimum-games filter. Rows are MOVED (not rebuilt) between their category list and a
+// flat sorted list, so opened situations keep their built bodies. Choice remembered per device.
+const SIT_SORT_KEY='sportshub:sit-sort:v1';
+function applySituationView(host){
+ if(!host)return;
+ const q=(host.querySelector('[data-bs-situation-search]')?.value||'').trim().toLowerCase();
+ const sortSel=host.querySelector('[data-bs-situation-sort]'),minSel=host.querySelector('[data-bs-situation-min]');
+ const sort=sortSel?.value||'category',min=Number(minSel?.value||0);
+ try{localStorage.setItem(SIT_SORT_KEY,JSON.stringify({sort,min}));}catch(_){}
+ const flat=host.querySelector('[data-situation-flat]'),rows=[...host.querySelectorAll('details.bs-situation')];
+ rows.forEach(r=>{if(!r.dataset.home)r.dataset.home=r.closest('[data-situation-category]')?.dataset.situationCategory??'';});
+ const show=r=>r.dataset.situationSearch.includes(q)&&Number(r.dataset.sortGames||0)>=min;
+ if(sort==='category'){
+  flat.hidden=true;
+  rows.forEach(r=>{const list=host.querySelector(`[data-situation-category="${r.dataset.home}"] .bs-situation-list`);if(list&&r.parentElement!==list)list.appendChild(r);});
+  host.querySelectorAll('[data-situation-category]').forEach(group=>{
+   const list=group.querySelector('.bs-situation-list');
+   [...list.children].sort((a,b)=>rows.indexOf(a)-rows.indexOf(b)).forEach(r=>list.appendChild(r));
+   let count=0;list.querySelectorAll('details.bs-situation').forEach(r=>{r.hidden=!show(r);if(!r.hidden)count++;});
+   group.hidden=count===0;if(q&&count)group.open=true;
+  });
+ } else {
+  const key={'ats-roi':'sortAtsRoi','ats-roi-low':'sortAtsRoi','ats-win':'sortAtsWin','ml-win':'sortMlWin','ou-win':'sortOuWin','games':'sortGames'}[sort];
+  const val=r=>{const v=r.dataset[key];return v===''||v==null?null:Number(v);};
+  const sorted=rows.slice().sort((a,b)=>{
+   if(sort==='name')return a.dataset.sortName.localeCompare(b.dataset.sortName);
+   const x=val(a),y=val(b);if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return -1;
+   return sort==='ats-roi-low'?x-y:y-x;
+  });
+  sorted.forEach(r=>{flat.appendChild(r);r.hidden=!show(r);});
+  flat.hidden=false;host.querySelectorAll('[data-situation-category]').forEach(g=>g.hidden=true);
+ }
+ host.querySelector('[data-situation-no-results]').hidden=rows.some(r=>!r.hidden);
+}
 document.addEventListener('input',e=>{
  if(!e.target.matches('[data-bs-situation-search]'))return;
- const q=e.target.value.trim().toLowerCase(),host=e.target.closest('.bs-situations');
- host.querySelectorAll('[data-situation-category]').forEach(group=>{
-  let count=0;group.querySelectorAll('[data-situation-search]').forEach(row=>{row.hidden=!row.dataset.situationSearch.includes(q);if(!row.hidden)count++;});
-  group.hidden=count===0;if(q&&count)group.open=true;
- });
- host.querySelector('[data-situation-no-results]').hidden=!!host.querySelector('[data-situation-search]:not([hidden])');
+ applySituationView(e.target.closest('.bs-situations'));
 });
+document.addEventListener('change',e=>{
+ if(!e.target.matches('[data-bs-situation-sort],[data-bs-situation-min]'))return;
+ applySituationView(e.target.closest('.bs-situations'));
+});
+// Restore the remembered sort whenever a situations list is painted.
+new MutationObserver(()=>{
+ const host=document.querySelector('.bs-situations:not([data-sort-ready])');if(!host)return;
+ host.dataset.sortReady='1';
+ let saved={};try{saved=JSON.parse(localStorage.getItem(SIT_SORT_KEY)||'{}')||{};}catch(_){}
+ const sel=host.querySelector('[data-bs-situation-sort]'),min=host.querySelector('[data-bs-situation-min]');
+ if(sel&&saved.sort&&[...sel.options].some(o=>o.value===saved.sort))sel.value=saved.sort;
+ if(min&&saved.min!=null&&[...min.options].some(o=>o.value===String(saved.min)))min.value=String(saved.min);
+ if((sel&&sel.value!=='category')||(min&&min.value!=='0'))applySituationView(host);
+}).observe(document.body,{childList:true,subtree:true});

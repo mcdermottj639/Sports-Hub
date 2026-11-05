@@ -710,7 +710,24 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v349** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v350** (backend **b17-fantasy-league-rules**).
+
+### v350 — Sort and filter situational trends
+
+Jack: "allow me to sort these trends by performance and other things."
+Situational trends gets two selects above the list: **Sort** (By category —
+the default grouped view — ATS ROI best/worst first, ATS win %, ML win %,
+Over/under win %, Most games, A–Z) and **Min games** (Any, 5+, 10+, 20+).
+Each card carries `data-sort-*` attributes from its own per-market quick
+record (ATS sorts use the spread record even when the card's headline is
+another market; missing values sink to the bottom). `applySituationView`
+in app.js MOVES the existing `<details>` rows into a flat list (or back to
+their category, original order) instead of re-rendering, so built bodies and
+open state survive a re-sort; search applies on top. The choice is kept in
+`sportshub:sit-sort:v1` and re-applied when a situations list paints.
+Small-sample situations (3–4 games) top the ROI sorts; Min games is the
+answer to that, not a hidden threshold.
+
 
 ### v349 — Situation card stats name their market
 
@@ -8321,6 +8338,8 @@ rewrite.**
   44px touch-target floor; keyboard focus shows a `:focus-visible` ring.
 
 ## localStorage keys
+
+- `sportshub:sit-sort:v1` — v350 Situational trends sort and minimum-games choice (`{sort, min}`). Device-only view preference.
 
 - `sportshub:clv:v1` — v345 last pregame quotes per settled NFL/CFB event (`sport|event_id|provider` → `{spread?, total?, at}` or `{miss, at}`), read once from `betting_quote_snapshots` for the Performance CLV section. Device cache only; safe to clear.
 
