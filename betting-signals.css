@@ -101,3 +101,20 @@
 .bs-sys-compact .bs-sys-title h4{font-size:14px}
 .bs-sys-compact .bs-sys-stats > span{font-size:17px}
 .bs-sys-compact .bs-spark{width:96px;height:28px}
+
+/* v348 — situational trends rows as compact cards (quick chips kept below) */
+.bs-situation-list{padding:8px 10px;display:grid;gap:8px}
+.bs-situation.bs-sit-card{border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden}
+.bs-results .bs-situation.bs-sit-card>summary{padding:12px 14px;gap:8px;list-style:none}
+.bs-situation.bs-sit-card>summary::-webkit-details-marker{display:none}
+.bs-sit-card .bs-sys-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;min-width:0;width:100%}
+.bs-sit-card .bs-sys-title{display:flex;flex-direction:column;min-width:0}
+.bs-sit-card .bs-sit-name{font-size:14.5px;line-height:1.25;text-decoration:none}
+.bs-sit-card .bs-sys-market{font-size:11.5px;color:var(--muted);margin-top:2px}
+.bs-sit-card .bs-sys-stats{display:flex;gap:12px;flex:0 0 auto;text-align:right}
+.bs-sit-card .bs-sys-stats>span{display:flex;flex-direction:column;font-size:17px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.bs-sit-card .bs-sys-stats small{font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-top:3px}
+.bs-sit-foot{display:flex;align-items:center;gap:8px;min-width:0;width:100%}
+.bs-sit-foot .bs-sit-quick{flex:1 1 auto;min-width:0}
+.bs-sit-foot .bs-spark{width:84px;height:26px}
+.bs-situation.bs-sit-card[open]>.bs-situation-body{padding:0 12px 12px}

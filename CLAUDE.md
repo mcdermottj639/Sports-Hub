@@ -710,7 +710,23 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v347** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v348** (backend **b17-fantasy-league-rules**).
+
+### v348 — Situational trends rows are compact cards
+
+Jack: "Do that" (after asking for the collapsed situation rows to show the
+card look too). Each row in Research → Situational trends is now a small card:
+name, games count + headline market, **win % and ROI** top right, the quick
+ML/ATS/Total chips kept underneath, and a sparkline. Headline = the spread
+record (else moneyline, else total) from the same largest sample
+`quickRecords` already picks; `quickRecords` now also carries units/risk (for
+ROI), the sides counted and the sample key. `sitSeries()` builds the
+sparkline from that sample's own decisions only, using ONE settlement map
+built per render (not per situation), so the v339 "list paints at once" rule
+holds: the tables/games inside a situation are still built only when it is
+opened. Measured headless at 390px: 25 cards, ~1.8 s from tap to painted
+list, no sideways overflow.
+
 
 ### v347 — System cards everywhere a record is shown
 

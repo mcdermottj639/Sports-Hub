@@ -158,7 +158,7 @@
       const [,market,side]=m,sample=[g.rule_version,g.decision_policy,g.engine,g.provider_id,g.source_quality].join('|');
       if(!markets.has(market))markets.set(market,new Map());const ss=markets.get(market);
       if(!ss.has(sample))ss.set(sample,new Map());const sides=ss.get(sample),k=team?'team':side;
-      const r=sides.get(k)||{side:k,w:0,l:0,p:0};r.w+=g.wins||0;r.l+=g.losses||0;r.p+=g.pushes||0;sides.set(k,r);
+      const r=sides.get(k)||{side:k,w:0,l:0,p:0,units:0,risk:0,sides:new Set(),sample};r.w+=g.wins||0;r.l+=g.losses||0;r.p+=g.pushes||0;r.units+=g.units||0;r.risk+=g.risk||0;r.sides.add(side);sides.set(k,r);
     }
     const out=[];
     for(const market of ['moneyline','spread','total']){
@@ -170,9 +170,17 @@
       const r=team?rows[0]:rows.sort((a,b)=>pct(b)-pct(a)||['home','over'].indexOf(b.side)-['home','over'].indexOf(a.side))[0];
       const short=({moneyline:'ML',spread:'ATS',total:''})[market];
       const label=market==='total'?(r.side==='under'?'Under':'Over'):team?short:`${r.side==='away'?'Road':'Home'} ${short}`;
-      out.push({market,label,w:r.w,l:r.l,p:r.p,pct:r.w+r.l?r.w/(r.w+r.l)*100:null});
+      out.push({market,label,w:r.w,l:r.l,p:r.p,pct:r.w+r.l?r.w/(r.w+r.l)*100:null,roi:r.risk?r.units/r.risk*100:null,sides:[...r.sides],sample:r.sample});
     }
     return out;
+  }
+  function sitSeries(matches,head,settled){
+    const am=v=>{const n=Number(v);return Number.isFinite(n)&&Math.abs(n)>=100?n:null;};
+    const key=d=>[d.rule_version,d.decision_policy,d.model_context?.engine||'unavailable',d.inputs?.provider_id||'unknown',d.quality_flags?.includes('source_freshness_unverified')?'unverified':'verified'].join('|');
+    const re=new RegExp(`_${head.market}_(${head.sides.join('|')})$`);
+    const pts=matches.filter(d=>re.test(String(d.rule_id))&&key(d)===head.sample&&['matched','unpriced_match'].includes(d.status)&&am(d.selected_price)!=null)
+      .map(d=>({at:Date.parse(d.scheduled_start_at),p:am(d.selected_price),r:settled.get(String(d.id))||d.result})).filter(x=>['win','loss','push'].includes(x.r)).sort((a,b)=>a.at-b.at);
+    let u=0;const out=[0];for(const x of pts){if(x.r==='win')u+=x.p>0?x.p/100:100/-x.p;else if(x.r==='loss')u-=1;out.push(u);}return out;
   }
   function quickChips(q){
     return q.map(x=>{const n=x.w+x.l,tone=x.pct==null||n<5?'':x.pct>=55?' bs-q-up':x.pct<=45?' bs-q-down':'';
@@ -185,12 +193,17 @@
     const S=root.SportsHubSituations,C=root.SportsHubSignalsCore;
     if(!S||!C)return note('Situational research is unavailable. Refresh the app.');
     const rows=vm.decisions||[],categories=[...new Set(S.defs.map(d=>d.category))];
+    const settlements=vm.settlements||[],settled=new Map(settlements.map(x=>[String(x.decision_id),x.result]));
     situationCache=new Map();
     return `<section class="bs-situations"><label class="bs-situation-search"><span class="bs-visually-hidden">Find a situation</span><input type="search" data-bs-situation-search placeholder="Find a situation — bye, travel, underdog…"></label><p class="bs-q-key"><span class="bs-q bs-q-up"><i>55%+</i></span><span class="bs-q bs-q-down"><i>≤45%</i></span><span>win % · pushes out · ML ignores price</span></p><p data-situation-no-results hidden>No situations match that search.</p>${categories.map(category=>`<details class="bs-situation-category" data-situation-category open><summary>${e(category)}</summary><div class="bs-situation-list">${S.defs.filter(d=>d.category===category).map(def=>{
-      const {matches,games,unknown}=S.coverage(rows,def.id),groups=C.performance(matches,vm.settlements||[]);
+      const {matches,games,unknown}=S.coverage(rows,def.id),groups=C.performance(matches,settlements);
       const quick=quickRecords(groups,def);
       situationCache.set(def.id,{def,matches,games,unknown,groups,vm});
-      return `<details class="bs-situation" data-situation-id="${e(def.id)}" data-situation-search="${e((def.name+' '+def.category+' '+def.description).toLowerCase())}"><summary><span class="bs-sit-head"><strong>${e(def.name)}</strong><span>${games?`${games} game${games===1?'':'s'}${quick.length?'':' · awaiting results'}`:unknown?'needs saved context':'no matches yet'}</span></span>${quick.length?`<span class="bs-sit-quick">${quickChips(quick)}</span>`:''}</summary><div class="bs-situation-body" data-situation-body></div></details>`;
+      // v348 — card head: win % + ROI + sparkline for the spread record (else ML, else total); chips stay below.
+      const head=quick.find(q=>q.market==='spread')||quick.find(q=>q.market==='moneyline')||quick[0];
+      const series=head?sitSeries(matches,head,settled):[];
+      const win=head?.pct,roi=head?.roi,sub=games?`${games} game${games===1?'':'s'}${head?` · ${head.label.trim()||'Total'}${head.market==='spread'?'':head.market==='moneyline'?'':''}`:' · awaiting results'}`:unknown?'needs saved context':'no matches yet';
+      return `<details class="bs-situation bs-sit-card" data-situation-id="${e(def.id)}" data-situation-search="${e((def.name+' '+def.category+' '+def.description).toLowerCase())}"><summary><span class="bs-sys-head"><span class="bs-sys-title"><strong class="bs-sit-name">${e(def.name)}</strong><span class="bs-sys-market">${e(sub)}</span></span>${head?`<span class="bs-sys-stats"><span class="${win==null?'':win>=52.4?'bs-positive':win<50?'bs-negative':''}">${win==null?'—':Math.round(win)+'%'}<small>Win</small></span><span class="${roi>0?'bs-positive':roi<0?'bs-negative':''}">${roi==null?'—':number(roi,1)+'%'}<small>ROI</small></span></span>`:''}</span>${quick.length?`<span class="bs-sit-foot"><span class="bs-sit-quick">${quickChips(quick)}</span>${sparkline(series)}</span>`:''}</summary><div class="bs-situation-body" data-situation-body></div></details>`;
     }).join('')}</div></details>`).join('')}</section>`;
   }
   function situationBodyHTML(id) {
