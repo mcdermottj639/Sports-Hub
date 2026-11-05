@@ -710,7 +710,16 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v348** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v349** (backend **b17-fantasy-league-rules**).
+
+### v349 — Situation card stats name their market
+
+Jack asked whether the big numbers on a situation card were ATS and ML
+combined. They never were: they are the headline record only (spread, else
+moneyline, else total). The labels now say so — "ATS WIN / ATS ROI" (or
+"ML …" / "O/U …") — and the sub-line drops the trailing "· ATS" (totals
+keep "· Over/Under" so the side is clear). Label-only change.
+
 
 ### v348 — Situational trends rows are compact cards
 
