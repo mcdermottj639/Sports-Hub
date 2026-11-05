@@ -364,14 +364,22 @@
     if (!host.dataset.ready) { host.dataset.ready='1'; ['nfl','cfb'].forEach(s=>root.SportsHubFootballDevelopment?.mountSummary(host,s,'append')); }
   }
   function tile(path,title,desc,i) { return `<button type="button" class="desk-tile${CLUBS[path]?' desk-team-tile desk-tile-'+path:''}" data-desk-route="${path}"><span class="desk-tile-icon">${CLUBS[path]?teamMark(CLUBS[path]):icon(i)}</span><b>${title}</b><p>${desc}</p><span class="desk-tile-arrow">${icon('arrow')}</span></button>`; }
+  // v351 — More, rebuilt for the phone: Fantasy first (it left the bottom bar for Research), then short
+  // two-column tiles with one-line labels instead of 25 paragraph tiles. Research items live on their own tab.
+  function moreTile(path,title,sub,i,href){
+    const club=CLUBS[path];
+    const inner=`<span class="desk-more-icon">${club?teamMark(club):icon(i)}</span><span class="desk-more-text"><b>${title}</b><small>${sub}</small></span>`;
+    return href?`<a class="desk-more-tile" href="${href}">${inner}</a>`:`<button type="button" class="desk-more-tile${club?' desk-more-club desk-more-'+path:''}" data-desk-route="${path}">${inner}</button>`;
+  }
   function renderExplore() {
     const host=$d('desk-explore-grid');
-    const groups = [
-      ['Make a decision','models/all/picks','models/all/results','models/all/trends','models/all/recent','watchlist','fantasy/gm','fantasy/lineup','pickem'],
-      ['Follow your sports','eagles','redsox','nfl','cfb','nba','models/mlb/picks','news'],
-      ['Go deeper','research','nfl/research','cfb/research','fantasy/season','models/all/calibration','models/all/method','tools','about'],
+    const fantasy=`<section class="desk-more-hero"><button type="button" class="desk-more-hero-main" data-desk-route="fantasy"><span class="desk-more-icon">${icon('fantasy')}</span><span class="desk-more-text"><small>YOUR LEAGUE</small><b>Fantasy HQ</b><span>Roster, matchup, waivers &amp; lineup</span></span><span class="desk-more-go">${icon('arrow')}</span></button><div class="desk-more-chips">${[['fantasy/matchup','Matchup'],['fantasy/lineup','Start / sit'],['fantasy/gm','Waivers &amp; trades'],['fantasy/season','Season']].map(([r,t])=>`<button type="button" data-desk-route="${r}">${t}</button>`).join('')}</div></section>`;
+    const groups=[
+      ['Models',[['models/all/picks','Model board','Today’s forecasts','predictions'],['models/all/props','Player props','Top props per game','predictions'],['models/all/results','Performance','Record &amp; ROI','predictions'],['models/all/recent','Game history','Every saved game','predictions'],['models/all/method','How it works','Inputs &amp; formulas','about'],['models/all/calibration','Calibration','Probability check','research']]],
+      ['Teams &amp; leagues',[['eagles','Eagles','News · schedule','eagles'],['redsox','Red Sox','News · schedule','redsox'],['nfl','NFL','This week’s games','nfl'],['cfb','College','Top 25','cfb'],['nba','NBA','Games &amp; model','nba'],['models/mlb/picks','MLB','Model board','redsox'],['news','News &amp; scores','Around the leagues','pulse'],['leagues','All leagues','Quick access','leagues']]],
+      ['Your stuff',[['watchlist','Watchlist','Saved games &amp; notes','watchlist'],['pickem','Pick’em','Your ATS pool','pickem'],['tools','Tools &amp; labs','Mock drafts, trivia','labs'],['signals-lab','Signals Lab','AN signals graded','research','signals-lab.html'],['about','About &amp; data','Sources &amp; collection','about']]],
     ];
-    host.innerHTML=groups.map(([title,...paths])=>`<section class="desk-explore-section"><h2>${title}</h2><div class="desk-explore-grid">${paths.map(path=>links.find(x=>x[0]===path)).filter(Boolean).map(x=>tile(...x)).join('')}</div></section>`).join('');
+    host.innerHTML=fantasy+groups.map(([title,items])=>`<section class="desk-more-section"><h2>${title}</h2><div class="desk-more-grid">${items.map(x=>moreTile(...x)).join('')}</div></section>`).join('');
   }
   function openSearch() {
     const dialog=$d('desk-search-dialog');searchInvoker=document.activeElement;

@@ -710,7 +710,30 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v350** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v351** (backend **b17-fantasy-league-rules**).
+
+### v351 — Research takes the bottom-bar slot; Fantasy leads a rebuilt More
+
+Jack: "Move research back to tab where fantasy is but make sure fantasy is an
+option at top of more. Also optimize the whole more app."
+- Bottom bar (phones): Today · Models · **Research** · Leagues · More.
+  `desk-core.js` `group()` now returns `'research'` for `#/research`,
+  `#/nfl/research` and `#/cfb/research`, and `'explore'` (More) for every
+  `#/fantasy…` route, so the right button lights up. The desktop sidebar is
+  unchanged (it already had both).
+- More (`desk.js` `renderExplore`): a dark **Fantasy HQ** hero first (opens
+  `#/fantasy`) with four quick chips — Matchup, Start / sit, Waivers & trades,
+  Season — then three sections of compact two-column tiles (one-line
+  labels, 4 columns on desktop): Models, Teams & leagues, Your stuff (incl.
+  Signals Lab). 19 tiles instead of 25 paragraph tiles; research tiles moved
+  to the Research tab. On phones the page banner is slimmed on More only
+  (`body[data-desk-panel="explore"]`) so Fantasy + all of Models sit on the
+  first screen.
+- Research panel gets a 4-tile quick-jump row at the top: NFL research,
+  College research, Model trends, Signals Lab (the duplicate "Model trends →"
+  shortcut was dropped).
+Tests: desk-core group expectations and the dock test updated.
+
 
 ### v350 — Sort and filter situational trends
 

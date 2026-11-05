@@ -35,11 +35,11 @@ test('NBA spreads grade from immutable pregame evidence, including below-filter 
  assert.equal(A.forecastGrade(r,'spread','nba-v1').result,'loss');
  assert.equal(A.forecastGrade({...r,q:{...r.q,odds:{spread:-2,ou:223}}},'spread','nba-v1').result,'push');
 });
-test('NBA and Leagues deep links resolve and retain direct access beside Fantasy',()=>{
+test('NBA and Leagues deep links resolve and retain direct access beside Research (Fantasy leads More since v351)',()=>{
  for(const page of ['nba','leagues'])assert.equal(R.hashFor(R.route('#/'+page)),'#/'+page);
  assert.equal(R.group(R.route('#/nba')),'leagues');
  const html=fs.readFileSync(require.resolve('../index.html'),'utf8'),dock=html.match(/<nav id="botbar"[^]*?<\/nav>/)[0];
- assert.match(dock,/data-desk-route="leagues"/);assert.match(dock,/data-desk-route="fantasy"/);
+ assert.match(dock,/data-desk-route="leagues"/);assert.match(dock,/data-desk-route="research"/);assert.match(fs.readFileSync(require.resolve('../desk.js'),'utf8'),/desk-more-hero-main" data-desk-route="fantasy"/);
  assert.match(html,/id="nba-games"/);assert.ok(html.indexOf('nba-model.js')<html.indexOf('app.js?'));
 });
 test('NBA collector creates all available market rows, with its own version and original input snapshot',()=>{

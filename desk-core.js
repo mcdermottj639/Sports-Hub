@@ -31,8 +31,9 @@
   }
   function group(r) {
     if (r.panel === 'predictions') return 'predictions';
-    if (r.panel === 'fantasy') return 'fantasy';
-    if (r.panel === 'research' || r.sportView === 'research') return 'explore';
+    // v351: Research has the bottom-bar slot; Fantasy opens from the top of More.
+    if (r.panel === 'research' || r.sportView === 'research') return 'research';
+    if (r.panel === 'fantasy') return 'explore';
     if (['leagues','nfl','cfb','nba'].includes(r.panel)) return 'leagues';
     return r.panel === 'home' ? 'home' : 'explore';
   }
