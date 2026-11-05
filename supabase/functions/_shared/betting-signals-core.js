@@ -13,7 +13,7 @@ const BLOWOUT_MARGIN=-14, EARLY_WEEKS=[1,4], WINLESS_WEEKS=[2,6];
 // A broad observational cohort, NOT additional claimed betting systems.
 const RESEARCH=['moneyline','spread','total'].flatMap(market=>(market==='total'?['over','under']:['home','away']).map(side=>({id:`nfl_research_${market}_${side}`,version:'v1',market,side,name:`${market} · ${side}`})));
 const researchRules=(sport='nfl')=>RESEARCH.map(r=>({...r,id:r.id.replace(/^nfl_/,`${sport}_`)}));
-const isResearch=d=>/^(nfl|cfb)_research_/.test(String(d.rule_id||''));
+const isResearch=d=>/^(nfl|cfb|nba)_research_/.test(String(d.rule_id||''));
 const ranked=v=>Number.isInteger(number(v))&&number(v)>=1&&number(v)<=25;
 const top25=g=>ranked(g.home?.rank)||ranked(g.away?.rank);
 const number=v=>v==null||String(v).trim()===''||!Number.isFinite(Number(v))?null:Number(v);
@@ -91,6 +91,7 @@ function researchDimensions(d){
  const i=d.inputs||{},side=d.selection_side,team=['home','away'].includes(side)?side:null;
  const home=restDays(i.scheduled_start_at,i.home_previous_game_at),away=restDays(i.scheduled_start_at,i.away_previous_game_at);
  const rest=team==='home'?home:team==='away'?away:null,other=team==='home'?away:team==='away'?home:null;
+ const rest2=team?restDays(i.scheduled_start_at,i[team+'_previous2_game_at']):null;
  const cfb=d.sport==='cfb'||i.sport==='cfb';
  const verified=cfb?!!(i.home_conference&&i.away_conference&&i.conference_source):!!(i.home_division&&i.away_division&&i.division_source);
  const line=number(d.selection_line),price=american(d.selected_price),opponent=american(i.opponent_price);
@@ -98,7 +99,7 @@ function researchDimensions(d){
  const category=d.market==='spread'&&line!=null?(line>0?'underdog':line<0?'favorite':'pickem'):d.market==='moneyline'&&price!=null&&opponent!=null?(implied(price)===implied(opponent)?'pickem':implied(price)<implied(opponent)?'underdog':'favorite'):null;
  const same=cfb?!i.home_independent&&!i.away_independent&&i.home_conference===i.away_conference:i.home_division===i.away_division;
  const bothRanked=ranked(i.home_rank)&&ranked(i.away_rank),oneRanked=ranked(i.home_rank)||ranked(i.away_rank);
- return {team,category,division:verified?(same?'division':'nondivision'):null,ranking:!cfb?null:bothRanked?'both':oneRanked?'mixed':null,rest,restAdvantage:rest==null||other==null?null:rest-other,bye:team?i[team+'_post_bye']??null:null,neutral:i.neutral??null};
+ return {team,category,division:verified?(same?'division':'nondivision'):null,ranking:!cfb?null:bothRanked?'both':oneRanked?'mixed':null,rest,rest2,otherRest:other,restAdvantage:rest==null||other==null?null:rest-other,bye:team?i[team+'_post_bye']??null:null,neutral:i.neutral??null};
 }
 function filterResearch(rows,f={}){
  const bounds={};for(const k of ['lineMin','lineMax'])if(f[k]!=null&&String(f[k]).trim()!==''){const n=number(f[k]);if(n==null)throw Error('Line bounds must be numbers.');bounds[k]=n;}

@@ -53,12 +53,17 @@ async function json(url:string, retries = 2):Promise<any> {
   }
 }
 
+function record(c:any) {
+  const r=(c?.records||[]).find((x:any)=>x.type==='total'||/^(overall|total)$/i.test(String(x.name||'')))||c?.records?.[0];
+  const m=String(r?.summary||'').match(/^(\d+)-(\d+)(?:-(\d+))?$/);
+  return m?{wins:Number(m[1]),losses:Number(m[2]),ties:Number(m[3]||0)}:{wins:null,losses:null,ties:null};
+}
 function team(c:any) {
   const t = c?.team || {};
   const rank = Number(c?.curatedRank?.current);
   return { id:String(t.id || ''), name:t.displayName || t.name || '', abbr:t.abbreviation || '',
     score:number(c?.score?.value ?? c?.score), winner:c?.winner === true,
-    rank:rank >= 1 && rank <= 25 ? rank : null, conf:t.conferenceId == null ? null : String(t.conferenceId),
+    rank:rank >= 1 && rank <= 25 ? rank : null, conf:t.conferenceId == null ? null : String(t.conferenceId), ...record(c),
     probables:c?.probables || [], leaders:c?.leaders || [] };
 }
 function event(ev:any) {
@@ -66,7 +71,9 @@ function event(ev:any) {
   const h = sides.find((x:any) => x.homeAway === 'home') || sides[0] || {};
   const a = sides.find((x:any) => x.homeAway === 'away') || sides[1] || {};
   const st = ev.status?.type || c.status?.type || {};
-  return { id:String(ev.id), date:ev.date, state:st.state, status:st.shortDetail || st.detail || '',
+  // v352: week + overall W-L-T, which signalInputs freezes for the v346 week/winless rules. Before v352
+  // only the odds job's signalGame carried them, so this collector's decisions read them as missing.
+  return { id:String(ev.id), date:ev.date, state:st.state, status:st.shortDetail || st.detail || '', week:number(ev.week?.number),
     seasonType:Number(ev.season?.type ?? c.season?.type) || null, season:ev.season?.year, completed:st.completed===true, neutral:c.neutralSite === true, venue:c.venue||null,
     home:team(h), away:team(a), odds:c.odds?.[0] || null };
 }
@@ -363,7 +370,7 @@ Deno.serve(async(req:Request)=>{
         }
         for(const g of games){
           let quotes:any[]=[],inputs:any=null;
-          const watch=captureSignals&&(sport==='nfl'||sport==='cfb');
+          const watch=captureSignals&&(sport==='nfl'||sport==='cfb'||sport==='nba');
           if(watch){
             try{signals.graded+=await settleSignalGame(db,g);signals.missed+=await missedSignalWindows(db,g);}catch(_){signalError();}
             try{quotes=await captureSignalQuotes(db,g,`ai:${run.id}`,g.observedAt);signals.written+=quotes.length;if(quotes.length)signals.last_observed_at=g.observedAt;}catch(_){signalError();}

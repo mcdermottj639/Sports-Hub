@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v351';
+const APP_VERSION = 'v352';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -2954,8 +2954,8 @@ function researchLinksHTML(sport) {
   return `<aside class="sport-research-links"><strong>Saved betting research</strong><p>Frozen entries, conditions and paper results live with each league. Exploratory results do not change model confidence.</p>${(sport && sport !== 'all' ? [sport] : ['nfl','cfb']).map(s=>`<button type="button" class="fan-btn" data-bs-results data-bs-sport="${s}">${s==='cfb'?'CFB Top 25':'NFL'} research →</button>`).join(' ')}</aside>`;
 }
 async function setSportView(sport, view, syncRoute = true) {
-  if (!['nfl','cfb'].includes(sport)) return;
-  const panel=document.getElementById(sport), research=view==='research';
+  if (!['nfl','cfb','nba'].includes(sport)) return;
+  const panel=document.getElementById(sport), research=view==='research', football=sport!=='nba';
   panel.dataset.sportView=view;
   if(syncRoute)globalThis.SportsHubDesk?.syncResearch(sport,view);
   document.getElementById(`${sport}-games-view`).hidden=research;
@@ -2971,16 +2971,17 @@ async function setSportView(sport, view, syncRoute = true) {
   let host=document.getElementById('bs-results-host');
   if(!host){host=el('div');host.id='bs-results-host';}
   if(!target.dataset.ready){
-    target.innerHTML=`<h2>${sport==='cfb'?'CFB Top 25':'NFL'} Picks &amp; Research</h2><p class="muted">Model forecasts and tracked research, kept separate.</p><details class="sport-research-block"><summary>This week’s model picks</summary><div data-sport-picks><p>Loading forecasts…</p></div></details><details class="sport-research-block"><summary>Model performance</summary><div data-sport-record></div></details><div data-sport-results></div>`;
+    target.innerHTML=!football?`<h2>NBA Research</h2><p class="muted">Tracked market sides and situational trends from frozen pregame lines. Model picks live on the Model board.</p><div data-sport-results></div>`:`<h2>${sport==='cfb'?'CFB Top 25':'NFL'} Picks &amp; Research</h2><p class="muted">Model forecasts and tracked research, kept separate.</p><details class="sport-research-block"><summary>This week’s model picks</summary><div data-sport-picks><p>Loading forecasts…</p></div></details><details class="sport-research-block"><summary>Model performance</summary><div data-sport-record></div></details><div data-sport-results></div>`;
     target.dataset.ready='true';
   }
-  globalThis.SportsHubFootballDevelopment?.mount(target, sport);
-  globalThis.SportsHubFootballDevelopment?.mountSummary(target, sport);
+  if(football){globalThis.SportsHubFootballDevelopment?.mount(target, sport);
+  globalThis.SportsHubFootballDevelopment?.mountSummary(target, sport);}
   target.querySelector('[data-sport-results]').appendChild(host);
   const record=target.querySelector('[data-sport-record]');
-  record.replaceChildren(recordPanel(tallyDetails(sport),pendingSummary(sport),sport));
+  record?.replaceChildren(recordPanel(tallyDetails(sport),pendingSummary(sport),sport));
   if(signalsEnabled())paintSignalResults();
   else host.innerHTML='<p>Saved research is unavailable right now.</p>';
+  if(!football)return;
   try {
     const sb=await scoreboard(sport);
     if(token!==sportResearchToken)return;
@@ -13004,7 +13005,7 @@ function showTab(name, options = {}) {
     if (options.aiSport) state.aiSport = options.aiSport;
     if (options.aiSub) state.aiSub = options.aiSub;
   }
-  if(['nfl','cfb'].includes(name))setSportView(name,options.sportView || 'games',false);
+  if(['nfl','cfb','nba'].includes(name))setSportView(name,options.sportView || 'games',false);
   globalThis.SportsHubDesk?.onTab(name,options);
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === name));
   document.querySelectorAll('#tabs button').forEach((b) => {

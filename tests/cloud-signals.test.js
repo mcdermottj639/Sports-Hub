@@ -14,7 +14,7 @@ test('failed pages retain prior complete cache with error',async()=>{
 test('reads are read only and explicit bounded range rejected',async()=>{
  const api=adapter(async(url,opts)=>{assert.equal(opts.method,undefined);assert.equal(opts.headers.apikey,'public');return {ok:true,json:async()=>[]};});
  const invalid=await api.loadResults('','',{from:'2020-01-01',to:'2026-01-01'});assert.equal(invalid.state,'error');assert.match(invalid.error,/370/);
- assert.equal((await api.loadCurrent('nba',['1'])).state,'unsupported');
+ assert.equal((await api.loadCurrent('nhl',['1'])).state,'unsupported');
 });
 test('research filters use only frozen movement and model gap, missing stays missing',async()=>{
  const rows=[{id:'up',inputs:{observed_line_movement:1},model_context:{same_market_gap:3}},{id:'down',inputs:{observed_line_movement:-1},model_context:{same_market_gap:4}},{id:'zero',inputs:{observed_line_movement:0},model_context:{same_market_gap:0}},{id:'missing',inputs:{observed_line_movement:null},model_context:{same_market_gap:null}}];

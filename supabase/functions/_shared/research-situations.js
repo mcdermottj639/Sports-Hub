@@ -38,8 +38,15 @@ const bettor={postbye:['Team off a bye','both'],homebye:['Home team off a bye','
  westearly:['West Coast team, early East kickoff','both'],eastwest:['East Coast team traveling west','both'],
  intlreturn:['Team back from overseas','both'],roadrepeat:['Road team, 2nd straight road game','away'],
  road_dog:['Road underdog','away'],home_dog:['Home underdog','home'],road_fav:['Road favorite','away'],
- win:['Team off a win','both'],loss:['Team off a loss','both'],bigloss:['Team off a 14+ point loss','both'],bigwin:['Team off a 14+ point win','both']};
+ win:['Team off a win','both'],loss:['Team off a loss','both'],bigloss:['Team off a 14+ point loss','both'],bigwin:['Team off a 14+ point win','both'],
+ b2b:['Team on a back-to-back','both'],threein4:['Team on 3rd game in 4 nights','both'],oppb2b:['Team facing a back-to-back opponent','both'],
+ nbarestedge:['Better-rested team','both'],nbarestdeficit:['Less-rested team','both']};
 const known=(v,fn)=>v==null?null:fn(v);
+// v352 — which leagues each situation applies to. Unlisted ids are NFL-only.
+const ALL=['nfl','cfb','nba'],FB=['nfl','cfb'];
+const SPORTS_FOR={short:FB,long:FB,restedge:FB,restdeficit:FB,roadrepeat:ALL,neutral:FB,road_dog:ALL,home_dog:ALL,road_fav:ALL,prime:FB,
+ win:ALL,loss:ALL,bigloss:ALL,bigwin:ALL,conf:['cfb'],nonconf:['cfb'],rankedboth:['cfb'],rankedmixed:['cfb'],
+ b2b:['nba'],threein4:['nba'],oppb2b:['nba'],nbarestedge:['nba'],nbarestdeficit:['nba']};
 const team=(x,fn)=>x.team?fn():false;
 const defs=[
  ['postbye','Rest & byes','Off a bye','Selected team after its verified schedule bye.',x=>team(x,()=>x.bye)],
@@ -66,9 +73,20 @@ const defs=[
  ['win','Previous result','After a win','Selected team won its previous completed regular-season game.',x=>team(x,()=>known(x.previousMargin,v=>v>0))],
  ['loss','Previous result','After a loss','Selected team lost its previous completed regular-season game.',x=>team(x,()=>known(x.previousMargin,v=>v<0))],
  ['bigloss','Previous result','After a 14+ point loss','Selected team lost its previous game by at least 14 points.',x=>team(x,()=>known(x.previousMargin,v=>v<=-14))],
- ['bigwin','Previous result','After a 14+ point win','Selected team won its previous game by at least 14 points.',x=>team(x,()=>known(x.previousMargin,v=>v>=14))]
-].map(([id,category,name,description,test])=>({id,category,name,description,test,...(bettor[id]?{bet:bettor[id][0],betSide:bettor[id][1]}:{})}));
+ ['bigwin','Previous result','After a 14+ point win','Selected team won its previous game by at least 14 points.',x=>team(x,()=>known(x.previousMargin,v=>v>=14))],
+ // v352 — college (Top 25 games) and NBA situations. Same frozen inputs; nothing backfilled beyond what was saved.
+ ['conf','Matchups & market','Conference games','Same verified conference (Top 25 games).',x=>known(x.division,v=>v==='division')],
+ ['nonconf','Matchups & market','Non-conference games','Different conferences, or an independent (Top 25 games).',x=>known(x.division,v=>v==='nondivision')],
+ ['rankedboth','Matchups & market','Ranked vs ranked','Both teams in the AP/CFP Top 25 when the entry froze.',x=>x.ranking==null?null:x.ranking==='both'],
+ ['rankedmixed','Matchups & market','Ranked vs unranked','Exactly one Top 25 team when the entry froze.',x=>x.ranking==null?null:x.ranking==='mixed'],
+ ['b2b','Rest & schedule','Back-to-back','Selected team played the previous night (1 calendar day).',x=>team(x,()=>known(x.rest,v=>v===1))],
+ ['threein4','Rest & schedule','3rd game in 4 nights','Selected team’s game two games ago was 3 or fewer days before this one.',x=>team(x,()=>known(x.rest2,v=>v<=3))],
+ ['oppb2b','Rest & schedule','Opponent on a back-to-back','Selected team faces an opponent that played the previous night.',x=>team(x,()=>known(x.otherRest,v=>v===1))],
+ ['nbarestedge','Rest & schedule','Rest advantage','Selected team has at least 1 more day of rest than its opponent.',x=>team(x,()=>known(x.restAdvantage,v=>v>=1))],
+ ['nbarestdeficit','Rest & schedule','Rest disadvantage','Selected team has at least 1 fewer day of rest.',x=>team(x,()=>known(x.restAdvantage,v=>v<=-1))]
+].map(([id,category,name,description,test])=>({id,category,name,description,test,sports:SPORTS_FOR[id]||['nfl'],...(bettor[id]?{bet:bettor[id][0],betSide:bettor[id][1]}:{})}));
+const forSport=sport=>defs.filter(d=>d.sports.includes(sport||'nfl'));
 function select(rows,id){const def=defs.find(x=>x.id===id);return def?rows.filter(d=>def.test(dimensions(d))===true):rows;}
 function coverage(rows,id){const def=defs.find(x=>x.id===id);if(!def)return {matches:rows,games:new Set(rows.map(d=>[d.sport,d.event_id,d.schedule_instance].join('|'))).size,unknown:0};const matches=[],unknown=[];for(const d of rows){const r=def.test(dimensions(d));if(r===true)matches.push(d);else if(r==null)unknown.push(d);}const count=ds=>new Set(ds.map(d=>[d.sport,d.event_id,d.schedule_instance].join('|'))).size;return {matches,games:count(matches),unknown:count(unknown)};}
-return {defs,dimensions,select,coverage,scheduleContext,international,baseZone};
+return {defs,forSport,dimensions,select,coverage,scheduleContext,international,baseZone};
 });

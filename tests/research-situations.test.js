@@ -69,5 +69,15 @@ test('team situations label rows by the team being bet, not a bare home/away sid
  assert.doesNotMatch(long,/Matching team sides only|<h4>Home team<\/h4>|priced results/);
  const dog=UI.situationBodyHTML('westeast');
  assert.match(dog,/<h4>West Coast team traveling east · road<\/h4>/);
- assert.ok(S.defs.filter(d=>!d.bet).every(d=>['intl','neutral','division','nondivision','prime'].includes(d.id)));
+ assert.ok(S.defs.filter(d=>!d.bet).every(d=>['intl','neutral','division','nondivision','prime','conf','nonconf','rankedboth','rankedmixed'].includes(d.id)));
+});
+test('each league gets its own situation list and NBA/CFB research has no fixed-rule scope',()=>{
+ const ids=s=>S.forSport(s).map(d=>d.id);
+ assert.ok(ids('nba').includes('b2b')&&!ids('nba').includes('postbye')&&!ids('nba').includes('conf'));
+ assert.ok(ids('cfb').includes('rankedboth')&&!ids('cfb').includes('b2b'));
+ assert.ok(!ids('nfl').includes('b2b')&&!ids('nfl').includes('conf'));
+ for(const sport of ['nba','cfb']){const html=UI.systemResultsHTML({state:'ready',filters:{sport,scope:'situations'},decisions:[],settlements:[]});
+  assert.match(html,/data-bs-scope="situations"/);assert.doesNotMatch(html,/data-bs-scope="rules"/);}
+ const nba=UI.systemResultsHTML({state:'ready',filters:{sport:'nba',scope:'situations'},decisions:[],settlements:[]});
+ assert.match(nba,/data-situation-id="b2b"/);assert.doesNotMatch(nba,/data-situation-id="postbye"/);
 });

@@ -19,14 +19,14 @@
     if (!PANELS.includes(panel)) return null;
     if (panel === 'predictions') return { panel, aiSport: SPORTS.includes(parts[1]) ? parts[1] : 'all', aiSub: subs[parts[2]] || 'board' };
     if (panel === 'fantasy' && FANTASY_SECTIONS.includes(parts[1])) return { panel, section: parts[1] };
-    if (['nfl', 'cfb'].includes(panel)) return { panel, sportView: parts[1] === 'research' ? 'research' : 'games' };
+    if (['nfl', 'cfb', 'nba'].includes(panel)) return { panel, sportView: parts[1] === 'research' ? 'research' : 'games' };
     return { panel };
   }
   function hashFor(r) {
     const path = names[r.panel] || r.panel;
     if (r.panel === 'predictions') return `#/models/${SPORTS.includes(r.aiSport) ? r.aiSport : 'all'}/${subNames[r.aiSub] || 'picks'}`;
     if (r.panel === 'fantasy' && FANTASY_SECTIONS.includes(r.section)) return `#/fantasy/${r.section}`;
-    if (['nfl', 'cfb'].includes(r.panel) && r.sportView === 'research') return `#/${r.panel}/research`;
+    if (['nfl', 'cfb', 'nba'].includes(r.panel) && r.sportView === 'research') return `#/${r.panel}/research`;
     return `#/${path}`;
   }
   function group(r) {

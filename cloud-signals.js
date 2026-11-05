@@ -58,7 +58,7 @@
   }
   const safeID=value=>{if(!/^[\w.:-]+$/.test(String(value))) throw Error('Invalid event or provider identifier.'); return String(value);};
   async function loadCurrent(sport,eventIds=[]) {
-    if(!['nfl','cfb'].includes(sport)) return {state:'unsupported',quotes:[],decisions:[]};
+    if(!['nfl','cfb','nba'].includes(sport)) return {state:'unsupported',quotes:[],decisions:[]};
     const ids=[...new Set(eventIds.map(safeID))].sort();
     if(!ids.length) return {state:'ready',quotes:[],decisions:[],complete:true};
     if(ids.length>64) throw Error('Load at most 64 events at a time.');
@@ -75,17 +75,17 @@
     });
   }
   async function loadHistory(eventId,market,providerId,dateRange,sport='nfl') {
-    if(!['nfl','cfb'].includes(sport))throw Error('Choose NFL or CFB.');
+    if(!['nfl','cfb','nba'].includes(sport))throw Error('Choose NFL, CFB or NBA.');
     const dates=range(dateRange), id=safeID(eventId);
     if(!['moneyline','spread','total'].includes(market)) throw Error('Choose a supported market.');
     const key=`history:${sport}:${id}:${market}:${providerId||''}:${dates.from}:${dates.to}`;
     return run(key,async()=>({quotes:await read('betting_quote_snapshots',{sport:`eq.${sport}`,event_id:`eq.${id}`,market:`eq.${market}`,...(providerId?{provider_id:`eq.${safeID(providerId)}`} : {}),and:`(observed_at.gte.${dates.from},observed_at.lt.${dates.to})`,select:'*',order:'observed_at.asc,id.asc'}),dateRange:dates}));
   }
   async function loadResults(ruleId,version,dateRange={},filters={}) {
-    const sport=filters.sport||'nfl';if(!['nfl','cfb'].includes(sport))throw Error('Choose NFL or CFB.');
+    const sport=filters.sport||'nfl';if(!['nfl','cfb','nba'].includes(sport))throw Error('Choose NFL, CFB or NBA.');
     const key=`results:${JSON.stringify([ruleId,version,dateRange,filters])}`;
     return run(key,async()=>{
-      const research=sport==='cfb'||['explore','situations'].includes(filters.scope);
+      const research=sport!=='nfl'||['explore','situations'].includes(filters.scope);
       const scope={sport:`eq.${sport}`,rule_id:research?`like.${sport}_research_*`:`not.like.${sport}_research_*`,select:'scheduled_start_at'};
       const [first,last]=await Promise.all([
         read('betting_system_decisions',{...scope,order:'scheduled_start_at.asc'},true),
@@ -100,7 +100,7 @@
         if(availableRange.from&&(from<availableRange.from||to>availableRange.to)) throw Error(`Choose saved game dates between ${availableRange.from} and ${availableRange.to}.`);
       } catch(err) { err.availableRange=availableRange; throw err; }
       let decisions=await read('betting_system_decisions',{sport:`eq.${sport}`,rule_id:research?`like.${sport}_research_*`:ruleId?`eq.${safeID(ruleId)}`:`not.like.${sport}_research_*`,...(version?{rule_version:`eq.${safeID(version)}`} : {}),...(filters.market?{market:`eq.${safeID(filters.market)}`} : {}),and:`(scheduled_start_at.gte.${dates.from},scheduled_start_at.lt.${dates.to})`,select:'*',order:'decided_at.asc,id.asc'});
-      decisions=decisions.filter(d=>(!d.sport||d.sport===sport)&&/^(nfl|cfb)_research_/.test(String(d.rule_id||''))===research);
+      decisions=decisions.filter(d=>(!d.sport||d.sport===sport)&&/^(nfl|cfb|nba)_research_/.test(String(d.rule_id||''))===research);
       const cohorts=[...new Set(decisions.map(d=>d.model_context?.engine||d.model_context?.engine_version||'unavailable'))];
       const providers=[...new Set(decisions.map(d=>d.inputs?.provider_id||d.provider_id).filter(Boolean))];
       if(filters.provider) decisions=decisions.filter(d=>String(d.inputs?.provider_id||d.provider_id)===filters.provider);
