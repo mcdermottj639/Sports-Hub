@@ -710,7 +710,39 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v345** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v346** (backend **b17-fantasy-league-rules**).
+
+### v346 — Four more frozen NFL rules + Action Network-style system cards
+
+Jack, after comparing Action Network PRO's Systems screen with our research:
+"Yes add the rules we don't have as frozen rules we can keep tracking and I
+like how they have it looking with %win and roi so use that too."
+`betting-signals-core.js` `RULES` grows from 2 to 6: `nfl_dog_after_blowout`
+(underdog by the frozen spread whose previous game was a loss by 14+, spread),
+`nfl_early_season_dog_ml` (weeks 1–4 underdog, moneyline),
+`nfl_early_winless_team` (weeks 2–6, exactly one team at 0 wins with ≥1 game,
+spread on the winless team) and `nfl_week3_dog` (week 3 underdog, spread).
+Thresholds are OURS (AN publishes none) and fixed at v1 — change one only by
+adding a v2, never by editing v1. "Underdog" is always read from the frozen
+SPREAD quote (home line > 0 → home), so it means the same thing in every rule;
+pick'em is not_matched, a missing spread is insufficient_data. These rules
+resolve `selection_side` per game (`side:'dog'|'winless'` in RULES), so
+`grade()` and `performance()` needed no change. `signals.ts` now carries
+`week` (ESPN `ev.week.number`) and each team's overall W-L-T from the
+scoreboard competitor `records` into the frozen inputs (`home_wins`,
+`home_games`, …); the previous-game margin was already there. Same freeze
+window, same idempotent upsert; per game the collector now writes 12 decision
+rows (6 rules + 6 research sides) instead of 8. Nothing is backfilled: three
+of the four new rules are early-season only and will first collect in Sept
+2027; blowout-dog collects from Week 10. Not added (we lack the inputs):
+AN's public-betting, playoff, wind and prior-season systems.
+UI: `resultCard` is now a system card — win % and ROI in the top right,
+active (pending) picks, record, and a cumulative-units sparkline from settled
+entries in kickoff order; every fixed rule shows a card even before its first
+match. The scope button reads "Systems (fixed rules)". Collector shim
+repinned to this commit. Tests: `tests/betting-signals-core.test.js` (v346
+block), collector decision counts 8 → 12.
+
 
 ### v345 — Closing line value for the app's own picks
 

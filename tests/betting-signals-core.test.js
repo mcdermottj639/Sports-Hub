@@ -11,3 +11,30 @@ test('settlement requires confirmed final and respects side line',()=>{const d={
 test('actual price ROI includes pushes; never includes voids or unpriced matches',()=>{let i=0;const d=[];for(const [result,n] of [['win',10],['loss',7],['push',1],['void',3]])for(let k=0;k<n;k++)d.push({id:++i,rule_id:'r1',sport:'nfl',status:'matched',selected_price:-110,result});d.push({id:++i,rule_id:'r1',sport:'nfl',status:'unpriced_match',result:'win'});const r=C.performance(d)[0];assert.equal(r.risk,18);assert.ok(Math.abs(r.units-2.09090909)<1e-7);assert.ok(Math.abs(r.roi-11.6161616)<1e-6);assert.equal(r.unpriced,1);assert.equal(C.performance([...d,d[0]])[0].risk,18);});
 test('cohorts separate provider, engine and version',()=>{const d={id:1,sport:'nfl',rule_id:'r',rule_version:'v1',status:'matched',selected_price:150,result:'win',inputs:{provider_id:'100'}};assert.equal(C.performance([d,{...d,id:2,inputs:{provider_id:'101'}},{...d,id:3,rule_version:'v2'}]).length,3);assert.equal(C.performance([d])[0].units,1.5);});
 test('mixed ESPN representations never pair legacy prices with changed nested lines',()=>{const raw={provider:{id:'100'},spread:-3,awayTeamOdds:{spreadOdds:-110},homeTeamOdds:{spreadOdds:-115},pointSpread:{home:{close:{line:'-4'}},away:{close:{line:'+4'}}},overUnder:43,underOdds:-115,overOdds:-105,total:{over:{close:{line:'o44'}},under:{close:{line:'u44'}}}};let q=C.normalizeOdds(raw,{});assert.equal(q[1].line,-4);assert.equal(q[1].away_price,null);assert.equal(q[1].home_price,null);assert.equal(q[2].line,44);assert.equal(q[2].under_price,null);assert.equal(q[2].over_price,null);raw.spread=-4;raw.overUnder=44;q=C.normalizeOdds(raw,{});assert.equal(q[1].away_price,-110);assert.equal(q[2].under_price,-115);raw.pointSpread.away.close.odds='+105';raw.total.under.close.odds='-120';q=C.normalizeOdds(raw,{});assert.equal(q[1].away_price,105);assert.equal(q[2].under_price,-120);});
+// v346 — dynamic-side rules
+test('v346 rules: underdog comes from the frozen spread; week and records gate each rule',()=>{
+ const spread={market:'spread',line:-4,home_price:-110,away_price:-110,provider_id:'100',provider_name:'DK',quality_flags:[],source_updated_at:new Date().toISOString()};
+ const ml={market:'moneyline',line:null,home_price:-190,away_price:160,provider_id:'100',provider_name:'DK',quality_flags:[],source_updated_at:new Date().toISOString()};
+ const base={...inputs,week:3,home_previous_margin:10,away_previous_margin:-21,home_wins:2,home_losses:1,home_ties:0,home_games:3,away_wins:0,away_losses:3,away_ties:0,away_games:3};
+ const by=id=>C.evaluateRules(base,[spread,ml]).find(r=>r.rule_id===id);
+ let r=by('nfl_dog_after_blowout');assert.equal(r.status,'matched');assert.equal(r.selection_side,'away');assert.equal(r.selection_line,4);assert.equal(r.selected_price,-110);
+ r=by('nfl_week3_dog');assert.equal(r.status,'matched');assert.equal(r.selection_side,'away');
+ r=by('nfl_early_season_dog_ml');assert.equal(r.status,'matched');assert.equal(r.market,'moneyline');assert.equal(r.selected_price,160);assert.equal(r.selection_line,null);
+ r=by('nfl_early_winless_team');assert.equal(r.status,'matched');assert.equal(r.selection_side,'away');assert.equal(r.selection_line,4);
+ // home dog after a blowout, week 7: only the blowout rule matches, and it picks home
+ const w7=C.evaluateRules({...base,week:7,home_previous_margin:-17},[{...spread,line:3},ml]);
+ assert.equal(w7.find(r=>r.rule_id==='nfl_dog_after_blowout').selection_side,'home');assert.equal(w7.find(r=>r.rule_id==='nfl_dog_after_blowout').selection_line,3);
+ for(const id of ['nfl_week3_dog','nfl_early_season_dog_ml','nfl_early_winless_team'])assert.equal(w7.find(r=>r.rule_id===id).status,'not_matched',id);
+ // pick'em → no underdog → not matched, never insufficient
+ assert.equal(C.evaluateRules(base,[{...spread,line:0},ml]).find(r=>r.rule_id==='nfl_week3_dog').status,'not_matched');
+ // missing week / records / previous margin → insufficient_data
+ assert.equal(C.evaluateRules({...base,week:null},[spread,ml]).find(r=>r.rule_id==='nfl_week3_dog').status,'insufficient_data');
+ assert.equal(C.evaluateRules({...base,away_wins:null},[spread,ml]).find(r=>r.rule_id==='nfl_early_winless_team').status,'insufficient_data');
+ assert.equal(C.evaluateRules({...base,away_previous_margin:null},[spread,ml]).find(r=>r.rule_id==='nfl_dog_after_blowout').status,'insufficient_data');
+ // both winless → not matched; no spread quote → insufficient
+ assert.equal(C.evaluateRules({...base,home_wins:0},[spread,ml]).find(r=>r.rule_id==='nfl_early_winless_team').status,'not_matched');
+ assert.equal(C.evaluateRules(base,[ml]).find(r=>r.rule_id==='nfl_week3_dog').status,'insufficient_data');
+ // grading uses the resolved side and line
+ assert.equal(C.grade({status:'matched',market:'spread',selection_side:'away',selection_line:4},{state:'post',completed:true,home:{score:24},away:{score:21}}),'win');
+ assert.equal(C.grade({status:'matched',market:'moneyline',selection_side:'away',selection_line:null},{state:'post',completed:true,home:{score:24},away:{score:21}}),'loss');
+});

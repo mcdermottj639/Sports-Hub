@@ -74,3 +74,22 @@
 .bs-q-key .bs-q{padding:1px 7px}
 .bs-situation-body>.bs-source:first-child{margin:2px 0 8px}
 .bs-games-fold{margin:10px 0 0}.bs-results .bs-games-fold>summary{text-decoration:none;font-weight:700;font-size:14px}.bs-games-fold .bs-recent>h4{display:none}
+
+/* v346 — system cards (% win / ROI / active picks / sparkline) */
+.bs-sys .bs-sys-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;min-width:0}
+.bs-sys .bs-sys-title{min-width:0}
+.bs-sys .bs-sys-title h4{margin:0 0 2px;font-size:15px;line-height:1.25}
+.bs-sys .bs-sys-market{font-size:11.5px;color:var(--muted)}
+.bs-sys .bs-sys-stats{display:flex;gap:12px;flex:0 0 auto;text-align:right}
+.bs-sys .bs-sys-stats > span{display:flex;flex-direction:column;font-size:19px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.bs-sys .bs-sys-stats small{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-top:3px}
+.bs-sys .bs-sys-foot{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;margin-top:10px;min-width:0}
+.bs-sys .bs-sys-active{font-size:12.5px;color:var(--muted)}
+.bs-sys .bs-sys-active b{display:inline-block;min-width:20px;padding:1px 6px;border-radius:6px;background:var(--accent);color:#06241b;font-weight:800;text-align:center;margin-right:4px}
+.bs-sys .bs-record{font-size:12.5px;margin:0;flex:1 1 auto}
+.bs-spark{width:120px;height:34px;flex:0 0 auto;margin-left:auto}
+.bs-spark-zero{stroke:rgba(255,255,255,.18);stroke-width:1}
+.bs-spark-line{fill:none;stroke-width:1.6}
+.bs-spark-line.up,.bs-spark-fill.up{stroke:var(--accent);fill:var(--accent)}
+.bs-spark-line.down,.bs-spark-fill.down{stroke:#ff7b80;fill:#ff7b80}
+.bs-spark-fill{opacity:.18;stroke:none}
