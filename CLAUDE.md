@@ -716,7 +716,8 @@ Current version as of this writing: **v352** (backend **b17-fantasy-league-rules
 - CFB (Top 25 only) gets the Situational trends scope (18 situations incl. conference/nonconference, ranked-vs-ranked, ranked-vs-unranked, rest, road/home dog). No fixed rules for CFB/NBA.
 - NBA: new Games | Research switch on the NBA panel (`#/nba/research`), Research desk jump card. Market sides + 13 situations (back-to-back, 3-in-4, opponent on a B2B, rest edge/deficit, road/home dog, after win/loss/blowout). Situations come from `SportsHubSituations.forSport(sport)`.
 - Collector (sports-hub-ai): watches NBA too, quotes only within 3h of tip (`NBA_QUOTE_WINDOW_MS`) to cap cost; freezes `nba_research_*` sides only; records second-previous game time for 3-in-4. Fixes the v346 gap: ESPN event now carries week number and team W-L, so week/winless fixed rules stop freezing as insufficient_data.
-- Migration `20261105010000_nba_betting_research.sql` widens sport checks to nfl/cfb/nba. Needs applying + sports-hub-ai repin before NBA rows appear.
+- Migration `20261105010000_nba_betting_research.sql` widens sport checks to nfl/cfb/nba (applied 2026-11-05).
+- Follow-up fix: NBA games whose forecast is reused/deferred by the budget planner left the loop before `saveSignalDecision`, so research sides never froze. The skip branch now freezes sides (model_context availability `reused`) when quotes were captured this run; the 30–60 min window is still enforced in `saveSignalDecision`.
 
 ### v351 — Research takes the bottom-bar slot; Fantasy leads a rebuilt More
 

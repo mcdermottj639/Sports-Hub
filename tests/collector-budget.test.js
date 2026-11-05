@@ -54,8 +54,12 @@ test('collector imports the budget, plans the NBA pass and skips non-planned gam
  assert.match(src,/import '\.\.\/_shared\/collector-budget\.js';/);
  assert.match(src,/BUDGET\.plan\(games,saved\|\|\[\],sport==='nba'/);
  assert.match(src,/requireVersions:\[early\],cap:Infinity,protectMs:BUDGET\.CFB_PROTECT_MS/);
- const skip=src.indexOf("if(planForecast&&!planForecast.has(String(g.id))){await enrichPrices(g);await enrichProbabilities(g);continue;}"),pred=src.indexOf('const baseline=await predict(sport,g)');
+ const skip=src.indexOf("if(planForecast&&!planForecast.has(String(g.id))){"),pred=src.indexOf('const baseline=await predict(sport,g)');
  assert.ok(skip>0&&pred>skip,'non-planned NBA games must leave the loop before the forecast, after price enrichment');
+ const block=src.slice(skip,pred);
+ assert.match(block,/await enrichPrices\(g\);await enrichProbabilities\(g\);/);assert.match(block,/continue;/);assert.doesNotMatch(block,/predict\(/);
+ // v352: reused forecasts still freeze research sides inside the decision window.
+ assert.match(block,/if\(watch&&quotes\.length\)\{inputs=await signalInputs\(g\)/);assert.match(block,/saveSignalDecision\(db,g,quotes,inputs,\{engine:[\s\S]*?availability:'reused'/);
  assert.match(src,/if\(!BUDGET\.pregameEligible\(g\)\)\{skipped\+\+;continue;\}/);
  assert.match(src,/reused:0,deferred:0,cap:BUDGET\.DEFAULT_CAP/);
 });

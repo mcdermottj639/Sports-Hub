@@ -377,7 +377,14 @@ Deno.serve(async(req:Request)=>{
           }
           if(!BUDGET.pregameEligible(g)){skipped++;continue;}
           if(sport==='nba')nba.eligible++;
-          if(planForecast&&!planForecast.has(String(g.id))){await enrichPrices(g);await enrichProbabilities(g);continue;}
+          if(planForecast&&!planForecast.has(String(g.id))){
+            await enrichPrices(g);await enrichProbabilities(g);
+            // v352: a reused/deferred forecast must still freeze research sides when the
+            // game is inside its decision window (quotes were captured this run).
+            if(watch&&quotes.length){inputs=await signalInputs(g).catch(()=>{signalError();return null;});
+              if(inputs)try{const out=await saveSignalDecision(db,g,quotes,inputs,{engine:`scheduled-${modelVersionFor(sport)}`,availability:'reused',calculated_at:null});signals.evaluated+=out.evaluated;signals.unpriced+=out.unpriced;}catch(_){signalError();}}
+            continue;
+          }
           const evidencePromise=(sport==='nfl'||sport==='cfb')?footballEvidence(sport,g).catch(()=>null):Promise.resolve(null);
           const inputsPromise=watch?signalInputs(g).catch(()=>{signalError();return null;}):Promise.resolve(null);
           await enrichPrices(g);
