@@ -116,3 +116,42 @@ test('worker grades through failed game-log requests, preserves snapshots and sa
  claimed=false;result=await (await invoke()).json();
  assert.equal(result.coverage_status,'settled');assert.equal(patches.length,1);
 });
+function harness(job,data,stored){
+ const patches=[],seen=[];let handler,claimed=false;
+ const source=fs.readFileSync(require.resolve('../supabase/functions/sports-hub-props/index.ts'),'utf8').replace(/^import .*;\n/gm,'');
+ const context={SportsHubPropsCore:C,console:{error(){},warn(){}},URLSearchParams,AbortSignal,Response,Date,
+  Deno:{env:{get:k=>k==='SUPABASE_URL'?'https://db.test':'test-only'},serve:fn=>{handler=fn;}},
+  fetch:async(url,init={})=>{
+   const u=new URL(url);seen.push(u.hostname+u.pathname);
+   if(u.pathname.endsWith('/summary'))return Response.json(data);
+   if(u.pathname.includes('/gamelog'))return new Response('unavailable',{status:503});
+   if(u.pathname.endsWith('/rpc/claim_prop_game')){if(claimed)return Response.json([]);claimed=true;return Response.json([job]);}
+   if(u.pathname.endsWith('/prop_picks')){
+    if(init.method==='PATCH'){const patch=JSON.parse(init.body);patches.push(patch);Object.assign(stored,patch);return Response.json([stored]);}
+    if(!stored)return Response.json([]);
+    return Response.json(u.searchParams.get('result')==='eq.pending'&&stored.result!=='pending'?[]:[stored]);
+   }
+   if(u.pathname.endsWith('/prop_games')){Object.assign(job,JSON.parse(init.body));return Response.json([job]);}
+   if(u.pathname.endsWith('/prop_runs'))return Response.json([]);
+   throw Error('Unexpected request '+url);
+  }};
+ vm.runInNewContext(stripTypeScriptTypes(source),context);
+ return {invoke:async()=>(await handler({method:'POST',json:async()=>({mode:'worker'})})).json(),patches,seen};
+}
+test('v353 worker keeps grading saved props-v1 picks after the v2 switch',async()=>{
+ const {data,game,pick}=sample('mlb','4872595','RBIs');
+ const job={sport:'mlb',event_id:game.id,starts_at:game.date,game:{...game,season:2026,seasonType:3}};
+ const stored={...pick,model_version:'props-v1',captured_at:'2026-10-07T05:42:01.168Z'};
+ const w=harness(job,data,stored),result=await w.invoke();
+ assert.equal(result.coverage_status,'settled');assert.equal(stored.result,'loss');assert.equal(stored.model_version,'props-v1');
+ assert.equal(w.patches.length,1);assert.deepEqual(Object.keys(w.patches[0]).sort(),['actual','result','settled_at','settlement_note']);
+});
+test('v353 worker waits until 24 hours before the start without fetching the odds page',async()=>{
+ const {data,game}=sample('mlb','4872595','RBIs'),start=new Date(Date.now()+48*3600000).toISOString();
+ const co=data.header.competitions[0];co.date=start;co.status={type:{state:'pre',completed:false,detail:'Scheduled'}};
+ const job={sport:'mlb',event_id:game.id,starts_at:start,game:{...game,date:start,state:'pre',completed:false,season:2026,seasonType:2}};
+ const w=harness(job,data,null),result=await w.invoke();
+ assert.equal(result.coverage_status,'queued');assert.match(result.coverage_note,/within 24 hours/);
+ assert.ok(Math.abs(Date.parse(result.next_poll_at)-(Date.parse(start)-24*3600000))<5000);
+ assert.ok(!w.seen.some(x=>x.startsWith('www.espn.com')));
+});

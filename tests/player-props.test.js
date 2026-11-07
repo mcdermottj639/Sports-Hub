@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
 const C=require('../supabase/functions/_shared/prop-model.js'),R=require('../desk-core.js');
-const now=Date.parse('2026-10-07T05:00:00Z'),g={id:'123',sport:'nfl',state:'pre',seasonType:2,date:'2026-10-09T00:15:00Z',home:{id:'6'},away:{id:'27'},probables:[]};
+const now=Date.parse('2026-10-07T05:00:00Z'),g={id:'123',sport:'nfl',state:'pre',seasonType:2,date:'2026-10-07T20:15:00Z',home:{id:'6'},away:{id:'27'},probables:[]};
 const athlete={id:'9',displayName:'Player',team:{id:'6',abbreviation:'DAL'},active:true};
 const quote={athlete_id:'9',market:'rushingYards',market_label:'Rushing yards',line:50.5,price:-110,side:'over',quote_at:new Date(now).toISOString(),provider:'DraftKings'};
 const history=Array.from({length:20},(_,i)=>({id:String(i),date:new Date(now-(21-i)*7*864e5).toISOString(),team_id:'6',opponent_id:'27',stats:{rushingYards:40+i*2}}));
@@ -53,7 +53,9 @@ test('pitchers require a probable start and NBA/MLB reject missing or sharply re
  assert.equal(C.project({...quote,market:'hits',line:.5},h.slice(0,14).map(r=>({...r,stats:{hits:1,atBats:4}})),athlete,game,now),null);
 });
 test('push probabilities and paper ROI respect returned stakes',()=>{
- const p=C.project({...quote,line:50},history,athlete,g,now);assert.ok(Math.abs(p.model_probability+p.push_probability+(p.features.losses+1)/22-1)<1e-10);
+ const p=C.project({...quote,line:50},history,athlete,g,now);assert.equal(p.features.pushes,1);assert.ok(Math.abs(p.push_probability-1/22)<1e-12);
+ assert.ok(p.model_probability>0&&p.model_probability+p.push_probability<1);
+ assert.ok(Math.abs(p.expected_return-(p.model_probability*C.payout(-110)-(1-p.model_probability-p.push_probability)))<1e-12);
  const base={model_version:C.VERSION,captured_at:new Date(now).toISOString(),starts_at:g.date};
  const r=C.performance([{...base,result:'win',price:150},{...base,result:'loss',price:-110},{...base,result:'push',price:-110},{...base,result:'void',price:-110},{...base,result:'pending',price:-110}]);
  assert.equal(r.profit,.5);assert.equal(r.priced,3);assert.equal(r.roi,1/6);assert.equal(r.n,2);assert.equal(r.pending,1);assert.equal(r.voids,1);
@@ -68,4 +70,37 @@ test('grading waits for final exact-event statistics and handles pushes, DNP and
 test('player prop routes are available for every modeled league',()=>{
  for(const sport of C.SPORTS)assert.equal(R.hashFor(R.route(`#/models/${sport}/props`)),`#/models/${sport}/props`);
  const app=fs.readFileSync(require.resolve('../app.js'),'utf8');assert.match(app,/delete container.dataset.propToken/);
+});
+
+test('v2 probabilities start from the no-vig market and only lean toward the hit rate',()=>{
+ assert.equal(C.VERSION,'props-v2');assert.deepEqual(C.LEGACY,['props-v1']);
+ assert.ok(Math.abs(C.fair(-110,-110)-.5)<1e-12);
+ assert.ok(Math.abs(C.fair(-110)-C.implied(-110)/C.ASSUMED_MARGIN)<1e-12);
+ assert.ok(Math.abs(C.fair(-150,130)-C.implied(-150)/(C.implied(-150)+C.implied(130)))<1e-12);
+ assert.equal(C.fair(50),null);
+ // 18 of 20 past games cleared 50.5: v1 said (18+1)/22 = 86%; v2 stays near the market.
+ const hot=history.map((r,i)=>({...r,stats:{rushingYards:i<2?40:60}}));
+ const p=C.project(quote,hot,athlete,g,now,20,-110);
+ assert.equal(p.features.hits,18);assert.ok(Math.abs(p.model_probability-(18+80*.5)/(20+80))<1e-12);
+ assert.ok(p.model_probability<.6&&p.model_probability>.5);assert.equal(p.features.market_probability,.5);
+ assert.equal(p.features.market_weight,C.MARKET_WEIGHT);assert.equal(p.features.opposite_price,-110);
+ assert.match(p.features.method,/No-vig market price/);
+ // Same record, no opposite price: the side's own price less the assumed margin.
+ const q=C.project(quote,hot,athlete,g,now);assert.ok(Math.abs(q.features.market_probability-C.implied(-110)/C.ASSUMED_MARGIN)<1e-12);assert.equal(q.features.opposite_price,null);
+ // A player who never cleared the line still is not called a lock either way.
+ const cold=C.project(quote,history.map(r=>({...r,stats:{rushingYards:10}})),athlete,g,now,20,-110);
+ assert.ok(cold.model_probability>.35&&cold.model_probability<.5);
+});
+test('v2 picks only within 24 hours of the start and pairs each quote with its opposite side',()=>{
+ assert.equal(C.captureOpen(g,now),true);
+ const far={...g,date:new Date(now+30*3600000).toISOString()};
+ assert.equal(C.captureOpen(far,now),false);assert.equal(C.project(quote,history,athlete,far,now),null);
+ const under={...quote,side:'under',price:-120},alt={...quote,line:60.5,side:'under',price:-200},other={...quote,provider:'FanDuel',side:'under',price:-105};
+ assert.equal(C.opposite(quote,[quote,alt,other,under]),-120);assert.equal(C.opposite(under,[quote,under]),-110);assert.equal(C.opposite(quote,[quote]),null);
+});
+test('legacy v1 picks keep their own record',()=>{
+ const base={captured_at:new Date(now).toISOString(),starts_at:g.date};
+ const rows=[{...base,model_version:'props-v1',result:'win',price:-110},{...base,model_version:'props-v1',result:'loss',price:-110},{...base,model_version:'props-v2',result:'win',price:100}];
+ assert.equal(C.performance(rows).n,1);assert.equal(C.performance(rows).profit,1);
+ const old=C.performance(rows,'props-v1');assert.equal(old.n,2);assert.equal(old.wins,1);
 });

@@ -1,5 +1,28 @@
 # Player prop model and tracking
 
+Current version `props-v2`, launched with app v353 (November 2026). It replaces
+`props-v1` (7 October – 7 November 2026), described below for history. v1 picks
+keep grading and keep their own record.
+
+## props-v2 changes
+
+- **Why:** v1 treated a player's raw hit rate at the line as the win
+  probability. Across 380 graded v1 picks the model averaged 67.4% and the picks
+  won 49.5%; the book's no-vig price averaged 48.8% and scored best
+  (Brier .252 vs .290). NFL picks were saved about 104 hours before kickoff.
+- **Probability:** `P(win) = (1 − P(push)) × (w + K·q) / (w + l + K)` with
+  `K = 80` market pseudo-games and `q` the no-vig market probability. `q` comes
+  from the opposite side at the same player, market, line and provider; when
+  that side is not posted, the side's own implied probability ÷ 1.045.
+  `P(push) = p/(n+2)` as before. On the v1 sample K = 80 averaged 52.8%
+  against 49.5% actual (Brier .253): still slightly high, so +EV labels stay
+  experimental.
+- **Timing:** nothing is captured until 24 hours before the start; the odds
+  page is not fetched earlier.
+- Everything else below (sources, gates, grading, immutability) is unchanged.
+
+The v1 description follows.
+
 Version `props-v1`, launched 7 October 2026. NFL, Top-25 CFB, NBA and MLB
 share an independent player-prop model and record. Existing game predictions
 and their validation are unchanged.

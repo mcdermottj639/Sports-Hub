@@ -1,7 +1,15 @@
 /* Deterministic player-prop baseline, shared by capture, UI and replay. */
 (function(root){
   'use strict';
-  const VERSION='props-v1',SPORTS=['nfl','cfb','nba','mlb'];
+  // props-v2 (v353): probabilities start from the posted market and only lean
+  // toward the player's hit rate. props-v1 (Oct 7 - Nov 7 2026) used the raw
+  // hit rate and said 67% where 380 graded picks won 49.5%. v1 picks stay
+  // saved and graded under their own record.
+  const VERSION='props-v2',LEGACY=['props-v1'],SPORTS=['nfl','cfb','nba','mlb'];
+  // Market prior weight in pseudo-games: with 20 games the player's own hit
+  // rate carries 20/(20+80)=20%. Chosen from the v1 graded record, where the
+  // no-vig market alone scored best (Brier .252 vs .290 for v1).
+  const MARKET_WEIGHT=80,ASSUMED_MARGIN=1.045,CAPTURE_HOURS=24;
   const path={nfl:'football/nfl',cfb:'football/college-football',nba:'basketball/nba',mlb:'baseball/mlb'};
   const definitions={
     passingYards:['Passing yards',['Passing Yards'],['nfl','cfb']],
@@ -32,6 +40,15 @@
   const price=v=>{const n=number(v);return n!=null&&Math.abs(n)>=100?n:null;};
   const payout=p=>p>0?p/100:100/-p;
   const implied=p=>p>0?100/(p+100):-p/(100-p);
+  // No-vig market probability for one side: from the opposite price at the
+  // same line when posted, else the side's own price less an assumed margin.
+  function fair(p,opposite){
+    if(price(p)==null)return null;const a=implied(p),b=price(opposite)!=null?implied(opposite):null;
+    return b!=null&&a+b>1?a/(a+b):a/ASSUMED_MARGIN;
+  }
+  // Picks are chosen within a day of the start so the saved price and the
+  // player's status are close to the market the bet would actually face.
+  const captureOpen=(game,at=Date.now())=>Date.parse(game.date)-at<=CAPTURE_HOURS*3600000;
   const mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
   // Parse JSON values from ESPN's public hydration data without executing scripts.
   function jsonField(text,key){
@@ -98,11 +115,11 @@
     if(athlete.active===false||/\bout\b|doubtful|inactive|injured reserve|suspend|disabled/i.test(status))return 'Player is unavailable';
     return null;
   }
-  function project(quote,history,athlete,game,at=Date.now(),window=20){
+  function project(quote,history,athlete,game,at=Date.now(),window=20,opposite=null){
     const sport=game.sport,quotedAt=Date.parse(quote.quote_at);
     if(!SPORTS.includes(sport)||!definitions[quote.market]?.[2].includes(sport)||unavailable(athlete,game)||String(athlete.id)!==String(quote.athlete_id))return null;
     if(!Number.isFinite(at)||!Number.isFinite(quotedAt)||!Number.isFinite(quote.line)||quote.line<0||price(quote.price)==null||!['over','under'].includes(quote.side))return null;
-    if(!(Date.parse(game.date)>at)||game.seasonType===1||game.state!=='pre'||quotedAt>at||at-quotedAt>15*60000)return null;
+    if(!(Date.parse(game.date)>at)||!captureOpen(game,at)||game.seasonType===1||game.state!=='pre'||quotedAt>at||at-quotedAt>15*60000)return null;
     const pitcher=quote.market.startsWith('pitcher');
     if(pitcher&&!game.probables?.includes(quote.athlete_id))return null;
     const cut=Math.min(at,Date.parse(game.date)),seen=new Map();
@@ -116,8 +133,10 @@
     if(rows.length<min)return null;
     const values=rows.map(r=>r.stats[quote.market]),n=values.length,avg=mean(values),recent=values.slice(-5),ordered=[...values].sort((a,b)=>a-b),median=(ordered[Math.floor((n-1)/2)]+ordered[Math.floor(n/2)])/2,sd=Math.sqrt(values.reduce((s,v)=>s+(v-avg)**2,0)/(n-1));
     const w=values.filter(x=>quote.side==='over'?x>quote.line:x<quote.line).length,push=values.filter(x=>x===quote.line).length,l=n-w-push;
-    // One prior observation on each side; pushes retain their observed mass.
-    const pWin=(w+1)/(n+2),pLoss=(l+1)/(n+2),pPush=push/(n+2),ev=pWin*payout(quote.price)-pLoss;
+    // Market prior: MARKET_WEIGHT pseudo-games at the no-vig price, then the
+    // player's decided games at this exact line. Pushes keep their observed mass.
+    const market=fair(quote.price,opposite),pPush=push/(n+2),hitRate=(w+1)/(w+l+2);
+    const pWin=(1-pPush)*(w+MARKET_WEIGHT*market)/(w+l+MARKET_WEIGHT),pLoss=1-pPush-pWin,ev=pWin*payout(quote.price)-pLoss;
     const workloadKey=sport==='nba'?'minutes':sport==='mlb'?(pitcher?'pitcherOuts':'atBats'):null;
     const workload=workloadKey?rows.map(r=>r.stats[workloadKey]).filter(Number.isFinite):[];
     const warning=(athlete.injuries||[]).map(x=>x.status).filter(Boolean);
@@ -125,9 +144,9 @@
     if(pitcher&&mean(workload.slice(-3))<9)return null;
     const matchup=rows.filter(r=>r.opponent_id===String(String(athlete.team.id)===String(game.home.id)?game.away.id:game.home.id));
     return {...quote,athlete_name:athlete.displayName||athlete.fullName,team_id:String(athlete.team.id),team_abbr:athlete.team.abbreviation||'',projection:avg,model_probability:pWin,push_probability:pPush,expected_return:ev,
-      features:{sample_size:n,window,mean:avg,last5:mean(recent),last10:mean(values.slice(-10)),median,sd,hits:w,losses:l,pushes:push,recent_hits:recent.filter(x=>quote.side==='over'?x>quote.line:x<quote.line).length,
+      features:{sample_size:n,window,mean:avg,market_probability:market,book_probability:implied(quote.price),hit_rate:hitRate,market_weight:MARKET_WEIGHT,opposite_price:price(opposite),last5:mean(recent),last10:mean(values.slice(-10)),median,sd,hits:w,losses:l,pushes:push,recent_hits:recent.filter(x=>quote.side==='over'?x>quote.line:x<quote.line).length,
         workload:workload.length?{name:workloadKey,mean:mean(workload),last3:mean(workload.slice(-3))}:null,matchup:matchup.length?{n:matchup.length,mean:mean(matchup.map(r=>r.stats[quote.market]))}:null,
-        warnings:warning,history:rows.map(r=>({event_id:r.id,date:r.date,value:r.stats[quote.market],opponent_id:r.opponent_id,workload:workloadKey?r.stats[workloadKey]??null:null})),method:'Empirical last-20 same-team games; one prior observation per side. Probabilities and returns are experimental.',athlete_checked_at:new Date(at).toISOString()}};
+        warnings:warning,history:rows.map(r=>({event_id:r.id,date:r.date,value:r.stats[quote.market],opponent_id:r.opponent_id,workload:workloadKey?r.stats[workloadKey]??null:null})),method:'No-vig market price as the prior ('+MARKET_WEIGHT+' pseudo-games), updated by the last-20 same-team hit rate at this line. Probabilities and returns are experimental.',athlete_checked_at:new Date(at).toISOString()}};
   }
   function select(candidates){
     const sorted=[...candidates].sort((a,b)=>b.expected_return-a.expected_return||b.features.sample_size-a.features.sample_size||String(a.athlete_id).localeCompare(String(b.athlete_id))||a.market.localeCompare(b.market));
@@ -191,11 +210,16 @@
     if(value==null||!Number.isFinite(value))return null;
     return {result:value===pick.line?'push':(pick.side==='over'?value>pick.line:value<pick.line)?'win':'loss',actual:value,reason};
   }
-  function performance(rows){
-    const selected=rows.filter(x=>x.model_version===VERSION&&Date.parse(x.captured_at)<Date.parse(x.starts_at)),settled=selected.filter(x=>['win','loss'].includes(x.result)),priced=selected.filter(x=>['win','loss','push'].includes(x.result)&&price(x.price)!=null);
+  function performance(rows,version=VERSION){
+    const selected=rows.filter(x=>x.model_version===version&&Date.parse(x.captured_at)<Date.parse(x.starts_at)),settled=selected.filter(x=>['win','loss'].includes(x.result)),priced=selected.filter(x=>['win','loss','push'].includes(x.result)&&price(x.price)!=null);
     const wins=settled.filter(x=>x.result==='win').length,profit=priced.reduce((s,x)=>s+(x.result==='win'?payout(x.price):x.result==='loss'?-1:0),0);
     return {n:settled.length,wins,losses:settled.length-wins,pushes:selected.filter(x=>x.result==='push').length,voids:selected.filter(x=>x.result==='void').length,pending:selected.filter(x=>x.result==='pending').length,priced:priced.length,profit,roi:priced.length?profit/priced.length:null};
   }
-  const api={VERSION,SPORTS,path,definitions,number,price,payout,implied,jsonField,packageFromHTML,quotes,statValues,logs,project,select,boxScoreRow,settle,performance};
+  // Opposite-side price at the same player/market/line/provider, or null.
+  function opposite(quote,all){
+    const o=all.find(x=>x.athlete_id===quote.athlete_id&&x.market===quote.market&&x.line===quote.line&&x.provider===quote.provider&&x.side!==quote.side);
+    return o?o.price:null;
+  }
+  const api={VERSION,LEGACY,MARKET_WEIGHT,ASSUMED_MARGIN,CAPTURE_HOURS,SPORTS,path,definitions,number,price,payout,implied,fair,captureOpen,opposite,jsonField,packageFromHTML,quotes,statValues,logs,project,select,boxScoreRow,settle,performance};
   root.SportsHubPropsCore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
