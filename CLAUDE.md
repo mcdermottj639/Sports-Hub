@@ -136,9 +136,11 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > NFL, Top-25 CFB, NBA and MLB have `#/models/{sport}/props` with up to two
 > different-player selections per game, exact posted lines/prices, saved player
 > history and a separate W/L/push/void, paper-profit and ROI record. Picks also
-> appear in game reports and league slate cards. The experimental `props-v1`
-> baseline ranks supported quotes from last-20 same-team game logs; it does not
-> claim calibrated probabilities or demonstrated betting value. Missing lines,
+> appear in game reports and league slate cards. Since v353 the experimental
+> `props-v2` baseline starts from the no-vig posted price and leans toward the
+> last-20 same-team hit rate (market = 80 games), picking within 24 h of the
+> start; retired `props-v1` picks keep grading under their own record. It does
+> not claim demonstrated betting value. Missing lines,
 > insufficient history and source failures remain explicit coverage states.
 > `sports-hub-props` discovers games every 15 minutes, with two isolated game
 > workers per minute. `prop_games`, `prop_picks` and `prop_runs` are read-only
@@ -710,7 +712,15 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v352** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v353** (backend **b17-fantasy-league-rules**).
+
+### v353 — Player props v2: odds-anchored probabilities, picked within 24 h
+- Why: props-v1 showed raw hit rates as win chances. 380 graded v1 picks (Oct 7 – Nov 7) averaged a 67.4% model probability and won 49.5%; the book's no-vig price averaged 48.8% (Brier: v1 .290, market .252). NFL picks were saved ~104 h before kickoff, so their prices were days stale (NFL 46–58, −15.9u).
+- `prop-model.js` VERSION `props-v2` (LEGACY `['props-v1']`). P(win) = (hits + 80 × no-vig market) / (decided games + 80), times (1 − push mass). No-vig uses the opposite side at the same player/market/line/provider (`opposite()`), else own price ÷ 1.045. Features save `market_probability`, `book_probability`, `hit_rate`, `market_weight`, `opposite_price`.
+- `captureOpen()`: no capture until 24 h before the start. The worker returns `queued` with one wake-up at start − 24 h and does not fetch the odds page before then (also cuts egress).
+- Worker grades pending picks of every version; captures only the current version. Games that already hold v1 picks keep them (no live data edited); v2 starts with games picked after deploy.
+- UI: cards show Book % beside Model %; v1 cards say `v1` instead of +EV/Lean; a game with v2 picks shows only those; the record headline is v2 with a separate "Retired v1" line.
+- Deploy = merge + Pages + redeploy `sports-hub-props` (no migration; no schema change).
 
 ### v352 — Research for every league: CFB Top 25 situations + NBA research
 - CFB (Top 25 only) gets the Situational trends scope (18 situations incl. conference/nonconference, ranked-vs-ranked, ranked-vs-unranked, rest, road/home dog). No fixed rules for CFB/NBA.

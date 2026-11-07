@@ -84,10 +84,11 @@ async function worker(){
   const toStart=Date.parse(job.starts_at)-Date.now();if(toStart>0)wait=Math.min(wait,Math.max(15*60000,toStart-15*60000));return wait;};
  const STALE=3*864e5;
  try{
-  const {g,data}=await gameNow(job),saved=await db(`prop_picks?${key}&model_version=eq.${C.VERSION}&select=*`);
+  // Every saved version is graded (props-v1 picks keep settling after v2); only the current version is captured.
+  const {g,data}=await gameNow(job),all=await db(`prop_picks?${key}&select=*`),saved=all.filter((x:any)=>x.model_version===C.VERSION);
   const year=g.season||(new Date(g.date).getUTCFullYear()+(g.sport==='nba'&&new Date(g.date).getUTCMonth()>=8?1:0));
-  if(saved.length){
-   for(const p of saved.filter((x:any)=>x.result==='pending')){
+  if(all.length&&(saved.length||g.state!=='pre'||Date.parse(g.date)<=Date.now())){
+   for(const p of all.filter((x:any)=>x.result==='pending')){
     if(g.state!=='post'&&!/cancel|postpon/i.test(g.status)&&Date.parse(g.date)===Date.parse(p.starts_at))continue;
     const dnp=C.boxScoreRow(p,g,data)?.didNotPlay===true;
     let history:any[]=[];
@@ -99,10 +100,12 @@ async function worker(){
     if(result)await db(`prop_picks?id=eq.${p.id}&result=eq.pending`,'PATCH',{result:result.result,actual:result.actual,settled_at:new Date().toISOString(),settlement_note:result.reason});
    }
    const pending=await db(`prop_picks?${key}&result=eq.pending&select=id`);
-   return finish({game:g,state:g.state,coverage_status:pending.length?'saved':'settled',coverage_note:pending.length?(g.state==='post'?'Waiting for final player statistics':'Selections and original lines are saved'):'Final prop results recorded',pick_count:saved.length,next_poll_at:pending.length&&Date.parse(g.date)>Date.now()-STALE?(Date.parse(g.date)>Date.now()?new Date(Date.parse(g.date)+2*3600000).toISOString():later(15*60000)):null,...(pending.length&&Date.parse(g.date)<=Date.now()-STALE?{coverage_note:'Stopped waiting for final player statistics 3 days after the game'}:{})});
+   return finish({game:g,state:g.state,coverage_status:pending.length?'saved':'settled',coverage_note:pending.length?(g.state==='post'?'Waiting for final player statistics':'Selections and original lines are saved'):'Final prop results recorded',pick_count:all.length,next_poll_at:pending.length&&Date.parse(g.date)>Date.now()-STALE?(Date.parse(g.date)>Date.now()?new Date(Date.parse(g.date)+2*3600000).toISOString():later(15*60000)):null,...(pending.length&&Date.parse(g.date)<=Date.now()-STALE?{coverage_note:'Stopped waiting for final player statistics 3 days after the game'}:{})});
   }
   if(g.state!=='pre'||g.seasonType===1||Date.parse(g.date)<=Date.now()||/cancel|postpon|suspend|delay/i.test(g.status))return finish({state:g.state,coverage_status:g.seasonType===1?'preseason':'not_captured',coverage_note:g.seasonType===1?'Preseason props are excluded':'No pregame prop picks were saved',next_poll_at:null});
   if(Date.parse(g.date)!==Date.parse(job.starts_at))await db(`prop_games?${key}`,'PATCH',{starts_at:g.date,game:g});
+  // v353: no prop page fetch until 24 h before the start; one wake-up then (also saves egress).
+  if(!C.captureOpen(g))return finish({state:g.state,coverage_status:'queued',coverage_note:`Props are picked within ${C.CAPTURE_HOURS} hours of the start`,next_poll_at:new Date(Math.max(Date.now()+15*60000,Date.parse(g.date)-C.CAPTURE_HOURS*3600000)).toISOString()});
   const html=await fetchData(`https://www.espn.com/${g.sport==='cfb'?'college-football':g.sport}/odds/_/gameId/${g.id}`,true),at=new Date().toISOString();
   const pkg=C.packageFromHTML(html,g.id),quotes=C.quotes(pkg,g.sport,g.id,at),refresh=Date.parse(g.date)-Date.now()>864e5?3600000:15*60000;
   if(Date.parse(pkg.gmStrp?.dt)!==Date.parse(g.date))throw Error('Prop feed start time does not match this game');
@@ -114,7 +117,7 @@ async function worker(){
   const candidates=(await mapLimit(ids,5,async(id)=>{
    try{
     const [detail,history]=await Promise.all([fetchData(`${COMMON}/${C.path[g.sport]}/athletes/${id}`),playerHistory(g.sport,id,year)]);
-    const athlete=detail.athlete||detail;return quotes.filter((q:any)=>q.athlete_id===id).map((q:any)=>C.project(q,history,athlete,g,Date.now())).filter(Boolean);
+    const athlete=detail.athlete||detail;return quotes.filter((q:any)=>q.athlete_id===id).map((q:any)=>C.project(q,history,athlete,g,Date.now(),20,C.opposite(q,quotes))).filter(Boolean);
    }catch(_){failures++;return [];}
   })).flat();
   // Retry an incomplete scan; a temporary player-data failure must not choose the winner.
