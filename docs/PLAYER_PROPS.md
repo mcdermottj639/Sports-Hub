@@ -21,9 +21,17 @@ keep grading and keep their own record.
   page is not fetched earlier.
 - Everything else below (sources, gates, grading, immutability) is unchanged.
 
+## v354 feed coverage
+
+- **College football:** ESPN posts no per-game odds page or player prop lines
+  for college games (the page answers 503; no CFB capture ever succeeded).
+  CFB Top-25 games are listed with that reason and are never scanned.
+- **Unpublished pages:** an odds page that is not posted yet (404 before the
+  start) counts as "waiting for lines", not a feed error.
+
 The v1 description follows.
 
-Version `props-v1`, launched 7 October 2026. NFL, Top-25 CFB, NBA and MLB
+Version `props-v1`, launched 7 October 2026. NFL, Top-25 CFB (no ESPN prop feed since v354), NBA and MLB
 share an independent player-prop model and record. Existing game predictions
 and their validation are unchanged.
 

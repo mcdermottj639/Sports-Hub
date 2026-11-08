@@ -712,7 +712,15 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v353** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v354** (backend **b17-fantasy-league-rules**).
+
+### v354 — Props feed: college football labelled (no ESPN prop lines), unposted pages are not errors
+- Why (Nov 7 audit, verified in data): CFB props never produced a capture (0 since Oct 7). Every CFB odds-page fetch answered `Source 503` (function logs); ESPN's college game pages have no Odds tab, so there is no public per-game prop feed. CFB alone was 4,957 of the week's failed scans. NBA added ~2,100 `Source 404` errors: the odds page is not published until near game day, and each 404 was logged as a source error.
+- `prop-model.js`: `NO_FEED` (cfb), `feedAvailable(sport)`, `pageNotPosted(error, game)`. `SPORTS` still includes cfb (DB check and discovery).
+- Worker: discovery lists CFB Top-25 games as `no_source` with the reason and no poll; already-queued CFB rows close as `no_source` before any fetch. Odds-page 404 before the start → `waiting_lines` ("sportsbook page not posted yet") on the normal refresh, not `source_error`. Other errors keep the v8 backoff.
+- Error volume context: the Nov 4 backoff had already cut failed scans from ~1,900–2,700/day (Oct 31–Nov 4) to ~130/day (Nov 5–7); v354 removes the CFB share and reclassifies NBA pre-publication 404s.
+- A real CFB prop source would need a new odds feed; not added.
+- Deploy = merge + Pages + redeploy `sports-hub-props` (no migration; no schema change).
 
 ### v353 — Player props v2: odds-anchored probabilities, picked within 24 h
 - Why: props-v1 showed raw hit rates as win chances. 380 graded v1 picks (Oct 7 – Nov 7) averaged a 67.4% model probability and won 49.5%; the book's no-vig price averaged 48.8% (Brier: v1 .290, market .252). NFL picks were saved ~104 h before kickoff, so their prices were days stale (NFL 46–58, −15.9u).

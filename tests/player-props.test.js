@@ -104,3 +104,18 @@ test('legacy v1 picks keep their own record',()=>{
  assert.equal(C.performance(rows).n,1);assert.equal(C.performance(rows).profit,1);
  const old=C.performance(rows,'props-v1');assert.equal(old.n,2);assert.equal(old.wins,1);
 });
+test('v354 college football has no prop feed: labelled, never scanned; other leagues still scan',()=>{
+ assert.equal(C.feedAvailable('cfb'),false);assert.match(C.NO_FEED.cfb,/college player prop lines/);
+ for(const s of ['nfl','nba','mlb'])assert.equal(C.feedAvailable(s),true);
+ assert.ok(C.SPORTS.includes('cfb'),'cfb stays a valid sport for discovery and the database check');
+ const src=fs.readFileSync(require('node:path').join(__dirname,'../supabase/functions/sports-hub-props/index.ts'),'utf8');
+ const guard=src.indexOf("if(!C.feedAvailable(job.sport))"),fetchAt=src.indexOf('await gameNow(job)');
+ assert.ok(guard>0&&guard<fetchAt,'worker closes no-feed rows before any source fetch');
+ assert.match(src,/coverage_status:'no_source',coverage_note:C\.NO_FEED\[sport\],next_poll_at:null/);
+});
+test('v354 an unpublished odds page before the start is waiting for lines, not a source error',()=>{
+ const at=Date.parse('2026-11-08T02:00:00Z'),game={date:'2026-11-09T00:30:00Z'};
+ assert.equal(C.pageNotPosted(Error('Source 404'),game,at),true);
+ assert.equal(C.pageNotPosted(Error('Source 503'),game,at),false);
+ assert.equal(C.pageNotPosted(Error('Source 404'),{date:'2026-11-08T01:00:00Z'},at),false,'after the start a 404 stays an error');
+});

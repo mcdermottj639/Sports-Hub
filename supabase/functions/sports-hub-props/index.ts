@@ -46,6 +46,8 @@ async function discover(){
      const g=event(e,sport);if(!g.id||!g.home.id||!g.away.id||!Number.isFinite(Date.parse(g.date)))continue;
      if(Date.parse(g.date)<Date.now()-864e5)continue;
      const preseason=g.seasonType===1,played=g.state!=='pre'||Date.parse(g.date)<=Date.now();
+     // v354: leagues without a public prop feed are listed with the reason and never scanned.
+     if(!C.feedAvailable(sport)){found.push({sport,event_id:g.id,starts_at:g.date,matchup:`${g.away.abbr} @ ${g.home.abbr}`,game:g,state:g.state,coverage_status:'no_source',coverage_note:C.NO_FEED[sport],next_poll_at:null});continue;}
      found.push({sport,event_id:g.id,starts_at:g.date,matchup:`${g.away.abbr} @ ${g.home.abbr}`,game:g,state:g.state,
       coverage_status:preseason?'preseason':played?'not_captured':'queued',coverage_note:preseason?'Preseason props are excluded':played?'No pregame prop picks were saved':'Waiting for the first prop scan',next_poll_at:preseason||played?null:new Date().toISOString()});
     }
@@ -83,6 +85,8 @@ async function worker(){
  const backoff=()=>{let wait=15*60000;if(job.coverage_status==='source_error'&&job.checked_at){const since=Date.now()-Date.parse(job.checked_at);if(since>0)wait=Math.min(6*3600000,Math.max(wait,2*since));}
   const toStart=Date.parse(job.starts_at)-Date.now();if(toStart>0)wait=Math.min(wait,Math.max(15*60000,toStart-15*60000));return wait;};
  const STALE=3*864e5;
+ // v354: rows queued before v354 for a league with no prop feed close without any fetch.
+ if(!C.feedAvailable(job.sport))return finish({coverage_status:'no_source',coverage_note:C.NO_FEED[job.sport],next_poll_at:null});
  try{
   // Every saved version is graded (props-v1 picks keep settling after v2); only the current version is captured.
   const {g,data}=await gameNow(job),all=await db(`prop_picks?${key}&select=*`),saved=all.filter((x:any)=>x.model_version===C.VERSION);
@@ -106,8 +110,12 @@ async function worker(){
   if(Date.parse(g.date)!==Date.parse(job.starts_at))await db(`prop_games?${key}`,'PATCH',{starts_at:g.date,game:g});
   // v353: no prop page fetch until 24 h before the start; one wake-up then (also saves egress).
   if(!C.captureOpen(g))return finish({state:g.state,coverage_status:'queued',coverage_note:`Props are picked within ${C.CAPTURE_HOURS} hours of the start`,next_poll_at:new Date(Math.max(Date.now()+15*60000,Date.parse(g.date)-C.CAPTURE_HOURS*3600000)).toISOString()});
-  const html=await fetchData(`https://www.espn.com/${g.sport==='cfb'?'college-football':g.sport}/odds/_/gameId/${g.id}`,true),at=new Date().toISOString();
-  const pkg=C.packageFromHTML(html,g.id),quotes=C.quotes(pkg,g.sport,g.id,at),refresh=Date.parse(g.date)-Date.now()>864e5?3600000:15*60000;
+  const refresh=Date.parse(g.date)-Date.now()>864e5?3600000:15*60000;
+  let html='';
+  // v354: the odds page 404s until ESPN publishes it (often the morning of an NBA game); that is "no lines yet", not an error.
+  try{html=await fetchData(`https://www.espn.com/${g.sport==='cfb'?'college-football':g.sport}/odds/_/gameId/${g.id}`,true);}
+  catch(e){if(C.pageNotPosted(e,g))return finish({state:g.state,coverage_status:'waiting_lines',coverage_note:'The sportsbook page for this game is not posted yet',quote_count:0,modeled_count:0,next_poll_at:later(refresh)});throw e;}
+  const at=new Date().toISOString(),pkg=C.packageFromHTML(html,g.id),quotes=C.quotes(pkg,g.sport,g.id,at);
   if(Date.parse(pkg.gmStrp?.dt)!==Date.parse(g.date))throw Error('Prop feed start time does not match this game');
   if(!quotes.length)return finish({state:g.state,coverage_status:'waiting_lines',coverage_note:'No supported player prop lines are posted in the available feed',quote_count:0,modeled_count:0,next_poll_at:later(refresh)});
   const ids=[...new Set(quotes.map((q:any)=>q.athlete_id))];
