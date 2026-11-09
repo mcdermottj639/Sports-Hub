@@ -27,7 +27,7 @@ function computeDimensions(d){const C=root.SportsHubSignalsCore,i=d.inputs||{},x
  // Historical non-neutral games can be classified only from known frozen team identities.
  const vz=i.venue_zone||(i.neutral===false&&(d.sport||i.sport)==='nfl'?baseZone(abbr[1]):null);
  const travel=t&&tz&&vz&&i.international!==true?`${tz}:${vz}`:null;
- return {...x,travel,international:typeof i.international==='boolean'?i.international:null,early:valid?day==='Sun'&&hour>=12&&hour<15:null,prime:valid?hour>=19:null,
+ return {...x,travel,international:typeof i.international==='boolean'?i.international:null,early:valid?day==='Sun'&&hour>=12&&hour<15:null,prime:valid?hour>=19:null,night:valid?(hour>=19?({Thu:'tnf',Sun:'snf',Mon:'mnf'})[day]||'other':'day'):null,
   returned:t?i[t+'_previous_international']??null:null,previousAway:t?i[t+'_previous_away']??null:null,previousMargin:t?C.number(i[t+'_previous_margin']):null,opponentBye:t?i[(t==='home'?'away':'home')+'_post_bye']??null:null};
 }
 // Display labels: which team each situation bets on. betSide 'both' = that team at home or on the road;
@@ -70,6 +70,10 @@ const defs=[
  ['division','Matchups & market','Division matchups','Verified same-division games. Examine both totals directions and team sides.',x=>known(x.division,v=>v==='division')],
  ['nondivision','Matchups & market','Non-division matchups','Verified different-division games.',x=>known(x.division,v=>v==='nondivision')],
  ['prime','Matchups & market','Primetime games','Kickoff at 7 PM Eastern or later.',x=>x.prime],
+ // v356 — the three NFL primetime windows, kept apart so each can show its own trend.
+ ['tnf','Matchups & market','Thursday Night Football','Thursday kickoff at 7 PM Eastern or later.',x=>known(x.night,v=>v==='tnf')],
+ ['snf','Matchups & market','Sunday Night Football','Sunday kickoff at 7 PM Eastern or later.',x=>known(x.night,v=>v==='snf')],
+ ['mnf','Matchups & market','Monday Night Football','Monday kickoff at 7 PM Eastern or later.',x=>known(x.night,v=>v==='mnf')],
  ['win','Previous result','After a win','Selected team won its previous completed regular-season game.',x=>team(x,()=>known(x.previousMargin,v=>v>0))],
  ['loss','Previous result','After a loss','Selected team lost its previous completed regular-season game.',x=>team(x,()=>known(x.previousMargin,v=>v<0))],
  ['bigloss','Previous result','After a 14+ point loss','Selected team lost its previous game by at least 14 points.',x=>team(x,()=>known(x.previousMargin,v=>v<=-14))],

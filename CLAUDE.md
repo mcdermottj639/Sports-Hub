@@ -712,7 +712,27 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v355** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v356** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v356 — TNF / SNF / MNF situational trends
+
+Jack: "Start tracking TNF, SNF and MNF as well to see if we can find trends."
+Three NFL game-wide situations in `_shared/research-situations.js` (Research →
+Situational trends, category Matchups & market): **Thursday / Sunday / Monday
+Night Football** = that Eastern weekday with a 7 PM ET or later kickoff, from a
+new `night` dimension (`tnf|snf|mnf|other|day`). The existing Primetime
+situation stays (it also covers Saturday and holiday nights). Thanksgiving
+afternoon games are not TNF.
+- Read-only over the six research sides the collector already freezes
+  (`scheduled_start_at` is in every row), so the trends cover every saved game
+  since collection began (Oct 1) — a filter over existing observations, not a
+  backfill. No collector, schema or rule change; no redeploy (signals.ts
+  imports the file for `scheduleContext` only).
+- First read, 9 Nov 2026 (settled research sides): MNF road ATS 5-0 (home
+  0-5), MNF over 4-1; SNF home ATS 4-2, O/U 3-3; TNF home ATS 4-2, O/U 3-3.
+  5-6 games per window: a direction to watch, not a system.
+- Test: `tests/research-situations.test.js` (+1).
+
 
 ### v355 — Full-season NFL systems replace the early-season / one-week rules
 

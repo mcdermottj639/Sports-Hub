@@ -69,7 +69,7 @@ test('team situations label rows by the team being bet, not a bare home/away sid
  assert.doesNotMatch(long,/Matching team sides only|<h4>Home team<\/h4>|priced results/);
  const dog=UI.situationBodyHTML('westeast');
  assert.match(dog,/<h4>West Coast team traveling east · road<\/h4>/);
- assert.ok(S.defs.filter(d=>!d.bet).every(d=>['intl','neutral','division','nondivision','prime','conf','nonconf','rankedboth','rankedmixed'].includes(d.id)));
+ assert.ok(S.defs.filter(d=>!d.bet).every(d=>['intl','neutral','division','nondivision','prime','tnf','snf','mnf','conf','nonconf','rankedboth','rankedmixed'].includes(d.id)));
 });
 test('each league gets its own situation list and NBA/CFB research has no fixed-rule scope',()=>{
  const ids=s=>S.forSport(s).map(d=>d.id);
@@ -80,4 +80,16 @@ test('each league gets its own situation list and NBA/CFB research has no fixed-
   assert.match(html,/data-bs-scope="situations"/);assert.doesNotMatch(html,/data-bs-scope="rules"/);}
  const nba=UI.systemResultsHTML({state:'ready',filters:{sport:'nba',scope:'situations'},decisions:[],settlements:[]});
  assert.match(nba,/data-situation-id="b2b"/);assert.doesNotMatch(nba,/data-situation-id="postbye"/);
+});
+
+test('v356 TNF / SNF / MNF split by Eastern weekday and a 7 PM kickoff',()=>{
+ const at=iso=>({sport:'nfl',rule_id:'nfl_research_total_over',market:'total',selection_side:'over',inputs:{scheduled_start_at:iso,sport:'nfl'}});
+ const ids=iso=>S.defs.filter(d=>['tnf','snf','mnf','prime'].includes(d.id)&&d.test(S.dimensions(at(iso)))).map(d=>d.id).sort();
+ assert.deepEqual(ids('2026-11-13T01:15:00Z'),['prime','tnf']);   // Thu 8:15 PM ET
+ assert.deepEqual(ids('2026-11-16T01:20:00Z'),['prime','snf']);   // Sun 8:20 PM ET
+ assert.deepEqual(ids('2026-11-17T01:15:00Z'),['mnf','prime']);   // Mon 8:15 PM ET
+ assert.deepEqual(ids('2026-11-15T18:00:00Z'),[]);                // Sun 1 PM ET
+ assert.deepEqual(ids('2026-11-26T17:30:00Z'),[]);                // Thanksgiving 12:30 PM ET is not TNF
+ assert.deepEqual(ids('2026-12-27T01:00:00Z'),['prime']);         // Sat 8 PM ET: primetime, none of the three
+ for(const id of ['tnf','snf','mnf']){const d=S.defs.find(x=>x.id===id);assert.ok(!d.bet);assert.deepEqual(S.forSport?S.forSport('cfb').filter(x=>x.id===id):[],[]);}
 });
