@@ -49,6 +49,15 @@
   // Picks are chosen within a day of the start so the saved price and the
   // player's status are close to the market the bet would actually face.
   const captureOpen=(game,at=Date.now())=>Date.parse(game.date)-at<=CAPTURE_HOURS*3600000;
+  // v354: ESPN publishes no per-game odds page (and so no player prop lines)
+  // for college football: the page answers 503 every time and CFB has never
+  // produced a capture (Oct 7 - Nov 7 2026, ~5,000 failed scans in a week).
+  // Sports listed here are discovered and labelled, never scanned.
+  const NO_FEED={cfb:'ESPN does not post college player prop lines, so no college props are picked'};
+  const feedAvailable=sport=>!Object.prototype.hasOwnProperty.call(NO_FEED,sport);
+  // A sportsbook page that is not published yet (404 before the start) means
+  // "no lines yet", not a feed failure: poll on the normal schedule.
+  const pageNotPosted=(error,game,at=Date.now())=>/Source 404/.test(String(error))&&Date.parse(game?.date)>at;
   const mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
   // Parse JSON values from ESPN's public hydration data without executing scripts.
   function jsonField(text,key){
@@ -220,6 +229,6 @@
     const o=all.find(x=>x.athlete_id===quote.athlete_id&&x.market===quote.market&&x.line===quote.line&&x.provider===quote.provider&&x.side!==quote.side);
     return o?o.price:null;
   }
-  const api={VERSION,LEGACY,MARKET_WEIGHT,ASSUMED_MARGIN,CAPTURE_HOURS,SPORTS,path,definitions,number,price,payout,implied,fair,captureOpen,opposite,jsonField,packageFromHTML,quotes,statValues,logs,project,select,boxScoreRow,settle,performance};
+  const api={VERSION,LEGACY,MARKET_WEIGHT,ASSUMED_MARGIN,CAPTURE_HOURS,SPORTS,NO_FEED,feedAvailable,pageNotPosted,path,definitions,number,price,payout,implied,fair,captureOpen,opposite,jsonField,packageFromHTML,quotes,statValues,logs,project,select,boxScoreRow,settle,performance};
   root.SportsHubPropsCore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
