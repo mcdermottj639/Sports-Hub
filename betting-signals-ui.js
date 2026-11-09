@@ -1,14 +1,15 @@
 (function(root){
   'use strict';
   const names={nfl_road_dog_extra_rest:'Road underdog with extra rest',nfl_divisional_under:'Divisional games · Under',
-    nfl_dog_after_blowout:'Underdog after a blowout loss',nfl_early_season_dog_ml:'Early-season underdog · Moneyline',nfl_early_winless_team:'Early-season winless team',nfl_week3_dog:'Week 3 underdog'};
+    nfl_dog_after_blowout:'Underdog after a blowout loss',nfl_dog_ml:'Underdog · Moneyline',nfl_struggling_team:'Struggling team (0–1 wins)',nfl_off_bye:'Team off a bye',nfl_short_week_under:'Short week · Under'};
   // v346 — plain-English rule text (thresholds are ours; Action Network does not publish theirs).
   const ruleText={nfl_road_dog_extra_rest:'Away underdog +3 to +7, with at least 3 extra rest days.',nfl_divisional_under:'Under the saved total in a verified divisional matchup.',
     nfl_dog_after_blowout:'The underdog by the frozen spread, when that team lost its previous game by 14 or more. Spread, that team.',
-    nfl_early_season_dog_ml:'Weeks 1–4: the underdog by the frozen spread, on the moneyline.',
-    nfl_early_winless_team:'Weeks 2–6: a team with zero wins (and at least one game played) against a team that has won. Spread, the winless team.',
-    nfl_week3_dog:'Week 3 only: the underdog by the frozen spread. Spread, that team.'};
-  const ruleMarket={nfl_road_dog_extra_rest:'NFL Spread',nfl_divisional_under:'NFL O/U',nfl_dog_after_blowout:'NFL Spread',nfl_early_season_dog_ml:'NFL ML',nfl_early_winless_team:'NFL Spread',nfl_week3_dog:'NFL Spread'};
+    nfl_dog_ml:'Every regular-season week: the underdog by the frozen spread, on the moneyline.',
+    nfl_struggling_team:'Every week: exactly one team has 0 or 1 wins after 3+ games. Spread, that team.',
+    nfl_off_bye:'Every week: exactly one team is playing its first game after its bye. Spread, that team.',
+    nfl_short_week_under:'Every week: both teams on 4 or fewer days of rest (Thursday games). Under the saved total.'};
+  const ruleMarket={nfl_road_dog_extra_rest:'NFL Spread',nfl_divisional_under:'NFL O/U',nfl_dog_after_blowout:'NFL Spread',nfl_dog_ml:'NFL ML',nfl_struggling_team:'NFL Spread',nfl_off_bye:'NFL Spread',nfl_short_week_under:'NFL O/U'};
   const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const time=v=>v&&Number.isFinite(Date.parse(v))?new Date(v).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/New_York',timeZoneName:'short'}):'Unavailable';
   const clock=v=>new Date(v).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'});
@@ -237,6 +238,7 @@
   }
   // Every fixed rule gets a card, so a rule that has not matched yet still shows as Collecting.
   function systemCards(groups,vm,f={}){
+    groups=groups.filter(g=>!root.SportsHubSignalsCore?.isRetired?.(g));
     const seen=new Set(groups.map(g=>g.rule_id));
     const rules=(root.SportsHubSignalsCore?.RULES||[]).filter(r=>!seen.has(r.id)&&(!f.rule||f.rule===r.id)&&(!f.market||f.market===r.market));
     return groups.map(g=>resultCard(g,vm)).join('')+rules.map(r=>resultCard({rule_id:r.id,rule_version:r.version},vm)).join('');
@@ -252,6 +254,6 @@
     const series=unitsSeries(g,vm.decisions||[],vm.settlements||[]);
     return sysCard({title:label(g),sub:`${ruleMarket[g.rule_id]||'NFL'} · Frozen rule`,w,l,p,roi,active,series,details:`<details><summary>Rule &amp; collection details</summary><p>${e(ruleText[g.rule_id]||'')}</p><p class="bs-source">${n?`Paper return ${Number.isFinite(units)?`${number(units,2)}u`:'—'} over ${n} priced settled entr${n===1?'y':'ies'} · 1 unit each at the frozen price · pushes return the stake.`:'No priced settled entries yet.'}</p><p class="bs-source">${e(g.rule_version||'v1')}${g.decision_policy?` · ${e(g.decision_policy)}`:''}${g.engine?` · ${e(g.engine)}`:''}${g.source_quality?` · source time ${e(g.source_quality)}`:''}${g.provider_id?` · book ${e(g.provider_id)}`:''}</p><p class="bs-source">${g.priced??0} of ${g.matched??0} matches priced · ${g.unpriced??g.unpriced_match??0} unpriced · ${g.insufficient_data??g.missing??0} missing inputs · ${g.missed_window??g.missed??0} missed windows · ${active} pending</p></details>`});
   }
-  const methodologyHTML=()=>note('<strong>Betting signals · six fixed NFL hypotheses.</strong><br>Road underdogs +3 to +7 with 3+ extra rest days; unders in verified divisional games; and, since v346, underdogs after a blowout loss, early-season underdog moneylines (weeks 1–4), early-season winless teams (weeks 2–6) and Week 3 underdogs. Every entry freezes at the first scheduled opportunity 30–60 minutes before kickoff and is graded on the frozen price; nothing is backtested or backfilled. Missing inputs and prices stay visible. Rules never increase model confidence.');
+  const methodologyHTML=()=>note('<strong>Betting signals · seven fixed NFL hypotheses, all season.</strong><br>Road underdogs +3 to +7 with 3+ extra rest days; unders in verified divisional games; underdogs after a blowout loss; and, since v355, underdog moneylines, struggling teams (0–1 wins), teams off a bye and short-week unders. Every rule can fire in any regular-season week. Every entry freezes at the first scheduled opportunity 30–60 minutes before kickoff and is graded on the frozen price; nothing is backtested or backfilled. Missing inputs and prices stay visible. Rules never increase model confidence.');
   const api=Object.freeze({signalsSummaryHTML,systemDetailHTML,systemResultsHTML,situationBodyHTML,methodologyHTML,chartHTML});root.SportsHubSignalsUI=api;if(typeof module==='object'&&module.exports)module.exports=api;
 })(globalThis);

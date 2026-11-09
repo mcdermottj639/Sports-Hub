@@ -4,12 +4,18 @@
 const RULES=[{id:'nfl_road_dog_extra_rest',version:'v1',market:'spread',side:'away',name:'Road underdog • extra rest'},{id:'nfl_divisional_under',version:'v1',market:'total',side:'under',name:'Divisional under'},
 // v346 — four more fixed NFL hypotheses, in the spirit of Action Network's "Systems" but with OUR thresholds
 // (theirs are not published) and graded prospectively like the two above. side:'dog' means the underdog by
-// the frozen spread (home line > 0 → home, < 0 → away; pick'em → no match); side:'winless' is the 0-win team.
+// the frozen spread (home line > 0 → home, < 0 → away; pick'em → no match); side:'struggling'/'bye' resolve to the one qualifying team (v355).
 {id:'nfl_dog_after_blowout',version:'v1',market:'spread',side:'dog',name:'Underdog after a blowout loss'},
-{id:'nfl_early_season_dog_ml',version:'v1',market:'moneyline',side:'dog',name:'Early-season underdog • moneyline'},
-{id:'nfl_early_winless_team',version:'v1',market:'spread',side:'winless',name:'Early-season winless team'},
-{id:'nfl_week3_dog',version:'v1',market:'spread',side:'dog',name:'Week 3 underdog'}];
-const BLOWOUT_MARGIN=-14, EARLY_WEEKS=[1,4], WINLESS_WEEKS=[2,6];
+// v355 — the three early-season / single-week rules (weeks 1–4 dog ML, weeks 2–6 winless, week 3 dog) are
+// RETIRED (Jack: "I don't want the early or one week systems"). They are replaced by four rules that can fire
+// every regular-season week. Retired ids stay in RETIRED_RULES so their old frozen rows are hidden, never edited.
+{id:'nfl_dog_ml',version:'v1',market:'moneyline',side:'dog',name:'Underdog • moneyline'},
+{id:'nfl_struggling_team',version:'v1',market:'spread',side:'struggling',name:'Struggling team (0–1 wins)'},
+{id:'nfl_off_bye',version:'v1',market:'spread',side:'bye',name:'Team off a bye'},
+{id:'nfl_short_week_under',version:'v1',market:'total',side:'under',name:'Short week • Under'}];
+const RETIRED_RULES=['nfl_early_season_dog_ml','nfl_early_winless_team','nfl_week3_dog'];
+const isRetired=d=>RETIRED_RULES.includes(String(d?.rule_id??d??''));
+const BLOWOUT_MARGIN=-14, STRUGGLING_MAX_WINS=1, STRUGGLING_MIN_GAMES=3, SHORT_WEEK_DAYS=4;
 // A broad observational cohort, NOT additional claimed betting systems.
 const RESEARCH=['moneyline','spread','total'].flatMap(market=>(market==='total'?['over','under']:['home','away']).map(side=>({id:`nfl_research_${market}_${side}`,version:'v1',market,side,name:`${market} · ${side}`})));
 const researchRules=(sport='nfl')=>RESEARCH.map(r=>({...r,id:r.id.replace(/^nfl_/,`${sport}_`)}));
@@ -60,14 +66,13 @@ function evaluateRules(inputs,quotes,now=Date.now()){const list=Array.isArray(qu
   // "underdog" means the same thing across rules; the price then comes from the rule's own market.
   const spread=list.find(x=>x?.market==='spread')||{},hl=number(spread.line);
   const dog=hl==null?null:hl>0?'home':hl<0?'away':'none';
-  const week=number(inputs.week);
   if(rule.side==='dog'){check('underdog','A priced underdog exists',dog==null?null:dog==='none'?'pick’em':dog,dog==null?null:dog!=='none');if(dog==='home'||dog==='away')side=dog;}
   if(rule.id==='nfl_dog_after_blowout'){const m=side==='home'||side==='away'?number(inputs[side+'_previous_margin']):null;check('blowout',`Underdog lost its previous game by ${-BLOWOUT_MARGIN}+`,m,dog==null?null:dog==='none'?false:m==null?null:m<=BLOWOUT_MARGIN);}
-  if(rule.id==='nfl_early_season_dog_ml')check('week',`Week ${EARLY_WEEKS[0]}–${EARLY_WEEKS[1]}`,week,week==null?null:week>=EARLY_WEEKS[0]&&week<=EARLY_WEEKS[1]);
-  if(rule.id==='nfl_week3_dog')check('week','Week 3',week,week==null?null:week===3);
-  if(rule.id==='nfl_early_winless_team'){check('week',`Week ${WINLESS_WEEKS[0]}–${WINLESS_WEEKS[1]}`,week,week==null?null:week>=WINLESS_WEEKS[0]&&week<=WINLESS_WEEKS[1]);const hw=number(inputs.home_wins),aw=number(inputs.away_wins),hg=number(inputs.home_games),ag=number(inputs.away_games);const hz=hw==null||hg==null?null:hw===0&&hg>0,az=aw==null||ag==null?null:aw===0&&ag>0;const one=hz==null||az==null?null:hz!==az;check('winless','Exactly one team is winless',hz==null||az==null?null:`${inputs.away_wins}-${ag==null?'?':ag-aw}${inputs.away_ties?'-'+inputs.away_ties:''} @ ${inputs.home_wins}-${hg==null?'?':hg-hw}${inputs.home_ties?'-'+inputs.home_ties:''}`,one);if(one)side=hz?'home':'away';}
-  if(rule.market==='spread'){selectedLine=q.line==null||side==='dog'||side==='winless'?null:side==='home'?q.line:-q.line;check('spread','Spread line saved',q.line,q.line==null?null:true);}
-  else selectedLine=null;
+  if(rule.id==='nfl_struggling_team'){const st=k=>{const w=number(inputs[k+'_wins']),g=number(inputs[k+'_games']);return w==null||g==null?null:g>=STRUGGLING_MIN_GAMES&&w<=STRUGGLING_MAX_WINS;};const hs=st('home'),as=st('away'),one=hs==null||as==null?null:hs!==as;check('struggling',`Exactly one team has ${STRUGGLING_MAX_WINS} or fewer wins (${STRUGGLING_MIN_GAMES}+ games played)`,hs==null||as==null?null:`${inputs.away_wins}-${inputs.away_losses??'?'} @ ${inputs.home_wins}-${inputs.home_losses??'?'}`,one);if(one)side=hs?'home':'away';}
+  if(rule.id==='nfl_off_bye'){const hb=inputs.home_post_bye,ab=inputs.away_post_bye,known=typeof hb==='boolean'&&typeof ab==='boolean',one=known?hb!==ab:null;check('bye','Exactly one team is coming off its bye',known?(hb&&ab?'both':hb?'home':ab?'away':'neither'):null,one);if(one)side=hb?'home':'away';}
+  if(rule.id==='nfl_short_week_under'){const hr=restDays(inputs.scheduled_start_at,inputs.home_previous_game_at),ar=restDays(inputs.scheduled_start_at,inputs.away_previous_game_at);check('short_week',`Both teams on ${SHORT_WEEK_DAYS} or fewer days of rest`,hr==null||ar==null?null:`${ar} / ${hr} days`,hr==null||ar==null?null:hr<=SHORT_WEEK_DAYS&&ar<=SHORT_WEEK_DAYS);check('total','Positive total line',q.line,q.line==null?null:q.line>0);}
+  if(rule.market==='spread'){selectedLine=q.line==null||['dog','struggling','bye'].includes(side)?null:side==='home'?q.line:-q.line;check('spread','Spread line saved',q.line,q.line==null?null:true);}
+  else selectedLine=rule.market==='total'?(number(q.line)??null):null;
  }
  const flags=[...(q.quality_flags||[])];if(q.source_updated_at&&+new Date(now)-time(q.source_updated_at)>45*6e4)flags.push('source_stale');const price=side==='home'||side==='away'||side==='over'||side==='under'?american(q[side+'_price']):null;const status=conditions.some(c=>c.passed===null)||flags.includes('source_stale')?'insufficient_data':conditions.some(c=>!c.passed)?'not_matched':price==null?'unpriced_match':'matched';return {rule_id:rule.id,rule_version:rule.version,market:rule.market,selection_side:side,selection_line:selectedLine,selected_price:price,status,condition_results:conditions,quality_flags:flags,inputs};});}
 function movement(rows,side){const sorted=[...rows].sort((a,b)=>time(a.observed_at)-time(b.observed_at));const last=sorted.at(-1);if(!last||last.provider_id==='unknown')return {available:false,reason:'Provider unavailable'};const same=sorted.filter(x=>['sport','event_id','schedule_instance','source','provider_id','market'].every(k=>x[k]===last[k]));if(same.length<2)return {available:false,reason:'One observation so far',first:last,latest:last};const first=same[0],orient=x=>x.line==null?null:x.market==='spread'&&side==='away'?-x.line:x.line;const a=orient(first),b=orient(last);return {available:true,first,latest:last,count:same.length,line_change:a==null||b==null?null:b-a,price_change:american(first[side+'_price'])==null||american(last[side+'_price'])==null?null:last[side+'_price']-first[side+'_price']};}
@@ -115,4 +120,4 @@ function filterResearch(rows,f={}){
   return true;
  });
 }
-return {RULES,BLOWOUT_MARGIN,EARLY_WEEKS,WINLESS_WEEKS,RESEARCH,researchRules,isResearch,ranked,top25,evaluateResearch,researchDimensions,filterResearch,number,american,restDays,pregame,decisionWindow,intervalMinutes,normalizeOdds,evaluateRules,movement,grade,performance};});
+return {RULES,RETIRED_RULES,isRetired,BLOWOUT_MARGIN,STRUGGLING_MAX_WINS,STRUGGLING_MIN_GAMES,SHORT_WEEK_DAYS,RESEARCH,researchRules,isResearch,ranked,top25,evaluateResearch,researchDimensions,filterResearch,number,american,restDays,pregame,decisionWindow,intervalMinutes,normalizeOdds,evaluateRules,movement,grade,performance};});

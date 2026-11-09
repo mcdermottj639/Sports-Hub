@@ -712,7 +712,30 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v353** (backend **b17-fantasy-league-rules**).
+Current version as of this writing: **v355** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v355 — Full-season NFL systems replace the early-season / one-week rules
+
+Jack, on the v346 cards (all three empty in Week 10): "I don't want the early or
+one week systems. I want u to make them better for full season analysis." The
+v346 windows (weeks 1–4, 2–6, week 3) could not collect before Sept 2027 and
+nothing is backfilled, so they were useless for in-season analysis.
+- `betting-signals-core.js` `RULES` 6 → 7. RETIRED (no longer evaluated or shown):
+  `nfl_early_season_dog_ml`, `nfl_early_winless_team`, `nfl_week3_dog`, listed in
+  `RETIRED_RULES` / `isRetired()`. Their saved rows stay in Supabase untouched;
+  `cloud-signals.js` and `systemCards` filter them out.
+- NEW, all regular-season weeks, thresholds fixed at v1:
+  `nfl_dog_ml` (underdog by the frozen spread, moneyline);
+  `nfl_struggling_team` (exactly one team with ≤1 win after 3+ games, spread on it);
+  `nfl_off_bye` (exactly one team with verified `*_post_bye`, spread on it);
+  `nfl_short_week_under` (both teams ≤4 New York days of rest, under the saved total).
+  All use inputs the collector already freezes; no schema or collector input change.
+- Collector writes 13 decision rows per game (7 rules + 6 research sides) instead
+  of 12. Release = push main + repin the `sports-hub-ai` shim to this commit.
+- Tests: v355 block in `tests/betting-signals-core.test.js` replaces the v346 block;
+  rule count 7; collector counts 12 → 13 (24 → 26 across a reschedule).
+  Checked at 390px: seven cards, retired ones gone, no sideways overflow.
+
 
 ### v353 — Player props v2: odds-anchored probabilities, picked within 24 h
 - Why: props-v1 showed raw hit rates as win chances. 380 graded v1 picks (Oct 7 – Nov 7) averaged a 67.4% model probability and won 49.5%; the book's no-vig price averaged 48.8% (Brier: v1 .290, market .252). NFL picks were saved ~104 h before kickoff, so their prices were days stale (NFL 46–58, −15.9u).
@@ -817,6 +840,7 @@ card titles (`<h4>`), not table headers.
 
 
 ### v346 — Four more frozen NFL rules + Action Network-style system cards
+⚠️ SUPERSEDED in v355: the three early-season / week-3 rules are retired and replaced by four full-season rules; the blowout-dog rule and the system cards remain.
 
 Jack, after comparing Action Network PRO's Systems screen with our research:
 "Yes add the rules we don't have as frozen rules we can keep tracking and I

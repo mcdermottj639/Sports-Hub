@@ -71,7 +71,8 @@
         read('betting_signal_current',{...p,order:'event_id.asc'}),
         read('betting_capture_runs',{select:'*',order:'started_at.desc',started_at:`gte.${new Date(Date.now()-86400000).toISOString()}`}),
         read('betting_signals_config',{id:'eq.1',select:'*',order:'id.asc'})]);
-      return {sport,quotes,decisions,current,run:runs[0]||null,config:config[0]||null};
+      const live=d=>!root.SportsHubSignalsCore?.isRetired?.(d);
+      return {sport,quotes,decisions:decisions.filter(live),current:current.map(c=>Array.isArray(c?.evaluations)?{...c,evaluations:c.evaluations.filter(live)}:c),run:runs[0]||null,config:config[0]||null};
     });
   }
   async function loadHistory(eventId,market,providerId,dateRange,sport='nfl') {
@@ -100,7 +101,7 @@
         if(availableRange.from&&(from<availableRange.from||to>availableRange.to)) throw Error(`Choose saved game dates between ${availableRange.from} and ${availableRange.to}.`);
       } catch(err) { err.availableRange=availableRange; throw err; }
       let decisions=await read('betting_system_decisions',{sport:`eq.${sport}`,rule_id:research?`like.${sport}_research_*`:ruleId?`eq.${safeID(ruleId)}`:`not.like.${sport}_research_*`,...(version?{rule_version:`eq.${safeID(version)}`} : {}),...(filters.market?{market:`eq.${safeID(filters.market)}`} : {}),and:`(scheduled_start_at.gte.${dates.from},scheduled_start_at.lt.${dates.to})`,select:'*',order:'decided_at.asc,id.asc'});
-      decisions=decisions.filter(d=>(!d.sport||d.sport===sport)&&/^(nfl|cfb|nba)_research_/.test(String(d.rule_id||''))===research);
+      decisions=decisions.filter(d=>(!d.sport||d.sport===sport)&&/^(nfl|cfb|nba)_research_/.test(String(d.rule_id||''))===research&&!root.SportsHubSignalsCore?.isRetired?.(d));
       const cohorts=[...new Set(decisions.map(d=>d.model_context?.engine||d.model_context?.engine_version||'unavailable'))];
       const providers=[...new Set(decisions.map(d=>d.inputs?.provider_id||d.provider_id).filter(Boolean))];
       if(filters.provider) decisions=decisions.filter(d=>String(d.inputs?.provider_id||d.provider_id)===filters.provider);
