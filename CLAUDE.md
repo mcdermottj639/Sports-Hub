@@ -298,7 +298,7 @@ fantasy/golf data are not refreshed by this cycle.
 
 ## Files
 
-- `matchup-context.js`, `matchup-context.css` — read-only full-screen model/market comparison, exact ESPN game matching and contextual source reads. No forecast or grading writes.
+- `matchup-context.js`, `matchup-context.css` — read-only compact full-screen model/market comparison, expandable model/source detail, exact ESPN game matching and contextual source reads. No forecast or grading writes.
 - `sports-evidence-core.js`, `sports-evidence.js`, `sports-evidence.css` — v364 game-focused full-screen `#/matchup-lab` from Today, plus embedded Research and NFL/NBA reports: visual ranks/form, score cross-checks, matched model diagnostics and a separate last-five replay. `data/draftkings-evidence.json` is a dated ChatGPT-connector snapshot; ESPN stays live. `scripts/refresh-sports-evidence.js` validates refreshes and saves immutable profiles in `data/evidence-observations/`. See `docs/SPORTS_EVIDENCE.md` for sources, refresh scope, leakage guards and initial findings. Data-only evidence refreshes need no app version bump; code changes follow the usual release ritual.
 
 - `nba-page.js`, `_shared/nba-model.js`, `_shared/nba-model-config.js` — NBA league UI and shared fitted model; the shared files live under `supabase/functions/`.
@@ -715,7 +715,19 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v367** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v368** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v368 — Compact Matchup Lab, all details accessible
+
+The full-screen lab uses one shared comparison header and compact ML / Spread /
+Total rows. Saved selections, prices, model probabilities/line gaps, projections,
+final scores and cautions stay visible. Model explanations, saved price/source
+timestamps, DraftKings ranks/form/history and ESPN context use labeled
+expanders. Open details survive data refresh for the same game; switching
+games starts with the compact overview. Phone header, scoreboard, projection
+and section spacing are tighter. No source fields, model calculations, saved
+picks or results were removed or changed. Preserves v367 exact-game navigation,
+return behavior and remembered filters.
 
 ### v367 — Remembered daily journeys and exact-game Lab entry
 
@@ -748,6 +760,10 @@ Models places section shortcuts and Expand/Collapse all on the same row, tighten
 Shared control rows use compact title-case tabs, the clubhouse green active state and separate league/section rows instead of an oversized tinted box. Models has five equal league tabs (All/NFL/CFB/NBA/MLB, in the existing league order), no emoji labels, readable section shortcuts and explicit Expand all / Collapse all actions. League selection exposes aria-pressed; focus outlines and wrapping retain keyboard and narrow-screen access. Navigation destinations, saved selections and model calculations are unchanged.
 
 ### v364 — Game-focused Matchup Lab and clear completed scores
+
+⚠️ SUPERSEDED in v368 (layout only): markets share a compact comparison header;
+DraftKings stats/form and ESPN context are expandable, with saved timestamps
+under source details. All underlying information remains available.
 
 Today’s full-screen lab now compares saved ML / Spread / Total selections and
 prices with ESPN’s available market quotes, while keeping DraftKings season
@@ -8006,6 +8022,11 @@ rewrite.**
   radar, and official model records separated by market. The existing model
   watchlist is retained in a remembered disclosure. Eagles and Red Sox
   shortcuts live on Leagues; scores can be opened from the header.
+- **Matchup Lab** — dedicated full-screen comparison with compact ML / Spread /
+  Total rows, visible saved projections/cautions and team-aligned final scores.
+  Expanders retain model explanations, capture times, DraftKings stats/form and
+  ESPN context. Open sections survive refresh for the same game; previous/next,
+  remembered filters and exact-game entry remain available.
 - **Research** — links to the existing NFL/CFB systems and paired challenger
   summaries, plus model results, calibration and methodology. It never combines
   system returns with model records or claims a challenger is the official model.

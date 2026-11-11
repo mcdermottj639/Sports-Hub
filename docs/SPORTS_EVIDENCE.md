@@ -2,14 +2,20 @@
 
 The Matchup Lab is available from Today, Research, NFL/NBA Research, and NFL/NBA
 game reports. Today opens the dedicated `#/matchup-lab` route: only the lab is
-visible, with a Today return button, NFL/NBA filters, Upcoming/Completed/All
-game periods, and a matchup dropdown. The full-screen route is matchup-only:
+visible, with a return button to the source screen, NFL/NBA filters,
+Upcoming/Completed/All game periods, a matchup dropdown and previous/next controls.
+League, period and selected game are remembered, with exact-game URL context. The full-screen route is matchup-only:
 our first saved score projection, the actual saved ML / Spread / Total picks,
 ESPN market quotes, source context and DraftKings team comparison. Completed
 games use large team-aligned scores, a winner highlight, final margin/total and
 saved pick results. Model check and Score audit remain in embedded Research.
-Controls stay mounted during data updates; phones stack the comparison, with
-extra model inputs and earlier games in disclosures.
+Controls stay mounted during data updates. ML / Spread / Total share one compact
+comparison header, keeping saved picks/prices, projections and cautions visible.
+Model explanations, saved price/source timestamps, DraftKings team stats/form
+and ESPN game context are available in labeled expanders. All source fields
+remain accessible; open sections survive refresh for the same game and reset
+on switching games. Narrow phones keep both comparison columns without
+horizontal scrolling.
 
 `matchup-context.js` reads the exact ESPN event summary and its saved cloud rows.
 Identity requires the same sport, oriented teams and exact start. Without a
