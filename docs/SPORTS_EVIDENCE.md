@@ -3,16 +3,38 @@
 The Matchup Lab is available from Today, Research, NFL/NBA Research, and NFL/NBA
 game reports. Today opens the dedicated `#/matchup-lab` route: only the lab is
 visible, with a Today return button, NFL/NBA filters, Upcoming/Completed/All
-game periods, and a matchup dropdown. Matchup, Model check and Score audit
-remain together; the latter two clearly cover the selected league, not just
-the selected game. League selections persist while switching views. Controls
-stay mounted during data updates. Desktop uses two columns for forecasts and
-season ranks; phones stack them, with prior opponents/scores in a disclosure.
-Research retains its embedded lab and a full-screen entry.
+game periods, and a matchup dropdown. The full-screen route is matchup-only:
+our first saved score projection, the actual saved ML / Spread / Total picks,
+ESPN market quotes, source context and DraftKings team comparison. Completed
+games use large team-aligned scores, a winner highlight, final margin/total and
+saved pick results. Model check and Score audit remain in embedded Research.
+Controls stay mounted during data updates; phones stack the comparison, with
+extra model inputs and earlier games in disclosures.
+
+`matchup-context.js` reads the exact ESPN event summary and its saved cloud rows.
+Identity requires the same sport, oriented teams and exact start. Without a
+saved event ID, use the Eastern-date scoreboard and require one exact match.
+Only the current model’s pregame, non-void rows appear as official picks; one
+immutable observation per market, ML / Spread / Total order. Each market’s
+saved selection and forecast remains its own observation; the summary uses the
+first saved full forecast. Pick and price capture timestamps are separate when
+prices were filled later. A source refresh never records or recalculates a pick.
+
+Upcoming comparisons label ESPN’s provider and retrieval time; a missing quote
+update time is explicit. A model-versus-line gap is descriptive, not a new saved
+pick or a calibrated betting edge. ESPN predictor percentages are separately
+labeled (not sportsbook probabilities). Records, injury listings, venue and
+weather appear only when supplied. Completed games show available ESPN final
+team stats, with current records labeled; current injury/predictor/market
+information is not passed off as historical pregame evidence. Source failures
+leave saved model picks and DraftKings evidence visible. Cached and in-flight
+reads are bounded by game identity; late responses cannot overwrite a newly
+selected game. Model Check / Score Audit calculations remain unchanged.
 
 It supplements ESPN with dated DraftKings team profiles and game
-results. ESPN remains the live source. There is no sportsbook account access,
-odds feed, player-stat/prop feed, bet execution, new paid service or new backend.
+results. ESPN remains the live source, including provider-labeled odds already used by
+the app. DraftKings connector data contains no sportsbook account access or
+odds/prop feed. There is no bet execution, new paid service or new backend.
 
 ## What ships
 
@@ -58,7 +80,7 @@ settlements, model IDs and Supabase collectors are unchanged.
 `data/draftkings-evidence.json` is a public normalized snapshot, not a live API.
 The connected DraftKings tools run in ChatGPT; GitHub Pages cannot invoke them.
 A scheduled agent refreshes the file. Refresh in the UI reloads the published
-snapshot only. Show its date at all times; after 36h mark it stale. A failed
+snapshot and refreshes the selected full-screen game’s ESPN context. Show its date at all times; after 36h mark it stale. A failed
 refresh preserves the last published evidence and its original timestamps.
 
 1. Read current main, this document and the current snapshot. Use the connected

@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v363';
+const APP_VERSION = 'v364';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -13206,6 +13206,7 @@ if (toTop) {
 /* 🔗 A `#pk=` link opens straight onto Pick'em, on the week the link names.
    Read BEFORE the first showTab so the hash is gone by the time anything
    paints — and so a reload cannot re-offer an import already dealt with. */
+globalThis.SportsHubMatchupContext?.configure({fetchJSON:url=>fetchLive(url,60000),normalizeOdds:normOdds,eventRows:(sport,id)=>globalThis.SportsHubCloudAI.eventRows(sport,id)});
 globalThis.SportsHubDesk.init();
 if (pkReadLink()) {
   if (pkPendingLink?.week) pkState.week = pkPendingLink.week;

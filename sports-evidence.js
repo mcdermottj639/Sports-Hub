@@ -16,7 +16,7 @@
   }
   const label=g=>`${g.away.abbr} @ ${g.home.abbr}`;
   function mark(t,abbr){const logo=/^https:\/\/(dkn\.gs|a\.espncdn\.com)\//.test(t?.logo||'')?`<img src="${esc(t.logo)}" alt="" loading="lazy" width="40" height="40">`:'';return `<span class="se-crest">${logo||esc(abbr)}</span>`;}
-  function sourceLine(s){const f=C.freshness(s);return `<p class="se-source"><span class="se-dot ${f.stale?'old':''}"></span>DraftKings snapshot · ${esc(time(s.capturedAt))}${f.stale?' · older than 36h':''}<span>ESPN supplies live scores</span></p>`;}
+  function sourceLine(s,full=false){const f=C.freshness(s);return `<p class="se-source"><span class="se-dot ${f.stale?'old':''}"></span>DraftKings snapshot · ${esc(time(s.capturedAt))}${f.stale?' · older than 36h':''}<span>${full?'ESPN lines &amp; game context':'ESPN supplies live scores'}</span></p>`;}
   function formHTML(f){return `<div class="se-form" aria-label="Recent results, oldest to newest">${f.rows.map(r=>`<span class="se-result ${r.result.toLowerCase()}" title="${esc(time(r.start)+' · '+(r.home?'vs ':'at ')+r.opponent+' · '+r.for+'–'+r.against)}">${r.result}</span>`).join('')||'<small>No earlier results</small>'}</div>`;}
   function spark(f){
     if(!f.rows.length)return '';
@@ -55,6 +55,15 @@
   function historyHTML(t,f){
     return `<section><h4>${esc(t.abbr)} · recent results</h4>${[...f.rows].reverse().map(r=>`<div class="se-history-row"><time>${esc(new Date(r.start).toLocaleDateString([],{month:'short',day:'numeric'}))}</time><span>${r.home?'vs':'at'} <b>${esc(r.opponent)}</b></span><strong>${r.for}–${r.against}</strong><span class="se-result ${r.result.toLowerCase()}">${r.result}</span></div>`).join('')||'<p class="se-note">No earlier results available.</p>'}</section>`;
   }
+  function labMatchupHTML(s,sport,g){
+    const done=C.final(g),start=g.start,home=C.form(s,sport,g.home.abbr,start),away=C.form(s,sport,g.away.abbr,start),b=C.baseline(s,sport,g),past=Date.parse(start)<=Date.now();
+    const side=(t,which)=>{
+      const winner=done&&t.score>g[which==='home'?'away':'home'].score,meta=C.team(s,sport,t.abbr);
+      return `<div class="mc-score-team${winner?' winner':''}">${mark(meta,t.abbr)}<div><span>${which==='away'?'AWAY':'HOME'}${winner?' · WINNER':''}</span><h2>${esc(t.abbr)}</h2><small>${esc(meta?.name||t.name)}</small></div>${done?`<b class="mc-final-score">${t.score}</b>`:''}</div>`;
+    };
+    const form=(t,f)=>`<section><h4>${esc(t.abbr)}</h4>${formHTML(f)}<div class="se-form-stats"><span><b>${f.n?`${f.wins}–${f.losses}${f.ties?'–'+f.ties:''}`:'—'}</b>last ${f.n}</span><span><b>${signed(f.margin)}</b>avg margin</span></div>${spark(f)}<p class="mc-note">${f.daysSince===null?'Rest unavailable':f.daysSince===1?'Back-to-back':`${f.daysSince} calendar days since previous game`}</p></section>`;
+    return `<article class="se-matchup mc-game"><div class="se-match-top"><span>${esc(sport.toUpperCase())} · ${esc(time(start))}</span><span class="se-tag">${done?'FINAL':past?'STARTED · SEE ESPN STATUS':'UPCOMING'}</span></div><div class="mc-scoreboard">${side(g.away,'away')}${side(g.home,'home')}</div>${done?'<p class="mc-score-source">Final score · DraftKings</p>':''}<section class="mc-model" data-mc-model></section><div class="mc-evidence-grid"><section class="mc-dk"><div class="mc-section-title"><h3>DraftKings team comparison</h3><small>Season statistics</small></div>${ranksHTML(s,sport,g)}<div class="mc-section-title"><h4>Form entering this game</h4><small>Last five · oldest → newest</small></div><div class="mc-form">${form(g.away,away)}${form(g.home,home)}</div><details class="se-expand se-history"><summary>Previous games &amp; form projection</summary><div class="se-history-grid">${historyHTML(g.away,away)}${historyHTML(g.home,home)}</div><p class="mc-note">${b.available?`Last-five baseline: ${esc(g.away.abbr)} ${fmt(b.awayScore)} · ${esc(g.home.abbr)} ${fmt(b.homeScore)}. `:'Form projection needs five earlier games for both teams. '}Experimental context; no injury, opponent-strength or home-court adjustment.${past?' Retrospective replay.':''}</p></details><p class="mc-note">${past?'Season ranks are today’s profile, not historical pregame inputs. ':''}Snapshot ${esc(time(s.capturedAt))}. Form margins are points, not betting returns.</p></section><section class="mc-espn" data-mc-context></section></div></article>`;
+  }
 
   function barCompare(title,values,caption){
     const available=values.filter(v=>C.number(v.value)!==null),max=Math.max(1,...available.map(v=>v.value));
@@ -81,11 +90,11 @@
     const choices={nfl:{selected:null,scope:'upcoming'},nba:{selected:null,scope:'upcoming'}};
     // Keep the controls mounted during feed updates so native selects and keyboard focus survive.
     const leagueButtons=['nfl','nba'].map(x=>`<button type="button" data-se-sport="${x}" aria-pressed="${sport===x}">${x.toUpperCase()}</button>`).join('');
-    const tabs=[['matchups','Matchup'],['accuracy','Model check'],['audit','Score audit']].map(([key,title])=>`<button type="button" data-se-tab="${key}" aria-pressed="${tab===key}">${title}</button>`).join('');
-    const reload='<button type="button" class="se-reload" data-se-reload aria-label="Reload published evidence" title="Reload the published snapshot">↻</button>';
-    host.innerHTML=`<div class="se-chrome">${full?`<header class="se-lab-header"><button type="button" class="se-back" data-desk-route="today"><span aria-hidden="true">←</span> Today</button><div><span class="se-kicker">SPORTS HUB</span><h1 tabindex="-1">Matchup Lab</h1></div>${reload}</header>`:`<div class="se-heading"><div><span class="se-kicker">THE MATCHUP LAB</span><h2>See the matchup. Check the model.</h2></div><button type="button" class="se-open" data-desk-route="matchup-lab">Full screen ↗</button></div>`}<div class="se-controls"><div class="se-picker-row"><div class="se-sport" role="group" aria-label="Evidence league">${leagueButtons}</div><label class="se-scope"><span>Games</span><select data-se-scope aria-label="Game period"><option value="upcoming">Upcoming</option><option value="completed">Completed</option><option value="all">All games</option></select></label><label class="se-select">Choose a game<select data-se-game aria-label="Choose matchup"><option>Loading games…</option></select></label></div><div class="se-tabs" role="group" aria-label="Evidence view">${tabs}${full?'':reload}</div></div></div><div data-se-source></div><p class="se-feedback" data-se-feedback role="status" hidden></p><div class="se-body" data-se-body><p class="se-note" role="status">Loading matchup evidence…</p></div>`;
+    const tabs=full?'':[['matchups','Matchup'],['accuracy','Model check'],['audit','Score audit']].map(([key,title])=>`<button type="button" data-se-tab="${key}" aria-pressed="${tab===key}">${title}</button>`).join('');
+    const reload='<button type="button" class="se-reload" data-se-reload aria-label="Reload matchup data" title="Reload the published snapshot and ESPN context">↻</button>';
+    host.innerHTML=`<div class="se-chrome">${full?`<header class="se-lab-header"><button type="button" class="se-back" data-desk-route="today"><span aria-hidden="true">←</span> Today</button><div><span class="se-kicker">SPORTS HUB</span><h1 tabindex="-1">Matchup Lab</h1></div>${reload}</header>`:`<div class="se-heading"><div><span class="se-kicker">THE MATCHUP LAB</span><h2>See the matchup. Check the model.</h2></div><button type="button" class="se-open" data-desk-route="matchup-lab">Full screen ↗</button></div>`}<div class="se-controls"><div class="se-picker-row"><div class="se-sport" role="group" aria-label="Evidence league">${leagueButtons}</div><label class="se-scope"><span>Games</span><select data-se-scope aria-label="Game period"><option value="upcoming">Upcoming</option><option value="completed">Completed</option><option value="all">All games</option></select></label><label class="se-select">Choose a game<select data-se-game aria-label="Choose matchup"><option>Loading games…</option></select></label></div>${full?'':`<div class="se-tabs" role="group" aria-label="Evidence view">${tabs}${reload}</div>`}</div></div><div data-se-source></div><p class="se-feedback" data-se-feedback role="status" hidden></p><div class="se-body" data-se-body><p class="se-note" role="status">Loading matchup evidence…</p></div>`;
     const gameSelect=host.querySelector('[data-se-game]'),scopeSelect=host.querySelector('[data-se-scope]');
-    const paint=(forceControls=false)=>{
+    const paint=(forceControls=false,forceContext=false)=>{
       if(!host.isConnected||!snapshot)return;
       const s=snapshot,rows=root.SportsHubCloudAI?.cached?.().rows||[],all=orderedGames(s,sport),choice=choices[sport];
       const filtered=all.filter(g=>choice.scope==='all'||(choice.scope==='completed'?C.final(g):!C.final(g)&&Date.parse(g.start)>Date.now()));
@@ -97,8 +106,9 @@
       const optionsHTML=filtered.length?filtered.map(x=>`<option value="${esc(x.id)}"${x.id===choice.selected?' selected':''}>${esc(label(x)+' · '+time(x.start)+(C.final(x)?' · Final':''))}</option>`).join(''):'<option value="">No games in this period</option>';
       if(gameSelect.innerHTML!==optionsHTML&&(forceControls||document.activeElement!==gameSelect))gameSelect.innerHTML=optionsHTML;
       gameSelect.disabled=!filtered.length;gameSelect.value=choice.selected||'';
-      host.querySelector('[data-se-source]').innerHTML=sourceLine(s);
-      host.querySelector('[data-se-body]').innerHTML=tab==='matchups'?(g?matchupHTML(s,sport,g,rows):`<div class="se-empty"><h3>No ${choice.scope==='all'?'':choice.scope+' '}${sport.toUpperCase()} games in this snapshot</h3><p>Try another period or league. Reload checks for a newer published snapshot.</p><button type="button" data-se-all>Show all games</button></div>`):`<p class="se-view-caption">${sport.toUpperCase()} · ${tab==='accuracy'?'League-wide forecast research':'League-wide final-score checks'} · all matched saved games</p>`+(tab==='accuracy'?accuracyHTML(s,rows,sport):auditHTML(s,rows,sport));
+      host.querySelector('[data-se-source]').innerHTML=sourceLine(s,full);
+      host.querySelector('[data-se-body]').innerHTML=tab==='matchups'?(g?(full?labMatchupHTML(s,sport,g):matchupHTML(s,sport,g,rows)):`<div class="se-empty"><h3>No ${choice.scope==='all'?'':choice.scope+' '}${sport.toUpperCase()} games in this snapshot</h3><p>Try another period or league. Reload checks for a newer published snapshot.</p><button type="button" data-se-all>Show all games</button></div>`):`<p class="se-view-caption">${sport.toUpperCase()} · ${tab==='accuracy'?'League-wide forecast research':'League-wide final-score checks'} · all matched saved games</p>`+(tab==='accuracy'?accuracyHTML(s,rows,sport):auditHTML(s,rows,sport));
+      if(full&&g)root.SportsHubMatchupContext?.mount(host.querySelector('[data-se-body]'),s,sport,g,rows,forceContext);
       host.querySelector('.se-select').hidden=tab!=='matchups';host.querySelector('.se-scope').hidden=tab!=='matchups';
       const status=host.querySelector('[data-se-feedback]');status.textContent=error;status.hidden=!error;
       const refresh=host.querySelector('[data-se-reload]');refresh.disabled=reloading;refresh.setAttribute('aria-busy',String(reloading));
@@ -107,7 +117,7 @@
       if(reloading)return;reloading=true;error='';const ticket=++token;
       const b=host.querySelector('[data-se-reload]');b.disabled=true;b.setAttribute('aria-busy','true');
       try{await load(true);}catch(_){error='Could not reload the published snapshot. Showing the last available evidence. Try refresh again.';}
-      finally{if(ticket===token){reloading=false;paint(true);if(!snapshot){b.disabled=false;b.setAttribute('aria-busy','false');const status=host.querySelector('[data-se-feedback]');status.textContent='Matchup evidence could not load. Check your connection and try refresh again.';status.hidden=false;host.querySelector('[data-se-body]').innerHTML='';}}}
+      finally{if(ticket===token){reloading=false;paint(true,true);if(!snapshot){b.disabled=false;b.setAttribute('aria-busy','false');const status=host.querySelector('[data-se-feedback]');status.textContent='Matchup evidence could not load. Check your connection and try refresh again.';status.hidden=false;host.querySelector('[data-se-body]').innerHTML='';}}}
     };
     host._evidencePaint=paint;
     host.addEventListener('click',e=>{
@@ -137,6 +147,6 @@
       if(host.isConnected)host.innerHTML=sourceLine(s)+matchupHTML(s,sport,matched,rows||[],true);
     }catch(_){if(host.isConnected)host.innerHTML='<p class="se-note">Extra matchup evidence is unavailable. Live game data is unchanged.</p>';}
   }
-  const api={load,mountResearch,mountLab,mountGame,matchupHTML,accuracyHTML,auditHTML};root.SportsHubEvidence=Object.freeze(api);
+  const api={load,mountResearch,mountLab,mountGame,matchupHTML,labMatchupHTML,accuracyHTML,auditHTML};root.SportsHubEvidence=Object.freeze(api);
   if(typeof module!=='undefined')module.exports=api;
 })(globalThis);
