@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v369';
+const APP_VERSION = 'v370';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -4000,30 +4000,6 @@ const aiWhy = (t, extra = '') => `<div class="ai-why" style="padding:2px 0${extr
 const lgLabel = (s) => `${LEAGUES[s]?.emoji || ''} ${esc(LEAGUES[s]?.label || s)}`.trim();
 const btCard = (title, right, body) => `<div class="bt-card"><div class="bt-h">${title}<span>${right}</span></div>${body}</div>`;
 
-// 📋 Copy my record data — the ONLY way the on-device record ever gets off the
-// phone, and therefore the only way any of it can be analysed for tuning. It
-// exports EVERYTHING regardless of which league is on screen, and says so.
-function exportButton() {
-  const box = el('div');
-  box.innerHTML = `<button class="rep-export" type="button" style="margin-top:12px;width:100%;padding:11px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--text);font:inherit;font-weight:700;cursor:pointer">📋 Copy my record data</button>
-    <textarea class="rep-export-ta" readonly hidden style="width:100%;height:90px;margin-top:6px;font:12px/1.4 monospace;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px;box-sizing:border-box"></textarea>
-    <div class="ai-why" style="margin-top:4px">Exports every graded pick — all leagues, all markets, not just the one on screen — so it can be analyzed for model tuning. Nothing leaves your device on its own.</div>`;
-  const exp = box.querySelector('.rep-export'), ta = box.querySelector('.rep-export-ta');
-  exp.onclick = async () => {
-    const data = localStorage.getItem(TALLY_KEY) || '{}';
-    let ok = false;
-    try { await navigator.clipboard.writeText(data); ok = true; } catch (_) {}
-    if (ok) {
-      exp.textContent = '✓ Copied — paste it to Claude';
-    } else { // clipboard blocked (some PWA contexts): reveal for manual select
-      ta.value = data; ta.hidden = false; ta.focus(); ta.select();
-      exp.textContent = 'Select all in the box below & copy';
-    }
-    setTimeout(() => { exp.textContent = '📋 Copy my record data'; }, 4000);
-  };
-  return box;
-}
-
 // 🧪 Calibrationing — the charts and the instruments. `sport` narrows every card
 // to one league; null is the cumulative view.
 function backtestPanel(det, sport, archive = false) {
@@ -4190,7 +4166,6 @@ function backtestPanel(det, sport, archive = false) {
   if (det.unlabelled) legacyBits.push(`${det.unlabelled} older pick${det.unlabelled === 1 ? '' : 's'} carr${det.unlabelled === 1 ? 'ies' : 'y'} no league stamp and are left out of this league's numbers entirely — they are in the cumulative view.`);
   if (legacyBits.length) box.appendChild(el('div', 'ai-why', legacyBits.join(' ')));
 
-  box.appendChild(exportButton());
   return box;
 }
 

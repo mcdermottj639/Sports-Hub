@@ -715,7 +715,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v369** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v370** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v370 — Remove obsolete clipboard record export
+
+Removed the Copy my record data button, oversized clipboard payload and paste instructions at the owner’s request. Existing device records, archive views, cloud history and scheduled capture/grading are preserved. No storage keys, data migrations or backend changes. Historical instructions below recommending this button are superseded by v370; ongoing official model analysis uses cloud history.
 
 ### v369 — Normalize football comparisons for unequal playing time
 
