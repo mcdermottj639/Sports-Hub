@@ -715,7 +715,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v365** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v366** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v366 — Compact Models spacing
+
+Models places section shortcuts and Expand/Collapse all on the same row, tightens heading/record/details gaps, and replaces the decorative phone hero with a compact title and refresh control. All seven model views remain visible in two rows on phones and one row on wide screens. Removed conflicting navigation grid rules from performance.css; desk.css owns the layout. No forecast, record, selection or model changes.
 
 ### v365 — Consistent section navigation
 

@@ -1,6 +1,5 @@
 /* Compact reporting layer: the same evidence and navigation on every sport. */
-:root[data-palette] .desk-shell #ai-sub { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); overflow:visible; }
-:root[data-palette] .desk-shell #ai-sub button { min-height:44px; font-size:12px; white-space:normal; }
+/* Shared model navigation layout lives in desk.css. */
 .ph-hub { --ph-green:#126b53; --ph-red:#b43845; color:var(--text); width:100%; min-width:0; }
 .ph-top,.ph-section-head { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
 .ph-top { margin:8px 0 18px; }
@@ -68,8 +67,6 @@
 .bs-recent-row .bs-link { margin-right:auto; }
 .ph-hub :is(button,input,select,summary):focus-visible { outline:3px solid #91ae53; outline-offset:3px; }
 @media(max-width:700px) {
-  :root[data-palette] .desk-shell #ai-sub { grid-template-columns:repeat(3,minmax(0,1fr)); gap:3px; }
-  :root[data-palette] .desk-shell #ai-sub button { padding:9px 3px; font-size:11px; }
   .ph-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .ph-stats>div { padding:12px; }
   .ph-filters { gap:8px; padding:10px; } .ph-filters label { flex-basis:calc(50% - 8px); } .ph-search { flex-basis:100%!important; }
   .ph-game>summary { flex-wrap:wrap; gap:9px; padding:12px; position:relative; } .ph-game>summary>span:first-child { padding-right:18px; }
