@@ -399,7 +399,21 @@ body.desk-shell { overscroll-behavior-y:none; }
 :root[data-palette] .desk-shell .section-title,:root[data-palette] .desk-shell .lad-sec { font-family:'Barlow Condensed','Archivo',sans-serif;font-size:20px;letter-spacing:.2px; }
 :root[data-palette] .desk-shell .game-card,:root[data-palette] .desk-shell .brd-card,:root[data-palette] .desk-shell .lad-card { box-shadow:0 2px 0 #cfdbc560;border-color:#d2ddc9; }
 :root[data-palette] .desk-shell .compact-matchup img,:root[data-palette] .desk-shell .slate-compact .team-logo { width:30px;height:30px;object-fit:contain; }
-:root[data-palette] .desk-shell .ctl-row { background:#e4ebdc;border:1px solid #d4dfca;border-radius:10px;padding:10px;margin-bottom:18px; }
+:root[data-palette] .desk-shell .ctl-row { background:transparent;border:0;border-bottom:1px solid var(--desk-line);border-radius:0;padding:0 0 12px;margin-bottom:18px;flex-wrap:wrap;gap:8px; }
+:root[data-palette] .desk-shell .ctl-row .ctl-chips { display:grid;flex:1 1 100%;gap:8px;padding:0;min-width:0; }
+:root[data-palette] .desk-shell .ctl-row .chips,
+:root[data-palette] .desk-shell .ctl-row .jump-nav,
+:root[data-palette] .desk-shell .ctl-row .eagles-nav { display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0; }
+:root[data-palette] .desk-shell .ctl-row .chip { display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:8px 11px;border:1px solid #d6e1d1;border-radius:8px;background:#fff;color:#4e655c;font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;line-height:1.3;max-width:100%;white-space:normal; }
+:root[data-palette] .desk-shell .ctl-row .chip.active,
+:root[data-palette] .desk-shell .ctl-row .chip.here { background:#103f36;border-color:#103f36;color:#efffc8;box-shadow:none; }
+:root[data-palette] .desk-shell .ctl-row .chip:hover { border-color:#71917c; }
+:root[data-palette] .desk-shell .ctl-row #ai-sport { display:grid;grid-template-columns:repeat(5,minmax(0,1fr)); }
+:root[data-palette] .desk-shell .ctl-row #ai-sport .chip { padding:8px 4px; }
+:root[data-palette] .desk-shell .ctl-row .jump-nav .chip { flex:1 1 auto;background:transparent;border-color:transparent;min-height:40px;padding:7px 9px;font-size:11px; }
+:root[data-palette] .desk-shell .ctl-row .jump-nav .chip.here { background:#dcefc4;color:#245131;border-color:#c6dda8; }
+:root[data-palette] .desk-shell .ctl-row .sec-all { flex:0 0 auto;width:auto;max-width:none;min-height:40px;margin:0 0 0 auto;padding:7px 10px;border:0;border-radius:8px;background:transparent;color:#416354;font-size:11px;font-weight:600;letter-spacing:0;text-transform:none; }
+:root[data-palette] .desk-shell .ctl-row button:focus-visible { outline:2px solid #0a6954;outline-offset:2px; }
 @media(min-width:1500px) {
   .desk-home-grid { grid-template-columns:minmax(0,2fr) minmax(330px,1fr); }
   #desk-agenda { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px; }

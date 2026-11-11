@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v364';
+const APP_VERSION = 'v365';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -5734,11 +5734,15 @@ function buildAiChips() {
   box.innerHTML = '';
   const add = (key, label) => {
     const c = el('button', 'chip' + (key === cur ? ' active' : ''), label);
+    c.type = 'button';
+    c.setAttribute('aria-pressed', String(key === cur));
     c.onclick = () => setAiSport(key);
     box.appendChild(c);
   };
-  add('all', '🌐 Overview');
-  sortedSports({ teamOnly: true }).forEach((s) => add(s, `${LEAGUES[s].emoji} ${LEAGUES[s].label}`));
+  add('all', 'All');
+  box.setAttribute('role', 'group');
+  box.setAttribute('aria-label', 'Model league');
+  sortedSports({ teamOnly: true }).forEach((s) => add(s, LEAGUES[s].label));
 }
 function buildAiSubs() {
   const box = $('#ai-sub');
@@ -10507,7 +10511,7 @@ function wireSectionToggle(panel) {
   const closed = heads.filter((h) => !h.classList.contains('open')).length;
   const expand = closed > 0;
   btn.hidden = false;
-  btn.textContent = expand ? `⌄ ALL ${heads.length}` : `⌃ ALL ${heads.length}`;
+  btn.textContent = expand ? 'Expand all' : 'Collapse all';
   btn.setAttribute('title', expand ? `Expand all ${heads.length} sections` : `Collapse all ${heads.length} sections`);
   btn.setAttribute('aria-expanded', String(!expand));
   btn.onclick = () => {
@@ -11351,7 +11355,8 @@ function injectJumpNav(name) {
     if (!h.id) h.id = `${name}-sec-${i}`;
     const clone = h.cloneNode(true);
     clone.querySelectorAll('.chips, button, .season-tag, .n').forEach((n) => n.remove());
-    const label = clone.textContent.trim().replace(/\s+/g, ' ').replace(/[🤖🦅]/g, '').trim();
+    const label = clone.textContent.trim().replace(/\s+/g, ' ').replace(/^[^\p{L}\p{N}]+/u, '').trim()
+      .replace(/^Against the spread$/i, 'Spread');
     return { id: h.id, label };
   }).filter((x) => x.label);
   const chips = panel.querySelector(':scope > .ctl-row .ctl-chips');

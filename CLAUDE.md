@@ -715,7 +715,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v364** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v365** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v365 — Consistent section navigation
+
+Shared control rows use compact title-case tabs, the clubhouse green active state and separate league/section rows instead of an oversized tinted box. Models has five equal league tabs (All/NFL/CFB/NBA/MLB, in the existing league order), no emoji labels, readable section shortcuts and explicit Expand all / Collapse all actions. League selection exposes aria-pressed; focus outlines and wrapping retain keyboard and narrow-screen access. Navigation destinations, saved selections and model calculations are unchanged.
 
 ### v364 — Game-focused Matchup Lab and clear completed scores
 
