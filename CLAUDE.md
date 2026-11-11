@@ -715,7 +715,21 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v368** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v369** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v369 — Normalize football comparisons for unequal playing time
+
+Football detail puts fourth-down attempts/opportunities, late-close EPA/play
+and cold-weather defensive EPA/rush in a compact comparison table. Games and
+play counts are labeled as samples; missing denominators stay unavailable.
+Coach names are labeled current only when confirmed, otherwise last recorded;
+the rates describe team history, not a verified coach-tenure sample. QB EPA per
+dropback leads its sample count. This reads existing frozen evidence without
+changing weights, collector code or historical picks. Regression checks cover
+equal rates with unequal exposure, missing versus zero, coach attribution,
+pregame coaching evidence, and player per-game means with different game counts.
+Player props already use last-20 same-team per-game history; additional games
+change probability evidence weight, not the per-game production unit.
 
 ### v368 — Compact Matchup Lab, all details accessible
 

@@ -11,6 +11,23 @@ test('shared play-level features exclude target/future games and deduplicate his
  const before=F.features(state,game);const future=structuredClone(history.games.at(-1));future.id='future';future.date=game.date;Object.values(future.sides).forEach(s=>{s.passEPA=1e8;});
  const changed=F.build({...history,games:[...history.games,history.games[0],future]},at);
  assert.deepEqual(F.features(changed,game),before);assert.equal(changed.used,state.used);
+ assert.deepEqual(E.coaching(changed,home,away),E.coaching(state,home,away));
+});
+test('team comparison normalizes unequal opportunities and preserves sample sizes',()=>{
+ const s={};s.globalThis=s;vm.runInNewContext(fs.readFileSync(require.resolve('../nfl-football-ui.js'),'utf8'),s);
+ const team={games:10,coach:'Previous coach',fourthGo:20,fourthN:80,lateN:50,lateEPA:10,coldRushN:30,coldRushEPA:-3};
+ const larger=Object.fromEntries(Object.entries(team).map(([k,v])=>[k,typeof v==='number'?v*2:v]));
+ const co=E.coaching({teams:{H:team,A:larger}},'H','A',{home:'New coach'});
+ const html=s.SportsHubNFLFootballUI.tendencies(co,{home:'Home',away:'Away'});
+ for(const rate of ['25.0%','0.20','-0.10'])assert.equal(html.split(`<b>${rate}</b>`).length-1,2);
+ for(const sample of ['10 games','20 games','20/80 opportunities','40/160 opportunities','50 plays','100 plays','30 rushes','60 rushes'])assert.ok(html.includes(sample));
+ assert.match(html,/not coach-specific/);assert.match(html,/Home current coach: New coach/);assert.match(html,/Away last recorded coach: Previous coach/);
+ // No opportunities is missing evidence; observed zero attempts/EPA is real zero.
+ const missing=s.SportsHubNFLFootballUI.tendencies({home:{fourthDownAttempts:0,fourthDownOpportunities:0,lateEPA:0,latePlays:0},away:{fourthDownAttempts:0,fourthDownOpportunities:5,lateEPA:0,latePlays:5}},{});
+ assert.equal(missing.split('<b>0.0%</b>').length-1,1);assert.equal(missing.split('<b>0.00</b>').length-1,1);
+ assert.ok(!/NaN|Infinity|null|undefined/.test(missing));
+ const unsafe=s.SportsHubNFLFootballUI.tendencies({home:{name:'<img src=x>',fourthDownAttempts:9,fourthDownOpportunities:2}},{});
+ assert.ok(!unsafe.includes('<img'));assert.match(unsafe,/&lt;img/);assert.ok(!unsafe.includes('450.0%'));
 });
 test('missing, stale, future and wrong-season sources fail closed; zero-game preseason uses priors',()=>{
  assert.equal(F.sourceReady(history,at,history.currentSeason),true);

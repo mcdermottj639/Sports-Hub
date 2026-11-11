@@ -24,6 +24,16 @@ test('prop projections cannot see future games, duplicates, another team or unpo
  for(const change of [{quote_at:'invalid'},{quote_at:new Date(now+1).toISOString()},{side:'yes'},{line:NaN},{price:0},{athlete_id:'different'}])assert.equal(C.project({...quote,...change},history,athlete,g,now),null);
  assert.equal(p.features.median,59);
 });
+test('unequal player game counts affect sample confidence, not per-game production',()=>{
+ const constant=history.map(r=>({...r,stats:{rushingYards:60}}));
+ const short=C.project(quote,constant.slice(-8),athlete,g,now),long=C.project(quote,constant,athlete,g,now);
+ assert.equal(short.projection,60);assert.equal(long.projection,60);
+ assert.equal(short.features.sample_size,8);assert.equal(long.features.sample_size,20);
+ assert.ok(short.model_probability<long.model_probability);
+ // A game after the capture but before this target kickoff is still future evidence.
+ const later={...constant[0],id:'later',date:new Date(now+3600000).toISOString(),stats:{rushingYards:9999}};
+ assert.deepEqual(C.project(quote,[...constant,later],athlete,g,now),long);
+});
 test('history parser keeps completed regular/postseason games and distinguishes missing from zero',()=>{
  const data={names:['rushingYards','receivingYards'],events:{a:{gameDate:'2026-09-01',gameResult:'W',team:{id:'6'}},b:{gameDate:'2026-09-02',gameResult:'W',team:{id:'6'}},live:{gameDate:'2026-09-03',gameResult:'',team:{id:'6'}}},seasonTypes:[{displayName:'2026 Preseason',categories:[{events:[{eventId:'b',stats:['300','300']}]}]},{displayName:'2026 Regular Season',categories:[{events:[{eventId:'a',stats:['0','—']},{eventId:'live',stats:['30','20']}]}]}]};
  const rows=C.logs(data);assert.equal(rows.length,1);assert.equal(rows[0].stats.rushingYards,0);assert.equal(rows[0].stats.receivingYards,undefined);
