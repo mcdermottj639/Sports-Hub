@@ -714,7 +714,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v358** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v359** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v359 — Clear research markets and line changes
+
+Research comparisons now use ML / Spread / Total controls in that order, with plain-language saved-window labels, paired model result cards and collapsed methodology. CFB Total remains explicitly unavailable as a challenger comparison. Today uses ML / Spread / Total consistently and separates Saved / Now prices from the model interpretation, with point or percentage-point units. Calculations and historical records are unchanged.
 
 ### v358 — Matchup Lab first on Today
 

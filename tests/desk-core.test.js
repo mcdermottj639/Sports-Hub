@@ -142,6 +142,8 @@ test('v329 games-ahead read: saved date, line moves and whether the saved projec
   const spread = c.moves.find(m=>m.market==='spread');
   assert.equal(spread.text,'Spread CIN −10 → −13.5 now · still covers by 1.5');
   assert.equal(spread.ok,true);
+  assert.deepEqual(c.moves.map(m=>m.market),['moneyline','spread']);
+  assert.equal(spread.saved,'CIN −10');assert.equal(spread.current,'CIN −13.5');assert.equal(spread.assessment,'Model covers by 1.5 pts');
   assert.equal(c.moves.some(m=>m.market==='total'),false); // total unchanged -> no note
   assert.match(c.moves.find(m=>m.market==='moneyline').text,/^ML CIN −600 → −900 now · edge now /);
 
@@ -166,6 +168,7 @@ test('v329 games-ahead read: saved date, line moves and whether the saved projec
   const buf = C.gameRead(new Map([['moneyline',{selection_home:true,price:-192,model_probability:0.68936,market_probability:0.63094}]]),
     {hML:-162,aML:136},{home:{abbr:'BUF'},away:{abbr:'BAL'}});
   assert.equal(buf.moves[0].text,'ML BUF −192 → −162 now · edge now +9.6');
+  assert.equal(buf.moves[0].assessment,'Model win chance 9.6 percentage points above market');
 });
 
 test('v335: no clubhouse banner on Today; Eagles and Red Sox live on the Leagues tab', () => {

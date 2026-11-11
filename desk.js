@@ -226,7 +226,7 @@
     const chips = read.chips.length ? `<span class="desk-chips">${read.chips.map(chip).join('')}</span>`
       : '<span class="desk-read-none">No saved forecast for this game yet</span>';
     const foot = [read.chips.length && read.savedAt ? `Model saved ${read.savedAt}` : '', read.proj].filter(Boolean);
-    const moves = (read.moves || []).length ? `<span class="desk-moves" aria-label="Line moved since the model saved">${read.moves.map(m=>`<span class="${m.ok===false?'off':m.ok?'ok':''}">${escape(m.text)}</span>`).join('')}</span>` : '';
+    const moves = (read.moves || []).length ? `<span class="desk-moves" aria-label="Saved and current lines"><span class="desk-move-heading"><b>Line changes</b><small>Saved → Now</small></span>${read.moves.map(m=>`<span class="desk-move-row ${m.ok===false?'off':m.ok?'ok':''}"><b class="desk-move-market">${m.market==='moneyline'?'ML':m.market==='spread'?'Spread':'Total'}</b><span class="desk-move-values"><span><small>Saved</small>${escape(m.saved)}</span><span aria-hidden="true">→</span><span><small>Now</small><strong>${escape(m.current)}</strong></span></span><small class="desk-move-meaning">${escape(m.assessment)}</small></span>`).join('')}</span>` : '';
     return `${lineRow}${chips}${foot.length?`<span class="desk-read-foot">${foot.map(t=>`<span>${escape(t)}</span>`).join('')}</span>`:''}${moves}`;
   }
   // v330: compact live field for NFL/CFB rows (football-field.js).

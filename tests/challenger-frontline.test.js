@@ -15,7 +15,7 @@ test('frontline compares the same frozen near window, regardless of row ordering
 test('agreement uses spread and total lines, not outright winner or identical projections',()=>{const c=ui().gameComparison(rows(),'game');assert.equal(c.spreadStatus,'Disagree');assert.equal(c.totalStatus,'Disagree');assert.match(ui().gameHTML(rows(),'game'),/CLE by 5.0/);assert.match(ui().gameHTML(rows(),'game'),/not calibrated/);});
 test('withheld near candidate does not silently fall back to eligible early candidate',()=>{const c=ui().gameComparison([...rows(),...rows('near',false)],'game');assert.equal(c.available,false);assert.equal(c.cm,null);assert.equal(c.ct,null);assert.equal(c.totalStatus,'Unavailable');assert.match(ui().gameHTML(rows('early',false),'game'),/listed QB Out/);});
 test('missing, post-kickoff and old-cohort observations never fabricate a comparison',()=>{assert.equal(ui().gameComparison([],'game'),null);const r=rows();r.forEach(x=>x.captured_at=x.starts_at);assert.equal(ui().gameComparison(r,'game'),null);const old=rows();old.forEach(x=>x.model_version='football-research-v2-early');assert.equal(ui().gameComparison(old,'game'),null);assert.equal(ui().gameHTML([],'game'),'');});
-test('results separate windows, exclude withheld and show collecting without settled prices',()=>{const html=ui().summaryHTML([...rows(),...rows('near',false)],'early');assert.match(html,/1 saved games · 1 challenger available · 0 withheld/);assert.match(html,/0 settled pairs/);assert.match(html,/previous collecting · live engine collecting/);const near=ui().summaryHTML([...rows(),...rows('near',false)],'near');assert.match(near,/1 saved games · 0 challenger available · 1 withheld/);});
+test('results separate windows, exclude withheld and show collecting without settled prices',()=>{const html=ui().summaryHTML([...rows(),...rows('near',false)],'early');assert.match(html,/1 saved games · 1 challenger available · 0 withheld/);assert.match(html,/0 settled pairs/);assert.match(html,/<span>Previous model<\/span><b>Collecting/);assert.match(html,/<span>Live engine<\/span><b>Collecting/);const near=ui().summaryHTML([...rows(),...rows('near',false)],'near');assert.match(near,/1 saved games · 0 challenger available · 1 withheld/);});
 test('saved source strings are escaped and exact-line comparisons are not called agreement',()=>{const r=rows();r.forEach(x=>{x.matchup='<img> @ CLE';x.projection=x.market==='total'?42:3;});const html=ui().gameHTML(r,'game');assert.ok(!html.includes('<img>'));assert.equal(ui().gameComparison(r,'game').spreadStatus,'At line');assert.equal(ui().gameComparison(r,'game').totalStatus,'At line');});
 function college(phase='early',available=true){return rows(phase,available).map(r=>({...r,sport:'cfb',matchup:'TEX @ UGA',model_version:C.versionFor('cfb')+'-'+phase,snapshot:{research:{...r.snapshot.research,evidence:{fpi:{home:22,away:23,updatedAt:'2026-09-30T20:00Z'}}}}}));}
 test('compact rows show picks at the saved line with each model projection beneath',()=>{
@@ -57,4 +57,12 @@ test('agreeing spread picks still show opposite projected winners',()=>{
   const r=rows();r.forEach(x=>{x.line=x.market==='spread'?2.5:x.line;x.projection=x.market==='total'?40.4:2.5;x.snapshot.research.baseline={margin:-0.8,total:43.8};});
   const html=ui().gameHTML(r,'game');const summary=html.match(/<details class="fc-market"><summary>(.*?)<\/summary>/)[1];
   assert.match(summary,/Agree/);assert.match(summary,/Proj. PIT by 0.8/);assert.match(summary,/Proj. CLE by 2.5/);assert.equal((summary.match(/<b>CLE \+2.5<\/b>/g)||[]).length,2);
+});
+
+test('market controls start on ML and CFB total never reports a copied challenger return',()=>{
+ const html=ui().summaryHTML(college(),'latest','cfb');
+ assert.deepEqual([...html.matchAll(/data-fc-market="([^"]+)"/g)].map(x=>x[1]),['moneyline','spread','total']);
+ assert.match(html,/data-fc-panel="moneyline" >/);
+ const total=html.split('data-fc-panel="total"')[1].split('</section>')[0];
+ assert.match(total,/hidden/);assert.match(total,/no independent CFB totals challenger/);assert.doesNotMatch(total,/Paper return|fc-model-columns/);
 });

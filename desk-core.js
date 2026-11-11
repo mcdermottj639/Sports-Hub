@@ -114,7 +114,7 @@
     const chips = [];
     if (ml) {
       const pct = num(ml.confidence) ?? (num(ml.model_probability) != null ? num(ml.model_probability) * 100 : null);
-      chips.push({ market: 'winner', label: 'Winner', value: `${ab(!!ml.selection_home)}${pct != null ? ` ${Math.round(pct)}%` : ''}`, tier: ml.tier || null, hot: HOT.includes(ml.tier) });
+      chips.push({ market: 'winner', label: 'ML', value: `${ab(!!ml.selection_home)}${pct != null ? ` ${Math.round(pct)}%` : ''}`, tier: ml.tier || null, hot: HOT.includes(ml.tier) });
     }
     if (sp) chips.push({ market: 'spread', label: 'Spread', value: String(sp.selection || '').replace(/ -(?=\d)/, ' −'), tier: sp.tier || null, hot: HOT.includes(sp.tier) });
     if (tot) {
@@ -148,13 +148,13 @@
     if (sp && sLine != null && s != null && !same(sLine, s)) {
       const home = !!sp.selection_home, side = v => { const x = home ? v : -v; return x > 0 ? `+${x}` : x < 0 ? `\u2212${Math.abs(x)}` : 'PK'; };
       const cushion = margin == null ? null : (home ? margin + s : -(margin + s));
-      moves.push({ market: 'spread', text: `Spread ${ab(home)} ${side(sLine)} \u2192 ${side(s)} now${cushion == null ? '' : cushion >= 0 ? ` \u00b7 still covers by ${r1(cushion)}` : ` \u00b7 now short by ${r1(-cushion)}`}`, ok: cushion == null ? null : cushion >= 0 });
+      moves.push({ market: 'spread', saved: `${ab(home)} ${side(sLine)}`, current: `${ab(home)} ${side(s)}`, assessment: cushion == null ? 'Projection unavailable' : cushion >= 0 ? `Model covers by ${r1(cushion)} pts` : `Model misses by ${r1(-cushion)} pts`, text: `Spread ${ab(home)} ${side(sLine)} \u2192 ${side(s)} now${cushion == null ? '' : cushion >= 0 ? ` \u00b7 still covers by ${r1(cushion)}` : ` \u00b7 now short by ${r1(-cushion)}`}`, ok: cushion == null ? null : cushion >= 0 });
     }
     const tLine = num(tot?.line);
     if (tot && tLine != null && ou != null && !same(tLine, ou)) {
       const over = /^over/i.test(String(tot.selection || ''));
       const cushion = total == null ? null : (over ? total - ou : ou - total);
-      moves.push({ market: 'total', text: `Total ${over ? 'O' : 'U'} ${tLine} \u2192 ${ou} now${cushion == null ? '' : cushion >= 0 ? ` \u00b7 still ${over ? 'over' : 'under'} by ${r1(cushion)}` : ` \u00b7 now short by ${r1(-cushion)}`}`, ok: cushion == null ? null : cushion >= 0 });
+      moves.push({ market: 'total', saved: `${over ? 'Over' : 'Under'} ${tLine}`, current: `${over ? 'Over' : 'Under'} ${ou}`, assessment: cushion == null ? 'Projection unavailable' : cushion >= 0 ? `Model ${over ? 'over' : 'under'} by ${r1(cushion)} pts` : `Model misses by ${r1(-cushion)} pts`, text: `Total ${over ? 'O' : 'U'} ${tLine} \u2192 ${ou} now${cushion == null ? '' : cushion >= 0 ? ` \u00b7 still ${over ? 'over' : 'under'} by ${r1(cushion)}` : ` \u00b7 now short by ${r1(-cushion)}`}`, ok: cushion == null ? null : cushion >= 0 });
     }
     const hP = num(odds?.hML), aP = num(odds?.aML), savedP = num(ml?.price);
     if (ml && hP != null && aP != null && savedP != null) {
@@ -163,9 +163,10 @@
         const imp = v => (v < 0 ? -v / (-v + 100) : 100 / (v + 100));
         const fair = imp(home ? hP : aP) / (imp(hP) + imp(aP));
         const edgeNow = mp == null ? null : Math.round((mp - fair) * 1000) / 10;
-        moves.push({ market: 'moneyline', text: `ML ${ab(home)} ${signed(savedP)} \u2192 ${signed(nowP)} now${edgeNow == null ? '' : ` \u00b7 edge now ${edgeNow > 0 ? '+' : edgeNow < 0 ? '\u2212' : ''}${Math.abs(edgeNow).toFixed(1)}`}`, ok: edgeNow == null ? null : edgeNow > 0 });
+        moves.push({ market: 'moneyline', saved: `${ab(home)} ${signed(savedP)}`, current: `${ab(home)} ${signed(nowP)}`, assessment: edgeNow == null ? 'Win-chance comparison unavailable' : `Model win chance ${Math.abs(edgeNow).toFixed(1)} percentage points ${edgeNow >= 0 ? 'above' : 'below'} market`, text: `ML ${ab(home)} ${signed(savedP)} \u2192 ${signed(nowP)} now${edgeNow == null ? '' : ` \u00b7 edge now ${edgeNow > 0 ? '+' : edgeNow < 0 ? '\u2212' : ''}${Math.abs(edgeNow).toFixed(1)}`}`, ok: edgeNow == null ? null : edgeNow > 0 });
       }
     }
+    moves.sort((a,b)=>['moneyline','spread','total'].indexOf(a.market)-['moneyline','spread','total'].indexOf(b.market));
     return { line, moneyline, chips, edge, flip, proj, savedAt, moves, hot: HOT.includes(ml?.tier) };
   }
   function slateSummary(reads) {
