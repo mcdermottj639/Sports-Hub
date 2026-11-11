@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v356';
+const APP_VERSION = 'v357';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -1180,6 +1180,12 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
     if (['nfl','cfb','nba'].includes(sport)) {
       globalThis.SportsHubSavedGameReport?.mount($('#md-saved-report'),sport,g,pred,g ? (pred?.lockedOdds || shownOdds(sport,g,normOdds(g?.odds,g?.home?.name,g?.away?.name,g?.home?.abbr,g?.away?.abbr)).info) : null);
       if (sport !== 'nba') globalThis.SportsHubFootballDevelopment?.mountGame($('#md-challenger'), id, sport);
+    }
+    if (g && ['nfl','nba'].includes(sport)) {
+      const context = el('section'); context.setAttribute('data-acc-boundary','');
+      const reportHost = $('#md-report');
+      if (reportHost) reportHost.before(context); else $('#modal-body').appendChild(context);
+      globalThis.SportsHubEvidence?.mountGame(context,sport,g);
     }
     if (g && ['nfl','cfb','nba','mlb'].includes(sport)) {
       const props=el('section','prop-game-report');props.setAttribute('data-acc-boundary','');
@@ -2973,6 +2979,11 @@ async function setSportView(sport, view, syncRoute = true) {
   if(!target.dataset.ready){
     target.innerHTML=!football?`<h2>NBA Research</h2><p class="muted">Tracked market sides and situational trends from frozen pregame lines. Model picks live on the Model board.</p><div data-sport-results></div>`:`<h2>${sport==='cfb'?'CFB Top 25':'NFL'} Picks &amp; Research</h2><p class="muted">Model forecasts and tracked research, kept separate.</p><details class="sport-research-block"><summary>This week’s model picks</summary><div data-sport-picks><p>Loading forecasts…</p></div></details><details class="sport-research-block"><summary>Model performance</summary><div data-sport-record></div></details><div data-sport-results></div>`;
     target.dataset.ready='true';
+  }
+  if (['nfl','nba'].includes(sport)) {
+    let evidence = target.querySelector('[data-league-evidence]');
+    if (!evidence) { evidence = el('div'); evidence.setAttribute('data-league-evidence',''); target.prepend(evidence); }
+    globalThis.SportsHubEvidence?.mountResearch(evidence,sport);
   }
   if(football){globalThis.SportsHubFootballDevelopment?.mount(target, sport);
   globalThis.SportsHubFootballDevelopment?.mountSummary(target, sport);}

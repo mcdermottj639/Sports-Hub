@@ -9,6 +9,7 @@ A personal sports decision workspace for **NFL, college football (Top 25), NBA, 
 - **Today** — your daily brief: what needs attention, upcoming games, saved forecasts, official model results and a compact game radar with TV and saved-market coverage.
 - **Find anything** — search destinations, games and personal notes with the header button, Cmd/Ctrl+K or /. Direct URLs support reloads and Back/Forward, including model scopes and fantasy sections.
 - **Watchlist** — bookmark games and keep personal notes, with undo for removal. Notes remain on this browser; they do not log bets or change predictions.
+- **Matchup Lab** — visual NFL/NBA team ranks, recent form, rest context, a second-source score audit and matched forecast-error comparisons. DraftKings evidence is a dated snapshot with stale labels; ESPN remains live. Recent-form replays are experimental and do not alter official picks.
 - **Research** — clear paths for situational betting systems and experimental model challengers. NFL and CFB studies retain their own data and results.
 - **Fantasy HQ** — real league matchup, lineup, roster needs, waivers and trade leads. Search can open the waiver/trade plan, lineup or season analysis directly.
 - **Navigation** — desktop sidebar and a five-button phone dock: Today, Models, Research, Fantasy, More. More groups every destination by purpose. The optional score rail is available from the header.

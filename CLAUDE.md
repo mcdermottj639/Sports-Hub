@@ -298,6 +298,8 @@ fantasy/golf data are not refreshed by this cycle.
 
 ## Files
 
+- `sports-evidence-core.js`, `sports-evidence.js`, `sports-evidence.css` — v357 Matchup Lab in Research and NFL/NBA reports: visual ranks/form, score cross-checks, matched model diagnostics and a separate last-five replay. `data/draftkings-evidence.json` is a dated ChatGPT-connector snapshot; ESPN stays live. `scripts/refresh-sports-evidence.js` validates refreshes and saves immutable profiles in `data/evidence-observations/`. See `docs/SPORTS_EVIDENCE.md` for sources, refresh scope, leakage guards and initial findings. Data-only evidence refreshes need no app version bump; code changes follow the usual release ritual.
+
 - `nba-page.js`, `_shared/nba-model.js`, `_shared/nba-model-config.js` — NBA league UI and shared fitted model; the shared files live under `supabase/functions/`.
 - `scripts/nba-data.py`, `scripts/nba-features.js`, `scripts/fit-nba.py`, `data/nba-history.json`, `data/nba-validation.json`, `docs/NBA_MODEL.md` — reproducible NBA evidence, chronological fitting and validation.
 
@@ -712,7 +714,25 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v356** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v357** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v357 — Visual Matchup Lab and DraftKings research evidence
+
+Jack authorized visual upgrades, stronger model/research evidence and release.
+- New NFL/NBA rank comparisons, last-five result/margin charts, calendar rest,
+  frozen model versus descriptive recent-form baseline, and final-score audit.
+- Research has Matchups / Model check / Score audit; Today links directly to it,
+  league Research includes it, game reports get a compact version. Mobile
+  Research header and navigation tiles are shortened to reach the evidence.
+- DraftKings is a dated snapshot, not a live API/odds feed. ESPN remains live.
+  36h stale labels, source timestamps, exact team/start matching, one game per
+  sample, disagreement exclusion and missing-line coverage are explicit.
+- Historical replay never uses today’s season ranks; prior finals only, last
+  five each. Snapshot profiles are retained for future prospective research.
+  Official weights/forecasts/settlements and Edge deployments are unchanged.
+- Initial audit: 84 NFL + 160 NBA finals agree, zero disagreements. NBA total
+  bias +4.7 pts across 160 is a forward-validation lead, not a fitted live fix.
+  Full methodology and refresh contract: docs/SPORTS_EVIDENCE.md.
 
 ### v356 — TNF / SNF / MNF situational trends
 

@@ -360,6 +360,7 @@
   }
   async function renderWatchlist() { paintWatchlist(); await loadAgenda(); }
   function renderResearch() {
+    root.SportsHubEvidence?.mountResearch($d('desk-matchup-lab'));
     const host=$d('desk-research-comparisons');
     if (!host.dataset.ready) { host.dataset.ready='1'; ['nfl','cfb'].forEach(s=>root.SportsHubFootballDevelopment?.mountSummary(host,s,'append')); }
   }
