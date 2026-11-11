@@ -714,7 +714,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v360** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v361** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v361 — Compact Today line changes
+
+Condensed ML / Spread / Total movement rows: shared Saved → Now labels, reduced padding and shorter interpretation text. Full explanations retained in title attributes; prices and calculations unchanged. Includes the v360 Monday-night week fix.
 
 ### v360 — Keep Monday Night Football in its reporting week
 
