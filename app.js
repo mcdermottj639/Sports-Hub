@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v366';
+const APP_VERSION = 'v367';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -995,7 +995,7 @@ function gameCard(sport, g, opts = {}) {
 
 // --- game detail modal ----------------------------------------------------
 const modal = () => $('#game-modal');
-function closeModal() { modal().classList.add('hidden'); activeGameDetail = null; ++detailToken; }
+function closeModal() { modal().classList.add('hidden'); activeGameDetail = null; ++detailToken; globalThis.SportsHubDesk?.reportClosed(); }
 $('#modal-close').addEventListener('click', closeModal);
 $('#modal-x').addEventListener('click', closeModal);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
@@ -1173,6 +1173,10 @@ async function openGameDetail(sport, id, g, focusSignals = false) {
       const actions = el('div', 'desk-report-actions');
       actions.innerHTML = '<span>Keep this game on your radar</span>';
       globalThis.SportsHubDesk?.addWatchControl(actions,sport,g);
+      if (['nfl','nba'].includes(sport)) {
+        const lab = el('button','desk-report-lab');lab.type='button';lab.textContent='Matchup Lab →';
+        lab.addEventListener('click',()=>globalThis.SportsHubDesk?.openLab(sport,g,lab));actions.appendChild(lab);
+      }
       $('#modal-body').prepend(actions);
     }
     makeAccordion($('#modal-body'), '.md-section-title', SEC_OPEN_ALL);
@@ -13029,8 +13033,8 @@ function showTab(name, options = {}) {
     b.classList.toggle('active', on);
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
-  Promise.resolve(renderers[name]())
-    .then(() => { injectJumpNav(name); applySections(name); paintStaleNote(); globalThis.SportsHubDesk?.focusSection(); if(name==='matchup-lab'&&currentTab===name)document.querySelector('#matchup-lab h1')?.focus({preventScroll:true}); })
+  return Promise.resolve(renderers[name]())
+    .then(() => { injectJumpNav(name); applySections(name); paintStaleNote(); if(currentTab===name)globalThis.SportsHubDesk?.focusSection(); if(name==='matchup-lab'&&currentTab===name)document.querySelector('#matchup-lab h1')?.focus({preventScroll:true}); })
     .catch((e) => console.error(e));
 }
 

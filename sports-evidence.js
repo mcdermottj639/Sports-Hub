@@ -8,6 +8,8 @@
   const time=v=>new Date(v).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
   const version=s=>root.SportsHubNFLLive?.versionFor(s)||(s==='nba'?'nba-v1':'nfl-football-v1');
   let snapshot=null,pending=null,loadedAt=0;
+  const PREFS_KEY='sportshub:matchup-lab:prefs:v1';
+  function savedPreferences(){let value;try{value=JSON.parse(localStorage.getItem(PREFS_KEY)||'null');}catch(_){}return root.SportsHubDeskCore.labPreferences(value);}
   async function load(force=false){
     if(snapshot&&!force&&Date.now()-loadedAt<5*60000)return snapshot;
     if(pending)return pending;
@@ -82,36 +84,66 @@
   function orderedGames(s,sport){const all=C.games(s,sport);return [...all.filter(g=>Date.parse(g.start)>Date.now()).sort((a,b)=>Date.parse(a.start)-Date.parse(b.start)),...all.filter(g=>Date.parse(g.start)<=Date.now()).sort((a,b)=>Date.parse(b.start)-Date.parse(a.start))];}
   async function mountResearch(host,initialSport='nfl',options={}){
     if(!host)return;
-    if(host.dataset.evidenceMounted){host._evidencePaint?.();return;}
+    if(host.dataset.evidenceMounted){host._evidenceNavigate?.(options.selection);host._evidencePaint?.();return;}
     const full=!!options.fullScreen;
     host.dataset.evidenceMounted='1';host.classList.add('se');
     if(full)host.classList.add('se-workspace');
-    let sport=['nfl','nba'].includes(initialSport)?initialSport:'nfl',tab='matchups',token=0,reloading=false,error='';
-    const choices={nfl:{selected:null,scope:'upcoming'},nba:{selected:null,scope:'upcoming'}};
+    const saved=savedPreferences();
+    let sport=saved.sport||initialSport,tab=full?'matchups':saved.tab,token=0,reloading=false,error='',missingSelection=null,bodyKey='';
+    const choices=saved.choices;
+    const applySelection=value=>{
+      const next=root.SportsHubDeskCore.labSelection(value);
+      if(next.sport)sport=next.sport;
+      if(next.tab&&!full)tab=next.tab;
+      if(next.scope)choices[sport].scope=next.scope;
+      if(next.selected)choices[sport].selected=next.selected;
+      missingSelection=next.selected||null;
+    };
+    applySelection(options.selection);
+    const remember=()=>{
+      try{localStorage.setItem(PREFS_KEY,JSON.stringify({sport,tab:full?savedPreferences().tab:tab,choices}));}catch(_){}
+      if(full)root.SportsHubDesk?.syncLab({sport,tab,...choices[sport],...(missingSelection?{selected:missingSelection}:{})});
+    };
     // Keep the controls mounted during feed updates so native selects and keyboard focus survive.
     const leagueButtons=['nfl','nba'].map(x=>`<button type="button" data-se-sport="${x}" aria-pressed="${sport===x}">${x.toUpperCase()}</button>`).join('');
     const tabs=full?'':[['matchups','Matchup'],['accuracy','Model check'],['audit','Score audit']].map(([key,title])=>`<button type="button" data-se-tab="${key}" aria-pressed="${tab===key}">${title}</button>`).join('');
+    const back=full?root.SportsHubDesk.labReturn():null;
     const reload='<button type="button" class="se-reload" data-se-reload aria-label="Reload matchup data" title="Reload the published snapshot and ESPN context">↻</button>';
-    host.innerHTML=`<div class="se-chrome">${full?`<header class="se-lab-header"><button type="button" class="se-back" data-desk-route="today"><span aria-hidden="true">←</span> Today</button><div><span class="se-kicker">SPORTS HUB</span><h1 tabindex="-1">Matchup Lab</h1></div>${reload}</header>`:`<div class="se-heading"><div><span class="se-kicker">THE MATCHUP LAB</span><h2>See the matchup. Check the model.</h2></div><button type="button" class="se-open" data-desk-route="matchup-lab">Full screen ↗</button></div>`}<div class="se-controls"><div class="se-picker-row"><div class="se-sport" role="group" aria-label="Evidence league">${leagueButtons}</div><label class="se-scope"><span>Games</span><select data-se-scope aria-label="Game period"><option value="upcoming">Upcoming</option><option value="completed">Completed</option><option value="all">All games</option></select></label><label class="se-select">Choose a game<select data-se-game aria-label="Choose matchup"><option>Loading games…</option></select></label></div>${full?'':`<div class="se-tabs" role="group" aria-label="Evidence view">${tabs}${reload}</div>`}</div></div><div data-se-source></div><p class="se-feedback" data-se-feedback role="status" hidden></p><div class="se-body" data-se-body><p class="se-note" role="status">Loading matchup evidence…</p></div>`;
+    host.innerHTML=`<div class="se-chrome">${full?`<header class="se-lab-header"><button type="button" class="se-back" data-se-back aria-label="Back to ${esc(back.label)}"><span aria-hidden="true">←</span><span data-se-back-label>${esc(back.label)}</span></button><div><span class="se-kicker">SPORTS HUB</span><h1 tabindex="-1">Matchup Lab</h1></div>${reload}</header>`:`<div class="se-heading"><div><span class="se-kicker">THE MATCHUP LAB</span><h2>See the matchup. Check the model.</h2></div><button type="button" class="se-open" data-se-open>Full screen ↗</button></div>`}<div class="se-controls"><div class="se-picker-row"><div class="se-sport" role="group" aria-label="Evidence league">${leagueButtons}</div><label class="se-scope"><span>Games</span><select data-se-scope aria-label="Game period"><option value="upcoming">Upcoming</option><option value="completed">Completed</option><option value="all">All games</option></select></label><div class="se-game-picker"><label class="se-select">Choose a game<select data-se-game aria-label="Choose matchup" disabled><option>Loading games…</option></select></label><div class="se-game-step"><button type="button" data-se-step="-1" aria-label="Previous matchup" disabled>‹</button><button type="button" data-se-step="1" aria-label="Next matchup" disabled>›</button></div></div></div>${full?'':`<div class="se-tabs" role="group" aria-label="Evidence view">${tabs}${reload}</div>`}</div></div><div data-se-source></div><p class="se-feedback" data-se-feedback role="status" hidden></p><div class="se-body" data-se-body><p class="se-note" role="status">Loading matchup evidence…</p></div>`;
     const gameSelect=host.querySelector('[data-se-game]'),scopeSelect=host.querySelector('[data-se-scope]');
+    let filtered=[];
     const paint=(forceControls=false,forceContext=false)=>{
       if(!host.isConnected||!snapshot)return;
       const s=snapshot,rows=root.SportsHubCloudAI?.cached?.().rows||[],all=orderedGames(s,sport),choice=choices[sport];
-      const filtered=all.filter(g=>choice.scope==='all'||(choice.scope==='completed'?C.final(g):!C.final(g)&&Date.parse(g.start)>Date.now()));
-      if(!filtered.some(g=>g.id===choice.selected))choice.selected=filtered.find(g=>Date.parse(g.start)>Date.now()&&[g.home.abbr,g.away.abbr].includes('PHI'))?.id||filtered[0]?.id||null;
+      if(missingSelection&&all.some(g=>g.id===missingSelection)){
+        const requested=all.find(g=>g.id===missingSelection);
+        if(choice.scope==='upcoming'&&(C.final(requested)||Date.parse(requested.start)<=Date.now()))choice.scope=C.final(requested)?'completed':'all';
+        if(choice.scope==='completed'&&!C.final(requested))choice.scope='all';
+        missingSelection=null;
+      }
+      filtered=all.filter(g=>choice.scope==='all'||(choice.scope==='completed'?C.final(g):!C.final(g)&&Date.parse(g.start)>Date.now()));
+      if(!missingSelection&&!filtered.some(g=>g.id===choice.selected))choice.selected=filtered.find(g=>Date.parse(g.start)>Date.now()&&[g.home.abbr,g.away.abbr].includes('PHI'))?.id||filtered[0]?.id||null;
       const g=filtered.find(g=>g.id===choice.selected);
       host.querySelectorAll('[data-se-sport]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.seSport===sport)));
       host.querySelectorAll('[data-se-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.seTab===tab)));
       scopeSelect.value=choice.scope;
-      const optionsHTML=filtered.length?filtered.map(x=>`<option value="${esc(x.id)}"${x.id===choice.selected?' selected':''}>${esc(label(x)+' · '+time(x.start)+(C.final(x)?' · Final':''))}</option>`).join(''):'<option value="">No games in this period</option>';
+      const optionsHTML=(missingSelection?'<option value="">Requested game unavailable</option>':'')+(filtered.length?filtered.map(x=>`<option value="${esc(x.id)}"${x.id===choice.selected?' selected':''}>${esc(label(x)+' · '+time(x.start)+(C.final(x)?' · Final':''))}</option>`).join(''):'<option value="">No games in this period</option>');
       if(gameSelect.innerHTML!==optionsHTML&&(forceControls||document.activeElement!==gameSelect))gameSelect.innerHTML=optionsHTML;
-      gameSelect.disabled=!filtered.length;gameSelect.value=choice.selected||'';
+      gameSelect.disabled=!filtered.length;gameSelect.value=missingSelection?'':choice.selected||'';
+      const at=filtered.findIndex(g=>g.id===choice.selected);
+      host.querySelectorAll('[data-se-step]').forEach(b=>{const next=at+Number(b.dataset.seStep);b.disabled=at<0||next<0||next>=filtered.length;});
+      if(full){const back=root.SportsHubDesk.labReturn();host.querySelector('[data-se-back-label]').textContent=back.label;host.querySelector('[data-se-back]').setAttribute('aria-label','Back to '+back.label);}
       host.querySelector('[data-se-source]').innerHTML=sourceLine(s,full);
-      host.querySelector('[data-se-body]').innerHTML=tab==='matchups'?(g?(full?labMatchupHTML(s,sport,g):matchupHTML(s,sport,g,rows)):`<div class="se-empty"><h3>No ${choice.scope==='all'?'':choice.scope+' '}${sport.toUpperCase()} games in this snapshot</h3><p>Try another period or league. Reload checks for a newer published snapshot.</p><button type="button" data-se-all>Show all games</button></div>`):`<p class="se-view-caption">${sport.toUpperCase()} · ${tab==='accuracy'?'League-wide forecast research':'League-wide final-score checks'} · all matched saved games</p>`+(tab==='accuracy'?accuracyHTML(s,rows,sport):auditHTML(s,rows,sport));
-      if(full&&g)root.SportsHubMatchupContext?.mount(host.querySelector('[data-se-body]'),s,sport,g,rows,forceContext);
-      host.querySelector('.se-select').hidden=tab!=='matchups';host.querySelector('.se-scope').hidden=tab!=='matchups';
+      const body=host.querySelector('[data-se-body]'),nextKey=sport+':'+tab+':'+(g?.id||missingSelection||'');
+      const detailKey=d=>d.dataset.mcFold||d.querySelector('summary')?.textContent.trim();
+      const openDetails=bodyKey===nextKey?new Set([...body.querySelectorAll('details[open]')].map(detailKey)):new Set();
+      body.innerHTML=tab==='matchups'?(missingSelection?'<div class="se-empty"><h3>This matchup is outside the current snapshot</h3><p>Choose another game or reload for newer evidence. Your link has not been changed to a different matchup.</p><button type="button" data-se-all>Browse available games</button></div>':g?(full?labMatchupHTML(s,sport,g):matchupHTML(s,sport,g,rows)):`<div class="se-empty"><h3>No ${choice.scope==='all'?'':choice.scope+' '}${sport.toUpperCase()} games in this snapshot</h3><p>Try another period or league. Reload checks for a newer published snapshot.</p><button type="button" data-se-all>Show all games</button></div>`):`<p class="se-view-caption">${sport.toUpperCase()} · ${tab==='accuracy'?'League-wide forecast research':'League-wide final-score checks'} · all matched saved games</p>`+(tab==='accuracy'?accuracyHTML(s,rows,sport):auditHTML(s,rows,sport));
+      [...body.querySelectorAll('details')].forEach(d=>{d.open=openDetails.has(detailKey(d));});bodyKey=nextKey;
+      if(full&&g&&!missingSelection)root.SportsHubMatchupContext?.mount(body,s,sport,g,rows,forceContext);
+      host.querySelector('.se-game-picker').hidden=tab!=='matchups';host.querySelector('.se-scope').hidden=tab!=='matchups';
       const status=host.querySelector('[data-se-feedback]');status.textContent=error;status.hidden=!error;
       const refresh=host.querySelector('[data-se-reload]');refresh.disabled=reloading;refresh.setAttribute('aria-busy',String(reloading));
+      if(host.offsetParent!==null)remember();
     };
     const refresh=async()=>{
       if(reloading)return;reloading=true;error='';const ticket=++token;
@@ -120,22 +152,26 @@
       finally{if(ticket===token){reloading=false;paint(true,true);if(!snapshot){b.disabled=false;b.setAttribute('aria-busy','false');const status=host.querySelector('[data-se-feedback]');status.textContent='Matchup evidence could not load. Check your connection and try refresh again.';status.hidden=false;host.querySelector('[data-se-body]').innerHTML='';}}}
     };
     host._evidencePaint=paint;
+    host._evidenceNavigate=applySelection;
     host.addEventListener('click',e=>{
       const b=e.target.closest('button');if(!b)return;
-      if(b.dataset.seSport){sport=b.dataset.seSport;paint(true);}
+      if(b.dataset.seSport){sport=b.dataset.seSport;missingSelection=null;paint(true);}
       else if(b.dataset.seTab){tab=b.dataset.seTab;paint();}
       else if(b.hasAttribute('data-se-reload'))refresh();
-      else if(b.hasAttribute('data-se-all')){choices[sport].scope='all';paint(true);scopeSelect.focus();}
+      else if(b.hasAttribute('data-se-back'))root.SportsHubDesk.backFromLab();
+      else if(b.hasAttribute('data-se-open'))root.SportsHubDesk.navigate({panel:'matchup-lab',lab:{sport,tab,...choices[sport]}});
+      else if(b.hasAttribute('data-se-step')){const at=filtered.findIndex(g=>g.id===choices[sport].selected),g=filtered[at+Number(b.dataset.seStep)];if(g){choices[sport].selected=g.id;missingSelection=null;paint(true);}}
+      else if(b.hasAttribute('data-se-all')){choices[sport].scope='all';missingSelection=null;paint(true);scopeSelect.focus();}
     });
     host.addEventListener('change',e=>{
-      if(e.target===gameSelect){choices[sport].selected=e.target.value;paint();}
-      else if(e.target===scopeSelect){choices[sport].scope=e.target.value;paint(true);}
+      if(e.target===gameSelect){choices[sport].selected=e.target.value;missingSelection=null;paint();}
+      else if(e.target===scopeSelect){choices[sport].scope=e.target.value;missingSelection=null;paint(true);}
     });
     const onCloud=()=>{if(host.isConnected){if(!host.contains(document.activeElement)||!document.activeElement.matches('select,summary'))paint();}else root.removeEventListener('sportshub:cloud-ai',onCloud);};
     root.addEventListener('sportshub:cloud-ai',onCloud);
     await refresh();
   }
-  function mountLab(host){return mountResearch(host,'nfl',{fullScreen:true});}
+  function mountLab(host){return mountResearch(host,'nfl',{fullScreen:true,selection:root.SportsHubDeskCore.route(root.location?.hash)?.lab});}
   async function mountGame(host,sport,g){
     if(!host||!g||!['nfl','nba'].includes(sport))return;
     host.classList.add('se');host.innerHTML='<p class="se-note">Loading matchup context…</p>';

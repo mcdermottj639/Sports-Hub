@@ -4,6 +4,7 @@
   'use strict';
   const C = root.SportsHubDeskCore;
   const WATCH_KEY = 'sportshub:desk:watch:v1';
+  const AGENDA_KEY = 'sportshub:desk:agenda:v1';
   const $d = id => document.getElementById(id);
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const icons = {
@@ -99,6 +100,7 @@
   let games = [], agendaFilter = 'all', agendaEdges = false, agendaLimit = 6, agendaErrors = [], agendaLoaded = false;
   let agendaPending = null, agendaAt = 0, boardPending = null, boardAt = 0;
   let currentRoute = { panel: 'home' }, routing = false, searchItems = [], searchInvoker = null;
+  let restoringScroll = null;
   let toastTimer, cloudFailed = false, undoItem = null, sectionPending = false;
   function readWatch() {
     try { return C.normalizeWatch(JSON.parse(localStorage.getItem(WATCH_KEY) || '[]')); } catch (_) { return []; }
@@ -152,9 +154,18 @@
     return new Date(date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', ...(full ? { weekday: 'short' } : {}) });
   }
   function ago(at) { return at ? timeAgo(typeof at === 'number' ? at : Date.parse(at)) : 'time unavailable'; }
+  function saveAgenda() {
+    try { localStorage.setItem(AGENDA_KEY, JSON.stringify({ filter:agendaFilter, edges:agendaEdges })); } catch (_) {}
+  }
+  function rememberScroll(extra = {}) {
+    if (routing || location.hash !== C.hashFor(currentRoute)) return;
+    history.replaceState({ ...history.state, deskScroll:window.scrollY, ...(currentRoute.panel==='home'?{deskAgendaLimit:agendaLimit}:{}), ...extra }, '', location.hash);
+  }
   function onTab(name, opts = {}) {
+    const previous = currentRoute;
+    if (!routing) rememberScroll(opts.returnReport ? { deskReport:opts.returnReport } : {});
     sectionPending = !!opts.section;
-    currentRoute = { panel:name, ...(name === 'predictions' ? { aiSport: state.aiSport, aiSub:state.aiSub } : {}), ...(opts.sportView ? { sportView:opts.sportView } : {}), ...(opts.section ? {section:opts.section} : {}) };
+    currentRoute = { panel:name, ...(name === 'predictions' ? { aiSport: state.aiSport, aiSub:state.aiSub } : {}), ...(opts.sportView ? { sportView:opts.sportView } : {}), ...(opts.section ? {section:opts.section} : {}), ...(opts.lab ? {lab:C.labSelection(opts.lab)} : {}) };
     const activeGroup = C.group(currentRoute);
     document.querySelectorAll('[data-desk-group]').forEach(b => {
       const on = b.dataset.deskGroup === activeGroup;
@@ -175,23 +186,76 @@
     if(art) art.innerHTML=(CLUBS[name]?[name]:['eagles','redsox']).map(path=>`<button type="button" class="desk-hero-crest desk-crest-${path}" data-desk-route="${path}" aria-label="Open ${CLUBS[path].name}">${teamMark(CLUBS[path])}</button>`).join('');
     if (!routing) {
       const hash = C.hashFor(currentRoute);
-      if (location.hash !== hash) history[opts.replace ? 'replaceState' : 'pushState'](null,'',hash);
+      if (location.hash !== hash) {
+        const entry = opts.replace ? { ...history.state } : { deskScroll:0 };
+        if (name === 'matchup-lab' && previous.panel !== name) entry.labReturn = { hash:C.hashFor(previous), label:opts.returnReport ? 'Game report' : (meta[previous.panel] || meta.home)[0] };
+        history[opts.replace ? 'replaceState' : 'pushState'](entry,'',hash);
+      }
     }
     paintWatchButtons();
   }
   function navigate(path, opts = {}) {
     const r = typeof path === 'string' ? C.route(path.startsWith('#') ? path : '#/' + path) : path;
     if (!r) return false;
-    showTab(r.panel, { ...r, ...opts });
-    if (opts.scroll !== false) window.scrollTo({top:0, behavior:'instant'});
+    restoringScroll = null;
+    const rendered = showTab(r.panel, { ...r, ...opts });
+    if (Number.isFinite(opts.restoreY)) {
+      const pending = { hash:C.hashFor(currentRoute), y:Math.max(0,opts.restoreY) };
+      restoringScroll = pending;
+      window.scrollTo({top:pending.y,behavior:'instant'});
+      Promise.resolve(rendered).then(() => {
+        if (restoringScroll === pending && C.hashFor(currentRoute) === pending.hash) window.scrollTo({top:pending.y,behavior:'instant'});
+        if (restoringScroll === pending) restoringScroll = null;
+      });
+    } else if (opts.scroll !== false) window.scrollTo({top:0, behavior:'instant'});
     return true;
+  }
+  function syncLab(lab) {
+    if (currentRoute.panel !== 'matchup-lab') return;
+    currentRoute = { panel:'matchup-lab', lab:C.labSelection(lab) };
+    if (restoringScroll) restoringScroll.hash=C.hashFor(currentRoute);
+    history.replaceState({ ...history.state }, '', C.hashFor(currentRoute));
+  }
+  function labReturn() {
+    const back = history.state?.labReturn;
+    return back && C.route(back.hash)?.panel !== 'matchup-lab' && C.route(back.hash) ? back : { label:'Today' };
+  }
+  function backFromLab() {
+    if (labReturn().hash) { history.back(); return; }
+    navigate('today',{replace:true});
+  }
+  function reportClosed() {
+    if (!history.state?.deskReport) return;
+    const entry = { ...history.state }; delete entry.deskReport;
+    history.replaceState(entry,'',location.hash);
+  }
+  async function openLab(sport, g, trigger) {
+    if (!['nfl','nba'].includes(sport) || !g?.id) return;
+    const origin = C.hashFor(currentRoute), fromReport = !$d('game-modal').classList.contains('hidden');
+    if (trigger) { trigger.disabled=true; trigger.setAttribute('aria-busy','true'); }
+    try {
+      const snapshot = await root.SportsHubEvidence.load();
+      if (C.hashFor(currentRoute) !== origin || (fromReport && $d('game-modal').classList.contains('hidden'))) return;
+      const matched = root.SportsHubEvidenceCore.findGame(snapshot,sport,g);
+      if (!matched) { toast('This game is not in the published Lab snapshot yet. Its game report is still available.'); return; }
+      if (fromReport) closeModal();
+      navigate({ panel:'matchup-lab', lab:{ sport, tab:'matchups', scope:root.SportsHubEvidenceCore.final(matched)?'completed':'all', selected:matched.id } },
+        fromReport ? { returnReport:{ sport, id:g.id, game:g } } : {});
+    } catch (_) { toast('Matchup Lab could not load. Try again when your connection is available.'); }
+    finally { if (trigger) { trigger.disabled=false;trigger.removeAttribute('aria-busy'); } }
   }
   function syncAI() { if (currentTab === 'predictions') onTab('predictions',{replace:true}); }
   function syncResearch(sport,view) { if (currentTab === sport) onTab(sport,{ sportView:view,replace:true }); }
   function restoreRoute() {
     if (!location.hash || location.hash.startsWith('#pk=')) return false;
     const r = C.route(location.hash); if (!r) return false;
-    routing = true; navigate(r,{scroll:false}); routing = false; return true;
+    if (r.panel === 'matchup-lab' && !$d('game-modal').classList.contains('hidden')) closeModal();
+    const entry = history.state, y = entry?.deskScroll;
+    if(r.panel==='home'&&Number.isInteger(entry?.deskAgendaLimit))agendaLimit=Math.max(6,Math.min(1000,entry.deskAgendaLimit));
+    routing = true; navigate(r,{scroll:false,...(Number.isFinite(y)?{restoreY:y}:{})}); routing = false;
+    const report = entry?.deskReport;
+    if (r.panel !== 'matchup-lab' && report && ['nfl','nba'].includes(report.sport) && report.game?.id === report.id) openGameDetail(report.sport,report.id,report.game);
+    return true;
   }
   function focusSection() {
     if (!sectionPending || currentRoute.panel !== 'fantasy' || !currentRoute.section) return;
@@ -291,14 +355,22 @@
     host.replaceChildren();
     if (errors.length) host.insertAdjacentHTML('beforeend',`<div class="desk-inline-note">${escape(errors.join(', '))} feed unavailable. <button type="button" data-desk-refresh>Retry</button></div>`);
     if (all.length) host.insertAdjacentHTML('beforeend',`<div class="desk-slate-strip" role="group" aria-label="Slate summary"><span>${isToday ? all.length : sum.games} ${(isToday ? all.length : sum.games)===1?"game":"games"}</span><span class="hot">${sum.edges} ${sum.edges===1?'edge':'edges'}</span><span class="flip">${sum.flips} dog ${sum.flips===1?'flip':'flips'}</span><button type="button" data-agenda-edges aria-pressed="${agendaEdges}">Edges only</button></div>`);
-    if (!list.length) host.insertAdjacentHTML('beforeend',`<div class="desk-empty"><b>${agendaEdges && all.length ? 'No edges or dog flips in this view.' : agendaFilter==='watchlist' ? 'Give your radar a personal touch.' : errors.length ? 'Waiting for the schedule.' : isToday ? 'No games scheduled today.' : 'No games in this view.'}</b><p>${agendaEdges && all.length ? 'Turn off Edges only to see every game.' : agendaFilter==='watchlist' ? 'Save a game with the bookmark icon. It will be easy to find here and in your watchlist.' : errors.length ? 'Your saved results and notes are still available.' : isToday ? 'Try All to see the upcoming football slate.' : 'Football covers this week; baseball and basketball cover today. Try another league or explore saved model results.'}</p>${button('models/all/results','View performance')}</div>`);
+    if (!list.length) host.insertAdjacentHTML('beforeend',`<div class="desk-empty"><b>${agendaEdges && all.length ? 'No edges or dog flips in this view.' : agendaFilter==='watchlist' ? 'Give your radar a personal touch.' : errors.length ? 'Waiting for the schedule.' : isToday ? 'No games scheduled today.' : 'No games in this view.'}</b><p>${agendaEdges && all.length ? 'Turn off Edges only to see every game.' : agendaFilter==='watchlist' ? 'Save a game with the bookmark icon. It will be easy to find here and in your watchlist.' : errors.length ? 'Your saved results and notes are still available.' : isToday ? 'Try All to see the upcoming football slate.' : 'Football covers this week; baseball and basketball cover today. Try another league or explore saved model results.'}</p>${agendaFilter!=='all'||agendaEdges?'<button type="button" class="desk-link" data-agenda-reset>Show all games →</button>':''}${button('models/all/results','View performance')}</div>`);
     list.slice(0,isToday ? list.length : agendaLimit).forEach(({sport,g,markets,book,read}) => {
       const row = document.createElement('div'); row.className = 'desk-game' + (read.hot ? ' desk-game-hot' : '');
       const status = gameState(g), started = status !== 'scheduled';
       const tag = status === 'live' ? (g.statusText || 'Live') : status === 'final' ? 'Final' : dateText(g.date);
       const ml = side => !started && read.moneyline[side] ? `<small class="desk-ml">ML ${escape(read.moneyline[side])}</small>` : '';
-      row.innerHTML = `<button type="button" class="desk-game-main" data-desk-game="${escape(sport+':'+g.id)}" aria-label="Open ${escape(g.away.name)} at ${escape(g.home.name)} game report"><span class="desk-game-meta"><span class="desk-sport">${escape(LEAGUES[sport].label)}</span><span class="${status==='live'?'desk-live':''}">${escape(tag)}</span>${edgeBadge(read)}</span><span class="desk-matchup"><span class="desk-match-team">${teamMark(g.away)}<span><b>${escape(g.away.abbr || g.away.name)}</b>${ml('away')||`<small>${escape(g.away.name)}</small>`}</span>${started?`<strong>${escape(g.away.score??'–')}</strong>`:''}</span><span class="desk-versus">${started?'–':'at'}</span><span class="desk-match-team">${teamMark(g.home)}<span><b>${escape(g.home.abbr || g.home.name)}</b>${ml('home')||`<small>${escape(g.home.name)}</small>`}</span>${started?`<strong>${escape(g.home.score??'–')}</strong>`:''}</span></span>${liveField(sport,g,markets)}${readHTML(read,book,status)}${gameContext(sport,g,markets)}</button>`;
-      addWatchControl(row,sport,g); host.appendChild(row);
+      row.innerHTML = `<button type="button" class="desk-game-main" data-desk-game="${escape(sport+':'+g.id)}" aria-label="Open ${escape(g.away.name)} at ${escape(g.home.name)} game report"><span class="desk-game-meta"><span class="desk-sport">${escape(LEAGUES[sport].label)}</span><span class="${status==='live'?'desk-live':''}">${escape(tag)}</span>${edgeBadge(read)}</span><span class="desk-matchup"><span class="desk-match-team">${teamMark(g.away)}<span><b>${escape(g.away.abbr || g.away.name)}</b>${ml('away')||`<small>${escape(g.away.name)}</small>`}</span>${started?`<strong>${escape(g.away.score??'–')}</strong>`:''}</span><span class="desk-versus">${started?'–':'at'}</span><span class="desk-match-team">${teamMark(g.home)}<span><b>${escape(g.home.abbr || g.home.name)}</b>${ml('home')||`<small>${escape(g.home.name)}</small>`}</span>${started?`<strong>${escape(g.home.score??'–')}</strong>`:''}</span></span>${liveField(sport,g,markets)}${readHTML(read,book,status)}</button>`;
+      addWatchControl(row,sport,g);
+      const footer = document.createElement('div');footer.className='desk-game-footer';
+      footer.innerHTML=gameContext(sport,g,markets);
+      if (['nfl','nba'].includes(sport)) {
+        const lab = document.createElement('button');lab.type='button';lab.className='desk-game-lab';lab.textContent='Matchup Lab →';
+        lab.setAttribute('aria-label',`Open Matchup Lab for ${g.away.name} at ${g.home.name}`);
+        lab.addEventListener('click',()=>openLab(sport,g,lab));footer.appendChild(lab);
+      }
+      if(footer.childNodes.length)row.appendChild(footer);host.appendChild(row);
     });
     if (!isToday && list.length > agendaLimit) host.insertAdjacentHTML('beforeend',`<button class="desk-show-more" type="button" data-agenda-more>Show ${Math.min(12,list.length-agendaLimit)} more games <span>(${list.length} in this view)</span></button>`);
     if (all.length) host.insertAdjacentHTML('beforeend','<details class="desk-read-note"><summary>How to read these rows</summary>Lines are ESPN\'s. Model chips are the official saved pregame forecasts (NFL football model, NBA model, v239 elsewhere); green means the model tiered it Edge, Best or Alert. Chips and the points badge are the saved forecast at the saved price; the line row is today\'s. When today\'s line has moved, a note shows the move and whether the saved projection still clears it (edge now = model win chance vs today\'s no-vig price). Dog flip = the saved price was plus money but the model gave that side over 50% (same rule as Performance; today\'s book price may have moved). Projected score comes from the saved margin and total. For fun — not betting advice.</details>');
@@ -429,6 +501,8 @@
     finally {document.querySelectorAll('[data-desk-refresh]').forEach(b=>b.disabled=false);}
   }
   function init() {
+    try { const p=C.agendaPreferences(JSON.parse(localStorage.getItem(AGENDA_KEY)||'null'));agendaFilter=p.filter;agendaEdges=p.edges; } catch (_) {}
+    if ('scrollRestoration' in history) history.scrollRestoration='manual';
     document.querySelectorAll('[data-desk-icon]').forEach(n=>n.innerHTML=icon(n.dataset.deskIcon));
     Object.entries(CLUBS).forEach(([path,club])=>{const node=document.querySelector(`#tab-${path} .ic`);if(node)node.innerHTML=teamMark(club);});
     // Keep an abbreviation if a feed logo is missing or cannot load.
@@ -446,9 +520,10 @@
       if(e.target.closest('[data-search-close]')){closeSearch();return;}
       const sr=e.target.closest('[data-search-index]');if(sr){const x=searchItems[Number(sr.dataset.searchIndex)];closeSearch();if(x?.game)openSavedGame(x.game);else if(x)navigate(x.path);return;}
       const game=e.target.closest('[data-desk-game]');if(game){openSavedGame(game.dataset.deskGame);return;}
-      const filter=e.target.closest('[data-agenda-filter]');if(filter){agendaFilter=filter.dataset.agendaFilter;if(agendaFilter==='today')agendaEdges=false;agendaLimit=6;paintAgenda();$d('desk-agenda-filters').querySelector(`[data-agenda-filter="${agendaFilter}"]`)?.focus();return;}
+      const filter=e.target.closest('[data-agenda-filter]');if(filter){agendaFilter=filter.dataset.agendaFilter;if(agendaFilter==='today')agendaEdges=false;agendaLimit=6;saveAgenda();paintAgenda();$d('desk-agenda-filters').querySelector(`[data-agenda-filter="${agendaFilter}"]`)?.focus();return;}
       if(e.target.closest('[data-agenda-more]')){agendaLimit+=12;paintAgenda();return;}
-      if(e.target.closest('[data-agenda-edges]')){agendaEdges=!agendaEdges;agendaLimit=6;paintAgenda();document.querySelector('[data-agenda-edges]')?.focus();return;}
+      if(e.target.closest('[data-agenda-edges]')){agendaEdges=!agendaEdges;agendaLimit=6;saveAgenda();paintAgenda();document.querySelector('[data-agenda-edges]')?.focus();return;}
+      if(e.target.closest('[data-agenda-reset]')){agendaFilter='all';agendaEdges=false;agendaLimit=6;saveAgenda();paintAgenda();$d('desk-agenda-filters').querySelector('[data-agenda-filter="all"]')?.focus();return;}
       if(e.target.closest('[data-desk-refresh]')){refresh();return;}
       const remove=e.target.closest('[data-watch-remove]');if(remove){const list=readWatch(),item=list.find(r=>C.key(r.sport,r.id)===remove.dataset.watchRemove);if(saveWatch(list.filter(r=>r!==item))){undoItem=item;toast('Removed from your watchlist.',true);}}
       if(e.target.closest('[data-watch-undo]')&&undoItem){const list=readWatch();if(list.length>=80){toast('Your watchlist is full. Remove another game to restore this one.');return;}if(saveWatch([undoItem,...list.filter(r=>C.key(r.sport,r.id)!==C.key(undoItem.sport,undoItem.id))])){undoItem=null;toast('Game and note restored.');}}
@@ -477,6 +552,10 @@
       tabs[next].focus();
     });
     window.addEventListener('popstate',restoreRoute);
+    // Save after scrolling settles; per-frame History writes hit Safari's rate limit.
+    let scrollTimer;
+    window.addEventListener('scroll',()=>{clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>{if(!restoringScroll)rememberScroll();},500);},{passive:true});
+    for (const event of ['pointerdown','touchstart','wheel','keydown']) window.addEventListener(event,()=>{restoringScroll=null;},{passive:true});
     window.addEventListener('hashchange',()=>{if(location.hash!==C.hashFor(currentRoute))restoreRoute();});
     window.addEventListener('sportshub:cloud-ai',()=>{cloudFailed=false;paintBrief();paintAgenda();});
     window.addEventListener('sportshub:cloud-error',()=>{cloudFailed=true;paintBrief();});
@@ -492,5 +571,5 @@
     $d('desk-board-fold').addEventListener('toggle',e=>{try{localStorage.setItem('sportshub:desk:board-open',String(e.target.open));}catch(_){}});
     try{$d('desk-board-fold').open=localStorage.getItem('sportshub:desk:board-open')==='true';}catch(_){}
   }
-  root.SportsHubDesk=Object.freeze({init,renderHome,renderResearch,renderWatchlist,renderExplore,addWatchControl,onTab,restoreRoute,navigate,syncAI,syncResearch,paintBrief,focusSection});
+  root.SportsHubDesk=Object.freeze({init,renderHome,renderResearch,renderWatchlist,renderExplore,addWatchControl,onTab,restoreRoute,navigate,syncAI,syncResearch,syncLab,labReturn,backFromLab,openLab,reportClosed,paintBrief,focusSection});
 })(globalThis);

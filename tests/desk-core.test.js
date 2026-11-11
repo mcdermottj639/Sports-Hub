@@ -42,6 +42,24 @@ test('bookmarks preserve notes, deduplicate by league and refuse silent eviction
   assert.equal(C.normalizeWatch([...full,{...item,sport:'cfb',id:'1'}]).length,80);
 });
 
+test('Lab links retain the league, exact game, period and evidence view', () => {
+  const selected={panel:'matchup-lab',lab:{sport:'nba',tab:'audit',scope:'completed',selected:'1026001'}};
+  assert.deepEqual(C.route(C.hashFor(selected)),selected);
+  assert.deepEqual(C.route('#/matchup-lab?league=nfl&game=974129&view=matchups&period=all'),{panel:'matchup-lab',lab:{sport:'nfl',tab:'matchups',scope:'all',selected:'974129'}});
+  assert.deepEqual(C.route('#/matchup-lab?league=cfb&game=%3Cscript%3E&view=unknown&period=bad'),{panel:'matchup-lab'});
+  assert.equal(C.route('#/fantasy/lineup?ignored=1').section,'lineup');
+});
+
+test('workspace preferences recover from malformed storage and keep per-league game choices', () => {
+  for(const value of [null,undefined,false,'bad',[],{choices:null}]) assert.equal(C.labPreferences(value).sport,'nfl');
+  const prefs=C.labPreferences({sport:'nba',tab:'accuracy',choices:{nfl:{selected:'974129',scope:'upcoming'},nba:{selected:'1026001',scope:'completed'}}});
+  assert.equal(prefs.choices.nfl.selected,'974129');assert.equal(prefs.choices.nba.scope,'completed');assert.equal(prefs.tab,'accuracy');
+  const bad=C.labPreferences({sport:'cfb',tab:'bad',choices:{nfl:{scope:'bad',selected:'x'.repeat(500)}}});
+  assert.deepEqual(bad.choices.nfl,{selected:null,scope:'upcoming'});
+  assert.deepEqual(C.agendaPreferences({filter:'nba',edges:true}),{filter:'nba',edges:true});
+  assert.deepEqual(C.agendaPreferences({filter:'unknown',edges:'false'}),{filter:'all',edges:false});
+});
+
 test('capture status differentiates stale, failed, missing and implausible timestamps', () => {
   assert.equal(C.captureStatus(null,now).tone,'muted');
   assert.equal(C.captureStatus({status:'ok',finished_at:new Date(now-30*60000).toISOString()},now).tone,'good');

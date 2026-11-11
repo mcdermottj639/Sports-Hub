@@ -767,3 +767,22 @@ body[data-desk-panel="home"] .desk-page-heading { position:absolute!important;wi
   :root[data-palette] .desk-shell #predictions .ctl-row .sec-all { font-size:10px; }
   :root[data-palette] .desk-shell #predictions .pred-header { display:grid;gap:4px; }
 }
+/* Daily journeys: compact content, comfortable actions, and direct game context. */
+.desk-quick-start{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 14px;}
+.desk-quick-start button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:8px 10px;border:1px solid #cdd9c7;border-radius:9px;background:#f8faf3;color:#234d3e;font:inherit;font-size:12px;font-weight:650;}
+.desk-quick-start svg{width:18px;height:18px;flex-shrink:0;}
+.desk-quick-start button:hover{background:#e9f0df;}
+.desk-game-footer{display:flex;align-items:center;gap:8px;padding-bottom:6px;}
+.desk-game-footer .desk-game-context{flex:1;min-width:0;margin:0;}
+#desk-agenda>.desk-slate-strip,#desk-agenda>.desk-read-note{grid-column:1/-1;}
+.desk-slate-strip button{min-height:44px;}
+.desk-game-lab{flex-shrink:0;margin-left:auto;padding:6px 10px;min-height:44px;min-width:44px;border:1px solid #cdd9c7;border-radius:8px;background:#edf3e6;color:#23543f;font:inherit;font-size:11px;font-weight:750;}
+.desk-game-lab[aria-busy=true]{opacity:.55;}
+.desk-report-lab{min-height:44px;border:1px solid #cdd9c7;border-radius:8px;background:#edf3e6;color:#23543f;font:inherit;font-size:12px;font-weight:650;padding:8px 12px;}
+.desk-report-actions{flex-wrap:wrap;}
+.desk-filter-row button{min-height:44px;}
+.modal-x{min-width:44px;min-height:44px;}
+.desk-quick-start button:focus-visible,.desk-game-lab:focus-visible,.desk-report-lab:focus-visible{outline:3px solid #398aef;outline-offset:3px;}
+@media(max-width:600px){.desk-filter-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0;}.desk-filter-row button{padding:7px 2px;min-width:0;}}
+@media(max-width:370px){.desk-filter-row{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;}}
+@media(max-width:420px){.desk-quick-start{gap:6px;margin-bottom:10px;}.desk-quick-start button{gap:5px;padding:7px 4px;font-size:11px;}.desk-quick-start svg{width:16px;height:16px;}}

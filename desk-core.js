@@ -12,11 +12,34 @@
   const subs = { picks: 'board', props: 'props', results: 'record', calibration: 'backtest', method: 'model', trends: 'trends', recent: 'recent' };
   const subNames = { board: 'picks', props: 'props', record: 'results', backtest: 'calibration', model: 'method', trends: 'trends', recent: 'recent' };
   const FANTASY_SECTIONS = ['matchup', 'gm', 'lineup', 'roster', 'season', 'waivers'];
+  const LAB_SPORTS = ['nfl', 'nba'], LAB_TABS = ['matchups', 'accuracy', 'audit'], LAB_SCOPES = ['upcoming', 'completed', 'all'];
+  const gameId = value => typeof value === 'string' && /^[a-zA-Z0-9_.:-]{1,160}$/.test(value) ? value : null;
+  function labSelection(value) {
+    const v = value && typeof value === 'object' ? value : {}, out = {};
+    if (LAB_SPORTS.includes(v.sport)) out.sport = v.sport;
+    if (LAB_TABS.includes(v.tab)) out.tab = v.tab;
+    if (LAB_SCOPES.includes(v.scope)) out.scope = v.scope;
+    if (gameId(v.selected)) out.selected = v.selected;
+    return out;
+  }
+  function labPreferences(value) {
+    const v = value && typeof value === 'object' ? value : {};
+    return { sport: LAB_SPORTS.includes(v.sport) ? v.sport : 'nfl', tab: LAB_TABS.includes(v.tab) ? v.tab : 'matchups',
+      choices: Object.fromEntries(LAB_SPORTS.map(s => { const c = labSelection(v.choices?.[s]); return [s, { selected: c.selected || null, scope: c.scope || 'upcoming' }]; })) };
+  }
+  function agendaPreferences(value) {
+    return { filter: ['all','today','watchlist',...SPORTS].includes(value?.filter) ? value.filter : 'all', edges: value?.edges === true };
+  }
   function route(hash) {
     if (String(hash).startsWith('#pk=')) return null;
-    const parts = String(hash || '').replace(/^#\/?/, '').split('/');
+    const [path, query = ''] = String(hash || '').replace(/^#\/?/, '').split('?');
+    const parts = path.split('/');
     const panel = aliases[parts[0]] || parts[0] || 'home';
     if (!PANELS.includes(panel)) return null;
+    if (panel === 'matchup-lab' && query) {
+      const p = new URLSearchParams(query), lab = labSelection({ sport:p.get('league'), tab:p.get('view'), scope:p.get('period'), selected:p.get('game') });
+      return { panel, ...(Object.keys(lab).length ? { lab } : {}) };
+    }
     if (panel === 'predictions') return { panel, aiSport: SPORTS.includes(parts[1]) ? parts[1] : 'all', aiSub: subs[parts[2]] || 'board' };
     if (panel === 'fantasy' && FANTASY_SECTIONS.includes(parts[1])) return { panel, section: parts[1] };
     if (['nfl', 'cfb', 'nba'].includes(panel)) return { panel, sportView: parts[1] === 'research' ? 'research' : 'games' };
@@ -24,6 +47,11 @@
   }
   function hashFor(r) {
     const path = names[r.panel] || r.panel;
+    if (r.panel === 'matchup-lab' && r.lab) {
+      const lab = labSelection(r.lab), p = new URLSearchParams();
+      for (const [key, name] of [['sport','league'],['tab','view'],['scope','period'],['selected','game']]) if (lab[key]) p.set(name,lab[key]);
+      return '#/matchup-lab' + (p.size ? '?' + p.toString() : '');
+    }
     if (r.panel === 'predictions') return `#/models/${SPORTS.includes(r.aiSport) ? r.aiSport : 'all'}/${subNames[r.aiSub] || 'picks'}`;
     if (r.panel === 'fantasy' && FANTASY_SECTIONS.includes(r.section)) return `#/fantasy/${r.section}`;
     if (['nfl', 'cfb', 'nba'].includes(r.panel) && r.sportView === 'research') return `#/${r.panel}/research`;
@@ -191,5 +219,5 @@
     const tokens = String(query || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
     return items.filter(x => tokens.every(t => `${x.title} ${x.description || ''} ${x.keywords || ''}`.toLowerCase().includes(t))).slice(0, 30);
   }
-  return Object.freeze({ route, hashFor, group, key, normalizeWatch, toggleWatch, captureStatus, savedSummary, gameForecasts, gameRead, slateSummary, agenda, search });
+  return Object.freeze({ route, hashFor, group, labSelection, labPreferences, agendaPreferences, key, normalizeWatch, toggleWatch, captureStatus, savedSummary, gameForecasts, gameRead, slateSummary, agenda, search });
 });

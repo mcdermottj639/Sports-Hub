@@ -108,3 +108,15 @@ body[data-desk-panel="matchup-lab"] :is(#ticker,.topbar,#tabs,.desk-page-heading
 .se-scoreline{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
 .se-projection .se-scoreline span{font:inherit;letter-spacing:0;color:inherit;white-space:nowrap;}
 @media(max-width:700px){.se-scope>span{display:none;}.se-detail-grid .se-scoreline{flex-direction:column;align-items:flex-start;gap:3px;}.se-detail-grid .se-scoreline em{display:none;}}
+/* Keep game stepping and returning to the source within the same workspace. */
+.se-game-picker{display:flex;align-items:flex-end;gap:8px;min-width:0;}
+.se-lab-header{grid-template-columns:minmax(44px,1fr) auto minmax(44px,1fr);}
+.se-back{min-width:44px;max-width:100%;}
+.se-game-picker .se-select{flex:1;min-width:0;}
+.se-game-step{display:flex;gap:4px;}
+.se-game-step button{width:44px;min-width:44px;min-height:46px;padding:5px;background:#edf2e7;color:#234e3e;border:1px solid #cad7c8;border-radius:8px;font-size:23px;}
+.se-game-step button:disabled{opacity:.4;cursor:default;}
+.se-back [data-se-back-label]{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px;}
+.se-workspace .se-controls .se-sport button,.se-controls .se-tabs button{min-height:44px;}
+@media(max-width:700px){.se-picker-row .se-game-picker{grid-column:1/-1;gap:6px;}.se-game-picker .se-select{width:0;}.se-game-step{gap:3px;}.se-game-step button{width:44px;min-width:44px;}.se-back [data-se-back-label]{max-width:82px;}}
+@media(max-width:420px){.se-back{padding:8px;gap:4px;}.se-back [data-se-back-label]{display:none;}.se-back::after{content:'Back';font-size:12px;}}

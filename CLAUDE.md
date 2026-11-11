@@ -715,7 +715,29 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v366** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v367** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v367 — Remembered daily journeys and exact-game Lab entry
+
+Today now has direct Fantasy, Saved games and Results shortcuts. Radar league
+and Edges-only choices persist on the device. NFL/NBA rows and game reports
+open the exact matching Lab game; a missing/rescheduled game stays on its
+source with an explanation instead of opening a different matchup.
+
+The Lab remembers league, period and per-league game selections across
+reloads; embedded Research also remembers its evidence view. Full-screen
+entry always opens the matchup comparison, preserving the v364 direction. Its URL carries that context, with previous/next matchup controls.
+A stale explicit game link shows an unavailable state. Lab controls replace
+one history entry, so Back returns to the source scroll position and reopens
+the same game report when appropriate. Late feed/render completions cannot
+navigate or scroll a newer destination. Previous-games and Research disclosures survive
+feed updates. Hidden Lab instances cannot overwrite active preferences.
+
+Daily actions and report close have 44px touch targets; narrow radar filters
+stay balanced, and desktop slate summaries span both game columns. Navigation
+regression coverage includes refresh/Back/Forward, source return, unavailable
+identity, connection failures and delayed loading. No models, saved forecasts,
+settlements, collectors or backend configuration change in this release.
 
 ### v366 — Compact Models spacing
 
@@ -7917,9 +7939,10 @@ rewrite.**
   again — and must not record games that are not today's; see the v214 entry.
 - `LEAGUES` — per-sport config (label, emoji, espnPath, `fav` favorite teams, type).
   **Favorites are Eagles + Red Sox only** (NOT Phillies/Sixers).
-- Navigation: Today, Models, Research, Fantasy and More on mobile; desktop
-  adds direct links to Watchlist, Pick’em, Eagles, Red Sox, NFL, CFB, News &
-  scores, Tools, and About. `showTab()` / `renderers` still own rendering.
+- Navigation: Today, Models, Research, Leagues and More on mobile. Fantasy
+  is one tap from Today and leads More; Today also links directly to Saved
+  games and Results. Desktop adds direct Fantasy, Watchlist, Pick’em, Eagles,
+  Red Sox, NFL, CFB, NBA, News & scores, Tools, and About links. `showTab()` / `renderers` still own rendering.
   `SportsHubDesk` owns URL routing. The requested model sport/subview is applied
   after `TAB_ENTER`, so explicit deep links survive the normal entry reset.
   - **`TAB_ENTER` (v216) — anything that must happen once per tab OPENING goes
@@ -7975,12 +7998,14 @@ rewrite.**
   labeled as a new chronological backtest. Existing modal/trend/export tools
   remain reachable. Responsive styling is appended after the existing layers.
 
-- **Today** — personal brief with distinct upcoming-game/forecast counts,
+- **Today** — Matchup Lab entry, compact Fantasy/Saved games/Results shortcuts,
+  remembered radar filters and exact-game Lab actions, followed by the
+  personal brief with distinct upcoming-game/forecast counts,
   saved-price coverage, forecasts awaiting grading, a watchlist count, fantasy
   starter warnings when a league snapshot is available, an NFL/Top-25/MLB/NBA
   radar, and official model records separated by market. The existing model
-  watchlist is retained in a remembered disclosure. Team shortcuts link to
-  Eagles and Red Sox; scores can be opened from the header.
+  watchlist is retained in a remembered disclosure. Eagles and Red Sox
+  shortcuts live on Leagues; scores can be opened from the header.
 - **Research** — links to the existing NFL/CFB systems and paired challenger
   summaries, plus model results, calibration and methodology. It never combines
   system returns with model records or claims a challenger is the official model.
