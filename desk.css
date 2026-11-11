@@ -93,10 +93,12 @@ body.desk-shell { overscroll-behavior-y:none; }
 .desk-filter-row { display:flex;gap:5px;flex-wrap:wrap;border-bottom:1px solid var(--desk-line);padding-bottom:12px; }
 .desk-filter-row button { border:0;background:transparent;color:var(--gy);font-size:10px;padding:8px 11px;min-height:35px;border-radius:7px; }
 .desk-filter-row button[aria-pressed=true] { background:#e6f1eb;color:#195e4e;font-weight:700; }
-.desk-game { display:flex;align-items:center;gap:12px;border-bottom:1px solid #edf2ef; }
+.desk-game { position:relative;display:block;border-bottom:1px solid #edf2ef; }
 .desk-game:last-child { border:0; }
-.desk-game-main { min-width:0;flex:1;text-align:left;border:0;background:none;color:var(--ink);padding:14px 0; }
-.desk-game-meta { display:flex;align-items:center;gap:9px;font-size:9px;color:var(--mu);line-height:1.5; }
+.desk-game-main { display:block;width:100%;min-width:0;text-align:left;border:0;background:none;color:var(--ink);padding:14px 0; }
+.desk-game-meta { display:flex;align-items:center;flex-wrap:wrap;gap:6px 9px;min-height:44px;padding-right:50px;font-size:9px;color:var(--mu);line-height:1.5; }
+/* Reserve room for Save only in the header, never beside the full report. */
+.desk-game > .desk-save { position:absolute;top:16px;right:0;min-width:44px;width:44px;height:44px; }
 .desk-sport { font-size:8px;font-weight:700;letter-spacing:.05em;min-width:28px; }
 .desk-matchup { display:flex;align-items:center;gap:15px;justify-content:space-between;font-size:15px;font-weight:650;margin-top:6px; }
 .desk-versus { font-size:10px;font-weight:400;color:var(--mu);padding:0 4px; }
@@ -439,7 +441,6 @@ body.desk-shell { overscroll-behavior-y:none; }
   .desk-match-team .desk-team-mark { width:35px;height:35px;border-radius:8px; }
   .desk-match-team b { font-size:23px; }.desk-match-team small { display:none; }
   .desk-match-team>strong { font-size:21px; }
-  .desk-game .desk-save { min-width:31px;width:31px; }
   .desk-game { gap:6px; }.desk-game-meta { font-size:10px; }
   .desk-game-context { gap:10px;font-size:10px; }.desk-versus { padding:0;font-size:9px; }
   .desk-filter-row { gap:3px; }.desk-filter-row button { padding:7px 10px; }

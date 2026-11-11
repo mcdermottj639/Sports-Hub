@@ -714,7 +714,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v362** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v363** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v363 — Full-width Games Ahead cards
+
+Game details now span the full card width. The bookmark sits in the upper-right header with a 44px tap target; only the metadata row reserves room for it and wraps when needed. Teams, market chips and line changes no longer lose an entire side column. Existing Save behavior and model data are unchanged.
 
 ### v362 — Full-screen Matchup Lab
 
