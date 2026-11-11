@@ -83,3 +83,19 @@ test('release wires evidence before app and preserves the existing scoring pipel
   const version=fs.readFileSync(require.resolve('../app.js'),'utf8').match(/APP_VERSION\s*=\s*['"]v(\d+)/)[1];
   assert.match(html,/desk-matchup-lab/);assert.ok(html.includes(`sports-evidence.css?v=${version}`));
 });
+
+test('official forecast remains visible even when recent-form baseline lacks five games',()=>{
+  const html=UI.matchupHTML(snapshot(),'nba',g,[row()]);
+  assert.match(html,/SAVED OFFICIAL FORECAST/);
+  assert.match(html,/BOS 103.5/);assert.match(html,/NYK 111.5/);
+  assert.match(html,/Needs more games/);assert.match(html,/No projection is filled in/);
+});
+test('matchup details retain earlier opponent scores and compact game reports',()=>{
+  const s=snapshot([game('old','2026-11-08T00:00:00Z'),g]);
+  const html=UI.matchupHTML(s,'nba',g,[]);
+  assert.match(html,/Last five games/);assert.match(html,/recent results/);
+  assert.match(html,/110–100/);assert.match(html,/Forecast comparison/);
+  const compact=UI.matchupHTML(s,'nba',g,[],true);
+  assert.match(compact,/Compare season ranks &amp; form baseline/);
+  assert.doesNotMatch(compact,/se-detail-grid|se-history-grid/);
+});

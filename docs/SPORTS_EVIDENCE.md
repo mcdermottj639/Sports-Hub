@@ -1,7 +1,16 @@
 # DraftKings evidence and Matchup Lab
 
 The Matchup Lab is available from Today, Research, NFL/NBA Research, and NFL/NBA
-game reports. It supplements ESPN with dated DraftKings team profiles and game
+game reports. Today opens the dedicated `#/matchup-lab` route: only the lab is
+visible, with a Today return button, NFL/NBA filters, Upcoming/Completed/All
+game periods, and a matchup dropdown. Matchup, Model check and Score audit
+remain together; the latter two clearly cover the selected league, not just
+the selected game. League selections persist while switching views. Controls
+stay mounted during data updates. Desktop uses two columns for forecasts and
+season ranks; phones stack them, with prior opponents/scores in a disclosure.
+Research retains its embedded lab and a full-screen entry.
+
+It supplements ESPN with dated DraftKings team profiles and game
 results. ESPN remains the live source. There is no sportsbook account access,
 odds feed, player-stat/prop feed, bet execution, new paid service or new backend.
 

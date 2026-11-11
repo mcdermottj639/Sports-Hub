@@ -1,7 +1,7 @@
 // Sports-Hub — static browser UI. Live cards come straight from ESPN; durable
 // AI Picks history is read from the scheduled Supabase collector.
 
-const APP_VERSION = 'v361';
+const APP_VERSION = 'v362';
 // UI-only releases must not reset the model's evaluation cohort.
 const AI_MODEL_VERSION = 'v239'; // Other leagues and the archived NFL baseline.
 function modelVersionFor(sport) { return globalThis.SportsHubNFLLive.versionFor(sport); }
@@ -12981,7 +12981,7 @@ function pkExpFallback(txt) {
   ta.value = txt; ta.select();
 }
 
-const renderers = { home: renderHome, pulse: renderPulse, research: () => globalThis.SportsHubDesk.renderResearch(), watchlist: () => globalThis.SportsHubDesk.renderWatchlist(), explore: () => globalThis.SportsHubDesk.renderExplore(), leagues: () => {}, nba: () => globalThis.SportsHubNBAPage.render(), eagles: renderEagles, nfl: renderNFL, cfb: renderCFB, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, pickem: renderPickem, labs: () => {}, about: renderAbout };
+const renderers = { 'matchup-lab': () => globalThis.SportsHubEvidence.mountLab(document.getElementById('matchup-lab-content')), home: renderHome, pulse: renderPulse, research: () => globalThis.SportsHubDesk.renderResearch(), watchlist: () => globalThis.SportsHubDesk.renderWatchlist(), explore: () => globalThis.SportsHubDesk.renderExplore(), leagues: () => {}, nba: () => globalThis.SportsHubNBAPage.render(), eagles: renderEagles, nfl: renderNFL, cfb: renderCFB, redsox: renderRedSox, predictions: renderPredictions, fantasy: renderFantasy, pickem: renderPickem, labs: () => {}, about: renderAbout };
 
 /* Per-tab ENTRY hooks (v216).
    🚨 A RENDERER IS NOT AN ENTRY SIGNAL, and assuming it was is what broke the
@@ -13025,7 +13025,7 @@ function showTab(name, options = {}) {
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
   Promise.resolve(renderers[name]())
-    .then(() => { injectJumpNav(name); applySections(name); paintStaleNote(); globalThis.SportsHubDesk?.focusSection(); })
+    .then(() => { injectJumpNav(name); applySections(name); paintStaleNote(); globalThis.SportsHubDesk?.focusSection(); if(name==='matchup-lab'&&currentTab===name)document.querySelector('#matchup-lab h1')?.focus({preventScroll:true}); })
     .catch((e) => console.error(e));
 }
 

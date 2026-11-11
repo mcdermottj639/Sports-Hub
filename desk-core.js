@@ -6,7 +6,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
   const SPORTS = ['nfl', 'cfb', 'mlb', 'nba'];
-  const PANELS = ['home', 'predictions', 'research', 'fantasy', 'watchlist', 'explore', 'leagues', 'eagles', 'redsox', 'nfl', 'cfb', 'nba', 'pickem', 'pulse', 'labs', 'about'];
+  const PANELS = ['home', 'predictions', 'research', 'matchup-lab', 'fantasy', 'watchlist', 'explore', 'leagues', 'eagles', 'redsox', 'nfl', 'cfb', 'nba', 'pickem', 'pulse', 'labs', 'about'];
   const aliases = { today: 'home', models: 'predictions', more: 'explore', news: 'pulse', tools: 'labs' };
   const names = { home: 'today', predictions: 'models', explore: 'more', pulse: 'news', labs: 'tools' };
   const subs = { picks: 'board', props: 'props', results: 'record', calibration: 'backtest', method: 'model', trends: 'trends', recent: 'recent' };
@@ -32,7 +32,7 @@
   function group(r) {
     if (r.panel === 'predictions') return 'predictions';
     // v351: Research has the bottom-bar slot; Fantasy opens from the top of More.
-    if (r.panel === 'research' || r.sportView === 'research') return 'research';
+    if (r.panel === 'research' || r.panel === 'matchup-lab' || r.sportView === 'research') return 'research';
     if (r.panel === 'fantasy') return 'explore';
     if (['leagues','nfl','cfb','nba'].includes(r.panel)) return 'leagues';
     return r.panel === 'home' ? 'home' : 'explore';

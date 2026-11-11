@@ -19,6 +19,9 @@ test('deep links round trip all model scopes and fantasy sections', () => {
   for (const section of ['', '/gm', '/lineup', '/matchup', '/roster', '/season', '/waivers']) {
     assert.equal(C.group(C.route('#/fantasy' + section)), 'explore');
   }
+  assert.deepEqual(C.route('#/matchup-lab'),{panel:'matchup-lab'});
+  assert.equal(C.hashFor(C.route('#/matchup-lab')),'#/matchup-lab');
+  assert.equal(C.group(C.route('#/matchup-lab')),'research');
   assert.equal(C.group(C.route('#/research')),'research');
   assert.equal(C.group(C.route('#/nfl/research')),'research');
   assert.equal(C.group(C.route('#/cfb/research')),'research');

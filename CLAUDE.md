@@ -298,7 +298,7 @@ fantasy/golf data are not refreshed by this cycle.
 
 ## Files
 
-- `sports-evidence-core.js`, `sports-evidence.js`, `sports-evidence.css` — v357 Matchup Lab in Research and NFL/NBA reports: visual ranks/form, score cross-checks, matched model diagnostics and a separate last-five replay. `data/draftkings-evidence.json` is a dated ChatGPT-connector snapshot; ESPN stays live. `scripts/refresh-sports-evidence.js` validates refreshes and saves immutable profiles in `data/evidence-observations/`. See `docs/SPORTS_EVIDENCE.md` for sources, refresh scope, leakage guards and initial findings. Data-only evidence refreshes need no app version bump; code changes follow the usual release ritual.
+- `sports-evidence-core.js`, `sports-evidence.js`, `sports-evidence.css` — v362 full-screen `#/matchup-lab` from Today, plus embedded Research and NFL/NBA reports: visual ranks/form, score cross-checks, matched model diagnostics and a separate last-five replay. `data/draftkings-evidence.json` is a dated ChatGPT-connector snapshot; ESPN stays live. `scripts/refresh-sports-evidence.js` validates refreshes and saves immutable profiles in `data/evidence-observations/`. See `docs/SPORTS_EVIDENCE.md` for sources, refresh scope, leakage guards and initial findings. Data-only evidence refreshes need no app version bump; code changes follow the usual release ritual.
 
 - `nba-page.js`, `_shared/nba-model.js`, `_shared/nba-model-config.js` — NBA league UI and shared fitted model; the shared files live under `supabase/functions/`.
 - `scripts/nba-data.py`, `scripts/nba-features.js`, `scripts/fit-nba.py`, `data/nba-history.json`, `data/nba-validation.json`, `docs/NBA_MODEL.md` — reproducible NBA evidence, chronological fitting and validation.
@@ -714,7 +714,19 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v361** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v362** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v362 — Full-screen Matchup Lab
+
+Today opens `#/matchup-lab`, a dedicated lab-only route with its own sticky
+Today return/header, NFL/NBA filters, Upcoming/Completed/All periods, game
+selector and Matchup / Model check / Score audit views. Controls retain focus
+and each league's selected game as feeds update or views switch. Research
+keeps the embedded lab plus a full-screen entry. Desktop places forecasts
+beside season ranks; phones stack the comparison with readable score pairs.
+Prior opponents and scores are available under Last five games. Missing form
+data no longer hides an available frozen official forecast. Data sources,
+models and saved results are unchanged. See docs/SPORTS_EVIDENCE.md.
 
 ### v361 — Compact Today line changes
 
@@ -730,14 +742,14 @@ Research comparisons now use ML / Spread / Total controls in that order, with pl
 
 ### v358 — Matchup Lab first on Today
 
-Moved the Matchup Lab shortcut above The games ahead, directly below the Today header, for faster access on phones. Navigation and research calculations are unchanged.
+Moved the Matchup Lab shortcut above The games ahead, directly below the Today header, for faster access on phones. ⚠️ SUPERSEDED in v362: the shortcut now opens the dedicated full-screen lab. Research calculations remain unchanged.
 
 ### v357 — Visual Matchup Lab and DraftKings research evidence
 
 Jack authorized visual upgrades, stronger model/research evidence and release.
 - New NFL/NBA rank comparisons, last-five result/margin charts, calendar rest,
   frozen model versus descriptive recent-form baseline, and final-score audit.
-- Research has Matchups / Model check / Score audit; Today links directly to it,
+- Research has Matchups / Model check / Score audit; ⚠️ SUPERSEDED in v362: Today opens the dedicated lab route instead,
   league Research includes it, game reports get a compact version. Mobile
   Research header and navigation tiles are shortened to reach the evidence.
 - DraftKings is a dated snapshot, not a live API/odds feed. ESPN remains live.
