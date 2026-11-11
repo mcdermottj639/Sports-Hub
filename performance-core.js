@@ -67,10 +67,16 @@
   function weekly(rows) {
     const groups=new Map();
     for(const r of rows.filter(settled)) {
-      const date=new Date(`${day(r)}T12:00:00Z`);date.setUTCDate(date.getUTCDate()-(date.getUTCDay()+6)%7);
+      // NFL reporting runs Tuesday–Monday so MNF stays with its weekend.
+      // Convert kickoff to an Eastern calendar date before doing day arithmetic.
+      const date=new Date(`${day(r)}T12:00:00Z`),startDay=r.sport==='nfl'?2:1;
+      date.setUTCDate(date.getUTCDate()-(date.getUTCDay()-startDay+7)%7);
       const k=date.toISOString().slice(0,10);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);
     }
-    return [...groups].sort(([a],[b])=>b.localeCompare(a)).map(([date,rs])=>({date,...summary(rs)}));
+    return [...groups].sort(([a],[b])=>b.localeCompare(a)).map(([date,rs])=>{
+      const end=new Date(`${date}T12:00:00Z`);end.setUTCDate(end.getUTCDate()+6);
+      return {date,endDate:end.toISOString().slice(0,10),...summary(rs)};
+    });
   }
   // Baselines use both sides of the very same saved quote as the model bet.
   // No reverse-engineered odds, refreshed lines, or convenient extra games.

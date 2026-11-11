@@ -303,7 +303,7 @@ fantasy/golf data are not refreshed by this cycle.
 - `nba-page.js`, `_shared/nba-model.js`, `_shared/nba-model-config.js` — NBA league UI and shared fitted model; the shared files live under `supabase/functions/`.
 - `scripts/nba-data.py`, `scripts/nba-features.js`, `scripts/fit-nba.py`, `data/nba-history.json`, `data/nba-validation.json`, `docs/NBA_MODEL.md` — reproducible NBA evidence, chronological fitting and validation.
 
-- `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. v345 adds closing line value (NFL/CFB spread + total picks vs the collector's last pregame DraftKings quote; see the v345 entry). Models exposes Performance / Trends / Game history / Model info / Calibration beside Forecasts. Performance includes the v327 Underdog flips record (book plus money, model > 50%). Since v340 the headline/per-sport records exclude totals (`headline()`); totals have their own row. Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Game history uses team-specific spread/projection labels, omits inapplicable moneyline fields, and shows newest played games first, with upcoming games below in kickoff order, and exposes immutable projections, outcomes and inputs, with search and result/date/market/version filters.
+- `performance-core.js`, `performance-ui.js`, `performance.css` — read-only cross-sport performance hub. NFL weekly results use Eastern Tuesday–Monday reporting periods and inclusive date ranges; other sports retain Monday–Sunday. v345 adds closing line value (NFL/CFB spread + total picks vs the collector's last pregame DraftKings quote; see the v345 entry). Models exposes Performance / Trends / Game history / Model info / Calibration beside Forecasts. Performance includes the v327 Underdog flips record (book plus money, model > 50%). Since v340 the headline/per-sport records exclude totals (`headline()`); totals have their own row. Current-version qualifying picks drive paper profit; full forecast evaluation and historical device records remain available separately. Baselines require matched games, final scores, two saved side prices and the same line/quote as the selected model bet. Game history uses team-specific spread/projection labels, omits inapplicable moneyline fields, and shows newest played games first, with upcoming games below in kickoff order, and exposes immutable projections, outcomes and inputs, with search and result/date/market/version filters.
 
 - `forecast-lock.js` — persistent pregame display snapshots (`sportshub:forecast-lock:v1`, latest 300 events within a 1 MiB UTF-16 budget), shared across model surfaces and restored after reload.
 
@@ -714,7 +714,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v359** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v360** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v360 — Keep Monday Night Football in its reporting week
+
+NFL performance tables group kickoff dates into Tuesday–Monday periods in America/New_York, so Thursday, Sunday and Monday night results stay together. Inclusive date ranges replace ambiguous “Week of” labels for NFL. Daily profit remains on the actual Eastern game date; other sports retain Monday–Sunday periods. Saved forecasts, grades, prices, model logic and cumulative totals are untouched. Regression coverage includes both Monday games, all three markets, DST, year rollover, next-week boundaries and displayed labels.
 
 ### v359 — Clear research markets and line changes
 

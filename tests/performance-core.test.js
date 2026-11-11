@@ -128,3 +128,41 @@ test('v340 headline records exclude totals unless Totals is the chosen market',(
  assert.equal(C.summary(C.headline(rows,'total')).l,2);
  assert.equal(C.summary(rows).n,4);
 });
+
+
+test('NFL weekly results keep Thursday, Sunday and both Monday games together in every market',()=>{
+ for(const market of C.MARKETS){
+  const rows=['2026-11-06T01:15:00Z','2026-11-08T18:00:00Z','2026-11-10T00:15:00Z','2026-11-10T01:15:00Z']
+   .map((starts_at,i)=>base({event_id:String(i),market,starts_at,result:i===1?'loss':'win'}));
+  const before=JSON.stringify(rows),weeks=C.weekly(rows),total=C.summary(rows);
+  assert.equal(weeks.length,1);assert.equal(weeks[0].date,'2026-11-03');assert.equal(weeks[0].endDate,'2026-11-09');
+  for(const key of ['w','l','pushes','n','priced','units','roi'])assert.equal(weeks[0][key],total[key]);
+  assert.equal(JSON.stringify(rows),before);
+  assert.deepEqual(C.series(rows).map(x=>x.date),['2026-11-05','2026-11-08','2026-11-09']);
+ }
+});
+test('NFL week rollover follows Eastern Tuesday midnight across DST and year boundaries',()=>{
+ for(const [monday,tuesday,previous,next] of [
+  ['2026-10-06T03:59:59Z','2026-10-06T04:00:00Z','2026-09-29','2026-10-06'],
+  ['2026-11-03T04:59:59Z','2026-11-03T05:00:00Z','2026-10-27','2026-11-03'],
+  ['2027-01-05T04:59:59Z','2027-01-05T05:00:00Z','2026-12-29','2027-01-05']
+ ])assert.deepEqual(C.weekly([base({starts_at:monday}),base({starts_at:tuesday})]).map(x=>x.date),[next,previous]);
+ const weeks=C.weekly([base({starts_at:'2026-11-10T01:15:00Z'}),base({starts_at:'2026-11-13T01:15:00Z'})]);
+ assert.deepEqual(weeks.map(x=>x.date),['2026-11-10','2026-11-03']);
+});
+test('other sports retain Monday calendar weeks and ungraded NFL rows do not enter results',()=>{
+ for(const sport of ['nba','mlb','cfb'])assert.deepEqual(C.weekly([
+  base({sport,starts_at:'2026-11-08T18:00:00Z'}),base({sport,starts_at:'2026-11-10T01:15:00Z'})
+ ]).map(x=>x.date),['2026-11-09','2026-11-02']);
+ const rows=['win','loss','push','pending','void'].map(result=>base({result,starts_at:'2026-11-10T01:15:00Z'}));
+ const week=C.weekly(rows)[0];assert.equal(week.n,3);assert.equal(week.pushes,1);assert.equal(week.pending,0);
+});
+test('NFL trends display the inclusive reporting range and explain Monday night grouping',()=>{
+ global.SportsHubPerformance=C;require('../performance-ui.js');
+ const oldDocument=global.document;global.document={createElement:()=>({addEventListener(){}})};
+ try{
+  const host=global.SportsHubPerformanceUI.panel({sport:'nfl',view:'trends',cache:{rows:[base({market:'moneyline',starts_at:'2026-11-10T01:15:00Z'})]}});
+  assert.match(host.innerHTML,/Nov 3 – Nov 9/);assert.match(host.innerHTML,/Tuesday–Monday/);
+  assert.doesNotMatch(host.innerHTML,/Week of Nov 9|weeks start Monday/);
+ }finally{global.document=oldDocument;}
+});
