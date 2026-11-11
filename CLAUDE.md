@@ -714,7 +714,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v357** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v358** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v358 — Matchup Lab first on Today
+
+Moved the Matchup Lab shortcut above The games ahead, directly below the Today header, for faster access on phones. Navigation and research calculations are unchanged.
 
 ### v357 — Visual Matchup Lab and DraftKings research evidence
 
