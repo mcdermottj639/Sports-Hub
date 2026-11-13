@@ -254,7 +254,7 @@
       watcher.observe(host, { childList: true, subtree: true, characterData: true });
     }
     if (!on) {
-      if (pane) { pane.hidden = true; pane.replaceChildren(); }
+      if (pane) { pane.hidden = true; pane.replaceChildren(); pane.__src = ''; }
       if (watcher) { watcher.disconnect(); watcher = null; }
       document.querySelectorAll('.duo-featured').forEach(function (r) { r.classList.remove('duo-featured'); });
       return;
@@ -264,10 +264,15 @@
     var row = choose(list);
     list.forEach(function (r) { r.classList.toggle('duo-featured', r === row); });
     if (!row) {
-      pane.hidden = false;
+      pane.hidden = false; pane.__src = '';
       pane.innerHTML = '<p class="duo-feature-empty">Waiting for the games ahead…</p>';
       return;
     }
+    // Rebuild only when the row actually changed: pose() runs on every
+    // viewport event, and re-cloning each time made the pane flicker.
+    var src = row.outerHTML;
+    if (pane.__src === src && !pane.hidden && pane.firstChild) return;
+    pane.__src = src;
     var copy = row.cloneNode(true);
     copy.classList.remove('duo-featured');
     copy.removeAttribute('id');
