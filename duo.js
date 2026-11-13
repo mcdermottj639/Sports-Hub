@@ -174,9 +174,16 @@
   var forwarding = false;
   var pane = null;
   var watcher = null;
+  // v378: the featured pane shows on every route in the seated pose.
   function seatedHome() {
-    return root.getAttribute('data-duo-pose') === 'seated' && document.body &&
-      document.body.getAttribute('data-desk-panel') === 'home';
+    return root.getAttribute('data-duo-pose') === 'seated' && !!document.body;
+  }
+  // Off Today the games list may never have loaded; ask the desk for it.
+  var askedAt = 0;
+  function askAgenda() {
+    if (Date.now() - askedAt < 60000) return;
+    askedAt = Date.now();
+    try { window.dispatchEvent(new CustomEvent('sportshub:duo-agenda')); } catch (_) {}
   }
   function rows() {
     var host = document.getElementById('desk-agenda');
@@ -264,6 +271,7 @@
     var row = choose(list);
     list.forEach(function (r) { r.classList.toggle('duo-featured', r === row); });
     if (!row) {
+      askAgenda();
       pane.hidden = false; pane.__src = '';
       pane.innerHTML = '<p class="duo-feature-empty">Waiting for the games ahead…</p>';
       return;

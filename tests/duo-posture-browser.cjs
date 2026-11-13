@@ -106,13 +106,13 @@ const poses={
       });
       await shot(page,'seated-report');
       await page.evaluate(()=>document.getElementById('modal-x')?.click());
-      await check('seated Models: page uses the whole screen above the slim dock',async()=>{
+      await check('seated Models: featured game stays on top, page scrolls below above the slim dock',async()=>{
         await page.locator('#botbar [data-desk-route]').nth(1).click();
-        await page.waitForFunction(()=>document.body.dataset.deskPanel!=='home',null,{timeout:3000}).catch(()=>{});await page.waitForTimeout(300);
-        const d=await page.evaluate(()=>{const b=document.getElementById('botbar').getBoundingClientRect();const m=document.getElementById('main-content');const r=m.getBoundingClientRect();m.scrollTop=200;return {top:b.top,bottom:b.bottom,h:innerHeight,mTop:r.top,mBottom:r.bottom,scrolled:m.scrollTop,y:scrollY,feature:!document.getElementById('duo-feature')||document.getElementById('duo-feature').hidden};});
-        assert.ok(d.h-d.top<=80,`dock height ${d.h-d.top}`);assert.equal(Math.round(d.bottom),d.h);assert.equal(d.feature,true);
-        assert.ok(d.mTop<438,'page starts above the fold');assert.ok(d.mBottom>462&&d.mBottom<=d.top+1,`page ends at the dock ${d.mBottom}/${d.top}`);
-        assert.equal(d.y,0);
+        await page.waitForFunction(()=>document.body.dataset.deskPanel!=='home',null,{timeout:3000}).catch(()=>{});await page.waitForTimeout(400);
+        const d=await page.evaluate(()=>{const b=document.getElementById('botbar').getBoundingClientRect();const m=document.getElementById('main-content');const r=m.getBoundingClientRect();const f=document.getElementById('duo-feature');const fr=f.getBoundingClientRect();m.scrollTop=200;return {top:b.top,bottom:b.bottom,h:innerHeight,mTop:r.top,mBottom:r.bottom,y:scrollY,fHidden:f.hidden,fBottom:fr.bottom,fGame:!!f.querySelector('.desk-game')};});
+        assert.ok(d.h-d.top<=80,`dock height ${d.h-d.top}`);assert.equal(Math.round(d.bottom),d.h);
+        assert.equal(d.fHidden,false);assert.equal(d.fGame,true);assert.ok(d.fBottom<=439,`pane bottom ${d.fBottom}`);
+        assert.ok(d.mTop>=462,`page starts below the fold ${d.mTop}`);assert.ok(d.mBottom<=d.top+1);assert.equal(d.y,0);
         await page.evaluate(()=>{document.getElementById('main-content').scrollTop=0;});
       });
       await shot(page,'seated-models');

@@ -721,9 +721,23 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v377** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v378** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v378 — Seated pose: the split view on every route
+
+Jack on v377: "I asked u to make the half fold view we created for the whole
+app". v377 misread him (full screen off Today). Now every route in the seated
+pose is the Today arrangement: featured game (`#duo-feature`) in the top
+half, the page scrolling in the bottom half above the normal dock, game
+reports in the top half. `duo.js` shows the pane on any route and fires
+`sportshub:duo-agenda` when the games list has no rows; `desk.js` answers
+with `loadAgenda()` and repaints the (hidden) list on live-score cycles while
+seated, so the featured copy stays current off Today. 440 Node tests + fold
+browser suite. Not yet seen on the phone.
 
 ### v377 — Seated pose: every route except Today gets the whole screen back
+
+⚠️ SUPERSEDED in v378: every route uses the split view (featured game on top, page below).
 
 Jack on v376: "It's good now, but you [cut] off most the whole app for this
 fold view", then picked "Full screen" when asked. Outside Today the page was
@@ -742,7 +756,7 @@ v372 arrangement again — featured game in the top half, the page (The games
 ahead first) scrolling in the bottom half above the normal dock, report in
 the top half — but on the v375 mechanics: document locked, `<main>` is the
 scroller, no fixed bar under a scrolling ancestor, report edge to edge.
-Other routes unchanged (page on top, dock deck below; ⚠️ SUPERSEDED in v377: they use the whole screen). 440 Node tests + fold
+Other routes unchanged (page on top, dock deck below; ⚠️ SUPERSEDED in v378: they use the same split as Today). 440 Node tests + fold
 browser suite. Not yet seen on the phone.
 
 ### v375 — Seated pose: `<main>` scrolls, not body (Safari clipped every fixed bar)
@@ -825,7 +839,7 @@ inert, so flat folded/open/phone/desktop layouts are unchanged.
 - ⚠️ v374 swapped Today's halves and v376 swapped them back to this arrangement; since v375 `<main>` scrolls (not the document) and the report fills the top half.
 - **Seated** (laptop pose, segments stacked): every route except Today reads
   in the top half; the phone dock becomes a 3-column deck filling the bottom
-  half (⚠️ SUPERSEDED in v377: those routes use the whole screen, slim dock) (deck starts at the crease, so the gutter is its padding). Today: a
+  half (⚠️ SUPERSEDED in v378: every route uses Today's split, slim dock) (deck starts at the crease, so the gutter is its padding). Today: a
   copy of one games-ahead row (live first, then next to start, then first)
   fills the top half in `#duo-feature`; The games ahead leads the bottom half
   (CSS `order`). Tapping a list row swaps the featured game instead of
