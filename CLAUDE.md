@@ -326,8 +326,11 @@ fantasy/golf data are not refreshed by this cycle.
   tested by `tests/signals-lab.test.js`. Research page only — nothing here
   feeds a model.
 - `duo.css`, `duo.js` — v371 iPhone Duo layout layer (slim chrome on short
-  screens, 76px rail at 761–1100px, side status-strip reclaim). `duo.css` loads
-  LAST; layout only — never put content or behaviour in it.
+  screens, 76px rail at 761–1100px, side status-strip reclaim) plus the v372
+  half-fold poses (`html[data-duo-pose]` seated/book from the Viewport Segments
+  API; Today's featured-game pane `#duo-feature`). `duo.css` loads LAST;
+  layout only — never put content or behaviour in it. Optional browser check:
+  `tests/duo-posture-browser.cjs`.
 - `ticker.js`, `ticker.css` — v326 rolling top ticker (scores, model picks,
   results, updates, news). Loads before app.js; pure builders under
   `SportsHubTicker._pure` are tested by `tests/ticker.test.js`.
@@ -718,7 +721,43 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v371** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v372** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v372 — iPhone Duo half-fold poses (layout only)
+
+Jack (Nov 12 2026), after seeing mockups of the seated and book poses: "Go."
+Same cards, numbers and copy, apart from one placeholder line in the empty
+featured pane. Safari 27.1 reports the fold
+through the Viewport Segments API and Device Posture API, both behind Safari
+feature flags (Settings › Apps › Safari › Advanced › Feature Flags). `duo.js`
+sets `html[data-duo-pose]` only with exactly two segments (and, where the
+Device Posture API exists, posture `folded`); the fold edges arrive as px
+vars with a ≥24px gutter centred on the crease. No segments → every rule is
+inert, so flat folded/open/phone/desktop layouts are unchanged.
+- **Seated** (laptop pose, segments stacked): every route except Today reads
+  in the top half; the phone dock becomes a 3-column deck filling the bottom
+  half (deck starts at the crease, so the gutter is its padding). Today: a
+  copy of one games-ahead row (live first, then next to start, then first)
+  fills the top half in `#duo-feature`; The games ahead leads the bottom half
+  (CSS `order`). Tapping a list row swaps the featured game instead of
+  opening the report; tapping the featured copy forwards the tap to the
+  matching element in the real row (report, bookmark, Matchup Lab). The copy
+  rebuilds on every list repaint (MutationObserver), so live scores follow.
+  The game report opens in the top half.
+- **Book** (held sideways, segments side by side): Today puts The games
+  ahead on the left page (own scroll, sticky) and everything else on the
+  right page, columns snapped to the fold; the left page uses the phone's
+  compact matchup row. The game report opens on the right page on every
+  route and the left page stays tappable, so another game swaps the report.
+- Verified in headless Chrome with CDP fold emulation
+  (`setDeviceMetricsOverride` displayFeature + `setDevicePostureOverride`),
+  which drives the same `window.viewport.segments` API:
+  `tests/duo-posture-browser.cjs` (stub NFL slate; 22 checks incl. folded,
+  open and 390px phone unchanged, no overflow, no page errors) and
+  `tests/duo-posture.test.js` (selectors scoped to the pose). Playwright's
+  screenshot emulation drops the CDP override; the script re-applies it.
+  Physical iPhone Duo not verified; whether the flags reach a home-screen web
+  app (vs Safari) not verified.
 
 ### v371 — iPhone Duo layout pass (layout only)
 

@@ -97,3 +97,86 @@ html.pf-side-status body.desk-shell .topbar { width:auto!important; }
    content out of them, as Safari did before cover was set. */
 html:not(.pf-side-status) body.desk-shell { padding-left:env(safe-area-inset-left,0px); padding-right:env(safe-area-inset-right,0px); }
 html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(safe-area-inset-left,0px)); }
+
+/* ═══ v372 · Half-fold poses (layout only) ═══════════════════════════════
+   duo.js sets html[data-duo-pose] only when Safari reports two viewport
+   segments (Viewport Segments / Device Posture APIs, behind Safari 27.1
+   feature flags). Without them none of this applies. Fold geometry comes in
+   as px: seated --fold-top/--fold-bottom/--fold-below, book --fold-left/
+   --fold-right; the gap between each pair is the crease plus a ≥24px gutter
+   where nothing tappable is drawn. */
+
+/* ── Seated (laptop pose): content above the fold, controls below ── */
+/* Every route except Today: the page reads in the top half; the dock grows
+   into a deck that fills the bottom half (big, thumb-sized targets). The
+   deck starts at the crease so the gutter is the deck's own padding. */
+@media (max-width:760px) {
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell:not([data-desk-panel="home"]) #botbar {
+    top:var(--fold-top)!important; bottom:0!important; height:auto!important; min-height:0!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important; grid-auto-rows:minmax(0,1fr); align-content:stretch;
+    gap:10px!important; padding:calc(var(--fold-bottom) - var(--fold-top) + 12px) 14px calc(14px + env(safe-area-inset-bottom,0px))!important;
+    border-radius:0!important; border-top:0!important; box-shadow:none!important; background:#eef4ee!important;
+  }
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell:not([data-desk-panel="home"]) .desk-mobile-dock button {
+    min-height:0!important; height:100%; border-radius:16px!important; background:#fff; border:1px solid #d6e3d9!important;
+    font-size:14px!important; gap:8px!important;
+  }
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell:not([data-desk-panel="home"]) .desk-mobile-dock button svg { width:30px!important; height:30px!important; }
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell:not([data-desk-panel="home"]) .desk-mobile-dock button.active { background:#dff2b1!important; border-color:#b9d98a!important; }
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell:not([data-desk-panel="home"]) main { padding-bottom:calc(var(--fold-below) + 24px)!important; }
+}
+
+/* Today: the featured game (duo.js copies one games-ahead row into
+   #duo-feature) fills the top half; the page itself — The games ahead
+   first — scrolls in the bottom half above the normal dock. */
+#duo-feature[hidden] { display:none!important; }
+/* The list leads the bottom half (CSS order only; the DOM is untouched). */
+:root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active { display:flex; flex-direction:column; }
+:root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card { order:-1; }
+#duo-feature { display:none; }
+:root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #duo-feature {
+  display:flex; flex-direction:column; justify-content:center; gap:8px;
+  position:fixed; left:0; right:0; top:var(--tk-h,0px); z-index:45;
+  height:calc(var(--fold-bottom) - var(--tk-h,0px));
+  padding:10px max(14px,env(safe-area-inset-right,0px)) calc(var(--fold-bottom) - var(--fold-top) + 10px) max(14px,env(safe-area-inset-left,0px));
+  background:var(--gr,#f7f9f9); border-bottom:1px solid #d9e5df; overflow:hidden; box-sizing:border-box;
+}
+:root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] { padding-top:calc(var(--fold-bottom) + 10px)!important; }
+:root[data-duo-pose="seated"] #duo-feature .desk-game { margin:0; max-height:100%; overflow:auto; overscroll-behavior:contain; }
+:root[data-duo-pose="seated"] #duo-feature .desk-match-team b { font-size:clamp(24px,6vw,34px)!important; }
+:root[data-duo-pose="seated"] #duo-feature .desk-match-team > strong { font-size:clamp(30px,8vw,46px)!important; }
+:root[data-duo-pose="seated"] #duo-feature .desk-match-team .desk-team-mark { width:46px!important; height:46px!important; }
+:root[data-duo-pose="seated"] #duo-feature .duo-feature-empty { margin:0; text-align:center; color:#6b817c; font-size:14px; }
+:root[data-duo-pose="seated"] #desk-agenda .desk-game.duo-featured { outline:2px solid #b9d98a; outline-offset:-2px; border-radius:12px; }
+
+/* Game report opens in the top half (seated) — the list stays usable below. */
+:root[data-duo-pose="seated"] .modal { top:var(--tk-h,0px); bottom:auto; height:calc(var(--fold-top) - var(--tk-h,0px)); align-items:stretch!important; }
+:root[data-duo-pose="seated"] .modal-card { max-height:none!important; height:100%; border-radius:0 0 16px 16px!important; animation:none; }
+
+/* ── Book (held sideways, half open): two pages either side of the fold ── */
+/* Today: The games ahead on the left page (its own scroll, stays put); the
+   brief, record and research on the right page. The 76px rail stays on the
+   left page. Column edges are snapped to the fold. */
+:root[data-palette][data-duo-pose="book"] body.desk-shell main { padding-left:18px!important; padding-right:18px!important; }
+:root[data-duo-pose="book"] body.desk-shell[data-desk-panel="home"] #home.active {
+  display:grid; align-items:start; align-content:start;
+  grid-template-columns:calc(var(--fold-left) - var(--desk-sidebar,76px) - 18px - 12px) minmax(0,1fr);
+  column-gap:calc(var(--fold-right) - var(--fold-left) + 24px); row-gap:14px;
+}
+:root[data-duo-pose="book"] body.desk-shell[data-desk-panel="home"] #home.active > * { grid-column:2; margin-top:0; min-width:0; }
+:root[data-duo-pose="book"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card {
+  grid-column:1; grid-row:1 / span 6; position:sticky; top:calc(var(--tk-h,0px) + 10px);
+  max-height:calc(100dvh - var(--tk-h,0px) - 20px); overflow-y:auto; overscroll-behavior:contain; margin:0;
+}
+:root[data-duo-pose="book"] body.desk-shell[data-desk-panel="home"] .desk-home-grid { grid-template-columns:minmax(0,1fr)!important; }
+:root[data-duo-pose="book"] body.desk-shell[data-desk-panel="home"] .desk-stats { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
+
+/* Game report opens on the right page, any route — the left page stays
+   tappable, so tapping another game swaps the report in place. */
+:root[data-duo-pose="book"] .modal { left:var(--fold-right); right:0; top:var(--tk-h,0px); align-items:stretch!important; justify-content:stretch!important; }
+:root[data-duo-pose="book"] .modal-card { max-width:none!important; max-height:none!important; width:100%; height:100%; border-radius:0!important; animation:none; }
+/* The left page is phone-narrow (~360px): use the phone's compact matchup row. */
+:root[data-duo-pose="book"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card .desk-match-team b { font-size:21px!important; }
+:root[data-duo-pose="book"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card .desk-match-team small { display:none!important; }
+:root[data-duo-pose="book"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card .desk-match-team > strong { font-size:21px!important; margin-left:6px; }
+:root[data-duo-pose="book"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card .desk-match-team .desk-team-mark { width:34px!important; height:34px!important; }
