@@ -721,7 +721,18 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v375** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v376** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v376 — Seated Today flipped back: featured game on top, list scrolls below
+
+Jack, after using v375: "the bottom half is the scrolling half. I was wrong,
+so reverse it to how you had it originally." Today in the seated pose is the
+v372 arrangement again — featured game in the top half, the page (The games
+ahead first) scrolling in the bottom half above the normal dock, report in
+the top half — but on the v375 mechanics: document locked, `<main>` is the
+scroller, no fixed bar under a scrolling ancestor, report edge to edge.
+Other routes unchanged (page on top, dock deck below). 440 Node tests + fold
+browser suite. Not yet seen on the phone.
 
 ### v375 — Seated pose: `<main>` scrolls, not body (Safari clipped every fixed bar)
 
@@ -744,6 +755,7 @@ and back-to-top button are hidden in this pose only.
 Jack on the real phone (v373 detected the fold): "they're probably reversed…
 the scrolling stuff should be the top", the game report "only got half the
 way there", and scrolling the scrolling half "bugs out and glitches".
+- ⚠️ SUPERSEDED in v376: Jack reversed this; featured game is back on top and the list scrolls in the bottom half.
 - **Halves swapped.** Today: the page (The games ahead first) and the slim
   dock live in the TOP half; the featured game is in the bottom half. Tapping
   a list row still swaps the featured game; tapping the featured card opens
@@ -799,7 +811,7 @@ sets `html[data-duo-pose]` only with exactly two segments (and, where the
 Device Posture API exists, posture `folded`); the fold edges arrive as px
 vars with a ≥24px gutter centred on the crease. No segments → every rule is
 inert, so flat folded/open/phone/desktop layouts are unchanged.
-- ⚠️ SUPERSEDED in v374: Today's halves are swapped (list on top, featured game below) and the report fills the top half.
+- ⚠️ v374 swapped Today's halves and v376 swapped them back to this arrangement; since v375 `<main>` scrolls (not the document) and the report fills the top half.
 - **Seated** (laptop pose, segments stacked): every route except Today reads
   in the top half; the phone dock becomes a 3-column deck filling the bottom
   half (deck starts at the crease, so the gutter is its padding). Today: a
