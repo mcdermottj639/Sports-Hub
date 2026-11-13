@@ -325,6 +325,9 @@ fantasy/golf data are not refreshed by this cycle.
   the public ESPN scoreboard. Pure helpers under `SportsHubSignalsLab._pure`,
   tested by `tests/signals-lab.test.js`. Research page only — nothing here
   feeds a model.
+- `duo.css`, `duo.js` — v371 iPhone Duo layout layer (slim chrome on short
+  screens, 76px rail at 761–1100px, side status-strip reclaim). `duo.css` loads
+  LAST; layout only — never put content or behaviour in it.
 - `ticker.js`, `ticker.css` — v326 rolling top ticker (scores, model picks,
   results, updates, news). Loads before app.js; pure builders under
   `SportsHubTicker._pure` are tested by `tests/ticker.test.js`.
@@ -715,7 +718,46 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v370** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v371** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v371 — iPhone Duo layout pass (layout only)
+
+Jack (Nov 12 2026): "optimize sports hub for iPhone duo and merge." Same cards,
+numbers and copy; CSS plus one inset probe. New `duo.css` (loaded LAST, after
+matchup-context.css) and `duo.js` (loaded first, defer). Measured Duo
+viewports: folded ≈466×677, open ≈960×676, both under 720px tall.
+- **Slim chrome** `(max-width:760px),(max-height:720px)`: topbar 64–68 → 50px;
+  the dark page banner (181–248px on phones, 190–219px on the open screen) is a
+  one-row title + refresh (≈45px); eyebrow, description, team art and date
+  hidden. First content now starts ≈160px from the top instead of 320–390px.
+  The ticker keeps its v337 size. This also applies to ordinary phones and
+  landscape phones (short screens), by design.
+- **Folded dock** `(max-width:760px) and (max-height:720px)`: 66 → 56px, tap
+  targets ≥46px (mobile-chrome.js measures it, so padding follows).
+- **Folded extras** `(min-width:420px) and (max-width:760px)`: stat tiles 4-up,
+  More tiles and Leagues cards 3-up, Research jump 3-up.
+- **Open** `(min-width:761px) and (max-width:1100px)`: the 192px sidebar
+  becomes a 76px scrolling icon-over-label rail (`--desk-sidebar:76px`, no
+  wrap — it used to wrap into a hidden second column at 676px tall); Today's
+  home grid is two-up again; More 4-up, Leagues 3-up, research paths /
+  comparisons / watch cards 2-up, method links 3-up. 761 (not 740) because
+  760/761 is this app's own phone/desktop breakpoint. iPad portrait also gets
+  the rail.
+- **Side status strip:** `viewport-fit=cover` is now on the viewport meta.
+  `duo.js` probes `env(safe-area-inset-right/left)`; only right ≥ 60 and
+  left < 20 sets `html.pf-side-status` + `--duo-r`, and then only the ticker,
+  topbar, page banner and stale note stay clear of the icons — cards run full
+  width (a card's right edge passes under the icons in the top ~100–160px
+  while scrolling). Any other device with side insets gets body padding equal
+  to the insets, matching Safari's pre-cover letterboxing.
+- Verified: every route at 960×676 and 466×677 with the inset forced
+  (scrollWidth = innerWidth, nothing past the right edge, no page errors);
+  sweep at 320/390/739/760/761/768/844×390/1024/1100/1101/1280 — no overflow,
+  desktop ≥1101 unchanged. 437/437 Node tests. ESPN/Supabase are unreachable
+  from the sandbox, so pages were checked with empty/failed feeds, not live
+  cards. `tests/fantasy-refresh-browser.cjs` already fails on main (it clicks a
+  Fantasy dock button removed in v351); not touched here. Physical iPhone Duo
+  not verified.
 
 ### v370 — Remove obsolete clipboard record export
 
