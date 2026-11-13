@@ -567,7 +567,9 @@
       games = games.map(x => ({...x,g:fresh.get(C.key(x.sport,x.g.id)) || x.g}));
       todayGames = todayGames.map(x => ({...x,g:fresh.get(C.key(x.sport,x.g.id)) || x.g}));
       if (currentTab === 'home' || currentTab === 'watchlist') { paintAgenda(); paintWatchlist(); paintClubs(); }
+      else if (document.documentElement.dataset.duoPose === 'seated') paintAgenda(); // v378: the fold's featured game copies a games-ahead row on every route
     });
+    window.addEventListener('sportshub:duo-agenda',()=>{loadAgenda().catch(()=>{});});
     $d('desk-board-fold').addEventListener('toggle',e=>{try{localStorage.setItem('sportshub:desk:board-open',String(e.target.open));}catch(_){}});
     try{$d('desk-board-fold').open=localStorage.getItem('sportshub:desk:board-open')==='true';}catch(_){}
   }

@@ -106,7 +106,7 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
    --fold-right; the gap between each pair is the crease plus a ≥24px gutter
    where nothing tappable is drawn. */
 
-/* ── Seated (laptop pose). v376: Today scrolls in the BOTTOM half; v377: other routes use the full screen ──
+/* ── Seated (laptop pose). v376: Today scrolls in the BOTTOM half; v378: every route does ──
    Jack: the upright half is the easy one to use, so everything you scroll
    and tap lives there; the flat bottom half is for glancing. The DOCUMENT
    never scrolls in this pose (html is locked, body is a fixed scroller sized
@@ -132,33 +132,26 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
   :root[data-duo-pose="seated"] body.desk-shell > .footer,
   :root[data-duo-pose="seated"] body.desk-shell > #to-top { display:none!important; }
 
-  /* Today (v376, Jack: "the bottom half is the scrolling half"): the featured
-     game (duo.js copies one games-ahead row into #duo-feature) fills the TOP
-     half; the page scrolls in the bottom half above the normal dock. */
-  :root[data-palette][data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] {
+  /* Every route (v378, Jack: "make the half fold view we created for the
+     whole app"): the featured game (duo.js copies one games-ahead row into
+     #duo-feature) fills the TOP half; the page scrolls in the bottom half
+     above the normal dock. v376 did this for Today only. */
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell {
     padding-top:var(--fold-bottom)!important; height:calc(100dvh - var(--bottom-bar-height,56px));
   }
-  :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #duo-feature {
+  :root[data-duo-pose="seated"] body.desk-shell #duo-feature {
     display:flex; flex-direction:column; justify-content:center; gap:8px;
     position:fixed; left:0; right:0; top:var(--tk-h,0px); height:calc(var(--fold-top) - var(--tk-h,0px)); z-index:45;
     padding:10px max(14px,env(safe-area-inset-right,0px)) 10px max(14px,env(safe-area-inset-left,0px));
     background:var(--gr,#f7f9f9); overflow:hidden; box-sizing:border-box;
   }
-  /* The list leads the scrolling half (CSS order only; the DOM is untouched). */
+  /* Today: the list leads the scrolling half (CSS order only; the DOM is untouched). */
   :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active { display:flex; flex-direction:column; }
   :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card { order:-1; }
 
-  /* Every other route (v377, Jack: the fold view "cut off most of the whole
-     app"): the page gets the WHOLE screen again and scrolls across both
-     halves above the normal slim dock. Same mechanics as Today: <main> is
-     the scroller, the document stays locked. Reports open full screen here. */
-  :root[data-palette][data-duo-pose="seated"] body.desk-shell:not([data-desk-panel="home"]) {
-    height:calc(100dvh - var(--bottom-bar-height,56px));
-  }
-
-  /* Game report on Today: the whole top half, scrolling inside itself. */
-  :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] .modal { top:var(--tk-h,0px); bottom:auto; height:calc(var(--fold-top) - var(--tk-h,0px)); align-items:stretch!important; }
-  :root[data-palette][data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] .modal-card { width:100%; max-width:none!important; max-height:none!important; height:100%; margin:0; border-radius:0!important; animation:none; overflow-y:auto!important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+  /* Game report: the whole top half, scrolling inside itself. */
+  :root[data-duo-pose="seated"] .modal { top:var(--tk-h,0px); bottom:auto; height:calc(var(--fold-top) - var(--tk-h,0px)); align-items:stretch!important; }
+  :root[data-palette][data-duo-pose="seated"] .desk-shell .modal-card { width:100%; max-width:none!important; max-height:none!important; height:100%; margin:0; border-radius:0!important; animation:none; overflow-y:auto!important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
 }
 #duo-feature[hidden] { display:none!important; }
 #duo-feature { display:none; }
