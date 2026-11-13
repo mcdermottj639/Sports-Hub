@@ -28,9 +28,181 @@
     }
   }
   var t = 0;
-  function later() { clearTimeout(t); t = setTimeout(probe, 120); }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', probe);
-  else probe();
+  function later() { clearTimeout(t); t = setTimeout(function () { probe(); pose(); }, 120); }
+
+  // ── v372 half-fold poses (layout only) ──────────────────────────────────
+  // Safari 27.1 exposes the fold through the Viewport Segments API (and the
+  // Device Posture API), both behind Safari feature flags for now. With two
+  // segments we set html[data-duo-pose] and the fold geometry in px:
+  //   seated — segments stacked (laptop pose): --fold-top / --fold-bottom
+  //   book   — segments side by side:          --fold-left / --fold-right
+  // The crease gets a gutter of at least FOLD_GAP px, centred on the fold, so
+  // nothing tappable sits on the curve. No segments → attribute removed and
+  // every pose rule in duo.css is inert. Where the Device Posture API exists
+  // it must say "folded" (a flat dual-screen device is not a half fold).
+  var FOLD_GAP = 24;
+  function segments() {
+    var v = window.viewport;
+    var s = v && v.segments;
+    return s && s.length === 2 ? [s[0], s[1]] : null;
+  }
+  function pose() {
+    var s = segments();
+    var dp = navigator.devicePosture;
+    var name = '';
+    if (s && !(dp && dp.type && dp.type !== 'folded')) {
+      var a = s[0], b = s[1];
+      if (b.top >= a.bottom - 1 && Math.abs(a.left - b.left) < 2) name = 'seated';
+      else if (b.left >= a.right - 1 && Math.abs(a.top - b.top) < 2) name = 'book';
+      if (name === 'seated') {
+        var mid = (a.bottom + b.top) / 2;
+        root.style.setProperty('--fold-top', Math.round(Math.min(a.bottom, mid - FOLD_GAP / 2)) + 'px');
+        root.style.setProperty('--fold-bottom', Math.round(Math.max(b.top, mid + FOLD_GAP / 2)) + 'px');
+        root.style.setProperty('--fold-below', Math.round(window.innerHeight - Math.min(a.bottom, mid - FOLD_GAP / 2)) + 'px');
+      } else if (name === 'book') {
+        var midx = (a.right + b.left) / 2;
+        root.style.setProperty('--fold-left', Math.round(Math.min(a.right, midx - FOLD_GAP / 2)) + 'px');
+        root.style.setProperty('--fold-right', Math.round(Math.max(b.left, midx + FOLD_GAP / 2)) + 'px');
+      }
+    }
+    if (name) root.setAttribute('data-duo-pose', name);
+    else root.removeAttribute('data-duo-pose');
+    if (name !== 'seated') {
+      ['--fold-top', '--fold-bottom', '--fold-below'].forEach(function (k) { root.style.removeProperty(k); });
+    }
+    if (name !== 'book') {
+      ['--fold-left', '--fold-right'].forEach(function (k) { root.style.removeProperty(k); });
+    }
+    feature();
+  }
+  if (window.viewport && window.viewport.addEventListener) {
+    try { window.viewport.addEventListener('segmentschange', later); } catch (e) { /* older shape */ }
+  }
+  if (navigator.devicePosture && navigator.devicePosture.addEventListener) {
+    navigator.devicePosture.addEventListener('change', later);
+  }
+
+  // ── Seated Today: the featured game sits above the fold ─────────────────
+  // A copy of one games-ahead row (live first, then the next to start, then
+  // the first row) is shown in the top half. Tapping a row in the list below
+  // swaps which game is featured; tapping the featured card does what the
+  // row itself does (opens the game report, bookmark, Matchup Lab), by
+  // forwarding the tap to the matching element in the real row. The copy is
+  // rebuilt whenever the list repaints, so live scores stay current.
+  var picked = '';
+  var forwarding = false;
+  var pane = null;
+  var watcher = null;
+  function seatedHome() {
+    return root.getAttribute('data-duo-pose') === 'seated' && document.body &&
+      document.body.getAttribute('data-desk-panel') === 'home';
+  }
+  function rows() {
+    var host = document.getElementById('desk-agenda');
+    return host ? Array.prototype.slice.call(host.querySelectorAll('.desk-game')) : [];
+  }
+  function keyOf(row) {
+    var b = row && row.querySelector('[data-desk-game]');
+    return b ? b.getAttribute('data-desk-game') : '';
+  }
+  function choose(list) {
+    if (picked) {
+      for (var i = 0; i < list.length; i++) if (keyOf(list[i]) === picked) return list[i];
+    }
+    for (var j = 0; j < list.length; j++) if (list[j].querySelector('.desk-live')) return list[j];
+    for (var k = 0; k < list.length; k++) if (!list[k].querySelector('.desk-match-team > strong')) return list[k];
+    return list[0] || null;
+  }
+  function ensurePane() {
+    if (pane || !document.body) return pane;
+    pane = document.createElement('section');
+    pane.id = 'duo-feature';
+    pane.setAttribute('aria-label', 'Featured game');
+    pane.hidden = true;
+    pane.addEventListener('click', onPaneClick);
+    document.body.appendChild(pane);
+    return pane;
+  }
+  function pathTo(node, top) {
+    var path = [];
+    while (node && node !== top) {
+      var p = node.parentElement;
+      if (!p) return null;
+      path.unshift(Array.prototype.indexOf.call(p.children, node));
+      node = p;
+    }
+    return node === top ? path : null;
+  }
+  function follow(top, path) {
+    var n = top;
+    for (var i = 0; n && i < path.length; i++) n = n.children[path[i]];
+    return n || null;
+  }
+  function onPaneClick(e) {
+    var copy = pane && pane.querySelector('.desk-game');
+    if (!copy) return;
+    var hit = e.target.closest('button, a, summary, [role="button"]');
+    if (!hit || !copy.contains(hit)) return;
+    var real = choose(rows());
+    var path = pathTo(hit, copy);
+    var target = real && path && follow(real, path);
+    if (!target) return;
+    e.preventDefault();
+    e.stopPropagation();
+    forwarding = true;
+    try { target.click(); } finally { forwarding = false; }
+  }
+  function onListClick(e) {
+    if (forwarding || !seatedHome()) return;
+    var main = e.target.closest('#desk-agenda .desk-game-main');
+    if (!main) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    picked = main.getAttribute('data-desk-game') || '';
+    feature();
+  }
+  document.addEventListener('click', onListClick, true);
+  var frame = 0;
+  function soon() { if (!frame) frame = requestAnimationFrame(function () { frame = 0; feature(); }); }
+  function feature() {
+    if (!document.body) return;
+    var on = seatedHome();
+    var host = document.getElementById('desk-agenda');
+    if (on && host && !watcher && window.MutationObserver) {
+      watcher = new MutationObserver(soon);
+      watcher.observe(host, { childList: true, subtree: true, characterData: true });
+    }
+    if (!on) {
+      if (pane) { pane.hidden = true; pane.replaceChildren(); }
+      if (watcher) { watcher.disconnect(); watcher = null; }
+      document.querySelectorAll('.duo-featured').forEach(function (r) { r.classList.remove('duo-featured'); });
+      return;
+    }
+    ensurePane();
+    var list = rows();
+    var row = choose(list);
+    list.forEach(function (r) { r.classList.toggle('duo-featured', r === row); });
+    if (!row) {
+      pane.hidden = false;
+      pane.innerHTML = '<p class="duo-feature-empty">Waiting for the games ahead…</p>';
+      return;
+    }
+    var copy = row.cloneNode(true);
+    copy.classList.remove('duo-featured');
+    copy.removeAttribute('id');
+    copy.querySelectorAll('[id]').forEach(function (n) { n.removeAttribute('id'); });
+    copy.querySelectorAll('[data-live-sport]').forEach(function (n) { n.removeAttribute('data-live-sport'); });
+    pane.replaceChildren(copy);
+    pane.hidden = false;
+  }
+  // The desk sets body[data-desk-panel] on every route change.
+  function watchPanel() {
+    if (!document.body || !window.MutationObserver) return;
+    new MutationObserver(function () { soon(); }).observe(document.body, { attributes: true, attributeFilter: ['data-desk-panel'] });
+  }
+  function start() { probe(); pose(); watchPanel(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
   window.addEventListener('resize', later);
   window.addEventListener('orientationchange', later);
 })();
