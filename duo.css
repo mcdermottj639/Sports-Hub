@@ -180,3 +180,5 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
 :root[data-duo-pose="book"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card .desk-match-team small { display:none!important; }
 :root[data-duo-pose="book"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card .desk-match-team > strong { font-size:21px!important; margin-left:6px; }
 :root[data-duo-pose="book"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card .desk-match-team .desk-team-mark { width:34px!important; height:34px!important; }
+/* v373 — fold-sensor readout beside the Today version label (diagnostic). */
+.duo-diag { white-space:nowrap; }

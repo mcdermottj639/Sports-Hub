@@ -19,6 +19,7 @@ const slate={week:{number:11},season:{type:2,year:2026},events:[
   ev('9004','pre','Sun 4:25 PM',now+90000000,team('KC','Chiefs'),team('LV','Raiders'),'0','0'),
 ]};
 const poses={
+  seatedLate:{width:676,height:900},
   seated:{width:676,height:900,feature:{orientation:'horizontal',offset:450,maskLength:0}},
   book:{width:951,height:676,feature:{orientation:'vertical',offset:475,maskLength:0}},
   folded:{width:466,height:677},open:{width:960,height:676},phone:{width:390,height:844},
@@ -34,10 +35,11 @@ const poses={
   const origin=`http://127.0.0.1:${server.address().port}`;
   const browser=await chromium.launch({headless:true,args:['--no-sandbox'],...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE?{executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE}:{})});
   const failures=[];
-  const open=async(name,hash='')=>{
+  const open=async(name,hash='',noJsSegments=false)=>{
     const P=poses[name],mobile=P.width<761;
     const context=await browser.newContext({viewport:{width:P.width,height:P.height},isMobile:mobile,hasTouch:mobile,serviceWorkers:'block'});
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+    if(noJsSegments)await page.addInitScript(()=>{try{delete window.viewport;Object.defineProperty(window,'viewport',{value:undefined,configurable:true});delete window.viewport;}catch(e){}});
     await page.route('**/*',route=>{
       const u=new URL(route.request().url());
       if(u.origin===origin)return route.continue();
@@ -53,7 +55,7 @@ const poses={
       await cdp.send('Emulation.setDevicePostureOverride',{posture:{type:'folded'}});
     }:async()=>{};
     page.fold=fold;await fold();
-    await page.goto(origin+'/'+hash,{waitUntil:'load'});
+    await page.goto(origin+'/'+(hash||''),{waitUntil:'load'});
     await page.waitForTimeout(1800);
     return {page,context,errors};
   };
@@ -118,6 +120,36 @@ const poses={
       await shot(page,'book-report');
       await check('book: no sideways overflow',()=>noOverflow(page));
       await check('book: no page errors',async()=>assert.deepEqual(errors,[]));
+      await context.close();}
+    // v373: the phone opens flat and is folded LATER, with no viewport resize.
+    {const {page,context,errors}=await open('seatedLate');
+      await check('late fold: starts flat',async()=>{
+        assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),undefined);
+      });
+      const cdp=await context.newCDPSession(page);
+      await cdp.send('Emulation.setDevicePostureOverride',{posture:{type:'folded'}});
+      await cdp.send('Emulation.setDeviceMetricsOverride',{width:676,height:900,deviceScaleFactor:2,mobile:true,displayFeature:{orientation:'horizontal',offset:450,maskLength:0}});
+      await check('late fold: pose picked up within 2s, no reload',async()=>{
+        await page.waitForFunction(()=>document.documentElement.dataset.duoPose==='seated',null,{timeout:2500});
+      });
+      await check('late fold: readout names the pose',async()=>{
+        const t=await page.evaluate(()=>document.getElementById('duo-diag')?.textContent||'');
+        assert.match(t,/seated/);
+      });
+      await cdp.send('Emulation.setDeviceMetricsOverride',{width:676,height:900,deviceScaleFactor:2,mobile:true});
+      await cdp.send('Emulation.setDevicePostureOverride',{posture:{type:'continuous'}});
+      await check('late fold: unfolding clears it again',async()=>{
+        await page.waitForFunction(()=>!document.documentElement.dataset.duoPose,null,{timeout:2500});
+      });
+      await check('late fold: no page errors',async()=>assert.deepEqual(errors,[]));
+      await context.close();}
+    // v373: only the CSS half of the API (no window.viewport) still works.
+    {const {page,context,errors}=await open('book',null,true);
+      await check('css-only: book pose from media queries + env()',async()=>{
+        const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,vp:'viewport' in window,diag:document.getElementById('duo-diag')?.textContent||''}));
+        assert.equal(s.vp,false);assert.equal(s.pose,'book');assert.match(s.diag,/css/);
+      });
+      await check('css-only: no page errors',async()=>assert.deepEqual(errors,[]));
       await context.close();}
     // Flat screens: nothing from v372 applies.
     for(const name of ['folded','open','phone']){
