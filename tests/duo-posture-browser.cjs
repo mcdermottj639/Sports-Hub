@@ -74,13 +74,21 @@ const poses={
         assert.equal(f.hidden,false);assert.equal(f.key,'nfl:9002');assert.ok(f.top>=462,`pane top ${f.top}`);assert.ok(f.bottom<=f.h);
       });
       await check('seated Today: list and dock live in the top half',async()=>{
-        const y=await page.evaluate(()=>({row:document.querySelector('#desk-agenda .desk-game').getBoundingClientRect().top,dock:document.getElementById('botbar').getBoundingClientRect().bottom,body:document.body.getBoundingClientRect().bottom,dockTop:document.getElementById('botbar').getBoundingClientRect().top}));
+        const y=await page.evaluate(()=>({row:document.querySelector('#desk-agenda .desk-game').getBoundingClientRect().top,dock:document.getElementById('botbar').getBoundingClientRect().bottom,body:document.getElementById('main-content').getBoundingClientRect().bottom,dockTop:document.getElementById('botbar').getBoundingClientRect().top}));
         assert.ok(y.row<438,`first row at ${y.row}`);assert.ok(y.dock<=439,`dock bottom ${y.dock}`);assert.ok(y.body<=y.dockTop+1,`page ${y.body} under dock ${y.dockTop}`);
       });
+      await check('seated: no fixed bar sits inside a scrolling ancestor (Safari clips those)',async()=>{
+        const bad=await page.evaluate(()=>['ticker','botbar','duo-feature','game-modal'].filter(id=>{for(let n=document.getElementById(id).parentElement;n&&n!==document.documentElement;n=n.parentElement){const o=getComputedStyle(n);if(/(auto|scroll|hidden)/.test(o.overflowY)||o.position==='fixed')return true;}return false;}));
+        assert.deepEqual(bad,[]);
+      });
+      await check('seated Today: ticker on top, page ends at the dock',async()=>{
+        const g=await page.evaluate(()=>({tk:document.getElementById('ticker').getBoundingClientRect(),m:document.getElementById('main-content').getBoundingClientRect().bottom,d:document.getElementById('botbar').getBoundingClientRect().top}));
+        assert.equal(Math.round(g.tk.top),0);assert.ok(g.tk.height>20);assert.ok(Math.abs(g.m-g.d)<=1,`main ${g.m} dock ${g.d}`);
+      });
       await check('seated: the document never scrolls; the top half does',async()=>{
-        const s=await page.evaluate(()=>{document.body.scrollTop=300;const moved=document.body.scrollTop;window.scrollTo(0,400);return {moved,win:scrollY,docH:document.documentElement.scrollHeight,h:innerHeight,pane:document.getElementById('duo-feature').getBoundingClientRect().top};});
+        const s=await page.evaluate(()=>{const M=document.getElementById('main-content');M.scrollTop=300;const moved=M.scrollTop;window.scrollTo(0,400);return {moved,win:scrollY,docH:document.documentElement.scrollHeight,h:innerHeight,pane:document.getElementById('duo-feature').getBoundingClientRect().top};});
         assert.ok(s.moved>0,'top half scrolls');assert.equal(s.win,0);assert.ok(s.pane>=462,'pane stays put');
-        await page.evaluate(()=>{document.body.scrollTop=0;});
+        await page.evaluate(()=>{document.getElementById('main-content').scrollTop=0;});
       });
       await shot(page,'seated-today');
       await check('seated Today: tapping a row swaps the featured game, no report',async()=>{
