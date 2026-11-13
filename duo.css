@@ -1,0 +1,99 @@
+/* duo.css — iPhone Duo layout pass (v371). LAYOUT ONLY: no content, copy,
+   numbers or behaviour changes. Loaded LAST so it wins over desk.css and the
+   per-panel heading rules. Keyed to width/height ranges, never a device name.
+   Measured Duo viewports (Jack's screenshots, Nov 12 2026): folded ≈466×677,
+   open ≈960×676; both report the clock/Wi-Fi icons as a ≈100px RIGHT
+   safe-area inset (duo.js sets html.pf-side-status + --duo-r for that shape).
+   Ranges:
+     (max-width:760px),(max-height:720px)   slim chrome (both screens)
+     (min-width:420px) and (max-width:760px) folded extras
+     (min-width:761px) and (max-width:1100px) open layout (76px rail)
+   760/761 is this app's own phone/desktop breakpoint (desk.css), so the
+   open range starts at 761, not the 740 used in portfolio-dashboard. */
+
+/* ── Slim chrome: short screens (both Duo screens are under 720px tall) ── */
+@media (max-width:760px), (max-height:720px) {
+  :root[data-palette] body.desk-shell .topbar { height:50px!important; padding-top:0!important; padding-bottom:0!important; flex-wrap:nowrap!important; }
+  :root[data-palette] body.desk-shell .desk-wordmark { font-size:18px!important; gap:7px; }
+  :root[data-palette] body.desk-shell .desk-brand-symbol { width:28px; height:28px; font-size:16px; border-radius:8px; }
+  :root[data-palette] body.desk-shell .desk-search-trigger kbd { display:none; }
+
+  /* Tall dark page banner → slim block (title + refresh on one row). */
+  :root[data-palette] body.desk-shell .desk-page-heading { min-height:0!important; padding:10px 14px!important; margin-top:10px!important; margin-bottom:10px!important; align-items:center!important; flex-wrap:nowrap!important; }
+  :root[data-palette] body.desk-shell .desk-page-heading .desk-eyebrow,
+  :root[data-palette] body.desk-shell #desk-page-desc,
+  :root[data-palette] body.desk-shell #desk-heading-art,
+  :root[data-palette] body.desk-shell .desk-heading-side #desk-date { display:none!important; }
+  :root[data-palette] body.desk-shell .desk-page-heading h1 { font-size:clamp(17px,4.6vw,24px)!important; line-height:1.05!important; max-width:none!important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; letter-spacing:-.3px!important; }
+  :root[data-palette] body.desk-shell .desk-page-heading > div:first-child { min-width:0; }
+  :root[data-palette] body.desk-shell .desk-heading-side { position:static!important; transform:none!important; padding:0!important; flex-direction:row!important; flex:none; margin-left:auto; }
+  :root[data-palette] body.desk-shell .desk-refresh { min-height:36px; }
+}
+
+/* Phone dock: slimmer (66 → 56px) on the short folded screen. mobile-chrome.js
+   measures it, so content padding follows. Tap targets stay ≥44px. */
+@media (max-width:760px) and (max-height:720px) {
+  :root[data-palette] body.desk-shell #botbar { min-height:56px!important; padding-top:4px!important; padding-bottom:calc(4px + env(safe-area-inset-bottom,0px))!important; }
+  :root[data-palette] body.desk-shell .desk-mobile-dock button { min-height:46px; gap:3px; padding:3px 1px; }
+  :root[data-palette] body.desk-shell .desk-mobile-dock button svg { width:18px; height:18px; }
+}
+
+/* ── Folded extras: a wide-but-short phone (≈466px) ── */
+@media (min-width:420px) and (max-width:760px) {
+  .desk-stats { grid-template-columns:repeat(4,minmax(0,1fr))!important; gap:7px!important; }
+  .desk-stat { padding:11px 10px!important; min-width:0; }
+  .desk-stat > strong { font-size:clamp(18px,5vw,24px)!important; white-space:nowrap; }
+  .desk-stat > span, .desk-stat > small { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .desk-explore-grid { grid-template-columns:repeat(3,minmax(0,1fr))!important; gap:8px!important; }
+  .desk-tile { min-width:0; }
+  .desk-league-grid { grid-template-columns:repeat(3,minmax(0,1fr))!important; gap:8px!important; }
+  .desk-league-grid > * { min-width:0; }
+  .desk-research-jump { grid-template-columns:repeat(3,minmax(0,1fr))!important; }
+  .desk-research-jump > * { min-width:0; }
+}
+
+/* ── Open screen (≈960×676): 76px icon rail instead of the 192px sidebar ── */
+@media (min-width:761px) and (max-width:1100px) {
+  :root[data-palette="champagne"] { --desk-sidebar:76px!important; }
+  :root[data-palette] body.desk-shell nav.tabs { width:76px!important; padding:8px 6px 10px!important; gap:2px!important; flex-wrap:nowrap!important; overflow-y:auto!important; overflow-x:hidden!important; scrollbar-width:none; }
+  :root[data-palette] body.desk-shell nav.tabs::-webkit-scrollbar { display:none; }
+  :root[data-palette] body.desk-shell nav.tabs .desk-sidebar-title,
+  :root[data-palette] body.desk-shell nav.tabs .desk-sidebar-bottom,
+  :root[data-palette] body.desk-shell nav.tabs .desk-nav-count { display:none!important; }
+  :root[data-palette] body.desk-shell nav.tabs button { flex-direction:column!important; justify-content:center!important; align-items:center!important; gap:3px!important; min-height:52px!important; padding:5px 2px!important; text-align:center!important; font-size:9.5px!important; line-height:1.15; border-radius:10px; }
+  :root[data-palette] body.desk-shell nav.tabs button.active { box-shadow:none!important; }
+  :root[data-palette] body.desk-shell nav.tabs .ic { width:22px!important; height:22px!important; justify-content:center; }
+  :root[data-palette] body.desk-shell nav.tabs .lb { flex:none!important; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  :root[data-palette] body.desk-shell main { padding-left:18px!important; padding-right:18px!important; max-width:none!important; }
+  :root[data-palette] body.desk-shell .desk-page-heading { margin-left:calc(var(--desk-sidebar) + 18px)!important; margin-right:18px!important; }
+  :root[data-palette] body.desk-shell .topbar { padding-left:18px!important; padding-right:18px!important; }
+
+  /* Two-up instead of long single-column stacks. */
+  .desk-home-grid { grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)!important; gap:14px!important; }
+  .desk-side-column { grid-template-columns:1fr!important; }
+  .desk-explore-grid { grid-template-columns:repeat(4,minmax(0,1fr))!important; gap:10px!important; }
+  .desk-league-grid { grid-template-columns:repeat(3,minmax(0,1fr))!important; gap:10px!important; }
+  .desk-research-paths, .desk-comparison-grid, .desk-watch-grid { grid-template-columns:repeat(2,minmax(0,1fr))!important; align-items:start; }
+  .desk-method-links { grid-template-columns:repeat(3,minmax(0,1fr))!important; }
+  .desk-stat > strong { white-space:nowrap; font-size:clamp(20px,2.8vw,30px)!important; }
+}
+
+/* ── Reclaim the Duo's right status strip (duo.js sets the class) ──
+   Only the top chrome stays clear of the clock/Wi-Fi icons; cards run full
+   width. Known trade-off: a card's right edge passes under the icons while it
+   scrolls through the top ~100–160px. */
+html.pf-side-status body.desk-shell { padding-right:0!important; }
+html.pf-side-status .ticker { padding-right:var(--duo-r,0px)!important; }
+html.pf-side-status body.desk-shell .topbar,
+html.pf-side-status body.desk-shell #stale-note { margin-right:var(--duo-r,0px)!important; }
+:root[data-palette].pf-side-status body.desk-shell .desk-page-heading { margin-right:var(--duo-r,0px)!important; }
+html.pf-side-status body.desk-shell .topbar { width:auto!important; }
+@media (max-width:760px) {
+  html.pf-side-status body.desk-shell .desk-page-heading { margin-left:12px!important; }
+}
+
+/* viewport-fit=cover (v371) lets env() report insets. On any OTHER device
+   with side insets (a notched iPhone in landscape reports both sides) keep
+   content out of them, as Safari did before cover was set. */
+html:not(.pf-side-status) body.desk-shell { padding-left:env(safe-area-inset-left,0px); padding-right:env(safe-area-inset-right,0px); }
+html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(safe-area-inset-left,0px)); }
