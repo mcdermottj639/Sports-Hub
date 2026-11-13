@@ -106,7 +106,7 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
    --fold-right; the gap between each pair is the crease plus a ≥24px gutter
    where nothing tappable is drawn. */
 
-/* ── Seated (laptop pose). v376: Today scrolls in the BOTTOM half ──
+/* ── Seated (laptop pose). v376: Today scrolls in the BOTTOM half; v377: other routes use the full screen ──
    Jack: the upright half is the easy one to use, so everything you scroll
    and tap lives there; the flat bottom half is for glancing. The DOCUMENT
    never scrolls in this pose (html is locked, body is a fixed scroller sized
@@ -148,23 +148,17 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
   :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active { display:flex; flex-direction:column; }
   :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card { order:-1; }
 
-  /* Every other route: page on top, the dock becomes a big deck below. */
-  :root[data-palette][data-duo-pose="seated"] body.desk-shell:not([data-desk-panel="home"]) #botbar {
-    top:var(--fold-top)!important; bottom:0!important; height:auto!important; min-height:0!important;
-    grid-template-columns:repeat(3,minmax(0,1fr))!important; grid-auto-rows:minmax(0,1fr); align-content:stretch;
-    gap:10px!important; padding:calc(var(--fold-bottom) - var(--fold-top) + 12px) 14px calc(14px + env(safe-area-inset-bottom,0px))!important;
-    border-radius:0!important; border-top:0!important; box-shadow:none!important; background:#eef4ee!important;
+  /* Every other route (v377, Jack: the fold view "cut off most of the whole
+     app"): the page gets the WHOLE screen again and scrolls across both
+     halves above the normal slim dock. Same mechanics as Today: <main> is
+     the scroller, the document stays locked. Reports open full screen here. */
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell:not([data-desk-panel="home"]) {
+    height:calc(100dvh - var(--bottom-bar-height,56px));
   }
-  :root[data-palette][data-duo-pose="seated"] body.desk-shell:not([data-desk-panel="home"]) .desk-mobile-dock button {
-    min-height:0!important; height:100%; border-radius:16px!important; background:#fff; border:1px solid #d6e3d9!important;
-    font-size:14px!important; gap:8px!important;
-  }
-  :root[data-palette][data-duo-pose="seated"] body.desk-shell:not([data-desk-panel="home"]) .desk-mobile-dock button svg { width:30px!important; height:30px!important; }
-  :root[data-palette][data-duo-pose="seated"] body.desk-shell:not([data-desk-panel="home"]) .desk-mobile-dock button.active { background:#dff2b1!important; border-color:#b9d98a!important; }
 
-  /* Game report: the whole top half, scrolling inside itself. */
-  :root[data-duo-pose="seated"] .modal { top:var(--tk-h,0px); bottom:auto; height:calc(var(--fold-top) - var(--tk-h,0px)); align-items:stretch!important; }
-  :root[data-palette][data-duo-pose="seated"] .desk-shell .modal-card { width:100%; max-width:none!important; max-height:none!important; height:100%; margin:0; border-radius:0!important; animation:none; overflow-y:auto!important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+  /* Game report on Today: the whole top half, scrolling inside itself. */
+  :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] .modal { top:var(--tk-h,0px); bottom:auto; height:calc(var(--fold-top) - var(--tk-h,0px)); align-items:stretch!important; }
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] .modal-card { width:100%; max-width:none!important; max-height:none!important; height:100%; margin:0; border-radius:0!important; animation:none; overflow-y:auto!important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
 }
 #duo-feature[hidden] { display:none!important; }
 #duo-feature { display:none; }

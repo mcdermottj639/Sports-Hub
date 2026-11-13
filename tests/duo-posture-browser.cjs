@@ -106,11 +106,14 @@ const poses={
       });
       await shot(page,'seated-report');
       await page.evaluate(()=>document.getElementById('modal-x')?.click());
-      await check('seated Models: page above the fold, dock is a deck below it',async()=>{
+      await check('seated Models: page uses the whole screen above the slim dock',async()=>{
         await page.locator('#botbar [data-desk-route]').nth(1).click();
         await page.waitForFunction(()=>document.body.dataset.deskPanel!=='home',null,{timeout:3000}).catch(()=>{});await page.waitForTimeout(300);
-        const d=await page.evaluate(()=>{const b=document.getElementById('botbar').getBoundingClientRect();return {top:b.top,bottom:b.bottom,h:innerHeight,feature:!document.getElementById('duo-feature')||document.getElementById('duo-feature').hidden};});
-        assert.equal(Math.round(d.top),438);assert.equal(Math.round(d.bottom),d.h);assert.equal(d.feature,true);
+        const d=await page.evaluate(()=>{const b=document.getElementById('botbar').getBoundingClientRect();const m=document.getElementById('main-content');const r=m.getBoundingClientRect();m.scrollTop=200;return {top:b.top,bottom:b.bottom,h:innerHeight,mTop:r.top,mBottom:r.bottom,scrolled:m.scrollTop,y:scrollY,feature:!document.getElementById('duo-feature')||document.getElementById('duo-feature').hidden};});
+        assert.ok(d.h-d.top<=80,`dock height ${d.h-d.top}`);assert.equal(Math.round(d.bottom),d.h);assert.equal(d.feature,true);
+        assert.ok(d.mTop<438,'page starts above the fold');assert.ok(d.mBottom>462&&d.mBottom<=d.top+1,`page ends at the dock ${d.mBottom}/${d.top}`);
+        assert.equal(d.y,0);
+        await page.evaluate(()=>{document.getElementById('main-content').scrollTop=0;});
       });
       await shot(page,'seated-models');
       await check('seated: no sideways overflow',()=>noOverflow(page));
