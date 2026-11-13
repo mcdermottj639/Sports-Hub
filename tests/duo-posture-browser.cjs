@@ -69,26 +69,32 @@ const poses={
         const a=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,top:getComputedStyle(document.documentElement).getPropertyValue('--fold-top').trim(),bottom:getComputedStyle(document.documentElement).getPropertyValue('--fold-bottom').trim()}));
         assert.equal(a.pose,'seated');assert.equal(a.top,'438px');assert.equal(a.bottom,'462px');
       });
-      await check('seated Today: live game is featured above the fold',async()=>{
-        const f=await page.evaluate(()=>{const p=document.getElementById('duo-feature');const r=p.getBoundingClientRect();return {hidden:p.hidden,bottom:r.bottom,key:p.querySelector('[data-desk-game]')?.dataset.deskGame};});
-        assert.equal(f.hidden,false);assert.equal(f.key,'nfl:9002');assert.ok(f.bottom<=462,`pane bottom ${f.bottom}`);
+      await check('seated Today: live game is featured BELOW the fold',async()=>{
+        const f=await page.evaluate(()=>{const p=document.getElementById('duo-feature');const r=p.getBoundingClientRect();return {hidden:p.hidden,top:r.top,bottom:r.bottom,h:innerHeight,key:p.querySelector('[data-desk-game]')?.dataset.deskGame};});
+        assert.equal(f.hidden,false);assert.equal(f.key,'nfl:9002');assert.ok(f.top>=462,`pane top ${f.top}`);assert.ok(f.bottom<=f.h);
       });
-      await check('seated Today: list starts below the fold',async()=>{
-        const y=await page.evaluate(()=>document.querySelector('#desk-agenda .desk-game').getBoundingClientRect().top+scrollY);
-        assert.ok(y>=462,`first row at ${y}`);
+      await check('seated Today: list and dock live in the top half',async()=>{
+        const y=await page.evaluate(()=>({row:document.querySelector('#desk-agenda .desk-game').getBoundingClientRect().top,dock:document.getElementById('botbar').getBoundingClientRect().bottom,body:document.body.getBoundingClientRect().bottom,dockTop:document.getElementById('botbar').getBoundingClientRect().top}));
+        assert.ok(y.row<438,`first row at ${y.row}`);assert.ok(y.dock<=439,`dock bottom ${y.dock}`);assert.ok(y.body<=y.dockTop+1,`page ${y.body} under dock ${y.dockTop}`);
+      });
+      await check('seated: the document never scrolls; the top half does',async()=>{
+        const s=await page.evaluate(()=>{document.body.scrollTop=300;const moved=document.body.scrollTop;window.scrollTo(0,400);return {moved,win:scrollY,docH:document.documentElement.scrollHeight,h:innerHeight,pane:document.getElementById('duo-feature').getBoundingClientRect().top};});
+        assert.ok(s.moved>0,'top half scrolls');assert.equal(s.win,0);assert.ok(s.pane>=462,'pane stays put');
+        await page.evaluate(()=>{document.body.scrollTop=0;});
       });
       await shot(page,'seated-today');
       await check('seated Today: tapping a row swaps the featured game, no report',async()=>{
+        await page.locator('#desk-agenda [data-desk-game="nfl:9003"]').scrollIntoViewIfNeeded();
         await page.locator('#desk-agenda [data-desk-game="nfl:9003"]').click();
         await page.waitForFunction(()=>document.querySelector('#duo-feature [data-desk-game]')?.dataset.deskGame==='nfl:9003',null,{timeout:3000}).catch(()=>{});
         const s=await page.evaluate(()=>({key:document.querySelector('#duo-feature [data-desk-game]')?.dataset.deskGame,modal:document.getElementById('game-modal').classList.contains('hidden')}));
         assert.equal(s.key,'nfl:9003');assert.equal(s.modal,true);
       });
-      await check('seated Today: tapping the featured card opens its report in the top half',async()=>{
+      await check('seated Today: tapping the featured card (bottom) opens its report across the top half',async()=>{
         await page.locator('#duo-feature [data-desk-game]').click();
         await page.waitForTimeout(600);
-        const m=await page.evaluate(()=>{const g=document.getElementById('game-modal');const c=g.querySelector('.modal-card').getBoundingClientRect();return {open:!g.classList.contains('hidden'),bottom:c.bottom};});
-        assert.equal(m.open,true);assert.ok(m.bottom<=439,`report bottom ${m.bottom}`);
+        const m=await page.evaluate(()=>{const g=document.getElementById('game-modal');const card=g.querySelector('.modal-card');const c=card.getBoundingClientRect();card.scrollTop=200;return {open:!g.classList.contains('hidden'),bottom:c.bottom,left:c.left,right:c.right,w:innerWidth,scrolls:card.scrollHeight<=card.clientHeight||card.scrollTop>0};});
+        assert.equal(m.open,true);assert.ok(m.bottom<=439,`report bottom ${m.bottom}`);assert.equal(Math.round(m.left),0);assert.equal(Math.round(m.right),m.w);assert.equal(m.scrolls,true);
       });
       await shot(page,'seated-report');
       await page.evaluate(()=>document.getElementById('modal-x')?.click());
