@@ -721,7 +721,23 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v374** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v375** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v375 — Seated pose: `<main>` scrolls, not body (Safari clipped every fixed bar)
+
+Jack's v374 screenshots: top half showed the page, but the ticker, dock,
+featured game and the bottom of the report were all missing. v374 made
+`body` a fixed `overflow:auto` scroller; **Safari clips `position:fixed`
+descendants to a scrolling ancestor** (Chrome does not, so the headless suite
+passed), and the ticker, `#botbar`, `#duo-feature` and `#game-modal` are all
+children of body. Now body is a non-scrolling flex column sized to the top
+half (`overflow:visible`), the topbar/heading are fixed-size rows and
+`<main>` is the scroller. No fixed element lives inside `<main>`. The footer
+and back-to-top button are hidden in this pose only.
+- ⚠️ Rule: **never put overflow on an ancestor of a fixed bar.** The browser
+  suite now asserts that for the four fixed elements, because Chrome cannot
+  reproduce the clipping itself.
+- 440 Node tests + fold browser suite. Not yet seen on the phone.
 
 ### v374 — Seated pose flipped: scroll on top, glance below; the document no longer scrolls
 
@@ -735,7 +751,8 @@ way there", and scrolling the scrolling half "bugs out and glitches".
 - **The glitch:** the document scrolled, so Safari resized its viewport as
   its toolbar moved, which moved the fold's coordinates under a layout keyed
   to them. In the seated pose `html` is now locked and `body` is a fixed
-  scroller sized to the top half; nothing in this pose depends on document
+  scroller sized to the top half (⚠️ SUPERSEDED in v375: `<main>` scrolls; a
+  scrolling body made Safari clip every fixed bar); nothing in this pose depends on document
   scroll. `feature()` also re-clones the featured row only when its HTML
   changed (it used to rebuild on every viewport event).
 - **Game report** fills the whole top half edge to edge and scrolls inside

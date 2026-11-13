@@ -114,16 +114,27 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
    which moves the fold under the layout and made v372/v373 jump. */
 @media (max-width:760px) {
   html[data-duo-pose="seated"] { overflow:hidden!important; height:100%; background:#eef4ee; }
+  /* v375: <main> is the scroller, NOT body. Safari clips position:fixed
+     children (ticker, dock, featured pane, report) to a scrolling ancestor,
+     and every one of them is a child of body — v374 made body the scroller
+     and they all vanished on the phone. Body is just a top-half column. */
   :root[data-palette][data-duo-pose="seated"] body.desk-shell {
-    position:fixed!important; left:0; right:0; top:var(--tk-h,0px); margin:0;
-    height:calc(var(--fold-top) - var(--tk-h,0px)); min-height:0!important; padding-top:0!important;
-    overflow-x:hidden!important; overflow-y:auto!important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch;
+    display:flex!important; flex-direction:column; box-sizing:border-box; margin:0;
+    height:var(--fold-top); min-height:0!important; overflow:visible!important;
   }
-  :root[data-palette][data-duo-pose="seated"] body.desk-shell main { padding-bottom:16px!important; }
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell > .topbar,
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell > #stale-note,
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell > .desk-page-heading { flex:none; }
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell > main {
+    flex:1 1 0; min-height:0; width:auto!important; padding-bottom:16px!important;
+    overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch;
+  }
+  :root[data-duo-pose="seated"] body.desk-shell > .footer,
+  :root[data-duo-pose="seated"] body.desk-shell > #to-top { display:none!important; }
 
   /* Today: slim dock sits at the bottom of the top half; the featured game
      (duo.js copies one games-ahead row into #duo-feature) fills the bottom. */
-  :root[data-palette][data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] { height:calc(var(--fold-top) - var(--tk-h,0px) - var(--bottom-bar-height,56px)); }
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] { height:calc(var(--fold-top) - var(--bottom-bar-height,56px)); }
   :root[data-palette][data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #botbar {
     top:calc(var(--fold-top) - var(--bottom-bar-height,56px))!important; bottom:auto!important;
     padding-bottom:4px!important; border-radius:0!important;
