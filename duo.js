@@ -41,17 +41,60 @@
   // every pose rule in duo.css is inert. Where the Device Posture API exists
   // it must say "folded" (a flat dual-screen device is not a half fold).
   var FOLD_GAP = 24;
+  function mq(q) { try { return window.matchMedia ? window.matchMedia(q) : null; } catch (e) { return null; } }
+  var MQ = {
+    v2: mq('(vertical-viewport-segments: 2)'),
+    h2: mq('(horizontal-viewport-segments: 2)'),
+    folded: mq('(device-posture: folded)'),
+    cont: mq('(device-posture: continuous)')
+  };
+  // Measure one env() value with a hidden probe; NaN when the browser has none.
+  function envPx(expr) {
+    if (!document.body) return NaN;
+    var d = document.createElement('div');
+    d.setAttribute('aria-hidden', 'true');
+    d.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-top:' + expr;
+    document.body.appendChild(d);
+    var v = parseFloat(getComputedStyle(d).paddingTop);
+    d.remove();
+    return v;
+  }
+  // Two segments, from the JS list when it exists, else from the CSS media
+  // queries + env() geometry (Safari may expose one half of the API and not
+  // the other while it is behind a flag).
   function segments() {
     var v = window.viewport;
     var s = v && v.segments;
-    return s && s.length === 2 ? [s[0], s[1]] : null;
+    if (s && s.length === 2) return { src: 'js', n: 2, a: s[0], b: s[1] };
+    var W = window.innerWidth, H = window.innerHeight;
+    if (MQ.v2 && MQ.v2.matches) {
+      var top = envPx('env(viewport-segment-bottom 0 0, -1px)');
+      var nxt = envPx('env(viewport-segment-top 0 1, -1px)');
+      if (top > 0 && nxt > 0) return { src: 'css', n: 2,
+        a: { top: 0, bottom: top, left: 0, right: W }, b: { top: nxt, bottom: H, left: 0, right: W } };
+    }
+    if (MQ.h2 && MQ.h2.matches) {
+      var right = envPx('env(viewport-segment-right 0 0, -1px)');
+      var left = envPx('env(viewport-segment-left 1 0, -1px)');
+      if (right > 0 && left > 0) return { src: 'css', n: 2,
+        a: { top: 0, bottom: H, left: 0, right: right }, b: { top: 0, bottom: H, left: left, right: W } };
+    }
+    return { src: s ? 'js' : (MQ.v2 || MQ.h2 ? 'css' : 'none'), n: s ? s.length : null };
   }
-  function pose() {
-    var s = segments();
+  function postureNow() {
     var dp = navigator.devicePosture;
+    if (dp && dp.type) return dp.type;
+    if (MQ.folded && MQ.folded.matches) return 'folded';
+    if (MQ.cont && MQ.cont.matches) return 'continuous';
+    return '';
+  }
+  var lastSig = '';
+  function pose() {
+    var seg = segments();
+    var post = postureNow();
     var name = '';
-    if (s && !(dp && dp.type && dp.type !== 'folded')) {
-      var a = s[0], b = s[1];
+    if (seg.n === 2 && post !== 'continuous') {
+      var a = seg.a, b = seg.b;
       if (b.top >= a.bottom - 1 && Math.abs(a.left - b.left) < 2) name = 'seated';
       else if (b.left >= a.right - 1 && Math.abs(a.top - b.top) < 2) name = 'book';
       if (name === 'seated') {
@@ -73,13 +116,51 @@
     if (name !== 'book') {
       ['--fold-left', '--fold-right'].forEach(function (k) { root.style.removeProperty(k); });
     }
+    diag(seg, post, name);
     feature();
   }
-  if (window.viewport && window.viewport.addEventListener) {
-    try { window.viewport.addEventListener('segmentschange', later); } catch (e) { /* older shape */ }
+  // One line under the Today version label so a screenshot says what the
+  // browser reports: whether the fold APIs exist at all, the posture, the
+  // segment count and the pose this page settled on.
+  function diag(seg, post, name) {
+    var host = document.getElementById('home-version');
+    if (!host) return;
+    var el = document.getElementById('duo-diag');
+    if (!el) {
+      el = document.createElement('span');
+      el.id = 'duo-diag';
+      el.className = 'duo-diag';
+      host.parentNode.appendChild(el);
+    }
+    var apis = (window.viewport && 'segments' in window.viewport ? 'S' : '') + (navigator.devicePosture ? 'P' : '') +
+      (MQ.v2 && MQ.v2.media !== 'not all' ? 'M' : '');
+    var txt = apis ? ('fold: ' + (post || 'n/a') + ' · ' + (seg.n == null ? '?' : seg.n) + ' seg · ' +
+      (name || 'flat') + ' · ' + apis + (seg.src === 'css' ? ' css' : '')) : 'fold sensors off';
+    if (el.textContent !== ' · ' + txt) el.textContent = ' · ' + txt;
   }
-  if (navigator.devicePosture && navigator.devicePosture.addEventListener) {
-    navigator.devicePosture.addEventListener('change', later);
+  // Folding usually does NOT change the viewport size, so resize alone never
+  // fires: listen to the fold's own signals, and re-check on a slow timer as a
+  // backstop while the page is visible (reading segments is cheap).
+  function watchFold() {
+    [MQ.v2, MQ.h2, MQ.folded, MQ.cont].forEach(function (m) {
+      if (!m) return;
+      if (m.addEventListener) m.addEventListener('change', later);
+      else if (m.addListener) m.addListener(later);
+    });
+    var dp = navigator.devicePosture;
+    if (dp && dp.addEventListener) dp.addEventListener('change', later);
+    if (window.viewport && window.viewport.addEventListener) {
+      try { window.viewport.addEventListener('segmentschange', later); } catch (e) { /* not in every build */ }
+    }
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', later);
+    var apis = !!(window.viewport || navigator.devicePosture || (MQ.v2 && MQ.v2.media !== 'not all'));
+    if (apis) setInterval(function () {
+      if (document.visibilityState !== 'visible') return;
+      var seg = segments();
+      var sig = postureNow() + '|' + seg.n + '|' + (seg.a ? Math.round(seg.a.bottom) + ',' + Math.round(seg.a.right) : '');
+      if (sig !== lastSig) { lastSig = sig; pose(); }
+    }, 1000);
+    document.addEventListener('visibilitychange', later);
   }
 
   // ── Seated Today: the featured game sits above the fold ─────────────────
@@ -200,7 +281,7 @@
     if (!document.body || !window.MutationObserver) return;
     new MutationObserver(function () { soon(); }).observe(document.body, { attributes: true, attributeFilter: ['data-desk-panel'] });
   }
-  function start() { probe(); pose(); watchPanel(); }
+  function start() { probe(); pose(); watchPanel(); watchFold(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
   window.addEventListener('resize', later);

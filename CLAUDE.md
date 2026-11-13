@@ -721,7 +721,32 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v372** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v373** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v373 — Half-fold detection that survives a silent fold, plus a fold readout
+
+Jack on v372, with both Safari flags on: "nothing happens when I fold". Three
+changes in `duo.js`, layout untouched:
+- **Folding often does not resize the viewport** (flat-open → book keeps the
+  same width and height), so v372's `resize`-only re-check could miss it and
+  its `segmentschange` listener is not a standard event. Now: `change`
+  listeners on `(vertical|horizontal)-viewport-segments: 2` and
+  `(device-posture: folded|continuous)`, `devicePosture` change,
+  `visualViewport` resize, visibility change, and a 1s signature poll while
+  visible (only when any fold API exists). Reading segments is cheap.
+- **CSS-only fallback.** If Safari exposes the media queries / `env()` but not
+  `window.viewport.segments`, geometry comes from `env(viewport-segment-*)`
+  probes. v372 required the JS list and would stay flat — the browser suite
+  reproduces that case against v372 (fails) and v373 (passes).
+- **Posture rule:** a pose applies unless posture reads `continuous`
+  (was: required `folded` when the API existed). Same for the two-value API.
+- **`#duo-diag`** after the Today version label: `fold: <posture> · <n> seg ·
+  <pose> · <APIs>` (S = segments list, P = posture, M = media queries,
+  `css` = fallback used) or `fold sensors off`. Diagnostic, so a screenshot
+  answers what Safari reports.
+- ⚠️ Chrome's CDP fold emulation fires a resize, so a truly silent fold cannot
+  be reproduced headlessly; the poll is the guarantee. Physical Duo still not
+  verified; whether the flags reach the home-screen app still unknown.
 
 ### v372 — iPhone Duo half-fold poses (layout only)
 
