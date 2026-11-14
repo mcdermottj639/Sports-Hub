@@ -216,16 +216,19 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
    full-detail row below and the game report on tap, with no data changes. */
 :root[data-duo-pose="seated"] #duo-feature .desk-game-main { padding:4px 0 0; }
 :root[data-duo-pose="seated"] #duo-feature .desk-game-meta { min-height:28px; }
+:root[data-duo-pose="seated"] #duo-feature .desk-matchup { margin-top:6px; }
+:root[data-duo-pose="seated"] #duo-feature .desk-line { margin-top:6px; padding:5px 0; }
+:root[data-duo-pose="seated"] #duo-feature .desk-chips { margin-top:6px; }
 :root[data-duo-pose="seated"] #duo-feature .desk-moves,
 :root[data-duo-pose="seated"] #duo-feature .desk-read-foot,
 :root[data-duo-pose="seated"] #duo-feature .desk-game-footer { display:none!important; }
 :root[data-duo-pose="seated"] #duo-feature .desk-game-main::after {
   content:"Tap for full game report"; display:block; text-align:right;
-  margin-top:7px; font-size:11px; font-weight:650; color:var(--ac,#146d60);
+  margin-top:5px; font-size:11px; font-weight:650; color:var(--ac,#146d60);
 }
 #duo-feature[hidden] { display:none!important; }
 #duo-feature { display:none; }
-:root[data-duo-pose="seated"] #duo-feature .desk-game { margin:0; min-height:0; flex:0 1 auto; max-height:100%; overflow:auto; overscroll-behavior:contain; }
+:root[data-duo-pose="seated"] #duo-feature .desk-game { margin:0; padding-top:2px; padding-bottom:2px; min-height:0; flex:0 1 auto; max-height:100%; overflow:auto; overscroll-behavior:contain; }
 :root[data-duo-pose="seated"] #duo-feature .desk-match-team b { font-size:clamp(24px,6vw,34px)!important; }
 :root[data-duo-pose="seated"] #duo-feature .desk-match-team > strong { font-size:clamp(30px,8vw,46px)!important; }
 :root[data-duo-pose="seated"] #duo-feature .desk-match-team .desk-team-mark { width:46px!important; height:46px!important; }

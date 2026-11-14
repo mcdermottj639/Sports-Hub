@@ -727,7 +727,15 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v382** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v383** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v383 — Fit the preview within the raised boundary
+
+Live v382 inspection confirmed Duke/Miami names at y99–128 on 466×677,
+with preview/report ending at y259 (about 80px above the midpoint). Tightened
+only the upper clone's row margins/padding so all three market chips and the
+report hint fit without a tiny extra scroll. Text sizes and the raised curve
+boundary are unchanged; long live-game details still scroll inside the pane.
 
 ### v382 — Raise Duo content clear of the phone curve
 
