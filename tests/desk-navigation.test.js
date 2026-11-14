@@ -14,13 +14,14 @@ function browser(load = async () => snapshot) {
   const node = id => {
     if (!nodes.has(id)) {
       const classes = new Set(id === 'game-modal' ? ['hidden'] : []);
-      nodes.set(id, { textContent:'', dataset:{}, focus(){},
+      nodes.set(id, { textContent:'', dataset:{}, scrollTop:0, focus(){},
+        scrollTo({top}){this.scrollTop=top;},
         classList:{ contains:x=>classes.has(x), add:x=>classes.add(x), remove:x=>classes.delete(x), toggle(){} } });
     }
     return nodes.get(id);
   };
   const ctx = { SportsHubDeskCore:C, SportsHubEvidenceCore:E, SportsHubEvidence:{load},
-    document:{getElementById:node,querySelectorAll:()=>[],body:{dataset:{}}},
+    document:{getElementById:node,querySelectorAll:()=>[],body:{dataset:{}},documentElement:{dataset:{}}},
     location:{hash:'#/today'},localStorage:{getItem:()=>null},state:{aiSport:'all',aiSub:'picks'},
     currentTab:'home',scrollY:0,setTimeout:()=>1,clearTimeout(){},
     scrollTo({top}){ctx.scrollY=top;},
@@ -122,4 +123,61 @@ test('slow source rendering restores scroll, but cannot scroll a later destinati
   ctx.render=name=>name==='home'?new Promise(resolve=>{finish=resolve;}):undefined;
   api.backFromLab();api.navigate('fantasy');finish();await tick();
   assert.equal(ctx.scrollY,0);assert.equal(ctx.location.hash,'#/fantasy');
+});
+
+test('seated navigation resets main and Back restores its saved position without scrolling the window',async()=>{
+  const {ctx,api,node,entries}=browser();
+  ctx.document.documentElement.dataset.duoPose='seated';
+  const main=node('main-content');
+  main.scrollTop=620;ctx.scrollY=37;
+  api.navigate('matchup-lab');
+  assert.equal(entries[0].state.deskScroll,620);
+  assert.equal(main.scrollTop,0);
+  assert.equal(ctx.scrollY,37);
+  main.scrollTop=180;
+  api.backFromLab();await tick();
+  assert.equal(ctx.location.hash,'#/today');
+  assert.equal(main.scrollTop,620);
+  assert.equal(ctx.scrollY,37);
+});
+
+test('seated async restoration restores main but cannot move a later route',async()=>{
+  const {ctx,api,node}=browser();
+  ctx.document.documentElement.dataset.duoPose='seated';
+  const main=node('main-content');
+  main.scrollTop=760;api.navigate('matchup-lab');
+  let finish;
+  ctx.render=name=>name==='home'?new Promise(resolve=>{finish=resolve;}):undefined;
+  api.backFromLab();main.scrollTop=0;finish();await tick();
+  assert.equal(main.scrollTop,760);
+  assert.equal(ctx.scrollY,0);
+
+  ctx.render=undefined;api.navigate('matchup-lab');
+  ctx.render=name=>name==='home'?new Promise(resolve=>{finish=resolve;}):undefined;
+  api.backFromLab();api.navigate('fantasy');
+  main.scrollTop=230;finish();await tick();
+  assert.equal(ctx.location.hash,'#/fantasy');
+  assert.equal(main.scrollTop,230);
+  assert.equal(ctx.scrollY,0);
+});
+
+test('unfolding switches navigation and Back to the window scroller',async()=>{
+  const {ctx,api,node,entries}=browser();
+  ctx.document.documentElement.dataset.duoPose='seated';
+  const main=node('main-content');
+  main.scrollTop=510;api.navigate('matchup-lab');
+  delete ctx.document.documentElement.dataset.duoPose;
+  main.scrollTop=190;ctx.scrollY=80;
+  api.backFromLab();await tick();
+  assert.equal(ctx.location.hash,'#/today');
+  assert.equal(ctx.scrollY,510);
+  assert.equal(main.scrollTop,190);
+
+  ctx.scrollY=320;api.navigate('matchup-lab');
+  assert.equal(entries[0].state.deskScroll,320);
+  assert.equal(ctx.scrollY,0);
+  assert.equal(main.scrollTop,190);
+  api.backFromLab();await tick();
+  assert.equal(ctx.scrollY,320);
+  assert.equal(main.scrollTop,190);
 });

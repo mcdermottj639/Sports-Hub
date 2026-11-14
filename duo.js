@@ -62,10 +62,21 @@
   // Two segments, from the JS list when it exists, else from the CSS media
   // queries + env() geometry (Safari may expose one half of the API and not
   // the other while it is behind a flag).
+  function orderedSegments(s) {
+    if (!s || s.length !== 2) return null;
+    var pair = Array.prototype.slice.call(s);
+    if (!pair.every(function (r) {
+      return r && ['top', 'bottom', 'left', 'right'].every(function (k) { return Number.isFinite(r[k]); }) &&
+        r.bottom > r.top && r.right > r.left;
+    })) return null;
+    // Use rectangle geometry instead of depending on the API's array order.
+    return pair.sort(function (a, b) { return a.top - b.top || a.left - b.left; });
+  }
   function segments() {
     var v = window.viewport;
     var s = v && v.segments;
-    if (s && s.length === 2) return { src: 'js', n: 2, a: s[0], b: s[1] };
+    var pair = orderedSegments(s);
+    if (pair) return { src: 'js', n: 2, a: pair[0], b: pair[1] };
     var W = window.innerWidth, H = window.innerHeight;
     if (MQ.v2 && MQ.v2.matches) {
       var top = envPx('env(viewport-segment-bottom 0 0, -1px)');
@@ -79,7 +90,7 @@
       if (right > 0 && left > 0) return { src: 'css', n: 2,
         a: { top: 0, bottom: H, left: 0, right: right }, b: { top: 0, bottom: H, left: left, right: W } };
     }
-    return { src: s ? 'js' : (MQ.v2 || MQ.h2 ? 'css' : 'none'), n: s ? s.length : null };
+    return { src: s ? 'js' : (MQ.v2 || MQ.h2 ? 'css' : 'none'), n: s && s.length !== 2 ? s.length : null };
   }
   function postureNow() {
     var dp = navigator.devicePosture;
@@ -157,7 +168,10 @@
     if (apis) setInterval(function () {
       if (document.visibilityState !== 'visible') return;
       var seg = segments();
-      var sig = postureNow() + '|' + seg.n + '|' + (seg.a ? Math.round(seg.a.bottom) + ',' + Math.round(seg.a.right) : '');
+      var sig = postureNow() + '|' + seg.n + '|' + window.innerWidth + ',' + window.innerHeight + '|' +
+        [seg.a, seg.b].map(function (r) {
+          return r ? [r.top, r.bottom, r.left, r.right].map(Math.round).join(',') : '';
+        }).join('|');
       if (sig !== lastSig) { lastSig = sig; pose(); }
     }, 1000);
     document.addEventListener('visibilitychange', later);
@@ -299,4 +313,5 @@
   else start();
   window.addEventListener('resize', later);
   window.addEventListener('orientationchange', later);
+  window.addEventListener('pageshow', later);
 })();

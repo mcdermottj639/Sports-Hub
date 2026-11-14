@@ -328,7 +328,8 @@ fantasy/golf data are not refreshed by this cycle.
 - `duo.css`, `duo.js` — v371 iPhone Duo layout layer (slim chrome on short
   screens, 76px rail at 761–1100px, side status-strip reclaim) plus the v372
   half-fold poses (`html[data-duo-pose]` seated/book from the Viewport Segments
-  API; Today's featured-game pane `#duo-feature`). `duo.css` loads LAST;
+  API; live ticker and featured-game pane `#duo-feature` above the fold on
+  every seated route, page and dock below at all viewport widths). `duo.css` loads LAST;
   layout only — never put content or behaviour in it. Optional browser check:
   `tests/duo-posture-browser.cjs`.
 - `ticker.js`, `ticker.css` — v326 rolling top ticker (scores, model picks,
@@ -721,9 +722,36 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v378** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v379** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v379 — Half Fold across screen widths, with the live ticker above
+
+The seated detector already ran at every width, but its CSS stopped at 760px.
+On a wider stacked viewport it intercepted games-ahead taps while the featured
+pane remained hidden. Seated layout now follows the detected pose at all
+widths: the live scrolling ticker and featured game stay above the fold,
+every route scrolls below it, and the normal five-button dock stays reachable.
+The desktop sidebar/offsets are suppressed only while seated. Reports begin
+below the ticker in the top half. Main remains the only page scroller; body
+stays overflow-visible to preserve fixed descendants on Safari.
+
+The detector validates and orders segment rectangles, falls back to CSS for
+incomplete JS geometry, watches both rectangles for silent changes, and
+rechecks on pageshow. Missing sensors/continuous posture still use the normal
+layout. Desk navigation saves, resets and restores the active page scroller
+(main while seated, window otherwise), so switching routes starts at the top
+and Back returns to the saved lower-pane position. Node behavioral tests cover detector transitions; browser regression
+coverage now includes seated 960px/1280px in addition to the existing 676px,
+with top ticker, dock, game/report clicks and route checks. Validation: 451/451
+Node tests, changed-JS syntax checks and independent source review pass. The
+expanded browser suite was not run in this environment: isolated Chromium
+launch and local-file browser preview were blocked. Physical-phone validation
+remains outstanding. The width mismatch is confirmed
+in code; Jack's exact device-side trigger has not been observed.
 
 ### v378 — Seated pose: the split view on every route
+
+⚠️ SUPERSEDED in v379 for width coverage: the same split now works above 760px too.
 
 Jack on v377: "I asked u to make the half fold view we created for the whole
 app". v377 misread him (full screen off Today). Now every route in the seated

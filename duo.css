@@ -106,27 +106,28 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
    --fold-right; the gap between each pair is the crease plus a ≥24px gutter
    where nothing tappable is drawn. */
 
-/* ── Seated (laptop pose). v376: Today scrolls in the BOTTOM half; v378: every route does ──
-   Jack: the upright half is the easy one to use, so everything you scroll
-   and tap lives there; the flat bottom half is for glancing. The DOCUMENT
-   never scrolls in this pose (html is locked, body is a fixed scroller sized
-   to the top half): a scrolling document makes Safari resize its viewport,
-   which moves the fold under the layout and made v372/v373 jump. */
-@media (max-width:760px) {
+/* ── Seated (laptop pose). v379: the fold, not screen width, selects the layout ──
+   Live ticker and featured game on TOP; every page scrolls in the BOTTOM
+   half above the dock. A wide folded screen must not keep the desktop rail
+   or hide the featured pane while duo.js intercepts game-row taps.
+   Only <main> scrolls: body stays non-scrolling so Safari does not clip
+   its fixed ticker, dock, featured pane or report. */
   html[data-duo-pose="seated"] { overflow:hidden!important; height:100%; background:#eef4ee; }
+  :root[data-palette][data-duo-pose="seated"] { --desk-sidebar:0px!important; }
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell nav.tabs { display:none!important; }
   /* v375: <main> is the scroller, NOT body. Safari clips position:fixed
      children (ticker, dock, featured pane, report) to a scrolling ancestor,
      and every one of them is a child of body — v374 made body the scroller
-     and they all vanished on the phone. Body is just a top-half column. */
+     and they all vanished on the phone. Body is a non-scrolling column. */
   :root[data-palette][data-duo-pose="seated"] body.desk-shell {
     display:flex!important; flex-direction:column; box-sizing:border-box; margin:0;
-    height:var(--fold-top); min-height:0!important; overflow:visible!important;
+    min-height:0!important; overflow:visible!important;
   }
   :root[data-palette][data-duo-pose="seated"] body.desk-shell > .topbar,
   :root[data-palette][data-duo-pose="seated"] body.desk-shell > #stale-note,
   :root[data-palette][data-duo-pose="seated"] body.desk-shell > .desk-page-heading { flex:none; }
   :root[data-palette][data-duo-pose="seated"] body.desk-shell > main {
-    flex:1 1 0; min-height:0; width:auto!important; padding-bottom:16px!important;
+    flex:1 1 0; min-height:0; width:auto!important; margin-left:0!important; padding-bottom:16px!important;
     overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch;
   }
   :root[data-duo-pose="seated"] body.desk-shell > .footer,
@@ -139,6 +140,42 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
   :root[data-palette][data-duo-pose="seated"] body.desk-shell {
     padding-top:var(--fold-bottom)!important; height:calc(100dvh - var(--bottom-bar-height,56px));
   }
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell > .topbar {
+    margin-left:0!important; height:50px!important; padding:0 14px!important; flex-wrap:nowrap!important;
+  }
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell > #stale-note { margin-left:14px!important; }
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell > .desk-page-heading {
+    min-height:0!important; padding:10px 14px!important; margin-top:10px!important; margin-bottom:10px!important; margin-left:14px!important; align-items:center!important; flex-wrap:nowrap!important;
+  }
+  :root[data-duo-pose="seated"] .desk-page-heading .desk-eyebrow,
+  :root[data-duo-pose="seated"] #desk-page-desc,
+  :root[data-duo-pose="seated"] #desk-heading-art,
+  :root[data-duo-pose="seated"] .desk-heading-side #desk-date { display:none!important; }
+  :root[data-duo-pose="seated"] .desk-page-heading h1 { font-size:clamp(17px,4.6vw,24px)!important; line-height:1.05!important; max-width:none!important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  :root[data-duo-pose="seated"] .desk-page-heading > div:first-child { min-width:0; }
+  :root[data-duo-pose="seated"] .desk-heading-side { position:static!important; transform:none!important; padding:0!important; flex-direction:row!important; flex:none; margin-left:auto; }
+
+  /* The same five destinations remain reachable below the fold, even when
+     the full viewport is wider than the phone/desktop breakpoint. */
+  :root[data-palette][data-duo-pose="seated"] body.desk-shell #botbar {
+    display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); position:fixed;
+    left:0; right:0; top:calc(var(--visible-bottom,100dvh) - var(--bottom-bar-height,56px)); bottom:auto;
+    transform:none; width:100%; height:auto; min-height:56px!important;
+    padding:4px 8px calc(4px + env(safe-area-inset-bottom,0px))!important; gap:3px;
+    border:0; border-top:1px solid #c2d2b7; border-radius:15px 15px 0 0; background:#fbfdf5;
+    box-shadow:0 -4px 16px #153d3010; z-index:46; backdrop-filter:none;
+  }
+  :root[data-duo-pose="seated"] .desk-mobile-dock button {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:3px; min-height:46px; min-width:0; padding:3px 1px; border:0; border-radius:9px;
+    background:none; color:#6b817c; font-size:9px; font-weight:500;
+  }
+  :root[data-duo-pose="seated"] .desk-mobile-dock button svg { width:18px; height:18px; }
+  :root[data-duo-pose="seated"] .desk-mobile-dock button.active { background:#edf5f0; color:var(--ac); font-weight:700; }
+  :root[data-duo-pose="seated"].bottom-controls-hidden .desk-shell #botbar { visibility:hidden; pointer-events:none; }
+  /* Keep the live scrolling score ticker above the featured game on every
+     seated route. The pane/report start at --tk-h, leaving it unobscured. */
+  :root[data-duo-pose="seated"] #ticker { position:fixed; top:0; left:0; right:0; z-index:49; }
   :root[data-duo-pose="seated"] body.desk-shell #duo-feature {
     display:flex; flex-direction:column; justify-content:center; gap:8px;
     position:fixed; left:0; right:0; top:var(--tk-h,0px); height:calc(var(--fold-top) - var(--tk-h,0px)); z-index:45;
@@ -152,7 +189,6 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
   /* Game report: the whole top half, scrolling inside itself. */
   :root[data-duo-pose="seated"] .modal { top:var(--tk-h,0px); bottom:auto; height:calc(var(--fold-top) - var(--tk-h,0px)); align-items:stretch!important; }
   :root[data-palette][data-duo-pose="seated"] .desk-shell .modal-card { width:100%; max-width:none!important; max-height:none!important; height:100%; margin:0; border-radius:0!important; animation:none; overflow-y:auto!important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
-}
 #duo-feature[hidden] { display:none!important; }
 #duo-feature { display:none; }
 :root[data-duo-pose="seated"] #duo-feature .desk-game { margin:0; max-height:100%; overflow:auto; overscroll-behavior:contain; }

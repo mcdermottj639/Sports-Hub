@@ -157,9 +157,19 @@
   function saveAgenda() {
     try { localStorage.setItem(AGENDA_KEY, JSON.stringify({ filter:agendaFilter, edges:agendaEdges })); } catch (_) {}
   }
+  // Half Fold scrolls <main>; ordinary layouts scroll the document. Use the
+  // active scroller for new routes and Back, including late-render restores.
+  function pageScroller() {
+    return document.documentElement?.dataset?.duoPose === 'seated' ? ($d('main-content') || window) : window;
+  }
+  function pageScrollY() {
+    const scroller = pageScroller();
+    return scroller === window ? window.scrollY : scroller.scrollTop;
+  }
+  function scrollPage(top) { pageScroller().scrollTo({top,behavior:'instant'}); }
   function rememberScroll(extra = {}) {
     if (routing || location.hash !== C.hashFor(currentRoute)) return;
-    history.replaceState({ ...history.state, deskScroll:window.scrollY, ...(currentRoute.panel==='home'?{deskAgendaLimit:agendaLimit}:{}), ...extra }, '', location.hash);
+    history.replaceState({ ...history.state, deskScroll:pageScrollY(), ...(currentRoute.panel==='home'?{deskAgendaLimit:agendaLimit}:{}), ...extra }, '', location.hash);
   }
   function onTab(name, opts = {}) {
     const previous = currentRoute;
@@ -202,12 +212,12 @@
     if (Number.isFinite(opts.restoreY)) {
       const pending = { hash:C.hashFor(currentRoute), y:Math.max(0,opts.restoreY) };
       restoringScroll = pending;
-      window.scrollTo({top:pending.y,behavior:'instant'});
+      scrollPage(pending.y);
       Promise.resolve(rendered).then(() => {
-        if (restoringScroll === pending && C.hashFor(currentRoute) === pending.hash) window.scrollTo({top:pending.y,behavior:'instant'});
+        if (restoringScroll === pending && C.hashFor(currentRoute) === pending.hash) scrollPage(pending.y);
         if (restoringScroll === pending) restoringScroll = null;
       });
-    } else if (opts.scroll !== false) window.scrollTo({top:0, behavior:'instant'});
+    } else if (opts.scroll !== false) scrollPage(0);
     return true;
   }
   function syncLab(lab) {
@@ -554,7 +564,9 @@
     window.addEventListener('popstate',restoreRoute);
     // Save after scrolling settles; per-frame History writes hit Safari's rate limit.
     let scrollTimer;
-    window.addEventListener('scroll',()=>{clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>{if(!restoringScroll)rememberScroll();},500);},{passive:true});
+    const saveScroll = ()=>{clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>{if(!restoringScroll)rememberScroll();},500);};
+    window.addEventListener('scroll',saveScroll,{passive:true});
+    $d('main-content')?.addEventListener('scroll',()=>{if(pageScroller()!==window)saveScroll();},{passive:true});
     for (const event of ['pointerdown','touchstart','wheel','keydown']) window.addEventListener(event,()=>{restoringScroll=null;},{passive:true});
     window.addEventListener('hashchange',()=>{if(location.hash!==C.hashFor(currentRoute))restoreRoute();});
     window.addEventListener('sportshub:cloud-ai',()=>{cloudFailed=false;paintBrief();paintAgenda();});

@@ -10,13 +10,8 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
 
-test('duo.js sets a pose only from two viewport segments, and only when folded', () => {
-  const js = read('duo.js');
-  assert.match(js, /s && s\.length === 2/);
-  assert.match(js, /post !== 'continuous'/);
-  assert.match(js, /addEventListener\('change', later\)/);
-  assert.match(js, /root\.removeAttribute\('data-duo-pose'\)/);
-});
+// Pose guards and sensor events are exercised behaviorally in
+// duo-detection.test.js; avoid tying coverage to the implementation's spelling.
 
 test('every v372 rule in duo.css is keyed to data-duo-pose or the featured pane', () => {
   const css = read('duo.css');

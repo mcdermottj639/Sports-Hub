@@ -21,6 +21,8 @@ const slate={week:{number:11},season:{type:2,year:2026},events:[
 const poses={
   seatedLate:{width:676,height:900},
   seated:{width:676,height:900,feature:{orientation:'horizontal',offset:450,maskLength:0}},
+  seatedWide:{width:960,height:676,feature:{orientation:'horizontal',offset:338,maskLength:0}},
+  seatedDesktop:{width:1280,height:900,feature:{orientation:'horizontal',offset:450,maskLength:0}},
   book:{width:951,height:676,feature:{orientation:'vertical',offset:475,maskLength:0}},
   folded:{width:466,height:677},open:{width:960,height:676},phone:{width:390,height:844},
 };
@@ -85,7 +87,7 @@ const poses={
         const g=await page.evaluate(()=>({tk:document.getElementById('ticker').getBoundingClientRect(),m:document.getElementById('main-content').getBoundingClientRect().bottom,d:document.getElementById('botbar').getBoundingClientRect().top}));
         assert.equal(Math.round(g.tk.top),0);assert.ok(g.tk.height>20);assert.ok(Math.abs(g.m-g.d)<=1,`main ${g.m} dock ${g.d}`);
       });
-      await check('seated: the document never scrolls; the top half does',async()=>{
+      await check('seated: the document never scrolls; the bottom half does',async()=>{
         const s=await page.evaluate(()=>{const M=document.getElementById('main-content');M.scrollTop=300;const moved=M.scrollTop;window.scrollTo(0,400);return {moved,win:scrollY,docH:document.documentElement.scrollHeight,h:innerHeight,pane:document.getElementById('duo-feature').getBoundingClientRect().top};});
         assert.ok(s.moved>0,'bottom half scrolls');assert.equal(s.win,0);assert.ok(s.pane<100,'pane stays put');
         await page.evaluate(()=>{document.getElementById('main-content').scrollTop=0;});
@@ -119,6 +121,47 @@ const poses={
       await check('seated: no sideways overflow',()=>noOverflow(page));
       await check('seated: no page errors',async()=>assert.deepEqual(errors,[]));
       await context.close();}
+    // A detected stacked fold must use the split layout above the ordinary
+    // phone breakpoint too, with live ticker and reports in the top half.
+    for(const name of ['seatedWide','seatedDesktop']){
+      const {page,context,errors}=await open(name),P=poses[name],edge=P.feature.offset;
+      await check(`${name}: visible split, dock and top ticker at wide widths`,async()=>{
+        const s=await page.evaluate(()=>{
+          const rect=id=>document.getElementById(id).getBoundingClientRect();
+          const f=document.getElementById('duo-feature'),main=document.getElementById('main-content');
+          main.scrollTop=200;
+          return {pose:document.documentElement.dataset.duoPose,f:rect('duo-feature'),ticker:rect('ticker'),
+            main:rect('main-content'),dock:rect('botbar'),rail:getComputedStyle(document.getElementById('tabs')).display,
+            featureDisplay:getComputedStyle(f).display,scrolled:main.scrollTop,win:scrollY};
+        });
+        assert.equal(s.pose,'seated');assert.notEqual(s.featureDisplay,'none');assert.equal(s.rail,'none');
+        assert.equal(s.ticker.top,0);assert.ok(s.ticker.height>20);assert.ok(s.f.top>=s.ticker.bottom-1);
+        assert.ok(s.f.bottom<=edge-11);assert.ok(s.main.top>=edge+12);assert.ok(s.main.height>80);
+        assert.equal(s.main.left,0);assert.ok(s.main.bottom<=s.dock.top+1);assert.ok(s.scrolled>0);assert.equal(s.win,0);
+        assert.ok(s.dock.height>=44);assert.equal(Math.round(s.dock.bottom),P.height);
+      });
+      await check(`${name}: game selection and top-half report remain usable`,async()=>{
+        await page.locator('#desk-agenda [data-desk-game="nfl:9003"]').click();
+        await page.waitForFunction(()=>document.querySelector('#duo-feature [data-desk-game]')?.dataset.deskGame==='nfl:9003');
+        await page.locator('#duo-feature [data-desk-game]').click();
+        const r=await page.evaluate(()=>({hidden:document.getElementById('game-modal').classList.contains('hidden'),
+          report:document.querySelector('#game-modal .modal-card').getBoundingClientRect(),ticker:document.getElementById('ticker').getBoundingClientRect()}));
+        assert.equal(r.hidden,false);assert.ok(r.report.bottom<=edge-11);assert.ok(r.report.top>=r.ticker.bottom-1);
+        await page.locator('#modal-x').click();
+      });
+      await check(`${name}: split and live ticker persist through all dock routes`,async()=>{
+        for(let i=0;i<5;i++){
+          await page.locator('#botbar [data-desk-route]').nth(i).click();
+          const r=await page.evaluate(()=>({main:document.getElementById('main-content').getBoundingClientRect(),
+            ticker:document.getElementById('ticker').getBoundingClientRect(),display:getComputedStyle(document.getElementById('duo-feature')).display}));
+          assert.ok(r.main.top>=edge+12);assert.ok(r.main.height>60);assert.equal(r.ticker.top,0);assert.notEqual(r.display,'none');
+        }
+      });
+      await shot(page,name);
+      await check(`${name}: no sideways overflow`,()=>noOverflow(page));
+      await check(`${name}: no page errors`,async()=>assert.deepEqual(errors,[]));
+      await context.close();
+    }
     // Book: list on the left page, the rest on the right, report on the right page.
     {const {page,context,errors}=await open('book');
       await check('book: pose detected from side-by-side segments',async()=>{
