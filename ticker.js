@@ -21,13 +21,13 @@
   const SPEED = 55;            // px per second
   const SCORE_CAP = 40, PICK_CAP = 14, RESULT_CAP = 12, NEWS_CAP = 10;
   const CLOUD_MS = 5 * 60000, NEWS_MS = 10 * 60000;
-  const SPORT_LABEL = { nfl: 'NFL', cfb: 'CFB', mlb: 'MLB', nba: 'NBA' };
+  const SPORT_LABEL = { nfl: 'NFL', cfb: 'CFB', mlb: 'MLB', nba: 'NBA', cbb: 'CBB' };
   const MARKET_LABEL = { moneyline: 'ML', spread: 'ATS', total: 'TOT' };
 
   // Official cohort per sport — the same rule nfl-live.js versionFor applies.
   function currentVersion(sport) {
     const nfl = root.SportsHubNFLLive?.VERSION || 'nfl-football-v1';
-    return sport === 'nfl' ? nfl : sport === 'nba' ? 'nba-v1' : 'v239';
+    return sport === 'nfl' ? nfl : sport === 'nba' ? 'nba-v1' : sport === 'cbb' ? 'cbb-v1' : 'v239';
   }
   const isCurrent = (r) => r && r.model_version === currentVersion(r.sport);
 
@@ -275,7 +275,7 @@
     const now = Date.now();
     const iso = (t) => new Date(t).toISOString();
     const cols = 'sport,market,model_version,event_id,matchup,selection,line,price,tier,confidence,result,starts_at,graded_at';
-    const versions = `in.(v239,${currentVersion('nfl')},nba-v1)`;
+    const versions = `in.(v239,${currentVersion('nfl')},nba-v1,cbb-v1)`;
     const req = (path) => fetch(`${cfg.url}/rest/v1/${path}`, {
       headers: { apikey: cfg.key, Authorization: `Bearer ${cfg.key}` }, cache: 'no-store',
     }).then((r) => { if (!r.ok) throw new Error(`ticker ${r.status}`); return r.json(); });

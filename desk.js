@@ -57,6 +57,7 @@
     eagles: ['Philadelphia Eagles', 'Your team, from the next matchup to the full season.'],
     redsox: ['Boston Red Sox', 'The season, the roster, and what comes next.'],
     leagues: ['Leagues', 'Your league pages, one tap away.'],
+    cbb: ['College basketball', 'Top 25 and Division I tournaments.'],
     nba: ['NBA', 'Daily games, model forecasts and the season ahead.'],
     nfl: ['NFL', 'The full week, with your model beside the market.'],
     cfb: ['College football', 'The Top 25, with context beyond the score.'],
@@ -85,6 +86,8 @@
     ['eagles', 'Eagles', 'Philadelphia news, depth chart, schedule and standings', 'eagles'],
     ['redsox', 'Red Sox', 'Boston news, roster, schedule and standings', 'redsox'],
     ['leagues', 'Leagues', 'Quick access to NFL, college football, NBA and MLB', 'leagues'],
+    ['cbb', 'College basketball', 'Top 25 and every D1 tournament, model and results', 'nba'],
+    ['models/cbb/picks', 'CBB model', 'College basketball forecasts and saved results', 'predictions'],
     ['nba', 'NBA', 'Daily games, standings, headlines and the live NBA model', 'nba'],
     ['nfl', 'NFL games', 'This week’s schedule, betting board and playoff picture', 'nfl'],
     ['cfb', 'College football', 'Ranked games, Top 25 and playoff field', 'cfb'],
@@ -131,7 +134,7 @@
     if (saveWatch(C.toggleWatch(list, { sport, id: g.id, away: g.away?.name, home: g.home?.name, date: g.date }))) { if(was)undoItem=removed;toast(was ? 'Removed from your watchlist.' : 'Saved to your watchlist.',was); }
   }
   function addWatchControl(card, sport, g) {
-    if (!g?.id || !['nfl','cfb','mlb','nba'].includes(sport)) return;
+    if (!g?.id || !['nfl','cfb','mlb','nba','cbb'].includes(sport)) return;
     const button = document.createElement('button'); button.type = 'button'; button.className = 'desk-save';
     button.dataset.watchSport = sport; button.dataset.watchId = g.id;
     const paint = () => { const on = pinned(sport,g.id); button.innerHTML = icon('watchlist'); button.setAttribute('aria-pressed',String(on)); button.setAttribute('aria-label',`${on ? 'Remove from' : 'Save to'} watchlist: ${g.away?.name || 'Away'} at ${g.home?.name || 'Home'}`); button.title = on ? 'Saved to watchlist' : 'Save to watchlist'; };
@@ -328,7 +331,7 @@
     if (agendaPending) return agendaPending;
     if (!force && agendaLoaded && Date.now() - agendaAt < 60000) { paintAgenda(); return; }
     agendaPending = (async () => {
-      const sports = ['nfl','cfb','mlb','nba'];
+      const sports = ['nfl','cfb','mlb','nba','cbb'];
       const weeklyPending = Promise.allSettled(sports.map(async sport => ({ sport, list: WEEK_SPORTS.has(sport) ? (await weekSlate(sport)).games : await getGames(sport,ymd(sportsDate())) })));
       const daily = await Promise.allSettled(sports.map(async sport => ({ sport, list: (await scoreboard(sport,ymd(new Date()))).games })));
       const results = await weeklyPending;
@@ -358,7 +361,7 @@
     const open = all.filter(x => gameState(x.g) !== 'final');
     const sum = C.slateSummary(open.map(x => x.read));
     const list = agendaEdges ? all.filter(x => x.read.hot || x.read.flip) : all;
-    const filters = [['all','All'],['today','Today'],['watchlist','Saved'],['nfl','NFL'],['cfb','CFB'],['mlb','MLB'],['nba','NBA']];
+    const filters = [['all','All'],['today','Today'],['watchlist','Saved'],['nfl','NFL'],['cfb','CFB'],['mlb','MLB'],['nba','NBA'],['cbb','CBB']];
     const chips = $d('desk-agenda-filters');
     chips.innerHTML = filters.map(([k,label]) => `<button type="button" data-agenda-filter="${k}" aria-pressed="${agendaFilter===k}">${label}</button>`).join('');
     if (!agendaLoaded) { host.innerHTML='<div class="desk-empty" role="status">Loading your game radar…</div>'; return; }
@@ -462,7 +465,7 @@
     const fantasy=`<section class="desk-more-hero"><button type="button" class="desk-more-hero-main" data-desk-route="fantasy"><span class="desk-more-icon">${icon('fantasy')}</span><span class="desk-more-text"><small>YOUR LEAGUE</small><b>Fantasy HQ</b><span>Roster, matchup, waivers &amp; lineup</span></span><span class="desk-more-go">${icon('arrow')}</span></button><div class="desk-more-chips">${[['fantasy/matchup','Matchup'],['fantasy/lineup','Start / sit'],['fantasy/gm','Waivers &amp; trades'],['fantasy/season','Season']].map(([r,t])=>`<button type="button" data-desk-route="${r}">${t}</button>`).join('')}</div></section>`;
     const groups=[
       ['Models',[['models/all/picks','Model board','Today’s forecasts','predictions'],['models/all/props','Player props','Top props per game','predictions'],['models/all/results','Performance','Record &amp; ROI','predictions'],['models/all/recent','Game history','Every saved game','predictions'],['models/all/method','How it works','Inputs &amp; formulas','about'],['models/all/calibration','Calibration','Probability check','research']]],
-      ['Teams &amp; leagues',[['eagles','Eagles','News · schedule','eagles'],['redsox','Red Sox','News · schedule','redsox'],['nfl','NFL','This week’s games','nfl'],['cfb','College','Top 25','cfb'],['nba','NBA','Games &amp; model','nba'],['models/mlb/picks','MLB','Model board','redsox'],['news','News &amp; scores','Around the leagues','pulse'],['leagues','All leagues','Quick access','leagues']]],
+      ['Teams &amp; leagues',[['eagles','Eagles','News · schedule','eagles'],['redsox','Red Sox','News · schedule','redsox'],['nfl','NFL','This week’s games','nfl'],['cfb','College','Top 25','cfb'],['nba','NBA','Games &amp; model','nba'],['cbb','CBB','Top 25 + tournaments','nba'],['models/mlb/picks','MLB','Model board','redsox'],['news','News &amp; scores','Around the leagues','pulse'],['leagues','All leagues','Quick access','leagues']]],
       ['Your stuff',[['watchlist','Watchlist','Saved games &amp; notes','watchlist'],['pickem','Pick’em','Your ATS pool','pickem'],['tools','Tools &amp; labs','Mock drafts, trivia','labs'],['signals-lab','Signals Lab','AN signals graded','research','signals-lab.html'],['about','About &amp; data','Sources &amp; collection','about']]],
     ];
     host.innerHTML=fantasy+groups.map(([title,items])=>`<section class="desk-more-section"><h2>${title}</h2><div class="desk-more-grid">${items.map(x=>moreTile(...x)).join('')}</div></section>`).join('');
@@ -517,10 +520,10 @@
     Object.entries(CLUBS).forEach(([path,club])=>{const node=document.querySelector(`#tab-${path} .ic`);if(node)node.innerHTML=teamMark(club);});
     // Keep an abbreviation if a feed logo is missing or cannot load.
     document.addEventListener('error',e=>{if(e.target.matches?.('img[data-team-logo]'))e.target.hidden=true;},true);
-    ['nfl','cfb','nba'].forEach(sport=>{
+    ['nfl','cfb','nba','cbb'].forEach(sport=>{
       const nav=document.createElement('nav');nav.className='desk-league-switch';nav.setAttribute('aria-label','Switch league');
-      nav.innerHTML=[['nfl','NFL'],['cfb','CFB'],['nba','NBA'],['models/mlb/picks','MLB']].map(([path,label])=>`<button type="button" data-desk-route="${path}"${path===sport?' aria-current="page"':''}>${label}</button>`).join('');
-      nav.innerHTML+=`<button type="button" data-desk-route="models/${sport}/props">Player props</button>`;
+      nav.innerHTML=[['nfl','NFL'],['cfb','CFB'],['nba','NBA'],['cbb','CBB'],['models/mlb/picks','MLB']].map(([path,label])=>`<button type="button" data-desk-route="${path}"${path===sport?' aria-current="page"':''}>${label}</button>`).join('');
+      if(sport!=='cbb')nav.innerHTML+=`<button type="button" data-desk-route="models/${sport}/props">Player props</button>`;
       $d(sport)?.prepend(nav);
     });
     renderExplore();paintBrief();paintWatchButtons();

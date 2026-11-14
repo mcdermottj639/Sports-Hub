@@ -52,7 +52,7 @@ test('ineligible games are ignored, not deferred',()=>{
 test('collector imports the budget, plans the NBA pass and skips non-planned games before predict',()=>{
  const src=fs.readFileSync(__dirname+'/../supabase/functions/sports-hub-ai/index.ts','utf8');
  assert.match(src,/import '\.\.\/_shared\/collector-budget\.js';/);
- assert.match(src,/BUDGET\.plan\(games,saved\|\|\[\],sport==='nba'/);
+ assert.match(src,/BUDGET\.plan\(games,saved\|\|\[\],sport!=='cfb'/);
  assert.match(src,/requireVersions:\[early\],cap:Infinity,protectMs:BUDGET\.CFB_PROTECT_MS/);
  const skip=src.indexOf("if(planForecast&&!planForecast.has(String(g.id))){"),pred=src.indexOf('const baseline=await predict(sport,g)');
  assert.ok(skip>0&&pred>skip,'non-planned NBA games must leave the loop before the forecast, after price enrichment');

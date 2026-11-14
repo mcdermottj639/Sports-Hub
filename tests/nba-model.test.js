@@ -52,6 +52,6 @@ test('NBA collector creates all available market rows, with its own version and 
  const rows=ctx.rowsFor('nba',{...g,home:{...g.home,abbr:'H'},away:{...g.away,abbr:'A'}},{home:true,p:.6,conf:60,margin:4,total:224,quality:[]});
  assert.deepEqual(Array.from(rows,r=>r[4]),['moneyline','spread','total']);
  assert.equal(rows[1][8],4);assert.equal(rows[2][8],224);
- assert.match(src,/const SPORTS = \['nfl', 'cfb', 'mlb', 'nba'\]/);
+ assert.match(src,/const SPORTS = \['nfl', 'cfb', 'mlb', 'nba', 'cbb'\]/);
  assert.match(src,/if\(sport==='nba'\)return \(globalThis as any\).SportsHubNBA.load/);
 });

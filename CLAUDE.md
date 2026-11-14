@@ -82,7 +82,7 @@ Guidance for Claude (and humans) working on this repo. Read this first.
 
 **Sports-Hub** is a personal sports decision workspace for the owner (a Philadelphia
 Eagles superfan; also follows Red Sox, NFL, **college football (Top 25)**, MLB,
-NBA, and golf). The UI is a **static browser app** — HTML/CSS/vanilla JS, no
+NBA, men’s Division I college basketball, and golf). The UI is a **static browser app** — HTML/CSS/vanilla JS, no
 build step or framework — shipped from this repo via **GitHub Pages**. Two
 scoped services sit behind it: Render for private fantasy-league sync and
 Supabase for durable, scheduled AI-pick capture and grading.
@@ -91,7 +91,7 @@ The experience complements score/news apps with a daily brief, model
 forecasts and results, research, league-aware fantasy decisions, and a personal
 watchlist. Desktop uses a sidebar; mobile uses Today / Models / Fantasy /
 Leagues / More. Fantasy is one tap away in the persistent phone dock. The
-Leagues hub opens NFL, CFB, NBA or the MLB model board, and NFL/CFB/NBA pages
+Leagues hub opens NFL, CFB, NBA, CBB or the MLB model board, and NFL/CFB/NBA/CBB pages
 have a direct league switch. Research desk is in More → Go deeper and the
 desktop sidebar. More groups every existing destination by purpose, and global
 search finds features, current games and saved notes. News/team/golf content
@@ -115,7 +115,7 @@ Live URL: **https://mcdermottj639.github.io/Sports-Hub/**
 > Function invoked by pg_cron at minutes 7 and 37 every hour. Since 24 Oct 2026
 > the deployed entrypoint is a one-line shim importing the collector from this
 > repo at a pinned commit (see the collector-fix entry under Current version). It reads ESPN,
-> saves immutable first pregame NFL/Top-25-CFB/MLB/NBA observations in
+> saves immutable first pregame NFL/Top-25-CFB/MLB/NBA/CBB observations in
 > `public.ai_predictions`, grades finals, and audits each run in
 > `public.ai_job_runs`. v244 adds an independent `sports-hub-odds` job and
 > normalized permanent NFL history; see `BETTING_SIGNALS.md`. The first verified run on 15 Sep 2026 completed in 15s
@@ -300,6 +300,8 @@ fantasy/golf data are not refreshed by this cycle.
 
 - `matchup-context.js`, `matchup-context.css` — read-only compact full-screen model/market comparison, expandable model/source detail, exact ESPN game matching and contextual source reads. No forecast or grading writes.
 - `sports-evidence-core.js`, `sports-evidence.js`, `sports-evidence.css` — v364 game-focused full-screen `#/matchup-lab` from Today, plus embedded Research and NFL/NBA reports: visual ranks/form, score cross-checks, matched model diagnostics and a separate last-five replay. `data/draftkings-evidence.json` is a dated ChatGPT-connector snapshot; ESPN stays live. `scripts/refresh-sports-evidence.js` validates refreshes and saves immutable profiles in `data/evidence-observations/`. See `docs/SPORTS_EVIDENCE.md` for sources, refresh scope, leakage guards and initial findings. Data-only evidence refreshes need no app version bump; code changes follow the usual release ritual.
+
+- `cbb-page.js`, `_shared/cbb-model.js`, `_shared/cbb-model-config.js` — men’s D1 Top 25 / tournament board and shared opponent-adjusted score model. `scripts/cbb-data.py` refreshes public D1 results three times daily in season; `scripts/validate-cbb.js` performs chronological replay. See `docs/CBB_MODEL.md` and `data/cbb-validation.json`. All CBB markets remain research-only, with no betting tier or college player props. The collector saves and grades CBB independently of other sports; migration `20261114102215_cbb_prediction_capture.sql` extends the sport constraint only.
 
 - `nba-page.js`, `_shared/nba-model.js`, `_shared/nba-model-config.js` — NBA league UI and shared fitted model; the shared files live under `supabase/functions/`.
 - `scripts/nba-data.py`, `scripts/nba-features.js`, `scripts/fit-nba.py`, `data/nba-history.json`, `data/nba-validation.json`, `docs/NBA_MODEL.md` — reproducible NBA evidence, chronological fitting and validation.
@@ -727,7 +729,25 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v383** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v384** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v384 — College basketball Top 25 and D1 tournaments
+
+Adds CBB to Leagues, Today, Models, Results, search, watchlists and the score
+rail. The college board filters Top 25 / all D1 tournaments / combined and
+includes unranked tournament participants, neutral-court labels and date browsing.
+One shared opponent-adjusted model produces winner, margin and total forecasts
+from public D1 scores. Early-season priors shrink the previous season; stale or
+sparse evidence withholds a forecast. The historical 2025–26 holdout contains
+1,310 covered games, 74.9% winner accuracy, 9.87-point margin MAE and 13.57-point
+total MAE. It is retrospective evidence, not betting profitability.
+
+The existing half-hour collector captures immutable pre-tipoff CBB rows, grades
+finals even after a ranking drops, and keeps every CBB market research-only.
+Data refreshes at 10:17 / 16:17 / 22:17 UTC in November–April without refitting.
+CBB has its own 30-new-game run budget; NBA/CFB protections, other engines,
+existing histories, fantasy and v383 Duo geometry are preserved. No college
+player props. Method, limitations and open measurements: `docs/CBB_MODEL.md`.
 
 ### v383 — Fit the preview within the raised boundary
 
@@ -6371,6 +6391,11 @@ The live pipeline saves probability method, sample size, training cutoff and its
     suites still green.
 
 ## ⏳ Open measurements — read these BEFORE touching model constants
+
+CBB (v384): new research model; prospective validation is collecting. Review
+coverage, winner calibration, neutral/home splits, early-season priors and
+margin/total bias before promotion. The 2025–26 holdout is already used for
+evaluation and must not become a tuning sample. See `docs/CBB_MODEL.md`.
 
 Several fixes are shipped but **unverified against results**, because the data
 that would verify them didn't exist when they shipped. The repo's method is

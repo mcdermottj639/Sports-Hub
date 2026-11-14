@@ -1,0 +1,61 @@
+{
+  "trainedSeason": 2025,
+  "holdoutSeason": 2026,
+  "trainingGames": 5113,
+  "holdout": {
+    "games": 5719,
+    "winnerAccuracy": 0.716733694701871,
+    "brier": 0.1811263087286425,
+    "marginMAE": 9.38902599178632,
+    "totalMAE": 13.890858900400783,
+    "marginBias": -0.8519983706264035,
+    "totalBias": 0.48583641715134696,
+    "homeBaselineAccuracy": 0.6369994754327679,
+    "marginBaselineMAE": 11.7296730197587,
+    "totalBaselineMAE": 15.43119200539213
+  },
+  "requestedCoverage": {
+    "games": 1310,
+    "winnerAccuracy": 0.748854961832061,
+    "brier": 0.16103696435523154,
+    "marginMAE": 9.874253671237245,
+    "totalMAE": 13.566895168084693,
+    "marginBias": -1.8909427154302472,
+    "totalBias": 1.2357096377566308,
+    "homeBaselineAccuracy": 0.6450381679389313,
+    "marginBaselineMAE": 13.336641221374046,
+    "totalBaselineMAE": 14.98371557789198
+  },
+  "top25": {
+    "games": 774,
+    "winnerAccuracy": 0.8165374677002584,
+    "brier": 0.127008878194884,
+    "marginMAE": 10.703620809919443,
+    "totalMAE": 12.948146434662187,
+    "marginBias": -3.4974967358032463,
+    "totalBias": 0.2717904870490398,
+    "homeBaselineAccuracy": 0.6873385012919897,
+    "marginBaselineMAE": 15.850129198966409,
+    "totalBaselineMAE": 14.851883624293002
+  },
+  "tournaments": {
+    "games": 699,
+    "winnerAccuracy": 0.6723891273247496,
+    "brier": 0.19892367457930424,
+    "marginMAE": 9.045356974424777,
+    "totalMAE": 13.945929453380993,
+    "marginBias": -0.2576284377634841,
+    "totalBias": 2.380385034360045,
+    "homeBaselineAccuracy": 0.6065808297567954,
+    "marginBaselineMAE": 10.44062947067239,
+    "totalBaselineMAE": 14.90119557716652
+  },
+  "bettingROI": null,
+  "limitations": [
+    "Retrospective source snapshot; publication-time revisions are not reconstructable",
+    "Current D1 membership directory applied to historical scores",
+    "No historical odds or player availability",
+    "All structural parameters predeclared; only residual scale fitted on 2025"
+  ],
+  "status": "prospective-validation-pending"
+}

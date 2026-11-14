@@ -89,7 +89,7 @@
         result: h == null || a == null ? null : h === a ? 'push' : (h > a) === q.home ? 'win' : 'loss', error: null,
         selection: record.p || record.pick };
     }
-    if (market === 'spread' && !['nfl', 'cfb', 'nba'].includes(sport)) return missing('Market not tracked');
+    if (market === 'spread' && !['nfl', 'cfb', 'nba', 'cbb'].includes(sport)) return missing('Market not tracked');
     const projection = number(q.forecast?.[market === 'spread' ? 'margin' : 'total']);
     if (projection == null) return missing('Missing pregame projection');
     const actual = h == null || a == null ? null : market === 'spread' ? h - a : h + a;
@@ -110,6 +110,7 @@
   function missingBetReason(record, market, version, start) {
     const grade = forecastGrade(record, market, version, start), q = record?.q;
     if (!['Forecast saved', 'Awaiting result', 'No directional edge'].includes(grade.status)) return grade.status;
+    if (q?.researchOnly) return 'Research only';
     if (q?.quality?.length) return 'Data quality blocked bet';
     if (market === 'moneyline') return number(q.price) == null ? 'Missing pregame price' : 'No qualifying edge';
     const sport = record.s || record.sport;

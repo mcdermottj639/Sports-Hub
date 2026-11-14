@@ -5,7 +5,7 @@
   root.SportsHubPerformance = api;
 })(globalThis, function(A) {
   'use strict';
-  const SPORTS = ['nfl','cfb','mlb','nba'];
+  const SPORTS = ['nfl','cfb','mlb','nba','cbb'];
   const MARKETS = ['moneyline','spread','total'];
   const settled = r => ['win','loss','push'].includes(r.result);
   // v340 — Jack: totals drag every sport's headline record down. Headline

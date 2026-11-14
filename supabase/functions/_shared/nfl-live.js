@@ -4,7 +4,7 @@
   'use strict';
   const VERSION='nfl-football-v1', BASELINE='v239';
   const ACTIVATED_AT='2026-10-03T04:48:39Z';
-  const versionFor=sport=>sport==='nfl'?VERSION:sport==='nba'?'nba-v1':BASELINE;
+  const versionFor=sport=>sport==='nfl'?VERSION:sport==='nba'?'nba-v1':sport==='cbb'?'cbb-v1':BASELINE;
   const states=new Map();
   /* v342: owner QB override (data/nfl-qb-overrides.json). The owner follows
      lineups more closely than ESPN's depth chart; an unexpired entry for this

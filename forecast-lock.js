@@ -59,7 +59,7 @@
       projMargin:spread?.q.proj ?? ml.q.forecast?.margin ?? null, projTotal:total?.q.proj ?? ml.q.forecast?.total ?? null,
       breakdown:[], notes:['Restored from saved pregame evidence; missing projections are not recomputed.'],
       blockedReasons:ml.q.quality || [], thin:false, marginSat:false, rating:ml.q.rating || ml.q.features?.rating || null,
-      features:ml.q.features || null, football:ml.q.features?.football || null, sharp:null, savedEvidence:copy(ml.q),
+      researchOnly:ml.q.researchOnly === true, features:ml.q.features || null, football:ml.q.features?.football || null, sharp:null, savedEvidence:copy(ml.q),
     };
     return persist(sport,g,{at:ml.q.at,start:ml.q.start,source:ml.q.cloud?'cloud':'saved record',prediction,odds,
       probabilities:{spread:spread?.q.probability || null,total:total?.q.probability || null}});

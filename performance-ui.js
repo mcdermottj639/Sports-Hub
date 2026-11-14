@@ -1,7 +1,7 @@
 (function(root) {
   'use strict';
   const C=root.SportsHubPerformance;
-  const names={nfl:'NFL',cfb:'CFB Top 25',mlb:'MLB',nba:'NBA',moneyline:'Moneyline',spread:'Spread',total:'Totals'};
+  const names={nfl:'NFL',cfb:'CFB Top 25',mlb:'MLB',nba:'NBA',cbb:'CBB',moneyline:'Moneyline',spread:'Spread',total:'Totals'};
   const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const num=v=>v==null||v===''||!Number.isFinite(Number(v))?null:Number(v);
   const fmt=(v,d=1)=>num(v)==null?'—':Number(v).toFixed(d);

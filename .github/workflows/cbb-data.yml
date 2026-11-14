@@ -1,0 +1,41 @@
+name: Refresh college basketball evidence
+on:
+  schedule:
+    - cron: '17 10,16,22 * 1-4,11,12 *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['scripts/cbb-data.py', '.github/workflows/cbb-data.yml']
+permissions:
+  contents: write
+concurrency:
+  group: cbb-data
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Refresh complete public D1 history
+        run: |
+          cp data/cbb-history.json /tmp/cbb-history.json
+          python scripts/cbb-data.py --output /tmp/cbb-history.json
+      - name: Validate current season and source freshness
+        run: |
+          node scripts/check-cbb-data.js /tmp/cbb-history.json
+          node --test tests/cbb-model.test.js
+      - name: Publish evidence without refitting coefficients
+        run: |
+          git config user.name "Sports Hub data"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --ff-only origin main
+          cp /tmp/cbb-history.json data/cbb-history.json
+          git add data/cbb-history.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Refresh college basketball evidence"
+          git pull --rebase origin main
+          git push origin HEAD:main
