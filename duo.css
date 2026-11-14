@@ -215,6 +215,9 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
   /* Keep the live scrolling score ticker above the featured game on every
      seated route. The pane/report start at --tk-h, leaving it unobscured. */
   :root[data-duo-pose="seated"] #ticker { position:fixed; top:0; left:0; right:0; z-index:49; }
+  /* The Lab owns the lower page; its full-screen chrome rule must not
+     remove live scores from the separate upper screen. */
+  :root[data-duo-pose="seated"] body[data-desk-panel="matchup-lab"] #ticker { display:flex!important; }
   :root[data-duo-pose="seated"] body.desk-shell #duo-feature {
     display:flex; flex-direction:column; justify-content:flex-start; gap:8px;
     container:duo-feature / inline-size;

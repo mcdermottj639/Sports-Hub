@@ -746,6 +746,8 @@ Game-report Close stays visible when its short upper scrollport is scrolled
 and respects the right status strip. The ticker, curve clearance, On/Off
 persistence, independent lower scrolling, ordinary 76px open-screen rail,
 folded grids, saved results and model/backend data are preserved.
+The full-screen Matchup Lab keeps its own Back control in the lower page;
+its chrome-hiding rule no longer removes the upper screen's live ticker.
 
 Browser regressions cover quick-entry ordering and actual route entry,
 Close after scrolling, 100px status-inset controls and long abbreviations.

@@ -219,12 +219,21 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
           assert.ok(b.top>=s.main.top && b.bottom<=s.agenda.top,'daily shortcuts precede games');
           assert.ok(b.height>=44 && b.left>=s.main.left && b.right<=s.main.right,'shortcut fits and remains tappable');
         }
+        await shot(page,name+'-today');
         await page.locator('.desk-quick-start [data-desk-route="fantasy"]').click();
         assert.equal(await page.evaluate(()=>document.body.dataset.deskPanel),'fantasy');
         await page.locator('#botbar [data-desk-route="today"]').click();
         await page.locator('#home > .se-entry').click();
         assert.equal(await page.evaluate(()=>document.body.dataset.deskPanel),'matchup-lab');
-        await page.locator('#botbar [data-desk-route="today"]').click();
+        const lab=await page.evaluate(()=>({
+          ticker:document.getElementById('ticker').getBoundingClientRect(),
+          feature:document.getElementById('duo-feature').getBoundingClientRect()
+        }));
+        assert.equal(lab.ticker.top,0);assert.ok(lab.ticker.height>20,'Lab keeps the live ticker on the upper screen');
+        assert.ok(lab.feature.height>0 && lab.feature.bottom<=edge-72,'Lab keeps the featured game above the curve');
+        await shot(page,name+'-lab');
+        await page.locator('#matchup-lab-content [data-se-back]').click();
+        await page.waitForFunction(()=>document.body.dataset.deskPanel==='home');
       });
       await check(`${name}: game selection and top-half report remain usable`,async()=>{
         await page.locator('#desk-agenda [data-desk-game="nfl:9003"]').click();
