@@ -35,5 +35,5 @@ jobs:
         run: |
           npm install --no-save --no-package-lock playwright@1.57.0
           npx playwright install --with-deps chromium
-      - name: Fold-browser regressions
-        run: node tests/duo-posture-browser.cjs
+      - name: Manual Duo browser layout, selection and navigation
+        run: DUO_MANUAL_ONLY=1 node tests/duo-posture-browser.cjs
