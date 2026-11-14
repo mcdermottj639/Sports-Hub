@@ -334,7 +334,10 @@ fantasy/golf data are not refreshed by this cycle.
   on the device; an explicit OFF suppresses automatic fold detection. The upper
   card is top-aligned below the ticker; card and report end 48–80px before the
   upper fold boundary, leaving the curved area blank. The lower page keeps its
-  existing boundary. `duo.css` loads LAST;
+  existing boundary. Lab/Fantasy/Saved/Results share a compact row before the slate,
+  the lower header reclaims the status-strip width, and upper cards/header
+  adapt to usable container width. Game-report Close stays reachable while
+  scrolling. `duo.css` loads LAST;
   layout only — never put content or behaviour in it. Optional browser check:
   `tests/duo-posture-browser.cjs`.
 - `ticker.js`, `ticker.css` — v326 rolling top ticker (scores, model picks,
@@ -727,7 +730,31 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v383** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v385** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8. v384 belongs to the separate unmerged CBB review branch; this layout repair does not publish it.
+
+### v385 — Restore compact Duo navigation and usable controls
+
+The seated slate's `order:-1` had buried the v367 Matchup Lab and daily
+shortcuts below every game. They now share one 44px row ahead of the slate.
+Compact slate spacing retains filters, refresh, source scope and all rows.
+The lower header reclaims the top-only status-strip margin; the header and
+featured card use available container width, including a 100px right inset,
+instead of assuming that viewport width equals usable width. Narrow previews
+retain team marks, scores, live field and ML/Spread/Total with compact type;
+extremely narrow previews stack the score to keep long abbreviations readable.
+Game-report Close stays visible when its short upper scrollport is scrolled
+and respects the right status strip. The ticker, curve clearance, On/Off
+persistence, independent lower scrolling, ordinary 76px open-screen rail,
+folded grids, saved results and model/backend data are preserved.
+
+Browser regressions cover quick-entry ordering and actual route entry,
+Close after scrolling, 100px status-inset controls and long abbreviations.
+`tests/responsive.html` has an explicitly labeled status-inset simulation;
+it is a layout fixture, not proof of physical Safari behavior. The existing
+UI workflow now runs on main UI changes as well as PRs. The local Chromium
+runner cannot launch in this environment (socket EPERM); Node/syntax checks
+are local, rendered checks use the browser, and CI results must be checked
+separately before claiming the browser suite passed. No second-agent review.
 
 ### v383 — Fit the preview within the raised boundary
 
@@ -754,6 +781,9 @@ presets for live browser inspection. Physical curve placement still requires
 the user's phone; a desktop viewport does not establish device acceptance.
 
 ### v381 — Compact upper game preview
+
+⚠️ SUPERSEDED in v385 for narrow preview sizing: cards now use their usable
+container width, preserving the compact preview and complete source row.
 
 Preserved from main 564e406: line-change history, saved projection footer and
 source footer are omitted from the upper clone only. The full source row and
@@ -797,6 +827,8 @@ On a wider stacked viewport it intercepted games-ahead taps while the featured
 pane remained hidden. Seated layout now follows the detected pose at all
 widths: the live scrolling ticker and featured game stay above the fold,
 every route scrolls below it, and the normal five-button dock stays reachable.
+⚠️ SUPERSEDED in v385 for Today ordering: the games-first CSS had buried the
+existing quick entries; Lab/Fantasy/Saved/Results now precede the slate.
 The desktop sidebar/offsets are suppressed only while seated. Reports begin
 below the ticker in the top half. Main remains the only page scroller; body
 stays overflow-visible to preserve fixed descendants on Safari.

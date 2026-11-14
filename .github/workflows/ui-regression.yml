@@ -1,6 +1,16 @@
 name: Sports Hub UI regression
 on:
   pull_request:
+  push:
+    branches: [main, 'fix/duo-*']
+    paths:
+      - '*.css'
+      - 'duo.js'
+      - 'desk.js'
+      - 'mobile-chrome.js'
+      - 'index.html'
+      - 'tests/**'
+      - '.github/workflows/ui-regression.yml'
   workflow_dispatch:
 
 permissions:

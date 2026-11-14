@@ -206,6 +206,26 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
         for(const team of s.teams) assert.ok(team.top>=s.card.top && team.bottom<s.pane.bottom,'team names above curve');
         assert.ok(s.scrollHeight>s.clientHeight && s.scrolled>0,'oversized card scrolls within its safe area');
       });
+      await check(`${name}: Lab and daily shortcuts precede the games and open directly`,async()=>{
+        const s=await page.evaluate(()=>{
+          const main=document.getElementById('main-content');main.scrollTop=0;
+          const rect=e=>e.getBoundingClientRect().toJSON();
+          return {main:rect(main),lab:rect(document.querySelector('#home > .se-entry')),
+            agenda:rect(document.querySelector('#home > .desk-agenda-card')),
+            shortcuts:[...document.querySelectorAll('.desk-quick-start button')].map(rect)};
+        });
+        assert.ok(s.lab.top>=s.main.top && s.lab.bottom<=s.agenda.top,'Lab is at the start of the lower page');
+        for(const b of s.shortcuts){
+          assert.ok(b.top>=s.main.top && b.bottom<=s.agenda.top,'daily shortcuts precede games');
+          assert.ok(b.height>=44 && b.left>=s.main.left && b.right<=s.main.right,'shortcut fits and remains tappable');
+        }
+        await page.locator('.desk-quick-start [data-desk-route="fantasy"]').click();
+        assert.equal(await page.evaluate(()=>document.body.dataset.deskPanel),'fantasy');
+        await page.locator('#botbar [data-desk-route="today"]').click();
+        await page.locator('#home > .se-entry').click();
+        assert.equal(await page.evaluate(()=>document.body.dataset.deskPanel),'matchup-lab');
+        await page.locator('#botbar [data-desk-route="today"]').click();
+      });
       await check(`${name}: game selection and top-half report remain usable`,async()=>{
         await page.locator('#desk-agenda [data-desk-game="nfl:9003"]').click();
         await page.waitForFunction(()=>document.querySelector('#duo-feature [data-desk-game]')?.dataset.deskGame==='nfl:9003');
@@ -213,6 +233,14 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
         const r=await page.evaluate(()=>({hidden:document.getElementById('game-modal').classList.contains('hidden'),
           report:document.querySelector('#game-modal .modal-card').getBoundingClientRect(),ticker:document.getElementById('ticker').getBoundingClientRect()}));
         assert.equal(r.hidden,false);assert.ok(r.report.bottom<=edge-72);assert.ok(r.report.top>=r.ticker.bottom-1);
+        const close=await page.evaluate(()=>{
+          const card=document.querySelector('#game-modal .modal-card');
+          const detail=document.createElement('div');detail.style.height='1200px';card.append(detail);
+          card.scrollTop=500;
+          const button=document.getElementById('modal-x'),a=card.getBoundingClientRect(),b=button.getBoundingClientRect();
+          return {scrolled:card.scrollTop,visible:b.top>=a.top && b.bottom<=a.bottom,hit:document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)===button};
+        });
+        assert.ok(close.scrolled>0 && close.visible && close.hit,'Close stays reachable after report scrolling');
         await page.locator('#modal-x').click();
       });
       await check(`${name}: split and live ticker persist through all dock routes`,async()=>{
@@ -226,6 +254,44 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
       await shot(page,name);
       await check(`${name}: no sideways overflow`,()=>noOverflow(page));
       await check(`${name}: no page errors`,async()=>assert.deepEqual(errors,[]));
+      await context.close();
+    }
+    // Earlier phone checks had no safe-area inset and missed crowded chrome.
+    // Emulate the known 100px right status strip without requiring fold APIs.
+    for(const name of ['folded','open','seatedShort','seatedNarrow']){
+      const {page,context}=await open(name);
+      await page.evaluate(()=>{
+        window.__duoForce=true;
+        document.documentElement.classList.add('pf-side-status');
+        document.documentElement.style.setProperty('--duo-r','100px');
+        const style=document.createElement('style');
+        style.textContent='html.pf-side-status[data-duo-pose="seated"] #duo-feature{padding-right:100px!important}';
+        document.head.append(style);
+      });
+      await check(`${name}: inset-aware header controls fit without overlapping`,async()=>{
+        const s=await page.evaluate(()=>{
+          const bar=document.querySelector('.topbar').getBoundingClientRect();
+          return {bar,buttons:[...document.querySelectorAll('.topbar button')].filter(b=>b.getBoundingClientRect().width).map(b=>b.getBoundingClientRect().toJSON())};
+        });
+        for(let i=0;i<s.buttons.length;i++){
+          const b=s.buttons[i];assert.ok(b.left>=s.bar.left && b.right<=s.bar.right,`button outside header: ${JSON.stringify(b)}`);
+          assert.ok(b.height>=44);
+          if(i)assert.ok(b.left>=s.buttons[i-1].right,'header buttons overlap');
+        }
+      });
+      if(poses[name].feature){
+        await check(`${name}: inset preview keeps long abbreviations and live scores inside the card`,async()=>{
+          await page.evaluate(()=>{
+            const row=document.querySelector('#desk-agenda .duo-featured');
+            const names=row.querySelectorAll('.desk-match-team b');names[0].textContent='WAKE';names[1].textContent='TA&M';
+          });
+          await page.waitForFunction(()=>document.querySelector('#duo-feature .desk-match-team:last-child b')?.textContent==='TA&M');
+          const s=await page.evaluate(()=>[...document.querySelectorAll('#duo-feature .desk-match-team')].map(e=>({width:e.clientWidth,scroll:e.scrollWidth})));
+          for(const team of s)assert.ok(team.scroll<=team.width+1,`team overflow ${JSON.stringify(team)}`);
+        });
+      }
+      await check(`${name}: inset has no page overflow`,()=>noOverflow(page));
+      await shot(page,name+'-status-inset');
       await context.close();
     }
     // Book: list on the left page, the rest on the right, report on the right page.

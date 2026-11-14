@@ -99,6 +99,19 @@ html:not(.pf-side-status) body.desk-shell { padding-left:env(safe-area-inset-lef
 html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(safe-area-inset-left,0px)); }
 
 /* Manual Duo is always available, including browsers without fold sensors. */
+:root[data-palette] .desk-shell .topbar { container:duo-header / inline-size; }
+:root[data-palette] .desk-shell .topbar button { min-height:44px; }
+:root[data-palette] .desk-shell .desk-search-trigger,
+:root[data-palette] .desk-shell #ticker-filter { min-width:44px; }
+/* Use the header's usable width: the Duo status strip can take 100px out
+   of a 466px viewport. A viewport-only breakpoint misses that narrower row. */
+@container duo-header (max-width:400px) {
+  :root[data-palette] .desk-shell .desk-wordmark > span:last-child,
+  :root[data-palette] .desk-shell .desk-search-label,
+  :root[data-palette] .desk-shell .desk-search-trigger kbd,
+  :root[data-palette] .desk-shell .desk-breadcrumb { display:none; }
+  :root[data-palette] .desk-shell .head-right { gap:4px; }
+}
 :root[data-palette] .desk-shell #duo-toggle {
   display:inline-flex; align-items:center; justify-content:center; flex:none; gap:5px;
   min-width:66px; min-height:44px; padding:0 9px; border:1px solid #c2d2b7;
@@ -168,6 +181,11 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
   :root[data-palette][data-duo-pose="seated"] body.desk-shell > .desk-page-heading {
     min-height:0!important; padding:10px 14px!important; margin-top:10px!important; margin-bottom:10px!important; margin-left:14px!important; align-items:center!important; flex-wrap:nowrap!important;
   }
+  /* The status icons occupy the top screen. The lower controls should keep
+     the full width reclaimed in v371 instead of inheriting its top inset. */
+  :root[data-palette].pf-side-status[data-duo-pose="seated"] body.desk-shell > .topbar { margin-right:0!important; }
+  :root[data-palette].pf-side-status[data-duo-pose="seated"] body.desk-shell > .desk-page-heading,
+  :root[data-palette].pf-side-status[data-duo-pose="seated"] body.desk-shell > #stale-note { margin-right:14px!important; }
   :root[data-duo-pose="seated"] .desk-page-heading .desk-eyebrow,
   :root[data-duo-pose="seated"] #desk-page-desc,
   :root[data-duo-pose="seated"] #desk-heading-art,
@@ -199,17 +217,37 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
   :root[data-duo-pose="seated"] #ticker { position:fixed; top:0; left:0; right:0; z-index:49; }
   :root[data-duo-pose="seated"] body.desk-shell #duo-feature {
     display:flex; flex-direction:column; justify-content:flex-start; gap:8px;
+    container:duo-feature / inline-size;
     position:fixed; left:0; right:0; top:var(--tk-h,0px); height:calc(var(--duo-upper-end) - var(--tk-h,0px)); z-index:45;
     padding:10px max(14px,env(safe-area-inset-right,0px)) 10px max(14px,env(safe-area-inset-left,0px));
     background:var(--gr,#f7f9f9); overflow:hidden; box-sizing:border-box;
   }
-  /* Today: the list leads the scrolling half (CSS order only; the DOM is untouched). */
-  :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active { display:flex; flex-direction:column; }
-  :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card { order:-1; }
+  /* Keep v367's direct Lab/Fantasy/Saved/Results paths ahead of the slate.
+     They share one compact row, instead of being pushed below every game. */
+  :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active { display:grid; grid-template-columns:minmax(84px,1fr) minmax(0,3fr); gap:8px; align-content:start; }
+  :root[data-duo-pose="seated"] #home.active > * { grid-column:1 / -1; min-width:0; }
+  :root[data-duo-pose="seated"] #home.active > .se-entry { grid-column:1; margin:0; padding:6px; min-height:44px; justify-content:center; }
+  :root[data-duo-pose="seated"] #home.active > .se-entry small,
+  :root[data-duo-pose="seated"] #home.active > .se-entry > span:last-child { display:none; }
+  :root[data-duo-pose="seated"] #home.active > .se-entry b { font-size:12px; }
+  :root[data-duo-pose="seated"] #home.active > .desk-quick-start { grid-column:2; gap:4px; margin:0; }
+  :root[data-duo-pose="seated"] .desk-quick-start button { min-height:44px; padding:5px 2px; font-size:11px; gap:3px; }
+  :root[data-duo-pose="seated"] .desk-quick-start svg { display:none; }
+  :root[data-duo-pose="seated"] .desk-agenda-card { padding:10px; }
+  :root[data-duo-pose="seated"] .desk-agenda-card .desk-card-heading { margin-bottom:6px; }
+  :root[data-duo-pose="seated"] .desk-agenda-card .desk-eyebrow { display:none; }
+  :root[data-duo-pose="seated"] .desk-agenda-card h2 { font-size:21px; }
+  :root[data-duo-pose="seated"] .desk-agenda-scope { margin:0 0 6px; }
+  :root[data-duo-pose="seated"] .desk-filter-row { flex-wrap:nowrap; overflow-x:auto; padding-bottom:6px; }
+  :root[data-duo-pose="seated"] .desk-filter-row button { flex:none; min-height:44px; }
+  :root[data-duo-pose="seated"] .desk-slate-strip { margin:6px 0 0; gap:4px; }
 
   /* Game report: above the same curve clearance, scrolling inside itself. */
   :root[data-duo-pose="seated"] .modal { top:var(--tk-h,0px); bottom:auto; height:calc(var(--duo-upper-end) - var(--tk-h,0px)); align-items:stretch!important; }
   :root[data-palette][data-duo-pose="seated"] .desk-shell .modal-card { width:100%; max-width:none!important; max-height:none!important; height:100%; margin:0; border-radius:0!important; animation:none; overflow-y:auto!important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+  /* A short report needs a reachable Close after scrolling its content. */
+  :root[data-duo-pose] #game-modal .modal-x { position:sticky; float:right; top:0; right:0; z-index:2; margin:0 0 -44px 8px; width:44px; height:44px; }
+  :root.pf-side-status[data-duo-pose] #game-modal .modal-card { padding-right:max(20px,var(--duo-r,0px)); }
 /* v381: the upper pane is a glanceable game preview, NOT a duplicate of the
    expanded research card. On short Duo screens the move history used to be
    cut off at the hinge (even with correct fold geometry). Keep the original
@@ -234,6 +272,27 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
 :root[data-duo-pose="seated"] #duo-feature .desk-match-team .desk-team-mark { width:46px!important; height:46px!important; }
 :root[data-duo-pose="seated"] #duo-feature .duo-feature-empty { margin:0; text-align:center; color:#6b817c; font-size:14px; }
 :root[data-duo-pose="seated"] #desk-agenda .desk-game.duo-featured { outline:2px solid #b9d98a; outline-offset:-2px; border-radius:12px; }
+
+/* Fit the actual preview width, including the phone's right status inset.
+   Keep the field, score and all three saved markets; reduce their spacing
+   and oversized desktop type before requiring a scroll. */
+@container duo-feature (max-width:600px) {
+  :root[data-duo-pose="seated"] #duo-feature .desk-matchup { gap:5px; margin-top:3px; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team { gap:4px; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team b { font-size:clamp(20px,6cqw,26px)!important; letter-spacing:0; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team small { display:none!important; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team > strong { font-size:clamp(24px,7cqw,32px)!important; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team .desk-team-mark { width:32px!important; height:32px!important; flex-shrink:0; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-game-meta { min-height:24px; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-line { margin-top:3px; padding:3px 0; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-chips { margin-top:3px; gap:4px; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-chip { padding:4px 5px; }
+}
+@container duo-feature (max-width:320px) {
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team { display:grid; grid-template-columns:28px minmax(0,1fr); column-gap:4px; row-gap:1px; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team .desk-team-mark { width:28px!important; height:28px!important; grid-row:1 / span 2; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team > strong { grid-column:2; font-size:24px!important; }
+}
 
 /* ── Book (held sideways, half open): two pages either side of the fold ── */
 /* Today: The games ahead on the left page (its own scroll, stays put); the
