@@ -92,6 +92,28 @@ const poses={
         assert.ok(s.moved>0,'bottom half scrolls');assert.equal(s.win,0);assert.ok(s.pane<100,'pane stays put');
         await page.evaluate(()=>{document.getElementById('main-content').scrollTop=0;});
       });
+      await check('seated: research history remains in list but not in clipped upper preview',async()=>{
+        const s=await page.evaluate(()=>{
+          const upper=document.querySelector('#duo-feature .desk-game-main');
+          const lower=document.querySelector('#desk-agenda .desk-game-main');
+          if(!upper||!lower) return {missing:true};
+          const displays=[];
+          for(const host of [upper,lower]){
+            const moves=document.createElement('span');moves.className='desk-moves';moves.textContent='Saved line movements';
+            const foot=document.createElement('span');foot.className='desk-read-foot';foot.textContent='Projection';
+            host.append(moves,foot);
+            displays.push({moves:getComputedStyle(moves).display,foot:getComputedStyle(foot).display});
+            moves.remove();foot.remove();
+          }
+          const p=document.getElementById('duo-feature').getBoundingClientRect();
+          const c=document.querySelector('#duo-feature .desk-game').getBoundingClientRect();
+          return {displays,contained:c.top>=p.top-1&&c.bottom<=p.bottom+1};
+        });
+        assert.equal(s.missing,undefined,'game previews exist in both panes');
+        assert.equal(s.displays[0].moves,'none');assert.equal(s.displays[0].foot,'none');
+        assert.notEqual(s.displays[1].moves,'none');assert.notEqual(s.displays[1].foot,'none');
+        assert.equal(s.contained,true,'compact game preview fits the upper pane');
+      });
       await shot(page,'seated-today');
       await check('seated Today: tapping a row swaps the featured game, no report',async()=>{
         await page.locator('#desk-agenda [data-desk-game="nfl:9003"]').scrollIntoViewIfNeeded();
