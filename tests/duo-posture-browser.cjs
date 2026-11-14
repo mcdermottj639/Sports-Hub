@@ -40,7 +40,7 @@ const poses={
   const open=async(name,hash='',noJsSegments=false)=>{
     const P=poses[name],mobile=P.width<761;
     const context=await browser.newContext({viewport:{width:P.width,height:P.height},isMobile:mobile,hasTouch:mobile,serviceWorkers:'block'});
-    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+    const page=await context.newPage(),errors=[];page.setDefaultTimeout(6000);page.setDefaultNavigationTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
     if(noJsSegments)await page.addInitScript(()=>{try{delete window.viewport;Object.defineProperty(window,'viewport',{value:undefined,configurable:true});delete window.viewport;}catch(e){}});
     await page.route('**/*',route=>{
       const u=new URL(route.request().url());
