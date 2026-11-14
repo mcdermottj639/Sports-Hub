@@ -203,6 +203,19 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
   /* Game report: the whole top half, scrolling inside itself. */
   :root[data-duo-pose="seated"] .modal { top:var(--tk-h,0px); bottom:auto; height:calc(var(--fold-top) - var(--tk-h,0px)); align-items:stretch!important; }
   :root[data-palette][data-duo-pose="seated"] .desk-shell .modal-card { width:100%; max-width:none!important; max-height:none!important; height:100%; margin:0; border-radius:0!important; animation:none; overflow-y:auto!important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+/* v381: the upper pane is a glanceable game preview, NOT a duplicate of the
+   expanded research card. On short Duo screens the move history used to be
+   cut off at the hinge (even with correct fold geometry). Keep the original
+   full-detail row below and the game report on tap, with no data changes. */
+:root[data-duo-pose="seated"] #duo-feature .desk-game-main { padding:4px 0 0; }
+:root[data-duo-pose="seated"] #duo-feature .desk-game-meta { min-height:28px; }
+:root[data-duo-pose="seated"] #duo-feature .desk-moves,
+:root[data-duo-pose="seated"] #duo-feature .desk-read-foot,
+:root[data-duo-pose="seated"] #duo-feature .desk-game-footer { display:none!important; }
+:root[data-duo-pose="seated"] #duo-feature .desk-game-main::after {
+  content:"Tap for full game report"; display:block; text-align:right;
+  margin-top:7px; font-size:11px; font-weight:650; color:var(--ac,#146d60);
+}
 #duo-feature[hidden] { display:none!important; }
 #duo-feature { display:none; }
 :root[data-duo-pose="seated"] #duo-feature .desk-game { margin:0; max-height:100%; overflow:auto; overscroll-behavior:contain; }
