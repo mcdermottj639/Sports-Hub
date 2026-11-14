@@ -1,0 +1,39 @@
+name: Sports Hub UI regression
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  node-regressions:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax checks
+        run: |
+          node --check duo.js
+          node --check desk.js
+          node --check app.js
+          node --check tests/duo-posture.test.js
+          node --check tests/duo-posture-browser.cjs
+      - name: All Node regressions
+        run: node --test tests/*.test.js
+
+  duo-browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.57.0
+          npx playwright install --with-deps chromium
+      - name: Manual Duo browser layout, selection and navigation
+        run: DUO_MANUAL_ONLY=1 node tests/duo-posture-browser.cjs

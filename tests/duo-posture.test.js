@@ -30,3 +30,15 @@ test('seated Today forwards taps from the featured copy instead of duplicating h
   assert.match(js, /document\.addEventListener\('click', onListClick, true\)/);
   assert.match(js, /removeAttribute\('id'\)/);
 });
+
+test('the seated featured game is compact without hiding the full source row', () => {
+  const css = read('duo.css');
+  const section = css.slice(css.indexOf('/* v381:'));
+  assert.ok(section.includes(':root[data-duo-pose="seated"] #duo-feature .desk-moves,'));
+  assert.ok(section.includes(':root[data-duo-pose="seated"] #duo-feature .desk-read-foot,'));
+  assert.ok(section.includes(':root[data-duo-pose="seated"] #duo-feature .desk-game-footer { display:none!important; }'));
+  assert.ok(section.includes('Tap for full game report'));
+  const js = read('duo.js');
+  assert.ok(js.includes('var copy = row.cloneNode(true);'));
+  assert.ok(js.includes('pane.replaceChildren(copy);'));
+});

@@ -26,6 +26,9 @@ const poses={
   book:{width:951,height:676,feature:{orientation:'vertical',offset:475,maskLength:0}},
   folded:{width:466,height:677},open:{width:960,height:676},phone:{width:390,height:844},
 };
+const manualMode=process.env.DUO_MANUAL_ONLY==='1';
+// CI's Chromium may expose segments but report continuous posture despite CDP.
+// Manual mode validates the user's actual button-driven split independently of native sensors.
 (async()=>{
   const server=http.createServer((req,res)=>{
     const file=path.join(root,new URL(req.url,'http://localhost').pathname.replace(/^\/$/,'/index.html'));
@@ -40,7 +43,8 @@ const poses={
   const open=async(name,hash='',noJsSegments=false)=>{
     const P=poses[name],mobile=P.width<761;
     const context=await browser.newContext({viewport:{width:P.width,height:P.height},isMobile:mobile,hasTouch:mobile,serviceWorkers:'block'});
-    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+    const page=await context.newPage(),errors=[];page.setDefaultTimeout(6000);page.setDefaultNavigationTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
+    if(manualMode && P.feature && P.feature.orientation==='horizontal') await page.addInitScript(()=>localStorage.setItem('sportshub:duo-mode','on'));
     if(noJsSegments)await page.addInitScript(()=>{try{delete window.viewport;Object.defineProperty(window,'viewport',{value:undefined,configurable:true});delete window.viewport;}catch(e){}});
     await page.route('**/*',route=>{
       const u=new URL(route.request().url());
@@ -91,6 +95,36 @@ const poses={
         const s=await page.evaluate(()=>{const M=document.getElementById('main-content');M.scrollTop=300;const moved=M.scrollTop;window.scrollTo(0,400);return {moved,win:scrollY,docH:document.documentElement.scrollHeight,h:innerHeight,pane:document.getElementById('duo-feature').getBoundingClientRect().top};});
         assert.ok(s.moved>0,'bottom half scrolls');assert.equal(s.win,0);assert.ok(s.pane<100,'pane stays put');
         await page.evaluate(()=>{document.getElementById('main-content').scrollTop=0;});
+      });
+      await check('seated: research history remains in list but not in clipped upper preview',async()=>{
+        const s=await page.evaluate(()=>{
+          const upper=document.querySelector('#duo-feature .desk-game-main');
+          const lower=document.querySelector('#desk-agenda .desk-game-main');
+          if(!upper||!lower) return {missing:true};
+          const displays=[];
+          for(const host of [upper,lower]){
+            const moves=document.createElement('span');moves.className='desk-moves';moves.textContent='Saved line movements';
+            const foot=document.createElement('span');foot.className='desk-read-foot';foot.textContent='Projection';
+            host.append(moves,foot);
+            displays.push({moves:getComputedStyle(moves).display,foot:getComputedStyle(foot).display});
+            moves.remove();foot.remove();
+          }
+          const p=document.getElementById('duo-feature').getBoundingClientRect();
+          const c=document.querySelector('#duo-feature .desk-game').getBoundingClientRect();
+          return {displays,contained:c.top>=p.top-1&&c.bottom<=p.bottom+1};
+        });
+        assert.equal(s.missing,undefined,'game previews exist in both panes');
+        assert.equal(s.displays[0].moves,'none');assert.equal(s.displays[0].foot,'none');
+        assert.notEqual(s.displays[1].moves,'none');assert.notEqual(s.displays[1].foot,'none');
+        assert.equal(s.contained,true,'compact game preview fits the upper pane');
+      });
+      if(manualMode) await check('manual Duo: selected button and upper game are visible',async()=>{
+        const state=await page.evaluate(()=>({
+          pressed:document.getElementById('duo-toggle').getAttribute('aria-pressed'),
+          active:document.documentElement.dataset.duoPose,
+          hidden:document.getElementById('duo-feature')?.hidden
+        }));
+        assert.deepEqual(state,{pressed:'true',active:'seated',hidden:false});
       });
       await shot(page,'seated-today');
       await check('seated Today: tapping a row swaps the featured game, no report',async()=>{
@@ -163,7 +197,7 @@ const poses={
       await context.close();
     }
     // Book: list on the left page, the rest on the right, report on the right page.
-    {const {page,context,errors}=await open('book');
+    if(!manualMode) {const {page,context,errors}=await open('book');
       await check('book: pose detected from side-by-side segments',async()=>{
         const p=await page.evaluate(()=>document.documentElement.dataset.duoPose);assert.equal(p,'book');
       });
@@ -182,7 +216,7 @@ const poses={
       await check('book: no page errors',async()=>assert.deepEqual(errors,[]));
       await context.close();}
     // v373: the phone opens flat and is folded LATER, with no viewport resize.
-    {const {page,context,errors}=await open('seatedLate');
+    if(!manualMode) {const {page,context,errors}=await open('seatedLate');
       await check('late fold: starts flat',async()=>{
         assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),undefined);
       });
@@ -204,7 +238,7 @@ const poses={
       await check('late fold: no page errors',async()=>assert.deepEqual(errors,[]));
       await context.close();}
     // v373: only the CSS half of the API (no window.viewport) still works.
-    {const {page,context,errors}=await open('book',null,true);
+    if(!manualMode) {const {page,context,errors}=await open('book',null,true);
       await check('css-only: book pose from media queries + env()',async()=>{
         const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,vp:'viewport' in window,diag:document.getElementById('duo-diag')?.textContent||''}));
         assert.equal(s.vp,false);assert.equal(s.pose,'book');assert.match(s.diag,/css/);
