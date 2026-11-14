@@ -31,12 +31,14 @@ test('seated Today forwards taps from the featured copy instead of duplicating h
   assert.match(js, /removeAttribute\('id'\)/);
 });
 
-test('the seated featured game is a compact preview, without hiding the full row', () => {
+test('the seated featured game is compact without hiding the full source row', () => {
   const css = read('duo.css');
-  const selector = /:root\\[data-duo-pose="seated"\\] #duo-feature \\.desk-moves,[\\s\\S]*?#duo-feature \\.desk-read-foot,[\\s\\S]*?#duo-feature \\.desk-game-footer \\{ display:none!important; \\}/;
-  assert.match(css, selector, 'upper preview hides verbose detail only under #duo-feature');
-  assert.match(css, /Tap for full game report/, 'preview explains how to reach the full details');
+  const section = css.slice(css.indexOf('/* v381:'));
+  assert.ok(section.includes(':root[data-duo-pose="seated"] #duo-feature .desk-moves,'));
+  assert.ok(section.includes(':root[data-duo-pose="seated"] #duo-feature .desk-read-foot,'));
+  assert.ok(section.includes(':root[data-duo-pose="seated"] #duo-feature .desk-game-footer { display:none!important; }'));
+  assert.ok(section.includes('Tap for full game report'));
   const js = read('duo.js');
-  assert.match(js, /var copy = row.cloneNode\\(true\\)/, 'the full source row remains unchanged');
-  assert.match(js, /pane.replaceChildren\\(copy\\)/);
+  assert.ok(js.includes('var copy = row.cloneNode(true);'));
+  assert.ok(js.includes('pane.replaceChildren(copy);'));
 });
