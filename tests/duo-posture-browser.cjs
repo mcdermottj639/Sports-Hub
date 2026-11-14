@@ -23,6 +23,8 @@ const poses={
   seated:{width:676,height:900,feature:{orientation:'horizontal',offset:450,maskLength:0}},
   seatedWide:{width:960,height:676,feature:{orientation:'horizontal',offset:338,maskLength:0}},
   seatedDesktop:{width:1280,height:900,feature:{orientation:'horizontal',offset:450,maskLength:0}},
+  seatedShort:{width:466,height:677,feature:{orientation:'horizontal',offset:339,maskLength:0}},
+  seatedNarrow:{width:390,height:677,feature:{orientation:'horizontal',offset:339,maskLength:0}},
   book:{width:951,height:676,feature:{orientation:'vertical',offset:475,maskLength:0}},
   folded:{width:466,height:677},open:{width:960,height:676},phone:{width:390,height:844},
 };
@@ -157,7 +159,7 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
       await context.close();}
     // A detected stacked fold must use the split layout above the ordinary
     // phone breakpoint too, with live ticker and reports in the top half.
-    for(const name of ['seatedWide','seatedDesktop']){
+    for(const name of ['seatedWide','seatedDesktop','seatedShort','seatedNarrow']){
       const {page,context,errors}=await open(name),P=poses[name],edge=P.feature.offset;
       await check(`${name}: visible split, dock and top ticker at wide widths`,async()=>{
         const s=await page.evaluate(()=>{
@@ -174,13 +176,43 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
         assert.equal(s.main.left,0);assert.ok(s.main.bottom<=s.dock.top+1);assert.ok(s.scrolled>0);assert.equal(s.win,0);
         assert.ok(s.dock.height>=44);assert.equal(Math.round(s.dock.bottom),P.height);
       });
+      await check(`${name}: team names stay high and all upper content clears the curve`,async()=>{
+        // Exercise the same saved-market chips as a populated Duke/Miami row,
+        // plus oversized detail. The upper scrollport must contain it all.
+        await page.evaluate(()=>{
+          const host=document.querySelector('#desk-agenda .duo-featured .desk-game-main');
+          const chips=document.createElement('span');chips.className='desk-chips';
+          chips.innerHTML='<span class="desk-chip"><small>ML</small><b>MIA 55%</b></span><span class="desk-chip"><small>Spread</small><b>DUKE +15.5</b></span><span class="desk-chip"><small>Total</small><b>U 56.5</b></span>';
+          const detail=document.createElement('span');detail.dataset.curveFixture='true';
+          detail.style.cssText='display:block;height:240px';detail.textContent='Long game detail';
+          host.append(chips,detail);
+        });
+        await page.waitForFunction(()=>document.querySelector('#duo-feature [data-curve-fixture]'));
+        const s=await page.evaluate(()=>{
+          const rect=el=>el.getBoundingClientRect().toJSON();
+          const card=document.querySelector('#duo-feature .desk-game');
+          const result={pane:rect(document.getElementById('duo-feature')),card:rect(card),
+            ticker:rect(document.getElementById('ticker')),
+            teams:[...document.querySelectorAll('#duo-feature .desk-match-team')].map(rect),
+            scrollHeight:card.scrollHeight,clientHeight:card.clientHeight};
+          card.scrollTop=200;result.scrolled=card.scrollTop;card.scrollTop=0;
+          document.querySelector('#desk-agenda [data-curve-fixture]')?.remove();
+          return result;
+        });
+        assert.ok(edge-s.pane.bottom>=72,`only ${edge-s.pane.bottom}px above fold`);
+        assert.ok(s.card.top>=s.ticker.bottom && s.card.top<=s.ticker.bottom+12,`card starts at ${s.card.top}`);
+        assert.ok(s.card.bottom<=s.pane.bottom-9,'card scrollport ends before the blank margin');
+        assert.equal(s.teams.length,2);
+        for(const team of s.teams) assert.ok(team.top>=s.card.top && team.bottom<s.pane.bottom,'team names above curve');
+        assert.ok(s.scrollHeight>s.clientHeight && s.scrolled>0,'oversized card scrolls within its safe area');
+      });
       await check(`${name}: game selection and top-half report remain usable`,async()=>{
         await page.locator('#desk-agenda [data-desk-game="nfl:9003"]').click();
         await page.waitForFunction(()=>document.querySelector('#duo-feature [data-desk-game]')?.dataset.deskGame==='nfl:9003');
         await page.locator('#duo-feature [data-desk-game]').click();
         const r=await page.evaluate(()=>({hidden:document.getElementById('game-modal').classList.contains('hidden'),
           report:document.querySelector('#game-modal .modal-card').getBoundingClientRect(),ticker:document.getElementById('ticker').getBoundingClientRect()}));
-        assert.equal(r.hidden,false);assert.ok(r.report.bottom<=edge-11);assert.ok(r.report.top>=r.ticker.bottom-1);
+        assert.equal(r.hidden,false);assert.ok(r.report.bottom<=edge-72);assert.ok(r.report.top>=r.ticker.bottom-1);
         await page.locator('#modal-x').click();
       });
       await check(`${name}: split and live ticker persist through all dock routes`,async()=>{

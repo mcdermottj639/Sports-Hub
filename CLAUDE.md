@@ -331,7 +331,10 @@ fantasy/golf data are not refreshed by this cycle.
   API; live ticker and featured-game pane `#duo-feature` above the fold on
   every seated route, page and dock below at all viewport widths). The header's
   Duo toggle manually enables this layout without sensors and remembers ON/OFF
-  on the device; an explicit OFF suppresses automatic fold detection. `duo.css` loads LAST;
+  on the device; an explicit OFF suppresses automatic fold detection. The upper
+  card is top-aligned below the ticker; card and report end 48–80px before the
+  upper fold boundary, leaving the curved area blank. The lower page keeps its
+  existing boundary. `duo.css` loads LAST;
   layout only — never put content or behaviour in it. Optional browser check:
   `tests/duo-posture-browser.cjs`.
 - `ticker.js`, `ticker.css` — v326 rolling top ticker (scores, model picks,
@@ -724,7 +727,32 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v380** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v382** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v382 — Raise Duo content clear of the phone curve
+
+The compact v381 preview still sat too low on Jack's physical phone. The
+featured card now starts directly below the ticker instead of being vertically
+centered. Both preview and report stop an additional `clamp(48px,10dvh,80px)`
+before `--fold-top`; the lower page remains below `--fold-bottom`. On the
+677px-tall layout, the upper boundary moves up about 68px. Long cards/reports
+scroll inside that smaller upper area. This corrects placement without hiding
+team names, changing model data, or moving lower controls into the curve.
+
+Browser coverage includes 466×677 and 390×677 in addition to wide/tall Duo,
+top alignment, at least 72px from the fold centre, oversized card scrolling,
+and report containment. `tests/responsive.html` includes exact short/wide Duo
+presets for live browser inspection. Physical curve placement still requires
+the user's phone; a desktop viewport does not establish device acceptance.
+
+### v381 — Compact upper game preview
+
+Preserved from main 564e406: line-change history, saved projection footer and
+source footer are omitted from the upper clone only. The full source row and
+game report remain available; the preview says “Tap for full game report.”
+⚠️ SUPERSEDED in v382 for vertical fit: compacting content alone did not give
+Jack's curved screen enough clearance; the card is now top-aligned and bounded
+well above the crease.
 
 ### v380 — Manual Duo button, independent of fold sensors
 
@@ -737,7 +765,8 @@ state; the choice survives reloads in device-only `sportshub:duo-mode`.
 
 ON takes precedence over absent or continuous sensors, uses valid stacked
 geometry when available, and otherwise divides the layout viewport in half
-with a 24px gutter. Rotation recomputes the split; keyboard-only visual-viewport
+with a 24px gutter. ⚠️ SUPERSEDED in v382 for upper content: an additional
+48–80px curve margin sits above that gutter. Rotation recomputes the split; keyboard-only visual-viewport
 changes do not move the divider. OFF suppresses later sensor/poll/pageshow
 reactivation. With no saved choice, automatic seated/book detection remains.
 Storage failures still allow toggling in memory. Entering/exiting transfers

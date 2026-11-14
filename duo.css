@@ -126,7 +126,14 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
    or hide the featured pane while duo.js intercepts game-row taps.
    Only <main> scrolls: body stays non-scrolling so Safari does not clip
    its fixed ticker, dock, featured pane or report. */
-  html[data-duo-pose="seated"] { overflow:hidden!important; height:100%; background:#eef4ee; }
+  html[data-duo-pose="seated"] {
+    overflow:hidden!important; height:100%; background:#eef4ee;
+    /* The sensor/midpoint marks the crease, not where the curved glass
+       starts. Stop upper content well before it, without moving the lower
+       page up into the bend. Preview and report share this same boundary. */
+    --duo-curve-clearance:clamp(48px,10dvh,80px);
+    --duo-upper-end:max(var(--tk-h,0px),calc(var(--fold-top) - var(--duo-curve-clearance)));
+  }
   :root[data-palette][data-duo-pose="seated"] { --desk-sidebar:0px!important; }
   :root[data-palette][data-duo-pose="seated"] body.desk-shell nav.tabs { display:none!important; }
   /* v375: <main> is the scroller, NOT body. Safari clips position:fixed
@@ -191,8 +198,8 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
      seated route. The pane/report start at --tk-h, leaving it unobscured. */
   :root[data-duo-pose="seated"] #ticker { position:fixed; top:0; left:0; right:0; z-index:49; }
   :root[data-duo-pose="seated"] body.desk-shell #duo-feature {
-    display:flex; flex-direction:column; justify-content:center; gap:8px;
-    position:fixed; left:0; right:0; top:var(--tk-h,0px); height:calc(var(--fold-top) - var(--tk-h,0px)); z-index:45;
+    display:flex; flex-direction:column; justify-content:flex-start; gap:8px;
+    position:fixed; left:0; right:0; top:var(--tk-h,0px); height:calc(var(--duo-upper-end) - var(--tk-h,0px)); z-index:45;
     padding:10px max(14px,env(safe-area-inset-right,0px)) 10px max(14px,env(safe-area-inset-left,0px));
     background:var(--gr,#f7f9f9); overflow:hidden; box-sizing:border-box;
   }
@@ -200,8 +207,8 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
   :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active { display:flex; flex-direction:column; }
   :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card { order:-1; }
 
-  /* Game report: the whole top half, scrolling inside itself. */
-  :root[data-duo-pose="seated"] .modal { top:var(--tk-h,0px); bottom:auto; height:calc(var(--fold-top) - var(--tk-h,0px)); align-items:stretch!important; }
+  /* Game report: above the same curve clearance, scrolling inside itself. */
+  :root[data-duo-pose="seated"] .modal { top:var(--tk-h,0px); bottom:auto; height:calc(var(--duo-upper-end) - var(--tk-h,0px)); align-items:stretch!important; }
   :root[data-palette][data-duo-pose="seated"] .desk-shell .modal-card { width:100%; max-width:none!important; max-height:none!important; height:100%; margin:0; border-radius:0!important; animation:none; overflow-y:auto!important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
 /* v381: the upper pane is a glanceable game preview, NOT a duplicate of the
    expanded research card. On short Duo screens the move history used to be
@@ -218,7 +225,7 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
 }
 #duo-feature[hidden] { display:none!important; }
 #duo-feature { display:none; }
-:root[data-duo-pose="seated"] #duo-feature .desk-game { margin:0; max-height:100%; overflow:auto; overscroll-behavior:contain; }
+:root[data-duo-pose="seated"] #duo-feature .desk-game { margin:0; min-height:0; flex:0 1 auto; max-height:100%; overflow:auto; overscroll-behavior:contain; }
 :root[data-duo-pose="seated"] #duo-feature .desk-match-team b { font-size:clamp(24px,6vw,34px)!important; }
 :root[data-duo-pose="seated"] #duo-feature .desk-match-team > strong { font-size:clamp(30px,8vw,46px)!important; }
 :root[data-duo-pose="seated"] #duo-feature .desk-match-team .desk-team-mark { width:46px!important; height:46px!important; }
