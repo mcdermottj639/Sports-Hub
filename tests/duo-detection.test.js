@@ -44,10 +44,15 @@ function setup(options = {}) {
     };
   };
   function element() {
+    const attrs = {}, callbacks = new Map();
     return {
       style: { cssText: '' }, classList: classes(), children: [], hidden: false,
-      setAttribute() {}, removeAttribute() {},
-      addEventListener() {}, remove() {},
+      scrollTop: 0,
+      setAttribute(name, value) { attrs[name] = value; },
+      getAttribute: name => attrs[name] ?? null,
+      removeAttribute(name) { delete attrs[name]; },
+      addEventListener(name, callback) { callbacks.set(name, callback); },
+      click() { callbacks.get('click')?.({ target:this }); }, remove() {},
       querySelector: () => null, querySelectorAll: () => [],
       appendChild(child) { this.children.push(child); child.parentNode = this; if (child.id) ids.set(child.id, child); },
       replaceChildren(...children) { this.children = children; },
@@ -62,6 +67,8 @@ function setup(options = {}) {
   root.removeAttribute = name => { delete attributes[name]; };
   root.getAttribute = name => attributes[name] ?? null;
   const body = element();
+  const main = element(); main.id = 'main-content'; body.appendChild(main);
+  const toggle = element(); toggle.id = 'duo-toggle'; body.appendChild(toggle);
   const version = element();
   version.id = 'home-version';
   body.appendChild(version);
@@ -81,6 +88,8 @@ function setup(options = {}) {
   const window = {
     get innerWidth() { return state.width; },
     get innerHeight() { return state.height; },
+    get scrollY() { return state.windowY || 0; },
+    scrollTo(options) { state.windowY = options.top; },
     addEventListener: listen('window'), dispatchEvent: event => emit('window', event.type, event),
     visualViewport: { addEventListener: listen('visualViewport') },
   };
@@ -104,8 +113,14 @@ function setup(options = {}) {
   };
   class MutationObserver { observe() {} disconnect() {} }
   window.MutationObserver = MutationObserver;
+  const storage = new Map();
+  if (state.savedMode !== undefined) storage.set('sportshub:duo-mode', state.savedMode);
+  const localStorage = {
+    getItem(key) { if (state.storageDenied) throw new Error('storage unavailable'); return storage.get(key) ?? null; },
+    setItem(key, value) { if (state.storageDenied) throw new Error('storage unavailable'); storage.set(key, value); },
+  };
   vm.runInNewContext(source, {
-    document, window, navigator, getComputedStyle, MutationObserver,
+    document, window, navigator, localStorage, getComputedStyle, MutationObserver,
     CustomEvent: class { constructor(type) { this.type = type; } },
     setTimeout: callback => { timers.set(++timerId, callback); return timerId; },
     clearTimeout: id => timers.delete(id), setInterval: callback => intervals.push(callback),
@@ -121,11 +136,12 @@ function setup(options = {}) {
   emit('document', 'DOMContentLoaded');
   flush();
   return {
-    state, properties, root, document, queries,
+    state, properties, root, document, queries, toggle, main, storage, window,
     pose: () => root.getAttribute('data-duo-pose'),
     diagnostic: () => ids.get('duo-diag')?.textContent || '',
     tick() { for (const callback of intervals) callback(); flush(); },
     event(scope, name) { emit(scope, name); flush(); },
+    clickDuo() { toggle.click(); flush(); },
   };
 }
 
@@ -262,4 +278,100 @@ test('pageshow restores seated, book and flat states from current signals withou
   h.event('window', 'pageshow');
   assert.equal(h.pose(), null);
   assert.deepEqual(h.properties, {});
+});
+
+test('Duo works without any fold API, exposes pressed state and remembers both choices', () => {
+  const h = setup({ js:false, postureApi:false, css:false, height:844 });
+  assert.equal(h.pose(), null);
+  assert.equal(h.toggle.getAttribute('aria-pressed'), 'false');
+  h.clickDuo();
+  assert.equal(h.pose(), 'seated');
+  assert.equal(h.toggle.getAttribute('aria-pressed'), 'true');
+  assert.equal(h.properties['--fold-top'], '410px');
+  assert.equal(h.properties['--fold-bottom'], '434px');
+  assert.equal(h.storage.get('sportshub:duo-mode'), 'on');
+  assert.match(h.diagnostic(), /Duo on/);
+  h.clickDuo();
+  assert.equal(h.pose(), null);
+  assert.equal(h.toggle.getAttribute('aria-pressed'), 'false');
+  assert.deepEqual(h.properties, {});
+  assert.equal(h.storage.get('sportshub:duo-mode'), 'off');
+  assert.match(h.diagnostic(), /Duo off/);
+});
+
+test('saved Duo ON overrides continuous, invalid and side-by-side sensors on reload', () => {
+  for (const options of [
+    { js:false, postureApi:false, css:false },
+    { posture:'continuous', segments:[stacked()[0]] },
+    { segments:[{}, {}] },
+    { width:951, height:676, segments:sideBySide() },
+  ]) {
+    const h = setup({ ...options, savedMode:'on' });
+    assert.equal(h.pose(), 'seated');
+    assert.equal(h.toggle.getAttribute('aria-pressed'), 'true');
+    assert.equal(h.properties['--fold-left'], undefined);
+    h.event('window', 'pageshow');
+    assert.equal(h.pose(), 'seated');
+  }
+  const measured = setup({ savedMode:'on', posture:'continuous', segments:[
+    {top:0, bottom:360, left:0, right:676}, {top:390, bottom:900, left:0, right:676},
+  ] });
+  assert.equal(measured.properties['--fold-top'], '360px');
+  assert.equal(measured.properties['--fold-bottom'], '390px');
+});
+
+test('Duo OFF suppresses automatic detection across sensor events, polling and reloads', () => {
+  const h = setup();
+  assert.equal(h.pose(), 'seated');
+  h.clickDuo();
+  assert.equal(h.pose(), null);
+  for (const [scope, event] of [['posture','change'], ['viewport','segmentschange'],
+    ['window','resize'], ['window','pageshow'], ['document','visibilitychange']]) {
+    h.event(scope, event);
+    h.tick();
+    assert.equal(h.pose(), null);
+  }
+  const reloaded = setup({ savedMode:h.storage.get('sportshub:duo-mode') });
+  assert.equal(reloaded.pose(), null);
+  reloaded.clickDuo();
+  assert.equal(reloaded.pose(), 'seated');
+});
+
+test('manual Duo follows rotation and ignores a keyboard-only visual viewport resize', () => {
+  const h = setup({ js:false, postureApi:false, css:false, savedMode:'on' });
+  h.window.visualViewport.height = 340;
+  h.event('visualViewport', 'resize');
+  assert.equal(h.properties['--fold-top'], '438px');
+  h.state.height = 676; h.state.width = 960;
+  h.event('window', 'orientationchange');
+  assert.equal(h.properties['--fold-top'], '326px');
+  assert.equal(h.properties['--fold-bottom'], '350px');
+  assert.equal(h.pose(), 'seated');
+});
+
+test('Duo toggle stays usable when storage throws or contains an invalid value', () => {
+  for (const options of [{ storageDenied:true }, { savedMode:'unexpected' }]) {
+    const h = setup({ ...options, js:false, postureApi:false, css:false });
+    assert.equal(h.pose(), null);
+    h.clickDuo();
+    h.event('window', 'pageshow');
+    assert.equal(h.pose(), 'seated');
+    h.clickDuo();
+    assert.equal(h.pose(), null);
+  }
+});
+
+test('Duo transfers current scroll position between document and lower pane', () => {
+  const h = setup({ js:false, postureApi:false, css:false, windowY:680 });
+  h.clickDuo();
+  assert.equal(h.window.scrollY, 0);
+  assert.equal(h.main.scrollTop, 680);
+  // The user has navigated/scrolled in the lower pane since entering Duo.
+  h.main.scrollTop = 245;
+  h.clickDuo();
+  assert.equal(h.main.scrollTop, 0);
+  assert.equal(h.window.scrollY, 245);
+  h.clickDuo();
+  assert.equal(h.window.scrollY, 0);
+  assert.equal(h.main.scrollTop, 245);
 });

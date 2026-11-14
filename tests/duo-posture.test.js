@@ -1,7 +1,7 @@
 'use strict';
 
-// v372 — iPhone Duo half-fold layouts. The pose layer must stay inert unless
-// the browser reports two viewport segments, and must stay layout only.
+// iPhone Duo half-fold layouts. The pose layer is activated by a manual Duo
+// choice or valid automatic fold geometry, and must stay layout only.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

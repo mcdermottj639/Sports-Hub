@@ -329,7 +329,9 @@ fantasy/golf data are not refreshed by this cycle.
   screens, 76px rail at 761–1100px, side status-strip reclaim) plus the v372
   half-fold poses (`html[data-duo-pose]` seated/book from the Viewport Segments
   API; live ticker and featured-game pane `#duo-feature` above the fold on
-  every seated route, page and dock below at all viewport widths). `duo.css` loads LAST;
+  every seated route, page and dock below at all viewport widths). The header's
+  Duo toggle manually enables this layout without sensors and remembers ON/OFF
+  on the device; an explicit OFF suppresses automatic fold detection. `duo.css` loads LAST;
   layout only — never put content or behaviour in it. Optional browser check:
   `tests/duo-posture-browser.cjs`.
 - `ticker.js`, `ticker.css` — v326 rolling top ticker (scores, model picks,
@@ -722,9 +724,36 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v379** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v380** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v380 — Manual Duo button, independent of fold sensors
+
+Jack's v379 screenshot shows `fold: n/a · ? seg · flat · M css`: the page is
+current, but the browser supplies no usable fold geometry. A visible **Duo**
+toggle beside Ticker now forces the approved top/bottom split. The ticker and
+featured game/report remain above, all routes and the dock below. Tap again to
+return to the ordinary layout. Pressed styling and `aria-pressed` expose its
+state; the choice survives reloads in device-only `sportshub:duo-mode`.
+
+ON takes precedence over absent or continuous sensors, uses valid stacked
+geometry when available, and otherwise divides the layout viewport in half
+with a 24px gutter. Rotation recomputes the split; keyboard-only visual-viewport
+changes do not move the divider. OFF suppresses later sensor/poll/pageshow
+reactivation. With no saved choice, automatic seated/book detection remains.
+Storage failures still allow toggling in memory. Entering/exiting transfers
+the current page scroll between document and main; route and Back handling
+continue to use the active scroller. The header remains reachable while the
+lower page scrolls, with a compact wordmark at very narrow widths.
+
+Validation: 457/457 Node tests pass, including six manual-mode behavioral
+regressions, plus changed-JS syntax, diff checks and independent source review.
+Native phone fold/Safari behavior is separate from these checks. No backend,
+model, collector, stored forecasts/results, or other app changes.
 
 ### v379 — Half Fold across screen widths, with the live ticker above
+
+⚠️ SUPERSEDED in v380 for activation: the manual Duo toggle works even when
+the browser reports no fold geometry, as in Jack's v379 screenshot.
 
 The seated detector already ran at every width, but its CSS stopped at 760px.
 On a wider stacked viewport it intercepted games-ahead taps while the featured
@@ -8781,6 +8810,9 @@ rewrite.**
   44px touch-target floor; keyboard focus shows a `:focus-visible` ring.
 
 ## localStorage keys
+
+- `sportshub:duo-mode` — manual Duo layout choice, `on` or `off`. Missing or
+  invalid values keep automatic fold detection. Device-only; no account sync.
 
 - `sportshub:sit-sort:v1` — v350 Situational trends sort and minimum-games choice (`{sort, min}`). Device-only view preference.
 

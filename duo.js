@@ -37,10 +37,25 @@
   //   seated — segments stacked (laptop pose): --fold-top / --fold-bottom
   //   book   — segments side by side:          --fold-left / --fold-right
   // The crease gets a gutter of at least FOLD_GAP px, centred on the fold, so
-  // nothing tappable sits on the curve. No segments → attribute removed and
-  // every pose rule in duo.css is inert. Where the Device Posture API exists
-  // it must say "folded" (a flat dual-screen device is not a half fold).
+  // nothing tappable sits on the curve. The manual Duo button overrides
+  // sensor detection: ON always splits top/bottom, OFF stays flat. Without a
+  // manual choice, the existing automatic seated/book behavior is preserved.
   var FOLD_GAP = 24;
+  var MODE_KEY = 'sportshub:duo-mode';
+  var manualMode = '';
+  try {
+    var savedMode = localStorage.getItem(MODE_KEY);
+    if (savedMode === 'on' || savedMode === 'off') manualMode = savedMode;
+  } catch (_) { /* The toggle still works when device storage is unavailable. */ }
+  function bindToggle() {
+    var button = document.getElementById('duo-toggle');
+    if (!button) return;
+    button.addEventListener('click', function () {
+      manualMode = root.getAttribute('data-duo-pose') === 'seated' ? 'off' : 'on';
+      try { localStorage.setItem(MODE_KEY, manualMode); } catch (_) {}
+      pose();
+    });
+  }
   function mq(q) { try { return window.matchMedia ? window.matchMedia(q) : null; } catch (e) { return null; } }
   var MQ = {
     v2: mq('(vertical-viewport-segments: 2)'),
@@ -104,10 +119,10 @@
     var seg = segments();
     var post = postureNow();
     var name = '';
-    if (seg.n === 2 && post !== 'continuous') {
+    if (seg.n === 2 && manualMode !== 'off' && (manualMode === 'on' || post !== 'continuous')) {
       var a = seg.a, b = seg.b;
       if (b.top >= a.bottom - 1 && Math.abs(a.left - b.left) < 2) name = 'seated';
-      else if (b.left >= a.right - 1 && Math.abs(a.top - b.top) < 2) name = 'book';
+      else if (manualMode !== 'on' && b.left >= a.right - 1 && Math.abs(a.top - b.top) < 2) name = 'book';
       if (name === 'seated') {
         var mid = (a.bottom + b.top) / 2;
         root.style.setProperty('--fold-top', Math.round(Math.min(a.bottom, mid - FOLD_GAP / 2)) + 'px');
@@ -119,6 +134,20 @@
         root.style.setProperty('--fold-right', Math.round(Math.max(b.left, midx + FOLD_GAP / 2)) + 'px');
       }
     }
+    if (manualMode === 'on' && name !== 'seated') {
+      // Use the layout viewport, not keyboard/pinch-zoom visualViewport size.
+      // No sensor or feature flag is needed for the requested top/bottom view.
+      var halfway = Math.round(window.innerHeight / 2);
+      name = 'seated';
+      root.style.setProperty('--fold-top', (halfway - FOLD_GAP / 2) + 'px');
+      root.style.setProperty('--fold-bottom', (halfway + FOLD_GAP / 2) + 'px');
+      root.style.setProperty('--fold-below', (window.innerHeight - halfway + FOLD_GAP / 2) + 'px');
+    }
+    var wasSeated = root.getAttribute('data-duo-pose') === 'seated';
+    var isSeated = name === 'seated';
+    var main = document.getElementById('main-content');
+    var scrollTop = main && wasSeated ? main.scrollTop : (window.scrollY || 0);
+    if (isSeated && !wasSeated && window.scrollTo) window.scrollTo({ top:0, behavior:'instant' });
     if (name) root.setAttribute('data-duo-pose', name);
     else root.removeAttribute('data-duo-pose');
     if (name !== 'seated') {
@@ -126,6 +155,18 @@
     }
     if (name !== 'book') {
       ['--fold-left', '--fold-right'].forEach(function (k) { root.style.removeProperty(k); });
+    }
+    if (main && wasSeated !== isSeated) {
+      if (isSeated) main.scrollTop = scrollTop;
+      else {
+        main.scrollTop = 0;
+        if (window.scrollTo) window.scrollTo({ top:scrollTop, behavior:'instant' });
+      }
+    }
+    var button = document.getElementById('duo-toggle');
+    if (button) {
+      button.setAttribute('aria-pressed', String(isSeated));
+      button.title = isSeated ? 'Turn off Duo split view' : 'Turn on Duo split view';
     }
     diag(seg, post, name);
     feature();
@@ -147,6 +188,7 @@
       (MQ.v2 && MQ.v2.media !== 'not all' ? 'M' : '');
     var txt = apis ? ('fold: ' + (post || 'n/a') + ' · ' + (seg.n == null ? '?' : seg.n) + ' seg · ' +
       (name || 'flat') + ' · ' + apis + (seg.src === 'css' ? ' css' : '')) : 'fold sensors off';
+    if (manualMode) txt = 'Duo ' + manualMode;
     if (el.textContent !== ' · ' + txt) el.textContent = ' · ' + txt;
   }
   // Folding usually does NOT change the viewport size, so resize alone never
@@ -308,7 +350,7 @@
     if (!document.body || !window.MutationObserver) return;
     new MutationObserver(function () { soon(); }).observe(document.body, { attributes: true, attributeFilter: ['data-desk-panel'] });
   }
-  function start() { probe(); pose(); watchPanel(); watchFold(); }
+  function start() { bindToggle(); probe(); pose(); watchPanel(); watchFold(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
   window.addEventListener('resize', later);

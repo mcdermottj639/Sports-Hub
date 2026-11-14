@@ -98,10 +98,24 @@ html.pf-side-status body.desk-shell .topbar { width:auto!important; }
 html:not(.pf-side-status) body.desk-shell { padding-left:env(safe-area-inset-left,0px); padding-right:env(safe-area-inset-right,0px); }
 html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(safe-area-inset-left,0px)); }
 
+/* Manual Duo is always available, including browsers without fold sensors. */
+:root[data-palette] .desk-shell #duo-toggle {
+  display:inline-flex; align-items:center; justify-content:center; flex:none; gap:5px;
+  min-width:66px; min-height:44px; padding:0 9px; border:1px solid #c2d2b7;
+  border-radius:10px; background:#fbfdf5; color:#174c40; font-size:11px; font-weight:700;
+  line-height:1; white-space:nowrap;
+}
+:root[data-palette] .desk-shell #duo-toggle[aria-pressed="true"] { background:#def572; border-color:#174c40; color:#123e36; }
+:root[data-palette] .desk-shell #duo-toggle svg { width:16px; height:16px; flex:none; }
+@media (max-width:380px) {
+  :root[data-palette] .desk-shell .desk-wordmark > span:last-child { display:none; }
+  :root[data-palette] .desk-shell .head-right { gap:3px; }
+}
+
 /* ═══ v372 · Half-fold poses (layout only) ═══════════════════════════════
-   duo.js sets html[data-duo-pose] only when Safari reports two viewport
-   segments (Viewport Segments / Device Posture APIs, behind Safari 27.1
-   feature flags). Without them none of this applies. Fold geometry comes in
+   duo.js sets html[data-duo-pose] from fold sensors or the manual Duo button.
+   Manual ON works without sensors; manual OFF suppresses auto detection.
+   Fold geometry comes in
    as px: seated --fold-top/--fold-bottom/--fold-below, book --fold-left/
    --fold-right; the gap between each pair is the crease plus a ≥24px gutter
    where nothing tappable is drawn. */
