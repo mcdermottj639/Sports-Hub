@@ -1,10 +1,10 @@
-// duo.js — v371 iPhone Duo layout pass. Layout only.
-// Probes the safe-area insets with a hidden fixed element. Only when the
-// RIGHT inset is large (>= 60px) and the LEFT is small (< 20px) — the Duo's
-// shape, where the clock/Wi-Fi icons sit in a side strip — it sets
+// duo.js — responsive layout and optional split view.
+// Probes actual safe-area insets with a hidden fixed element. Only when the
+// RIGHT inset is large (>= 60px) and the LEFT is small (< 20px), it sets
 // html.pf-side-status and --duo-r so duo.css can keep only the top chrome
-// clear of the icons. A notched iPhone in landscape reports both sides and is
-// left alone. Re-runs on resize and orientation change.
+// clear of that inset. Safari's reserved outer-screen controls are outside
+// its viewport and cannot be reclaimed by this probe or viewport-fit=cover.
+// Two-sided insets are left alone. Re-runs on resize and orientation change.
 (function () {
   'use strict';
   var root = document.documentElement;
@@ -188,7 +188,7 @@
       (MQ.v2 && MQ.v2.media !== 'not all' ? 'M' : '');
     var txt = apis ? ('fold: ' + (post || 'n/a') + ' · ' + (seg.n == null ? '?' : seg.n) + ' seg · ' +
       (name || 'flat') + ' · ' + apis + (seg.src === 'css' ? ' css' : '')) : 'fold sensors off';
-    if (manualMode) txt = 'Duo ' + manualMode;
+    if (manualMode) txt = 'Duo split ' + manualMode;
     if (el.textContent !== ' · ' + txt) el.textContent = ' · ' + txt;
   }
   // Folding usually does NOT change the viewport size, so resize alone never

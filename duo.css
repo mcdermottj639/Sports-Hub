@@ -1,9 +1,8 @@
-/* duo.css — iPhone Duo layout pass (v371). LAYOUT ONLY: no content, copy,
-   numbers or behaviour changes. Loaded LAST so it wins over desk.css and the
-   per-panel heading rules. Keyed to width/height ranges, never a device name.
-   Measured Duo viewports (Jack's screenshots, Nov 12 2026): folded ≈466×677,
-   open ≈960×676; both report the clock/Wi-Fi icons as a ≈100px RIGHT
-   safe-area inset (duo.js sets html.pf-side-status + --duo-r for that shape).
+/* duo.css — responsive Duo layout layer. LAYOUT ONLY: no model or data changes.
+   Loaded LAST; keyed to usable viewport size, never a device name.
+   WebKit documents a 382px outer Safari viewport: its system-control strip
+   is OUTSIDE web content. Earlier 466px + forced-inset fixtures represented
+   a hypothetical host, not that Safari viewport. Test both independently.
    Ranges:
      (max-width:760px),(max-height:720px)   slim chrome (both screens)
      (min-width:420px) and (max-width:760px) folded extras
@@ -52,6 +51,38 @@
   .desk-research-jump > * { min-width:0; }
 }
 
+/* Short outer viewports, including Safari's actual 382px content area.
+   Compact spacing works with split view OFF as well as ON. Keep every
+   destination, explanatory sentence, forecast and source label available. */
+@media (max-width:760px) and (max-height:720px) {
+  :root:not([data-duo-pose]) body.desk-shell main { padding:0 12px calc(var(--bottom-bar-height,56px) + 12px)!important; }
+  :root:not([data-duo-pose]) body.desk-shell[data-desk-panel="home"] #home.active { display:grid; grid-template-columns:minmax(84px,1fr) minmax(0,3fr); gap:8px; align-content:start; }
+  :root:not([data-duo-pose]) #home.active > * { grid-column:1 / -1; min-width:0; }
+  :root:not([data-duo-pose]) #home.active > .se-entry { grid-column:1; margin:0; padding:6px; min-height:44px; justify-content:center; }
+  :root:not([data-duo-pose]) #home.active > .se-entry small,
+  :root:not([data-duo-pose]) #home.active > .se-entry > span:last-child { display:none; }
+  :root:not([data-duo-pose]) #home.active > .se-entry b { font-size:12px; }
+  :root:not([data-duo-pose]) #home.active > .desk-quick-start { grid-column:2; gap:4px; margin:0; }
+  :root:not([data-duo-pose]) #home .desk-quick-start button { min-height:44px; padding:5px 2px; font-size:11px; }
+  :root:not([data-duo-pose]) #home .desk-quick-start svg { display:none; }
+  .desk-shell #home .desk-home-grid { gap:10px; }
+  .desk-shell #home .desk-card { padding:12px; }
+  .desk-shell #home .desk-card-heading { margin-bottom:8px; }
+  .desk-shell #home .desk-board-fold { padding:0; }
+  .desk-shell #home .desk-board-fold > summary { min-height:60px; padding:12px 14px; gap:8px; }
+  .desk-shell #home .desk-board-fold > summary b { font-size:13px; }
+  .desk-shell #home .desk-research-promo { padding:12px 14px; }
+  .desk-shell #home .desk-research-promo .desk-eyebrow { margin:0 0 4px; }
+  .desk-shell #home .desk-research-promo h2 { font-size:26px; margin:3px 0 7px; }
+  .desk-shell #home .desk-research-promo p:not(.desk-eyebrow) { max-width:none; font-size:12px; line-height:1.45; }
+  .desk-shell #home .desk-research-promo button { min-height:44px; margin:8px 0 0; padding:9px 12px; font-size:12px; }
+  .desk-shell #home .desk-promo-lines { display:none; }
+  .desk-shell #home .desk-intro-strip { margin:0; padding:6px 0; }
+  .desk-shell #home .desk-stats { margin-bottom:0; }
+  .desk-shell #home > .desk-data-note { margin:4px 0 0; }
+  .desk-shell #home > .desk-version-foot { margin:4px 0 0; font-size:11px; }
+}
+
 /* ── Open screen (≈960×676): 76px icon rail instead of the 192px sidebar ── */
 @media (min-width:761px) and (max-width:1100px) {
   :root[data-palette="champagne"] { --desk-sidebar:76px!important; }
@@ -78,7 +109,8 @@
   .desk-stat > strong { white-space:nowrap; font-size:clamp(20px,2.8vw,30px)!important; }
 }
 
-/* ── Reclaim the Duo's right status strip (duo.js sets the class) ──
+/* ── Positive right safe-area inset, only when a host actually reports it ──
+   This cannot reclaim Safari's reserved controls outside its web viewport.
    Only the top chrome stays clear of the clock/Wi-Fi icons; cards run full
    width. Known trade-off: a card's right edge passes under the icons while it
    scrolls through the top ~100–160px. */

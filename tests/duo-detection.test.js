@@ -290,13 +290,13 @@ test('Duo works without any fold API, exposes pressed state and remembers both c
   assert.equal(h.properties['--fold-top'], '410px');
   assert.equal(h.properties['--fold-bottom'], '434px');
   assert.equal(h.storage.get('sportshub:duo-mode'), 'on');
-  assert.match(h.diagnostic(), /Duo on/);
+  assert.match(h.diagnostic(), /Duo split on/);
   h.clickDuo();
   assert.equal(h.pose(), null);
   assert.equal(h.toggle.getAttribute('aria-pressed'), 'false');
   assert.deepEqual(h.properties, {});
   assert.equal(h.storage.get('sportshub:duo-mode'), 'off');
-  assert.match(h.diagnostic(), /Duo off/);
+  assert.match(h.diagnostic(), /Duo split off/);
 });
 
 test('saved Duo ON overrides continuous, invalid and side-by-side sensors on reload', () => {

@@ -325,8 +325,9 @@ fantasy/golf data are not refreshed by this cycle.
   the public ESPN scoreboard. Pure helpers under `SportsHubSignalsLab._pure`,
   tested by `tests/signals-lab.test.js`. Research page only — nothing here
   feeds a model.
-- `duo.css`, `duo.js` — v371 iPhone Duo layout layer (slim chrome on short
-  screens, 76px rail at 761–1100px, side status-strip reclaim) plus the v372
+- `duo.css`, `duo.js` — responsive iPhone Duo layout layer (compact short
+  screens including 373/382px outer viewports, 76px rail at 761–1100px,
+  positive-safe-area fallback for hosts that actually report insets) plus the v372
   half-fold poses (`html[data-duo-pose]` seated/book from the Viewport Segments
   API; live ticker and featured-game pane `#duo-feature` above the fold on
   every seated route, page and dock below at all viewport widths). The header's
@@ -337,7 +338,11 @@ fantasy/golf data are not refreshed by this cycle.
   existing boundary. Lab/Fantasy/Saved/Results share a compact row before the slate,
   the lower header reclaims the status-strip width, and upper cards/header
   adapt to usable container width. Game-report Close stays reachable while
-  scrolling. `duo.css` loads LAST;
+  scrolling. Regular short-phone Today also keeps direct shortcuts in one row,
+  compacts the watchlist/research cards and uses the measured dock height for
+  footer clearance. “Duo split off” refers only to split view; responsive
+  optimization stays active. Safari's reserved control strip is outside web
+  content and cannot be reclaimed by CSS or viewport-fit=cover. `duo.css` loads LAST;
   layout only — never put content or behaviour in it. Optional browser check:
   `tests/duo-posture-browser.cjs`.
 - `ticker.js`, `ticker.css` — v326 rolling top ticker (scores, model picks,
@@ -730,9 +735,39 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v385** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8. v384 belongs to the separate unmerged CBB review branch; this layout repair does not publish it.
+Current version as of this writing: **v386** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8. v384 belongs to the separate unmerged CBB review branch; this layout repair does not publish it.
+
+### v386 — Fit the actual outer Safari viewport with split view off
+
+Jack's v385 physical screenshot showed oversized Today watchlist/research
+cards beside the system-control strip. Earlier tests assumed a 466px viewport
+plus a forced 100px inset. That does not represent the current outer Safari
+viewport. WebKit documents 382×580/618 and says the control strip is outside
+web content; viewport-fit=cover cannot reclaim it. Sources checked Nov 14:
+https://webkit.org/blog/18486/ (Viewport sizes / Web content under the controls),
+https://webkit.org/blog/18515/webkit-features-for-safari-27-2/ (no announced change
+to that behavior). 373×677 is an additional conservative screenshot estimate,
+not an observed CSS viewport or a native-device simulator.
+
+Short phone layouts now keep Lab/Fantasy/Saved/Results in one row even with
+split OFF. Watchlist loses double card/summary padding; research retains its
+copy and 44px action with compact heading/spacing and no decorative bars.
+The bottom spacing follows the measured dock so final content stays reachable.
+The footer says “Duo split off/on” to distinguish the toggle from responsive
+styling. Normal taller phones, wide rail, raised split boundary, source rows,
+saved models/results, backend and separate CBB remain preserved.
+
+Browser checks now exercise the three narrow outer cases without forced
+insets: shortcut position, watchlist/research/footer visibility above the dock,
+expand/collapse, Research/Back and split on/off. Two extra split dimensions
+exercise 382×618 and 373×677. Hypothetical 100px inset coverage remains labeled
+as such. The responsive fixture includes actual outer presets. Native Safari
+and physical bend behavior remain separate from Chromium browser evidence.
 
 ### v385 — Restore compact Duo navigation and usable controls
+
+⚠️ SUPERSEDED in v386 for physical viewport assumptions: 466px with a forced
+100px inset is a synthetic host fixture, not Safari's reserved-control layout.
 
 The seated slate's `order:-1` had buried the v367 Matchup Lab and daily
 shortcuts below every game. They now share one 44px row ahead of the slate.
@@ -991,6 +1026,11 @@ inert, so flat folded/open/phone/desktop layouts are unchanged.
   app (vs Safari) not verified.
 
 ### v371 — iPhone Duo layout pass (layout only)
+
+⚠️ SUPERSEDED in v386: the following 466px/100px-right-inset assumption came
+from interpreting screenshots, not measuring Safari's web viewport. Its outer
+viewport is documented as 382px, and its reserved control column stays outside
+web content. The old reclaim rules only act on a host reporting actual insets.
 
 Jack (Nov 12 2026): "optimize sports hub for iPhone duo and merge." Same cards,
 numbers and copy; CSS plus one inset probe. New `duo.css` (loaded LAST, after

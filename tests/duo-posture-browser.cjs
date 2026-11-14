@@ -25,8 +25,12 @@ const poses={
   seatedDesktop:{width:1280,height:900,feature:{orientation:'horizontal',offset:450,maskLength:0}},
   seatedShort:{width:466,height:677,feature:{orientation:'horizontal',offset:339,maskLength:0}},
   seatedNarrow:{width:390,height:677,feature:{orientation:'horizontal',offset:339,maskLength:0}},
+  seatedOuter:{width:382,height:618,feature:{orientation:'horizontal',offset:309,maskLength:0}},
+  seatedScreenshot:{width:373,height:677,feature:{orientation:'horizontal',offset:339,maskLength:0}},
   book:{width:951,height:676,feature:{orientation:'vertical',offset:475,maskLength:0}},
   folded:{width:466,height:677},open:{width:960,height:676},phone:{width:390,height:844},
+  outerSmall:{width:382,height:580,outer:true},outerLarge:{width:382,height:618,outer:true},
+  outerScreenshot:{width:373,height:677,outer:true},
 };
 const manualMode=process.env.DUO_MANUAL_ONLY==='1';
 // CI's Chromium may expose segments but report continuous posture despite CDP.
@@ -47,6 +51,7 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
     const context=await browser.newContext({viewport:{width:P.width,height:P.height},isMobile:mobile,hasTouch:mobile,serviceWorkers:'block'});
     const page=await context.newPage(),errors=[];page.setDefaultTimeout(6000);page.setDefaultNavigationTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
     if(manualMode && P.feature && P.feature.orientation==='horizontal') await page.addInitScript(()=>localStorage.setItem('sportshub:duo-mode','on'));
+    if(P.outer) await page.addInitScript(()=>localStorage.setItem('sportshub:duo-mode','off'));
     if(noJsSegments)await page.addInitScript(()=>{try{delete window.viewport;Object.defineProperty(window,'viewport',{value:undefined,configurable:true});delete window.viewport;}catch(e){}});
     await page.route('**/*',route=>{
       const u=new URL(route.request().url());
@@ -67,7 +72,7 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
     await page.waitForTimeout(1800);
     return {page,context,errors};
   };
-  const shot=async(page,name)=>{if(shots){fs.mkdirSync(shots,{recursive:true});await page.screenshot({path:path.join(shots,name+'.png')});await page.fold();await page.waitForTimeout(400);}};
+  const shot=async(page,name)=>{if(shots){fs.mkdirSync(shots,{recursive:true});await page.screenshot({path:path.join(shots,name+'.png'),animations:'disabled'});await page.fold();await page.waitForTimeout(400);}};
   const check=async(label,fn)=>{try{await fn();console.log('ok  ',label);}catch(e){failures.push(label);console.log('FAIL',label,'—',e.message);}};
   const noOverflow=async page=>{const o=await page.evaluate(()=>({s:document.documentElement.scrollWidth,w:innerWidth}));assert.ok(o.s<=o.w,`scrollWidth ${o.s} > ${o.w}`);};
   try{
@@ -159,7 +164,7 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
       await context.close();}
     // A detected stacked fold must use the split layout above the ordinary
     // phone breakpoint too, with live ticker and reports in the top half.
-    for(const name of ['seatedWide','seatedDesktop','seatedShort','seatedNarrow']){
+    for(const name of ['seatedWide','seatedDesktop','seatedShort','seatedNarrow','seatedOuter','seatedScreenshot']){
       const {page,context,errors}=await open(name),P=poses[name],edge=P.feature.offset;
       await check(`${name}: visible split, dock and top ticker at wide widths`,async()=>{
         const s=await page.evaluate(()=>{
@@ -265,8 +270,69 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
       await check(`${name}: no page errors`,async()=>assert.deepEqual(errors,[]));
       await context.close();
     }
-    // Earlier phone checks had no safe-area inset and missed crowded chrome.
-    // Emulate the known 100px right status strip without requiring fold APIs.
+    // Safari's outer-screen system strip is outside the web viewport. Exercise
+    // its actual narrow content widths with no invented inset or forced class.
+    // The 373px case is a conservative width inferred from Jack's screenshot;
+    // 382x580/618 are WebKit's documented Safari small/large viewports.
+    for(const name of ['outerSmall','outerLarge','outerScreenshot']){
+      const {page,context,errors}=await open(name),P=poses[name];
+      await check(`${name}: split off uses the entire available web viewport`,async()=>{
+        const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
+          right:getComputedStyle(document.body).paddingRight,
+          forced:document.documentElement.classList.contains('pf-side-status'),
+          main:document.getElementById('main-content').getBoundingClientRect(),
+          dock:document.getElementById('botbar').getBoundingClientRect()}));
+        assert.equal(s.pose,undefined);assert.equal(s.forced,false);assert.equal(s.right,'0px');
+        assert.equal(s.main.left,0);assert.equal(s.main.right,P.width);assert.equal(s.dock.right,P.width);
+        await noOverflow(page);
+      });
+      await check(`${name}: direct shortcuts fit before the game list with split off`,async()=>{
+        const s=await page.evaluate(()=>({lab:document.querySelector('#home > .se-entry').getBoundingClientRect(),
+          agenda:document.querySelector('.desk-agenda-card').getBoundingClientRect(),
+          buttons:[...document.querySelectorAll('.desk-quick-start button')].map(b=>b.getBoundingClientRect().toJSON())}));
+        assert.ok(s.lab.height>=44 && s.lab.bottom<=s.agenda.top);
+        for(const b of s.buttons)assert.ok(b.height>=44 && b.left>=0 && b.right<=P.width && b.bottom<=s.agenda.top);
+        await shot(page,name+'-today');
+      });
+      await check(`${name}: watchlist, research and version fit together above the dock`,async()=>{
+        await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
+        const s=await page.evaluate(()=>{
+          const rect=s=>document.querySelector(s).getBoundingClientRect().toJSON();
+          return {watch:rect('#desk-board-fold > summary'),promo:rect('.desk-research-promo'),
+            button:rect('.desk-research-promo button'),footer:rect('.desk-version-foot'),
+            ticker:rect('#ticker'),dock:rect('#botbar')};
+        });
+        assert.ok(s.watch.height<=80 && s.watch.top>=s.ticker.bottom,'compact watchlist is visible with the bottom cards');
+        assert.ok(s.promo.height<=190 && s.button.height>=44,'research stays compact with a full-size action');
+        assert.ok(s.footer.bottom<=s.dock.top-8,'version and final content clear navigation');
+        assert.ok(s.promo.left>=0 && s.promo.right<=P.width);
+        await shot(page,name+'-footer');
+      });
+      await check(`${name}: compact watchlist expands and research opens with working Back`,async()=>{
+        await page.locator('#desk-board-fold > summary').click();
+        assert.equal(await page.locator('#desk-board-fold').evaluate(e=>e.open),true);
+        await page.locator('#desk-board-fold > summary').click();
+        assert.equal(await page.locator('#desk-board-fold').evaluate(e=>e.open),false);
+        await page.locator('.desk-research-promo [data-desk-route="research"]').click();
+        assert.equal(await page.evaluate(()=>document.body.dataset.deskPanel),'research');
+        await page.goBack();
+        await page.waitForFunction(()=>document.body.dataset.deskPanel==='home');
+        await noOverflow(page);
+      });
+      await check(`${name}: split toggles without disabling the compact phone layout`,async()=>{
+        await page.locator('#duo-toggle').click();
+        assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),'seated');
+        await page.locator('#duo-toggle').click();
+        const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
+          preference:localStorage.getItem('sportshub:duo-mode'),label:document.getElementById('duo-diag').textContent}));
+        assert.equal(s.pose,undefined);assert.equal(s.preference,'off');assert.match(s.label,/Duo split off/);
+        await noOverflow(page);
+      });
+      await check(`${name}: no page errors`,async()=>assert.deepEqual(errors,[]));
+      await context.close();
+    }
+    // A separate hypothetical safe-area host, not Safari's reserved strip.
+    // Retain inset coverage without presenting it as native phone emulation.
     for(const name of ['folded','open','seatedShort','seatedNarrow']){
       const {page,context}=await open(name);
       await page.evaluate(()=>{
