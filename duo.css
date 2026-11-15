@@ -37,8 +37,12 @@
   :root[data-palette] body.desk-shell .desk-mobile-dock button svg { width:18px; height:18px; }
 }
 
-/* ── Wide phone extras (420px and up) ── */
-@media (min-width:420px) and (max-width:760px) {
+/* ── Wide phone extras (420px and up), and the folded Duo ──
+   v387: Jack's Nov 14 screenshot measured the folded Duo's Safari page at
+   about 373×677 CSS px (the clock/Wi-Fi strip sits outside the page). That
+   is under 420, so these grids had silently stopped applying on his phone.
+   The short-height clause brings them back for any short phone ≥340px wide. */
+@media (min-width:420px) and (max-width:760px), (min-width:340px) and (max-width:760px) and (max-height:720px) {
   .desk-stats { grid-template-columns:repeat(4,minmax(0,1fr))!important; gap:7px!important; }
   .desk-stat { padding:11px 10px!important; min-width:0; }
   .desk-stat > strong { font-size:clamp(18px,5vw,24px)!important; white-space:nowrap; }
@@ -81,6 +85,31 @@
   .desk-shell #home .desk-stats { margin-bottom:0; }
   .desk-shell #home > .desk-data-note { margin:4px 0 0; }
   .desk-shell #home > .desk-version-foot { margin:4px 0 0; font-size:11px; }
+}
+
+/* ── Folded Duo slate (v387): short phone screens get denser game rows so
+   two or more games show on the first screen. Same rows, data and buttons. */
+@media (max-width:760px) and (max-height:720px) {
+  .desk-shell #home .desk-agenda-card .desk-card-heading { margin-bottom:4px; }
+  .desk-shell #home .desk-agenda-card .desk-card-heading h2 { line-height:1; }
+  .desk-shell #home .desk-agenda-scope { margin:0 0 6px; }
+  .desk-shell #home #desk-agenda-filters { padding-bottom:6px; }
+  .desk-shell #home #desk-agenda-filters button { min-height:36px; padding:5px 2px; }
+  .desk-shell #home .desk-slate-strip { min-height:0; gap:5px; margin:4px 0 2px; }
+  .desk-shell #home .desk-slate-strip button { min-height:34px; padding:4px 10px; }
+  .desk-shell #home .desk-game { padding:2px 0; }
+  .desk-shell #home .desk-game-main { padding:6px 0 4px; gap:4px; }
+  .desk-shell #home .desk-game-meta { min-height:30px; }
+  .desk-shell #home .desk-game > .desk-save { top:2px; height:40px; }
+  .desk-shell #home .desk-team-mark { width:30px; height:30px; flex:0 0 30px; }
+  .desk-shell #home .desk-game-footer { padding-bottom:4px; }
+  .desk-shell #home .desk-game-lab { min-height:34px; padding:4px 10px; font-size:12px!important; }
+  .desk-shell #home .desk-stat > strong { font-size:clamp(18px,5vw,24px)!important; }
+  .desk-shell #home .desk-stat { padding:9px 8px!important; }
+}
+/* Under 420px four stat tiles cut every label to a few letters: keep 2×2. */
+@media (max-width:419px) and (max-height:720px) {
+  .desk-stats { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
 }
 
 /* ── Open screen (≈960×676): 76px icon rail instead of the 192px sidebar ── */

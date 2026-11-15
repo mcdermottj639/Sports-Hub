@@ -735,7 +735,11 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v386** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8. v384 belongs to the separate unmerged CBB review branch; this layout repair does not publish it.
+Current version as of this writing: **v387** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8. v384 belongs to the separate unmerged CBB review branch; this layout repair does not publish it.
+
+### v387 — Folded Duo optimized again at its real 373px width
+
+Jack, Nov 14 2026 (screenshot): "They made some good changes, so you don't have to remove all they did, but just I wanted it optimized for the duo again." His screenshot measures the folded Duo's Safari page at about 373×677 CSS px; the clock/Wi-Fi strip sits outside the page. The older Duo grids were keyed to `min-width:420px`, so they had stopped applying on his phone. duo.css now also applies those extras to short screens 340px and wider (`max-height:720px`), keeping the stat tiles 2×2 under 420px so their labels stay readable. A new short-screen slate block tightens the Today game rows (filters, count strip, meta row, team marks, Matchup Lab button) so two or more games show on the first screen. All v386 changes are kept. Layout only: same rows, data and controls. Verified in Chromium at 373×677, 382×618, 466×677, 320×568, 390×844 and 960×676, with no sideways overflow. The 390×844 tall-phone and desktop layouts are unchanged. Physical iPhone Duo not verified.
 
 ### v386 — Fit the actual outer Safari viewport with split view off
 
