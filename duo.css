@@ -115,6 +115,8 @@
   .desk-shell #home .desk-home-grid { gap:8px; }
   .desk-shell #home .desk-results-card { padding:12px; }
   .desk-shell #home .desk-results-card .desk-card-heading { margin-bottom:4px; }
+  .desk-shell #home .desk-results-card .desk-card-heading .desk-eyebrow { display:none; }
+  .desk-shell #home .desk-results-card .desk-card-heading h2 { font-size:20px;line-height:1.15;margin:0; }
   .desk-shell #home .desk-result { padding:7px 0; gap:8px; align-items:center; }
   .desk-shell #home .desk-result b { font-size:12px; }
   .desk-shell #home .desk-result strong { font-size:20px; line-height:1.15; }

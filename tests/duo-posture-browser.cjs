@@ -281,14 +281,16 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
       // Synthetic fixtures only, in a disposable context; never saved or sent.
       await page.evaluate(()=>{
         const tally={};
-        for(const [market,n,w,pushes,priced] of [['moneyline',413,270,0,156],['spread',170,93,2,110],['total',193,78,5,132]]){
+        for(const [market,n,w,pushes,priced,pricedWins] of [['moneyline',413,270,0,156,75],['spread',170,93,2,110,58],['total',193,78,5,132,48]]){
           for(let i=0;i<n;i++)tally[`${market}:${i}`]={s:'nba',a:market==='spread'?1:0,t:market==='total'?1:0,
             c:i<w?1:0,pu:i>=n-pushes?1:0,
-            q:{v:AI_MODEL_VERSION,at:'2026-11-01T10:00:00Z',start:'2026-11-01T20:00:00Z',price:i<priced?-110:null}};
+            q:{v:AI_MODEL_VERSION,at:'2026-11-01T10:00:00Z',start:'2026-11-01T20:00:00Z',
+              price:(i<w?i<pricedWins:i>=n-pushes||i-w<priced-pricedWins-pushes)?-110:null}};
         }
         window.SportsHubCloudAI={...window.SportsHubCloudAI,
           cached:()=>({at:Date.now(),rows:[],run:null}),maps:()=>({tally,pending:{}})};
         window.SportsHubDesk.paintBrief();
+        document.querySelector('.desk-results-card .desk-mini-badge').textContent='SAMPLE';
       });
       await check(`${name}: split off uses the entire available web viewport`,async()=>{
         const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
