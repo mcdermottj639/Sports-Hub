@@ -325,24 +325,25 @@ fantasy/golf data are not refreshed by this cycle.
   the public ESPN scoreboard. Pure helpers under `SportsHubSignalsLab._pure`,
   tested by `tests/signals-lab.test.js`. Research page only — nothing here
   feeds a model.
-- `duo.css`, `duo.js` — responsive iPhone Duo layout layer (compact short
-  screens including 373/382px outer viewports, 76px rail at 761–1100px,
+- `duo.css`, `duo.js` — always-active responsive iPhone Duo layout layer (compact phone
+  screens at every height, including 373/382px outer viewports, 76px rail at 761–1100px,
   positive-safe-area fallback for hosts that actually report insets) plus the v372
   half-fold poses (`html[data-duo-pose]` seated/book from the Viewport Segments
   API; live ticker and featured-game pane `#duo-feature` above the fold on
   every seated route, page and dock below at all viewport widths). The header's
-  Duo toggle manually enables this layout without sensors and remembers ON/OFF
-  on the device; an explicit OFF suppresses automatic fold detection. The upper
+  Duo toggle enables ONLY the mid-fold top/bottom split without sensors and remembers
+  ON/OFF on the device; OFF suppresses automatic seated splitting, never responsive
+  sizing or side-by-side fold avoidance. The upper
   card is top-aligned below the ticker; card and report end 48–80px before the
   upper fold boundary, leaving the curved area blank. The lower page keeps its
   existing boundary. Lab/Fantasy/Saved/Results share a compact row before the slate,
   the lower header reclaims the status-strip width, and upper cards/header
   adapt to usable container width. Game-report Close stays reachable while
-  scrolling. Regular short-phone Today also keeps direct shortcuts in one row,
+  scrolling. Regular phone Today also keeps direct shortcuts in one row,
   renders watchlist/research as compact phone rows at every viewport height,
   keeps populated results tight with expandable counting notes, and uses the measured dock height for
-  footer clearance. “Duo split off” refers only to split view; responsive
-  optimization stays active. Safari's reserved control strip is outside web
+  footer clearance. The footer says “Mid-fold on/off”; this describes only the
+  optional split. Responsive optimization stays active in every mode and height. Safari's reserved control strip is outside web
   content and cannot be reclaimed by CSS or viewport-fit=cover. `duo.css` loads LAST;
   layout only — never put content or behaviour in it. Optional browser check:
   `tests/duo-posture-browser.cjs`.
@@ -736,9 +737,36 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v388** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8. v384 belongs to the separate unmerged CBB review branch; this layout repair does not publish it.
+Current version as of this writing: **v389** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8. v384 belongs to the separate unmerged CBB review branch; this layout repair does not publish it.
+
+### v389 — Duo optimization always; Duo mode only for mid-fold
+
+Jack's correction: “Duo mode is for when the duo is like mid fold view ...
+But its always gotta be duo optimized.” This supersedes any interpretation of
+Duo OFF as disabling device optimization, and the prior assumption that
+“folded view” specifically meant an outer display. Adapt to the actual viewport
+and reported geometry; do not infer physical posture from a screenshot alone.
+
+All existing compact phone chrome, dock, grids, shortcuts and game rows now
+apply at every phone height, not only below 720px. Turning the mid-fold split
+on/off, browser-toolbar height changes and tall phone viewports retain these
+styles. Phone summaries include the v388 compact cards and counting disclosure.
+The stored Duo OFF preference suppresses only the seated top/bottom split;
+valid side-by-side segments still receive fold avoidance. ON still enables the
+mid-fold layout without sensors. The button remains “Duo,” with an accessible
+“Duo mode: mid-fold split” label and explanatory title. Footer status now says
+“Mid-fold on/off”; raw sensor diagnostics move to its title.
+
+Regressions cover the 719/721px boundary, 844px height, ON/OFF card/dock sizing,
+reload persistence and synthetic side-by-side geometry with mid-fold OFF,
+in addition to existing curve, routing, populated results and safe-area checks.
+The raised curve clearance, scroll preservation, all models/results and the
+separate unpublished CBB branch are unchanged. Physical-device acceptance is
+not inferred from automated browser results; release evidence goes in Claudex.
 
 ### v388 — Folded-screen Today density, independent of split mode
+
+⚠️ Superseded terminology in v389: “folded view” does not identify an outer display. Duo optimization always applies; Duo mode means the optional mid-fold split. This was a review candidate, not a deployed release.
 
 Jack clarified that the v387 screenshot is the folded Duo view with split OFF.
 Treat this as the normal narrow viewport, separately from the seated half-fold
@@ -767,7 +795,7 @@ acceptance. Preserve v387 game-row/grid improvements and the separate CBB branch
 
 ### v387 — Folded Duo optimized again at its real 373px width
 
-⚠️ v388 replaces the tall phone research promo and spacious result rows. The v387 game-row/grid changes remain.
+⚠️ v389 removes the short-height condition from these compact phone rules; tall phones now use them too. v388 replaces the tall phone research promo and spacious result rows. The v387 game-row/grid changes remain.
 
 Jack, Nov 14 2026 (screenshot): "They made some good changes, so you don't have to remove all they did, but just I wanted it optimized for the duo again." His screenshot measures the folded Duo's Safari page at about 373×677 CSS px; the clock/Wi-Fi strip sits outside the page. The older Duo grids were keyed to `min-width:420px`, so they had stopped applying on his phone. duo.css now also applies those extras to short screens 340px and wider (`max-height:720px`), keeping the stat tiles 2×2 under 420px so their labels stay readable. A new short-screen slate block tightens the Today game rows (filters, count strip, meta row, team marks, Matchup Lab button) so two or more games show on the first screen. All v386 changes are kept. Layout only: same rows, data and controls. Verified in Chromium at 373×677, 382×618, 466×677, 320×568, 390×844 and 960×676, with no sideways overflow. The 390×844 tall-phone and desktop layouts are unchanged. Physical iPhone Duo not verified.
 
@@ -1016,7 +1044,7 @@ changes in `duo.js`, layout untouched:
   reproduces that case against v372 (fails) and v373 (passes).
 - **Posture rule:** a pose applies unless posture reads `continuous`
   (was: required `folded` when the API existed). Same for the two-value API.
-- **`#duo-diag`** after the Today version label: `fold: <posture> · <n> seg ·
+- **`#duo-diag`** (⚠️ v389 moves raw diagnostics to its title; visible text is “Mid-fold on/off”) after the Today version label: `fold: <posture> · <n> seg ·
   <pose> · <APIs>` (S = segments list, P = posture, M = media queries,
   `css` = fallback used) or `fold sensors off`. Diagnostic, so a screenshot
   answers what Safari reports.

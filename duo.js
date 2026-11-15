@@ -31,15 +31,15 @@
   function later() { clearTimeout(t); t = setTimeout(function () { probe(); pose(); }, 120); }
 
   // ── v372 half-fold poses (layout only) ──────────────────────────────────
-  // Safari 27.1 exposes the fold through the Viewport Segments API (and the
-  // Device Posture API), both behind Safari feature flags for now. With two
-  // segments we set html[data-duo-pose] and the fold geometry in px:
+  // Use Viewport Segments / Device Posture signals when the browser exposes
+  // them. With two segments we set html[data-duo-pose] and geometry in px:
   //   seated — segments stacked (laptop pose): --fold-top / --fold-bottom
   //   book   — segments side by side:          --fold-left / --fold-right
   // The crease gets a gutter of at least FOLD_GAP px, centred on the fold, so
   // nothing tappable sits on the curve. The manual Duo button overrides
-  // sensor detection: ON always splits top/bottom, OFF stays flat. Without a
-  // manual choice, the existing automatic seated/book behavior is preserved.
+  // mid-fold detection: ON splits top/bottom, OFF disables only that split.
+  // Responsive sizing and side-by-side fold avoidance are always active.
+  // Without a manual choice, automatic seated/book behavior is preserved.
   var FOLD_GAP = 24;
   var MODE_KEY = 'sportshub:duo-mode';
   var manualMode = '';
@@ -119,9 +119,9 @@
     var seg = segments();
     var post = postureNow();
     var name = '';
-    if (seg.n === 2 && manualMode !== 'off' && (manualMode === 'on' || post !== 'continuous')) {
+    if (seg.n === 2 && (manualMode === 'on' || post !== 'continuous')) {
       var a = seg.a, b = seg.b;
-      if (b.top >= a.bottom - 1 && Math.abs(a.left - b.left) < 2) name = 'seated';
+      if (manualMode !== 'off' && b.top >= a.bottom - 1 && Math.abs(a.left - b.left) < 2) name = 'seated';
       else if (manualMode !== 'on' && b.left >= a.right - 1 && Math.abs(a.top - b.top) < 2) name = 'book';
       if (name === 'seated') {
         var mid = (a.bottom + b.top) / 2;
@@ -166,14 +166,13 @@
     var button = document.getElementById('duo-toggle');
     if (button) {
       button.setAttribute('aria-pressed', String(isSeated));
-      button.title = isSeated ? 'Turn off Duo split view' : 'Turn on Duo split view';
+      button.title = (isSeated ? 'Turn off' : 'Turn on') + ' mid-fold split. Device layout stays optimized.';
     }
     diag(seg, post, name);
     feature();
   }
-  // One line under the Today version label so a screenshot says what the
-  // browser reports: whether the fold APIs exist at all, the posture, the
-  // segment count and the pose this page settled on.
+  // The footer describes only the optional mid-fold split, never an
+  // optimization on/off state. Keep sensor details in its diagnostic title.
   function diag(seg, post, name) {
     var host = document.getElementById('home-version');
     if (!host) return;
@@ -188,8 +187,10 @@
       (MQ.v2 && MQ.v2.media !== 'not all' ? 'M' : '');
     var txt = apis ? ('fold: ' + (post || 'n/a') + ' · ' + (seg.n == null ? '?' : seg.n) + ' seg · ' +
       (name || 'flat') + ' · ' + apis + (seg.src === 'css' ? ' css' : '')) : 'fold sensors off';
-    if (manualMode) txt = 'Duo split ' + manualMode;
-    if (el.textContent !== ' · ' + txt) el.textContent = ' · ' + txt;
+    if (manualMode) txt += ' · mid-fold preference ' + manualMode;
+    el.title = txt;
+    var label = ' · Mid-fold ' + (name === 'seated' ? 'on' : 'off');
+    if (el.textContent !== label) el.textContent = label;
   }
   // Folding usually does NOT change the viewport size, so resize alone never
   // fires: listen to the fold's own signals, and re-check on a slow timer as a

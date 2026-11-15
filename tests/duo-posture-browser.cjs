@@ -32,6 +32,7 @@ const poses={
   outerSmall:{width:382,height:580,outer:true},outerLarge:{width:382,height:618,outer:true},
   outerScreenshot:{width:373,height:677,outer:true},
   outerTall:{width:373,height:760,outer:true},outerTiny:{width:320,height:568,outer:true},
+  bookOff:{width:951,height:676,bookOff:true},
 };
 const manualMode=process.env.DUO_MANUAL_ONLY==='1';
 // CI's Chromium may expose segments but report continuous posture despite CDP.
@@ -52,7 +53,17 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
     const context=await browser.newContext({viewport:{width:P.width,height:P.height},isMobile:mobile,hasTouch:mobile,serviceWorkers:'block'});
     const page=await context.newPage(),errors=[];page.setDefaultTimeout(6000);page.setDefaultNavigationTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
     if(manualMode && P.feature && P.feature.orientation==='horizontal') await page.addInitScript(()=>localStorage.setItem('sportshub:duo-mode','on'));
-    if(P.outer) await page.addInitScript(()=>localStorage.setItem('sportshub:duo-mode','off'));
+    if(P.outer) await page.addInitScript(()=>{
+      if(!localStorage.getItem('sportshub:duo-mode'))localStorage.setItem('sportshub:duo-mode','off');
+    });
+    // Explicit synthetic sensor fixture, independent of CDP's native API support.
+    if(P.bookOff) await page.addInitScript(()=>{
+      if(!localStorage.getItem('sportshub:duo-mode'))localStorage.setItem('sportshub:duo-mode','off');
+      Object.defineProperty(window,'viewport',{configurable:true,value:{segments:[
+        {top:0,bottom:676,left:0,right:475},{top:0,bottom:676,left:475,right:951}
+      ]}});
+      Object.defineProperty(navigator,'devicePosture',{configurable:true,value:{type:'folded'}});
+    });
     if(noJsSegments)await page.addInitScript(()=>{try{delete window.viewport;Object.defineProperty(window,'viewport',{value:undefined,configurable:true});delete window.viewport;}catch(e){}});
     await page.route('**/*',route=>{
       const u=new URL(route.request().url());
@@ -352,17 +363,84 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
         await noOverflow(page);
       });
       await check(`${name}: split toggles without disabling the compact phone layout`,async()=>{
+        const density=()=>page.evaluate(()=>({
+          research:document.querySelector('.desk-research-promo').getBoundingClientRect().height,
+          watch:document.querySelector('#desk-board-fold > summary').getBoundingClientRect().height,
+          recordPadding:getComputedStyle(document.querySelector('.desk-results-card')).padding,
+          dock:document.getElementById('botbar').getBoundingClientRect().height
+        }));
+        const before=await density();
         await page.locator('#duo-toggle').click();
         assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),'seated');
+        assert.deepEqual(await density(),before,'mid-fold ON preserves compact cards and dock');
         await page.locator('#duo-toggle').click();
         const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
           preference:localStorage.getItem('sportshub:duo-mode'),label:document.getElementById('duo-diag').textContent}));
-        assert.equal(s.pose,undefined);assert.equal(s.preference,'off');assert.match(s.label,/Duo split off/);
+        assert.equal(s.pose,undefined);assert.equal(s.preference,'off');assert.match(s.label,/Mid-fold off/);
+        assert.deepEqual(await density(),before,'mid-fold OFF preserves compact cards and dock');
         await noOverflow(page);
       });
+      if(name==='outerTall'){
+        await check('phone: compact layout survives toolbar-height changes above and below 720px',async()=>{
+          for(const height of [719,721,844,677]){
+            await page.setViewportSize({width:373,height});
+            await page.waitForTimeout(250);
+            const s=await page.evaluate(()=>({
+              lab:document.querySelector('#home > .se-entry').getBoundingClientRect(),
+              quick:document.querySelector('.desk-quick-start').getBoundingClientRect(),
+              dock:document.getElementById('botbar').getBoundingClientRect(),
+              columns:getComputedStyle(document.querySelector('.desk-stats')).gridTemplateColumns,
+              rowPadding:getComputedStyle(document.querySelector('.desk-game')).paddingTop
+            }));
+            assert.equal(s.lab.top,s.quick.top,'Lab and shortcuts stay in one row');
+            assert.equal(s.dock.height,56);assert.equal(s.dock.bottom,height);
+            assert.equal(s.columns.split(' ').length,2,'narrow stat tiles stay two columns');
+            assert.equal(s.rowPadding,'2px','compact game rows remain active');
+            await noOverflow(page);
+          }
+          await page.setViewportSize({width:P.width,height:P.height});
+        });
+        await check('phone: reload remembers mid-fold choice without changing baseline sizing',async()=>{
+          for(const pose of ['seated',undefined]){
+            await page.locator('#duo-toggle').click();
+            await page.reload({waitUntil:'load'});
+            await page.waitForFunction(expected=>document.documentElement.dataset.duoPose===expected,pose);
+            const s=await page.evaluate(()=>({
+              dock:document.getElementById('botbar').getBoundingClientRect().height,
+              label:document.getElementById('duo-toggle').getAttribute('aria-label'),
+              promo:document.querySelector('.desk-research-promo').getBoundingClientRect().height
+            }));
+            assert.equal(s.dock,56);assert.ok(s.promo<=76);assert.match(s.label,/mid-fold split/);
+            await noOverflow(page);
+          }
+        });
+      }
       await check(`${name}: no page errors`,async()=>assert.deepEqual(errors,[]));
       await context.close();
     }
+    {const {page,context,errors}=await open('bookOff');
+      await check('mid-fold OFF: side-by-side fold avoidance stays active',async()=>{
+        const assertBook=async()=>{
+          const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
+            pressed:document.getElementById('duo-toggle').getAttribute('aria-pressed'),
+            agenda:document.querySelector('.desk-agenda-card').getBoundingClientRect(),
+            stats:document.querySelector('.desk-stats').getBoundingClientRect()}));
+          assert.equal(s.pose,'book');assert.equal(s.pressed,'false');
+          assert.ok(s.agenda.right<=463);assert.ok(s.stats.left>=487);
+          await noOverflow(page);
+        };
+        await assertBook();
+        await page.locator('#duo-toggle').click();
+        assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),'seated');
+        await page.locator('#duo-toggle').click();
+        await assertBook();
+        await page.reload({waitUntil:'load'});
+        await page.waitForFunction(()=>document.documentElement.dataset.duoPose==='book');
+        await assertBook();
+        await shot(page,'book-mid-fold-off');
+      });
+      await check('book with mid-fold OFF: no page errors',async()=>assert.deepEqual(errors,[]));
+      await context.close();}
     // A separate hypothetical safe-area host, not Safari's reserved strip.
     // Retain inset coverage without presenting it as native phone emulation.
     for(const name of ['folded','open','seatedShort','seatedNarrow']){
@@ -432,7 +510,7 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
         await page.waitForFunction(()=>document.documentElement.dataset.duoPose==='seated',null,{timeout:2500});
       });
       await check('late fold: readout names the pose',async()=>{
-        const t=await page.evaluate(()=>document.getElementById('duo-diag')?.textContent||'');
+        const t=await page.evaluate(()=>document.getElementById('duo-diag')?.title||'');
         assert.match(t,/seated/);
       });
       await cdp.send('Emulation.setDeviceMetricsOverride',{width:676,height:900,deviceScaleFactor:2,mobile:true});
@@ -445,7 +523,7 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
     // v373: only the CSS half of the API (no window.viewport) still works.
     if(!manualMode) {const {page,context,errors}=await open('book',null,true);
       await check('css-only: book pose from media queries + env()',async()=>{
-        const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,vp:'viewport' in window,diag:document.getElementById('duo-diag')?.textContent||''}));
+        const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,vp:'viewport' in window,diag:document.getElementById('duo-diag')?.title||''}));
         assert.equal(s.vp,false);assert.equal(s.pose,'book');assert.match(s.diag,/css/);
       });
       await check('css-only: no page errors',async()=>assert.deepEqual(errors,[]));
