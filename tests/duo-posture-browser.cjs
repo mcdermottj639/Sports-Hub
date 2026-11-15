@@ -370,14 +370,21 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
           dock:document.getElementById('botbar').getBoundingClientRect().height
         }));
         const before=await density();
+        const sameDensity=async(message)=>{
+          const after=await density();
+          assert.equal(after.recordPadding,before.recordPadding,message);
+          // Scrolling can change rect subtraction by ~0.0001 CSS px.
+          for(const key of ['research','watch','dock'])
+            assert.ok(Math.abs(after[key]-before[key])<0.5,`${message}: ${key} ${before[key]} → ${after[key]}`);
+        };
         await page.locator('#duo-toggle').click();
         assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),'seated');
-        assert.deepEqual(await density(),before,'mid-fold ON preserves compact cards and dock');
+        await sameDensity('mid-fold ON preserves compact cards and dock');
         await page.locator('#duo-toggle').click();
         const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
           preference:localStorage.getItem('sportshub:duo-mode'),label:document.getElementById('duo-diag').textContent}));
         assert.equal(s.pose,undefined);assert.equal(s.preference,'off');assert.match(s.label,/Mid-fold off/);
-        assert.deepEqual(await density(),before,'mid-fold OFF preserves compact cards and dock');
+        await sameDensity('mid-fold OFF preserves compact cards and dock');
         await noOverflow(page);
       });
       if(name==='outerTall'){
