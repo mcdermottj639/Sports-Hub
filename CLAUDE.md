@@ -339,7 +339,8 @@ fantasy/golf data are not refreshed by this cycle.
   the lower header reclaims the status-strip width, and upper cards/header
   adapt to usable container width. Game-report Close stays reachable while
   scrolling. Regular short-phone Today also keeps direct shortcuts in one row,
-  compacts the watchlist/research cards and uses the measured dock height for
+  renders watchlist/research as compact phone rows at every viewport height,
+  keeps populated results tight with expandable counting notes, and uses the measured dock height for
   footer clearance. “Duo split off” refers only to split view; responsive
   optimization stays active. Safari's reserved control strip is outside web
   content and cannot be reclaimed by CSS or viewport-fit=cover. `duo.css` loads LAST;
@@ -735,13 +736,44 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v387** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8. v384 belongs to the separate unmerged CBB review branch; this layout repair does not publish it.
+Current version as of this writing: **v388** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8. v384 belongs to the separate unmerged CBB review branch; this layout repair does not publish it.
+
+### v388 — Folded-screen Today density, independent of split mode
+
+Jack clarified that the v387 screenshot is the folded Duo view with split OFF.
+Treat this as the normal narrow viewport, separately from the seated half-fold
+layout. Live v387 measured at a 373×677 frame: populated results card 456.7px,
+research promo 164.6px (desktop scrollbar reduces usable width to 358px).
+The previous 190px promo allowance and empty-record fixture did not express
+Jack's compactness requirement.
+
+Phone Today now uses a single 60px research action with a short subtitle, a
+single-row model watchlist, and tighter populated record rows. Counting rules
+expand in a native disclosure and keep their open state through refresh;
+football totals' research-only label remains visible. All record arithmetic,
+ROI, saved quotes, historical data and model/backend code are unchanged. Compact
+bottom rows apply at every phone height so toolbar/viewport changes cannot
+restore the tall banner. Desktop keeps its existing research presentation.
+Split geometry, raised curve clearance and the manual split preference stay intact.
+
+Regression coverage populates all three markets, checks visible W/L/push/ROI,
+opens the counting explanation and refreshes it without changing records,
+verifies research/Back and watchlist expansion, and enforces ≤76px research,
+≤60px watchlist and ≤340px results at 320/373/382px, including 760px height.
+Local Node tests: 458/458. Local browser launch is unavailable in this workspace;
+GitHub UI CI and the deployed page are the browser verification path, with exact
+release results recorded in Claudex. A browser frame is not physical-device
+acceptance. Preserve v387 game-row/grid improvements and the separate CBB branch.
 
 ### v387 — Folded Duo optimized again at its real 373px width
+
+⚠️ v388 replaces the tall phone research promo and spacious result rows. The v387 game-row/grid changes remain.
 
 Jack, Nov 14 2026 (screenshot): "They made some good changes, so you don't have to remove all they did, but just I wanted it optimized for the duo again." His screenshot measures the folded Duo's Safari page at about 373×677 CSS px; the clock/Wi-Fi strip sits outside the page. The older Duo grids were keyed to `min-width:420px`, so they had stopped applying on his phone. duo.css now also applies those extras to short screens 340px and wider (`max-height:720px`), keeping the stat tiles 2×2 under 420px so their labels stay readable. A new short-screen slate block tightens the Today game rows (filters, count strip, meta row, team marks, Matchup Lab button) so two or more games show on the first screen. All v386 changes are kept. Layout only: same rows, data and controls. Verified in Chromium at 373×677, 382×618, 466×677, 320×568, 390×844 and 960×676, with no sideways overflow. The 390×844 tall-phone and desktop layouts are unchanged. Physical iPhone Duo not verified.
 
 ### v386 — Fit the actual outer Safari viewport with split view off
+
+⚠️ v388 strengthens bottom-card compactness and tests populated results; the v386 190px research allowance was too loose.
 
 Jack's v385 physical screenshot showed oversized Today watchlist/research
 cards beside the system-control strip. Earlier tests assumed a 466px viewport

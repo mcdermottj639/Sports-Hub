@@ -31,6 +31,7 @@ const poses={
   folded:{width:466,height:677},open:{width:960,height:676},phone:{width:390,height:844},
   outerSmall:{width:382,height:580,outer:true},outerLarge:{width:382,height:618,outer:true},
   outerScreenshot:{width:373,height:677,outer:true},
+  outerTall:{width:373,height:760,outer:true},outerTiny:{width:320,height:568,outer:true},
 };
 const manualMode=process.env.DUO_MANUAL_ONLY==='1';
 // CI's Chromium may expose segments but report continuous posture despite CDP.
@@ -274,8 +275,21 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
     // its actual narrow content widths with no invented inset or forced class.
     // The 373px case is a conservative width inferred from Jack's screenshot;
     // 382x580/618 are WebKit's documented Safari small/large viewports.
-    for(const name of ['outerSmall','outerLarge','outerScreenshot']){
+    for(const name of ['outerSmall','outerLarge','outerScreenshot','outerTall','outerTiny']){
       const {page,context,errors}=await open(name),P=poses[name];
+      // Populate the actual renderer: empty-record cards hid the density problem.
+      // Synthetic fixtures only, in a disposable context; never saved or sent.
+      await page.evaluate(()=>{
+        const tally={};
+        for(const [market,n,w,pushes,priced] of [['moneyline',413,270,0,156],['spread',170,93,2,110],['total',193,78,5,132]]){
+          for(let i=0;i<n;i++)tally[`${market}:${i}`]={s:'nba',a:market==='spread'?1:0,t:market==='total'?1:0,
+            c:i<w?1:0,pu:i>=n-pushes?1:0,
+            q:{v:AI_MODEL_VERSION,at:'2026-11-01T10:00:00Z',start:'2026-11-01T20:00:00Z',price:i<priced?-110:null}};
+        }
+        window.SportsHubCloudAI={...window.SportsHubCloudAI,
+          cached:()=>({at:Date.now(),rows:[],run:null}),maps:()=>({tally,pending:{}})};
+        window.SportsHubDesk.paintBrief();
+      });
       await check(`${name}: split off uses the entire available web viewport`,async()=>{
         const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
           right:getComputedStyle(document.body).paddingRight,
@@ -302,11 +316,27 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
             button:rect('.desk-research-promo button'),footer:rect('.desk-version-foot'),
             ticker:rect('#ticker'),dock:rect('#botbar')};
         });
-        assert.ok(s.watch.height<=80 && s.watch.top>=s.ticker.bottom,'compact watchlist is visible with the bottom cards');
-        assert.ok(s.promo.height<=190 && s.button.height>=44,'research stays compact with a full-size action');
+        assert.ok(s.watch.height<=60 && s.watch.top>=s.ticker.bottom,'single-row watchlist is visible with the bottom cards');
+        assert.ok(s.promo.height<=76 && s.button.height>=44,'research is one compact action, not a banner');
         assert.ok(s.footer.bottom<=s.dock.top-8,'version and final content clear navigation');
         assert.ok(s.promo.left>=0 && s.promo.right<=P.width);
         await shot(page,name+'-footer');
+      });
+      await check(`${name}: populated results stay compact without losing the record or explanation`,async()=>{
+        const before=await page.locator('#desk-results .desk-result').allTextContents();
+        assert.match(before[2],/193 settled · 132 priced/);assert.match(before[2],/78–110–5P/);
+        assert.ok(before.every(row=>row.includes('paper ROI')),'all three market ROIs remain present');
+        const card=await page.locator('.desk-results-card').boundingBox();
+        assert.ok(card.height<=340,`results card grew to ${card.height}px`);
+        assert.equal(await page.locator('.desk-record-caution').isVisible(),true,'research-only caveat stays visible');
+        await page.locator('.desk-record-details > summary').click();
+        assert.equal(await page.locator('.desk-record-details > p').isVisible(),true);
+        assert.match(await page.locator('.desk-record-details > p').innerText(),/Unpriced results do not enter ROI/);
+        await page.evaluate(()=>window.SportsHubDesk.paintBrief());
+        assert.equal(await page.locator('.desk-record-details').evaluate(e=>e.open),true,'refresh preserves expanded evidence');
+        assert.deepEqual(await page.locator('#desk-results .desk-result').allTextContents(),before,'expanding and refreshing never changes records');
+        await page.locator('.desk-record-details > summary').click();
+        assert.equal(await page.locator('.desk-record-details').evaluate(e=>e.open),false);
       });
       await check(`${name}: compact watchlist expands and research opens with working Back`,async()=>{
         await page.locator('#desk-board-fold > summary').click();

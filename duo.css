@@ -107,6 +107,33 @@
   .desk-shell #home .desk-stat > strong { font-size:clamp(18px,5vw,24px)!important; }
   .desk-shell #home .desk-stat { padding:9px 8px!important; }
 }
+
+/* Phone summaries are compact at EVERY height. Safari's toolbar, orientation
+   and split toggle must not switch a navigation row back into a tall promo.
+   Scope to Today; preserve the full record, disclosures and destination pages. */
+@media (max-width:760px) {
+  .desk-shell #home .desk-home-grid { gap:8px; }
+  .desk-shell #home .desk-results-card { padding:12px; }
+  .desk-shell #home .desk-results-card .desk-card-heading { margin-bottom:4px; }
+  .desk-shell #home .desk-result { padding:7px 0; gap:8px; align-items:center; }
+  .desk-shell #home .desk-result b { font-size:12px; }
+  .desk-shell #home .desk-result strong { font-size:20px; line-height:1.15; }
+  .desk-shell #home .desk-result small { font-size:10px; line-height:1.35; margin-top:2px; }
+  .desk-shell #home .desk-record-caution { margin:7px 0 0; font-size:11px; line-height:1.4; }
+  .desk-shell #home .desk-record-details > summary { font-size:11px; }
+  .desk-shell #home .desk-results-card > .desk-link { min-height:44px; margin:0; padding:7px 0 0; font-size:12px; }
+  .desk-shell #home .desk-board-fold { padding:0; }
+  .desk-shell #home .desk-board-fold > summary { min-height:52px; padding:8px 12px; gap:8px; }
+  .desk-shell #home .desk-board-fold > summary .desk-eyebrow { display:none; }
+  .desk-shell #home .desk-board-fold > summary b { font-size:13px; }
+  .desk-shell #home .desk-research-promo { padding:0; box-shadow:none; }
+  .desk-shell #home .desk-research-promo > p,
+  .desk-shell #home .desk-research-promo > h2,
+  .desk-shell #home .desk-research-promo > .desk-promo-lines { display:none; }
+  .desk-shell #home .desk-research-promo > button { display:flex;align-items:center;justify-content:space-between;width:100%;min-height:60px;margin:0;padding:10px 12px;border-radius:inherit;background:transparent;color:#fff;gap:12px;text-align:left;font-size:13px; }
+  .desk-shell #home .desk-research-hint { display:block;font-size:11px;font-weight:400;line-height:1.4;color:#c6ddd5;margin-top:3px; }
+  .desk-shell #home .desk-research-promo button svg { width:20px;height:20px;color:var(--club-lime); }
+}
 /* Under 420px four stat tiles cut every label to a few letters: keep 2×2. */
 @media (max-width:419px) and (max-height:720px) {
   .desk-stats { grid-template-columns:repeat(2,minmax(0,1fr))!important; }

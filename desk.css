@@ -135,6 +135,12 @@ body.desk-shell { overscroll-behavior-y:none; }
 .desk-research-promo p:not(.desk-eyebrow) { font-size:11px;color:#bdd5cd;line-height:1.8;margin:0;max-width:240px; }
 .desk-research-promo button { margin:17px 0 9px;background:#d5eeda;border:0;border-radius:7px;padding:11px 13px;min-height:43px;color:#164435;font-size:10px;display:flex;align-items:center;gap:20px;font-weight:700; }
 .desk-research-promo button svg { width:15px;height:15px; }
+.desk-research-promo button b { font:inherit; }
+.desk-research-hint { display:none; }
+.desk-record-details > summary { display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;list-style:none;cursor:pointer;color:var(--ac);font-size:12px; }
+.desk-record-details > summary::-webkit-details-marker { display:none; }
+.desk-record-details[open] > summary > span { transform:rotate(180deg); }
+.desk-record-details > .desk-caption { margin:0 0 10px; }
 .desk-promo-lines { height:33px;display:flex;gap:7px;align-items:flex-end;margin-top:5px; }
 .desk-promo-lines i { flex:1;background:#35645a;border-radius:3px 3px 0 0;height:30%; }
 .desk-promo-lines i:nth-child(2n) { height:55%; }.desk-promo-lines i:nth-child(3n) { height:70%; }.desk-promo-lines i:nth-child(4n) { height:48%; }.desk-promo-lines i:last-child { height:100%;background:#749e78; }
