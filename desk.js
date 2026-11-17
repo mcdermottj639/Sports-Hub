@@ -413,11 +413,12 @@
       <div class="desk-focus-row"><span class="desk-focus-icon">${icon('research')}</span><div><b>What is actually improving?</b><p>Compare the official model with saved NFL and college challengers on the same games.</p></div>${button('research','Explore')}</div>`;
     const results = $d('desk-results');
     if (results) {
+      const recordDetailsOpen = !!results.querySelector('.desk-record-details')?.open;
       const records = Object.values(root.SportsHubCloudAI?.maps?.().tally || {});
       results.innerHTML = [['Winner',r=>!r.a&&!r.t],['Spread',r=>!!r.a],['Total',r=>!!r.t]].map(([label,filter]) => {
         const e = AI_MATH.evaluate(records.filter(filter),AI_MODEL_VERSION);
         return `<div class="desk-result"><span><b>${label}</b><small>${e.n} settled · ${e.priced} priced</small></span><span><strong>${e.n ? `${e.w}–${e.l}${e.pushes ? `–${e.pushes}P` : ''}` : 'Collecting'}</strong><small class="${e.roi!=null&&e.roi>=0?'desk-positive':''}">${e.roi==null ? 'ROI awaiting odds' : `${e.roi>=0?'+':''}${(e.roi*100).toFixed(1)}% paper ROI`}</small></span></div>`;
-      }).join('') + `<p class="desk-caption">Official saved record · one unit risked at each saved quote. Unpriced results do not enter ROI. Football totals remain research only.</p>`;
+      }).join('') + `<p class="desk-caption desk-record-caution">Football totals remain research only.</p><details class="desk-record-details"${recordDetailsOpen ? ' open' : ''}><summary>How the paper record is counted <span aria-hidden="true">⌄</span></summary><p class="desk-caption">Official saved record · one unit risked at each saved quote. Unpriced results do not enter ROI.</p></details>`;
     }
     const updated = $d('desk-data-note'); if(updated) updated.textContent = cloud.at ? `History refreshed ${ago(cloud.at)} · ${capture.at ? 'last collection '+ago(capture.at) : 'capture status unavailable'}${cloudFailed?' · refresh unavailable; showing saved history':''}` : cloudFailed ? 'Saved history could not load. Use Refresh to retry. Your device records remain available in Models.' : 'Saved history is loading. Collection runs even with the app closed.';
     paintWatchButtons();

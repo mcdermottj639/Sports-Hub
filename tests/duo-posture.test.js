@@ -18,7 +18,7 @@ test('every v372 rule in duo.css is keyed to data-duo-pose or the featured pane'
   const block = css.slice(css.indexOf('v372 · Half-fold poses'));
   assert.ok(block.length > 100, 'v372 block present');
   const selectors = block.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]+(?=\{)/g)
-    .map((s) => s.trim()).filter((s) => s && !s.startsWith('@media'));
+    .map((s) => s.trim()).filter((s) => s && !s.startsWith('@'));
   for (const sel of selectors) {
     assert.ok(/data-duo-pose|#duo-feature|\.duo-diag/.test(sel), `unscoped selector: ${sel}`);
   }

@@ -1,17 +1,16 @@
-/* duo.css — iPhone Duo layout pass (v371). LAYOUT ONLY: no content, copy,
-   numbers or behaviour changes. Loaded LAST so it wins over desk.css and the
-   per-panel heading rules. Keyed to width/height ranges, never a device name.
-   Measured Duo viewports (Jack's screenshots, Nov 12 2026): folded ≈466×677,
-   open ≈960×676; both report the clock/Wi-Fi icons as a ≈100px RIGHT
-   safe-area inset (duo.js sets html.pf-side-status + --duo-r for that shape).
+/* duo.css — responsive Duo layout layer. LAYOUT ONLY: no model or data changes.
+   Loaded LAST; keyed to usable viewport size, never a device name.
+   WebKit documents a 382px outer Safari viewport: its system-control strip
+   is OUTSIDE web content. Earlier 466px + forced-inset fixtures represented
+   a hypothetical host, not that Safari viewport. Test both independently.
    Ranges:
      (max-width:760px),(max-height:720px)   slim chrome (both screens)
-     (min-width:420px) and (max-width:760px) folded extras
+     (min-width:340px) and (max-width:760px) phone grids at every height
      (min-width:761px) and (max-width:1100px) open layout (76px rail)
    760/761 is this app's own phone/desktop breakpoint (desk.css), so the
    open range starts at 761, not the 740 used in portfolio-dashboard. */
 
-/* ── Slim chrome: short screens (both Duo screens are under 720px tall) ── */
+/* ── Slim chrome: phone-width or short screens ── */
 @media (max-width:760px), (max-height:720px) {
   :root[data-palette] body.desk-shell .topbar { height:50px!important; padding-top:0!important; padding-bottom:0!important; flex-wrap:nowrap!important; }
   :root[data-palette] body.desk-shell .desk-wordmark { font-size:18px!important; gap:7px; }
@@ -30,16 +29,18 @@
   :root[data-palette] body.desk-shell .desk-refresh { min-height:36px; }
 }
 
-/* Phone dock: slimmer (66 → 56px) on the short folded screen. mobile-chrome.js
+/* Phone dock: compact at every height, independent of Duo mode. mobile-chrome.js
    measures it, so content padding follows. Tap targets stay ≥44px. */
-@media (max-width:760px) and (max-height:720px) {
+@media (max-width:760px) {
   :root[data-palette] body.desk-shell #botbar { min-height:56px!important; padding-top:4px!important; padding-bottom:calc(4px + env(safe-area-inset-bottom,0px))!important; }
   :root[data-palette] body.desk-shell .desk-mobile-dock button { min-height:46px; gap:3px; padding:3px 1px; }
   :root[data-palette] body.desk-shell .desk-mobile-dock button svg { width:18px; height:18px; }
 }
 
-/* ── Folded extras: a wide-but-short phone (≈466px) ── */
-@media (min-width:420px) and (max-width:760px) {
+/* ── Phone grids at every height ──
+   Duo optimization is the baseline, never a mode or short-height feature.
+   Browser toolbars, rotation and the mid-fold toggle cannot turn it off. */
+@media (min-width:340px) and (max-width:760px) {
   .desk-stats { grid-template-columns:repeat(4,minmax(0,1fr))!important; gap:7px!important; }
   .desk-stat { padding:11px 10px!important; min-width:0; }
   .desk-stat > strong { font-size:clamp(18px,5vw,24px)!important; white-space:nowrap; }
@@ -50,6 +51,92 @@
   .desk-league-grid > * { min-width:0; }
   .desk-research-jump { grid-template-columns:repeat(3,minmax(0,1fr))!important; }
   .desk-research-jump > * { min-width:0; }
+}
+
+/* Phone viewports at every height, including narrow 373/382px layouts.
+   Compact spacing works with split view OFF as well as ON. Keep every
+   destination, explanatory sentence, forecast and source label available. */
+@media (max-width:760px) {
+  :root:not([data-duo-pose]) body.desk-shell[data-desk-panel="home"] main { padding:0 12px calc(var(--bottom-bar-height,56px) + 12px)!important; }
+  :root:not([data-duo-pose]) body.desk-shell[data-desk-panel="home"] #home.active { display:grid; grid-template-columns:minmax(84px,1fr) minmax(0,3fr); gap:8px; align-content:start; }
+  :root:not([data-duo-pose]) #home.active > * { grid-column:1 / -1; min-width:0; }
+  :root:not([data-duo-pose]) #home.active > .se-entry { grid-column:1; margin:0; padding:6px; min-height:44px; justify-content:center; }
+  :root:not([data-duo-pose]) #home.active > .se-entry small,
+  :root:not([data-duo-pose]) #home.active > .se-entry > span:last-child { display:none; }
+  :root:not([data-duo-pose]) #home.active > .se-entry b { font-size:12px; }
+  :root:not([data-duo-pose]) #home.active > .desk-quick-start { grid-column:2; gap:4px; margin:0; }
+  :root:not([data-duo-pose]) #home .desk-quick-start button { min-height:44px; padding:5px 2px; font-size:11px; }
+  :root:not([data-duo-pose]) #home .desk-quick-start svg { display:none; }
+  .desk-shell #home .desk-home-grid { gap:10px; }
+  .desk-shell #home .desk-card { padding:12px; }
+  .desk-shell #home .desk-card-heading { margin-bottom:8px; }
+  .desk-shell #home .desk-board-fold { padding:0; }
+  .desk-shell #home .desk-board-fold > summary { min-height:60px; padding:12px 14px; gap:8px; }
+  .desk-shell #home .desk-board-fold > summary b { font-size:13px; }
+  .desk-shell #home .desk-research-promo { padding:12px 14px; }
+  .desk-shell #home .desk-research-promo .desk-eyebrow { margin:0 0 4px; }
+  .desk-shell #home .desk-research-promo h2 { font-size:26px; margin:3px 0 7px; }
+  .desk-shell #home .desk-research-promo p:not(.desk-eyebrow) { max-width:none; font-size:12px; line-height:1.45; }
+  .desk-shell #home .desk-research-promo button { min-height:44px; margin:8px 0 0; padding:9px 12px; font-size:12px; }
+  .desk-shell #home .desk-promo-lines { display:none; }
+  .desk-shell #home .desk-intro-strip { margin:0; padding:6px 0; }
+  .desk-shell #home .desk-stats { margin-bottom:0; }
+  .desk-shell #home > .desk-data-note { margin:4px 0 0; }
+  .desk-shell #home > .desk-version-foot { margin:4px 0 0; font-size:11px; }
+}
+
+/* ── Compact phone slate: all phone heights get denser game rows so
+   two or more games show on the first screen. Same rows, data and buttons. */
+@media (max-width:760px) {
+  .desk-shell #home .desk-agenda-card .desk-card-heading { margin-bottom:4px; }
+  .desk-shell #home .desk-agenda-card .desk-card-heading h2 { line-height:1; }
+  .desk-shell #home .desk-agenda-scope { margin:0 0 6px; }
+  .desk-shell #home #desk-agenda-filters { padding-bottom:6px; }
+  .desk-shell #home #desk-agenda-filters button { min-height:36px; padding:5px 2px; }
+  .desk-shell #home .desk-slate-strip { min-height:0; gap:5px; margin:4px 0 2px; }
+  .desk-shell #home .desk-slate-strip button { min-height:34px; padding:4px 10px; }
+  .desk-shell #home .desk-game { padding:2px 0; }
+  .desk-shell #home .desk-game-main { padding:6px 0 4px; gap:4px; }
+  .desk-shell #home .desk-game-meta { min-height:30px; }
+  .desk-shell #home .desk-game > .desk-save { top:2px; height:40px; }
+  .desk-shell #home .desk-team-mark { width:30px; height:30px; flex:0 0 30px; }
+  .desk-shell #home .desk-game-footer { padding-bottom:4px; }
+  .desk-shell #home .desk-game-lab { min-height:34px; padding:4px 10px; font-size:12px!important; }
+  .desk-shell #home .desk-stat > strong { font-size:clamp(18px,5vw,24px)!important; }
+  .desk-shell #home .desk-stat { padding:9px 8px!important; }
+}
+
+/* Phone summaries are compact at EVERY height. Safari's toolbar, orientation
+   and split toggle must not switch a navigation row back into a tall promo.
+   Scope to Today; preserve the full record, disclosures and destination pages. */
+@media (max-width:760px) {
+  .desk-shell #home .desk-home-grid { gap:8px; }
+  .desk-shell #home .desk-results-card { padding:12px; }
+  .desk-shell #home .desk-results-card .desk-card-heading { margin-bottom:4px; }
+  .desk-shell #home .desk-results-card .desk-card-heading .desk-eyebrow { display:none; }
+  .desk-shell #home .desk-results-card .desk-card-heading h2 { font-size:20px;line-height:1.15;margin:0; }
+  .desk-shell #home .desk-result { padding:7px 0; gap:8px; align-items:center; }
+  .desk-shell #home .desk-result b { font-size:12px; }
+  .desk-shell #home .desk-result strong { font-size:20px; line-height:1.15; }
+  .desk-shell #home .desk-result small { font-size:10px; line-height:1.35; margin-top:2px; }
+  .desk-shell #home .desk-record-caution { margin:7px 0 0; font-size:11px; line-height:1.4; }
+  .desk-shell #home .desk-record-details > summary { font-size:11px; }
+  .desk-shell #home .desk-results-card > .desk-link { min-height:44px; margin:0; padding:7px 0 0; font-size:12px; }
+  .desk-shell #home .desk-board-fold { padding:0; }
+  .desk-shell #home .desk-board-fold > summary { min-height:52px; padding:8px 12px; gap:8px; }
+  .desk-shell #home .desk-board-fold > summary .desk-eyebrow { display:none; }
+  .desk-shell #home .desk-board-fold > summary b { font-size:13px; }
+  .desk-shell #home .desk-research-promo { padding:0; box-shadow:none; }
+  .desk-shell #home .desk-research-promo > p,
+  .desk-shell #home .desk-research-promo > h2,
+  .desk-shell #home .desk-research-promo > .desk-promo-lines { display:none; }
+  .desk-shell #home .desk-research-promo > button { display:flex;align-items:center;justify-content:space-between;width:100%;min-height:60px;margin:0;padding:10px 12px;border-radius:inherit;background:transparent;color:#fff;gap:12px;text-align:left;font-size:13px; }
+  .desk-shell #home .desk-research-hint { display:block;font-size:11px;font-weight:400;line-height:1.4;color:#c6ddd5;margin-top:3px; }
+  .desk-shell #home .desk-research-promo button svg { width:20px;height:20px;color:var(--club-lime); }
+}
+/* Under 420px four stat tiles cut every label to a few letters: keep 2×2. */
+@media (max-width:419px) {
+  .desk-stats { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
 }
 
 /* ── Open screen (≈960×676): 76px icon rail instead of the 192px sidebar ── */
@@ -78,7 +165,8 @@
   .desk-stat > strong { white-space:nowrap; font-size:clamp(20px,2.8vw,30px)!important; }
 }
 
-/* ── Reclaim the Duo's right status strip (duo.js sets the class) ──
+/* ── Positive right safe-area inset, only when a host actually reports it ──
+   This cannot reclaim Safari's reserved controls outside its web viewport.
    Only the top chrome stays clear of the clock/Wi-Fi icons; cards run full
    width. Known trade-off: a card's right edge passes under the icons while it
    scrolls through the top ~100–160px. */
@@ -99,6 +187,19 @@ html:not(.pf-side-status) body.desk-shell { padding-left:env(safe-area-inset-lef
 html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(safe-area-inset-left,0px)); }
 
 /* Manual Duo is always available, including browsers without fold sensors. */
+:root[data-palette] .desk-shell .topbar { container:duo-header / inline-size; }
+:root[data-palette] .desk-shell .topbar button { min-height:44px; }
+:root[data-palette] .desk-shell .desk-search-trigger,
+:root[data-palette] .desk-shell #ticker-filter { min-width:44px; }
+/* Use the header's usable width, including any positive inset reported by
+   its host. A viewport-only breakpoint can miss a narrower header row. */
+@container duo-header (max-width:400px) {
+  :root[data-palette] .desk-shell .desk-wordmark > span:last-child,
+  :root[data-palette] .desk-shell .desk-search-label,
+  :root[data-palette] .desk-shell .desk-search-trigger kbd,
+  :root[data-palette] .desk-shell .desk-breadcrumb { display:none; }
+  :root[data-palette] .desk-shell .head-right { gap:4px; }
+}
 :root[data-palette] .desk-shell #duo-toggle {
   display:inline-flex; align-items:center; justify-content:center; flex:none; gap:5px;
   min-width:66px; min-height:44px; padding:0 9px; border:1px solid #c2d2b7;
@@ -114,7 +215,8 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
 
 /* ═══ v372 · Half-fold poses (layout only) ═══════════════════════════════
    duo.js sets html[data-duo-pose] from fold sensors or the manual Duo button.
-   Manual ON works without sensors; manual OFF suppresses auto detection.
+   Manual ON works without sensors; OFF suppresses only the seated split.
+   Responsive sizing and automatic side-by-side fold avoidance remain active.
    Fold geometry comes in
    as px: seated --fold-top/--fold-bottom/--fold-below, book --fold-left/
    --fold-right; the gap between each pair is the crease plus a ≥24px gutter
@@ -168,6 +270,11 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
   :root[data-palette][data-duo-pose="seated"] body.desk-shell > .desk-page-heading {
     min-height:0!important; padding:10px 14px!important; margin-top:10px!important; margin-bottom:10px!important; margin-left:14px!important; align-items:center!important; flex-wrap:nowrap!important;
   }
+  /* The status icons occupy the top screen. The lower controls should keep
+     the full width reclaimed in v371 instead of inheriting its top inset. */
+  :root[data-palette].pf-side-status[data-duo-pose="seated"] body.desk-shell > .topbar { margin-right:0!important; }
+  :root[data-palette].pf-side-status[data-duo-pose="seated"] body.desk-shell > .desk-page-heading,
+  :root[data-palette].pf-side-status[data-duo-pose="seated"] body.desk-shell > #stale-note { margin-right:14px!important; }
   :root[data-duo-pose="seated"] .desk-page-heading .desk-eyebrow,
   :root[data-duo-pose="seated"] #desk-page-desc,
   :root[data-duo-pose="seated"] #desk-heading-art,
@@ -197,19 +304,42 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
   /* Keep the live scrolling score ticker above the featured game on every
      seated route. The pane/report start at --tk-h, leaving it unobscured. */
   :root[data-duo-pose="seated"] #ticker { position:fixed; top:0; left:0; right:0; z-index:49; }
+  /* The Lab owns the lower page; its full-screen chrome rule must not
+     remove live scores from the separate upper screen. */
+  :root[data-duo-pose="seated"] body[data-desk-panel="matchup-lab"] #ticker { display:flex!important; }
   :root[data-duo-pose="seated"] body.desk-shell #duo-feature {
     display:flex; flex-direction:column; justify-content:flex-start; gap:8px;
+    container:duo-feature / inline-size;
     position:fixed; left:0; right:0; top:var(--tk-h,0px); height:calc(var(--duo-upper-end) - var(--tk-h,0px)); z-index:45;
     padding:10px max(14px,env(safe-area-inset-right,0px)) 10px max(14px,env(safe-area-inset-left,0px));
     background:var(--gr,#f7f9f9); overflow:hidden; box-sizing:border-box;
   }
-  /* Today: the list leads the scrolling half (CSS order only; the DOM is untouched). */
-  :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active { display:flex; flex-direction:column; }
-  :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active > .desk-agenda-card { order:-1; }
+  /* Keep v367's direct Lab/Fantasy/Saved/Results paths ahead of the slate.
+     They share one compact row, instead of being pushed below every game. */
+  :root[data-duo-pose="seated"] body.desk-shell[data-desk-panel="home"] #home.active { display:grid; grid-template-columns:minmax(84px,1fr) minmax(0,3fr); gap:8px; align-content:start; }
+  :root[data-duo-pose="seated"] #home.active > * { grid-column:1 / -1; min-width:0; }
+  :root[data-duo-pose="seated"] #home.active > .se-entry { grid-column:1; margin:0; padding:6px; min-height:44px; justify-content:center; }
+  :root[data-duo-pose="seated"] #home.active > .se-entry small,
+  :root[data-duo-pose="seated"] #home.active > .se-entry > span:last-child { display:none; }
+  :root[data-duo-pose="seated"] #home.active > .se-entry b { font-size:12px; }
+  :root[data-duo-pose="seated"] #home.active > .desk-quick-start { grid-column:2; gap:4px; margin:0; }
+  :root[data-duo-pose="seated"] .desk-quick-start button { min-height:44px; padding:5px 2px; font-size:11px; gap:3px; }
+  :root[data-duo-pose="seated"] .desk-quick-start svg { display:none; }
+  :root[data-duo-pose="seated"] .desk-agenda-card { padding:10px; }
+  :root[data-duo-pose="seated"] .desk-agenda-card .desk-card-heading { margin-bottom:6px; }
+  :root[data-duo-pose="seated"] .desk-agenda-card .desk-eyebrow { display:none; }
+  :root[data-duo-pose="seated"] .desk-agenda-card h2 { font-size:21px; }
+  :root[data-duo-pose="seated"] .desk-agenda-scope { margin:0 0 6px; }
+  :root[data-duo-pose="seated"] .desk-filter-row { flex-wrap:nowrap; overflow-x:auto; padding-bottom:6px; }
+  :root[data-duo-pose="seated"] .desk-filter-row button { flex:none; min-height:44px; }
+  :root[data-duo-pose="seated"] .desk-slate-strip { margin:6px 0 0; gap:4px; }
 
   /* Game report: above the same curve clearance, scrolling inside itself. */
   :root[data-duo-pose="seated"] .modal { top:var(--tk-h,0px); bottom:auto; height:calc(var(--duo-upper-end) - var(--tk-h,0px)); align-items:stretch!important; }
   :root[data-palette][data-duo-pose="seated"] .desk-shell .modal-card { width:100%; max-width:none!important; max-height:none!important; height:100%; margin:0; border-radius:0!important; animation:none; overflow-y:auto!important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+  /* A short report needs a reachable Close after scrolling its content. */
+  :root[data-duo-pose] #game-modal .modal-x { position:sticky; float:right; top:0; right:0; z-index:2; margin:0 0 -44px 8px; width:44px; height:44px; }
+  :root.pf-side-status[data-duo-pose] #game-modal .modal-card { padding-right:max(20px,var(--duo-r,0px)); }
 /* v381: the upper pane is a glanceable game preview, NOT a duplicate of the
    expanded research card. On short Duo screens the move history used to be
    cut off at the hinge (even with correct fold geometry). Keep the original
@@ -234,6 +364,27 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
 :root[data-duo-pose="seated"] #duo-feature .desk-match-team .desk-team-mark { width:46px!important; height:46px!important; }
 :root[data-duo-pose="seated"] #duo-feature .duo-feature-empty { margin:0; text-align:center; color:#6b817c; font-size:14px; }
 :root[data-duo-pose="seated"] #desk-agenda .desk-game.duo-featured { outline:2px solid #b9d98a; outline-offset:-2px; border-radius:12px; }
+
+/* Fit the actual preview width, including the phone's right status inset.
+   Keep the field, score and all three saved markets; reduce their spacing
+   and oversized desktop type before requiring a scroll. */
+@container duo-feature (max-width:600px) {
+  :root[data-duo-pose="seated"] #duo-feature .desk-matchup { gap:5px; margin-top:3px; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team { gap:4px; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team b { font-size:clamp(20px,6cqw,26px)!important; letter-spacing:0; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team small { display:none!important; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team > strong { font-size:clamp(24px,7cqw,32px)!important; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team .desk-team-mark { width:32px!important; height:32px!important; flex-shrink:0; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-game-meta { min-height:24px; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-line { margin-top:3px; padding:3px 0; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-chips { margin-top:3px; gap:4px; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-chip { padding:4px 5px; }
+}
+@container duo-feature (max-width:320px) {
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team { display:grid; grid-template-columns:28px minmax(0,1fr); column-gap:4px; row-gap:1px; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team .desk-team-mark { width:28px!important; height:28px!important; grid-row:1 / span 2; }
+  :root[data-duo-pose="seated"] #duo-feature .desk-match-team > strong { grid-column:2; font-size:24px!important; }
+}
 
 /* ── Book (held sideways, half open): two pages either side of the fold ── */
 /* Today: The games ahead on the left page (its own scroll, stays put); the

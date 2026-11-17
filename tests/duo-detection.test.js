@@ -138,7 +138,8 @@ function setup(options = {}) {
   return {
     state, properties, root, document, queries, toggle, main, storage, window,
     pose: () => root.getAttribute('data-duo-pose'),
-    diagnostic: () => ids.get('duo-diag')?.textContent || '',
+    diagnostic: () => ids.get('duo-diag')?.title || '',
+    statusLabel: () => ids.get('duo-diag')?.textContent || '',
     tick() { for (const callback of intervals) callback(); flush(); },
     event(scope, name) { emit(scope, name); flush(); },
     clickDuo() { toggle.click(); flush(); },
@@ -290,13 +291,13 @@ test('Duo works without any fold API, exposes pressed state and remembers both c
   assert.equal(h.properties['--fold-top'], '410px');
   assert.equal(h.properties['--fold-bottom'], '434px');
   assert.equal(h.storage.get('sportshub:duo-mode'), 'on');
-  assert.match(h.diagnostic(), /Duo on/);
+  assert.match(h.statusLabel(), /Mid-fold on/);
   h.clickDuo();
   assert.equal(h.pose(), null);
   assert.equal(h.toggle.getAttribute('aria-pressed'), 'false');
   assert.deepEqual(h.properties, {});
   assert.equal(h.storage.get('sportshub:duo-mode'), 'off');
-  assert.match(h.diagnostic(), /Duo off/);
+  assert.match(h.statusLabel(), /Mid-fold off/);
 });
 
 test('saved Duo ON overrides continuous, invalid and side-by-side sensors on reload', () => {
@@ -320,7 +321,7 @@ test('saved Duo ON overrides continuous, invalid and side-by-side sensors on rel
   assert.equal(measured.properties['--fold-bottom'], '390px');
 });
 
-test('Duo OFF suppresses automatic detection across sensor events, polling and reloads', () => {
+test('Duo OFF suppresses only automatic seated split across events, polling and reloads', () => {
   const h = setup();
   assert.equal(h.pose(), 'seated');
   h.clickDuo();
@@ -374,4 +375,29 @@ test('Duo transfers current scroll position between document and lower pane', ()
   h.clickDuo();
   assert.equal(h.window.scrollY, 0);
   assert.equal(h.main.scrollTop, 245);
+});
+
+
+test('Duo OFF preserves side-by-side fold optimization after toggle, rotation and reload', () => {
+  const h = setup({ width:951, height:676, segments:sideBySide(), savedMode:'off' });
+  assert.equal(h.pose(), 'book');
+  assert.equal(h.toggle.getAttribute('aria-pressed'), 'false');
+  assert.match(h.statusLabel(), /Mid-fold off/);
+  assert.equal(h.properties['--fold-right'], '487px');
+  h.clickDuo();
+  assert.equal(h.pose(), 'seated');
+  h.clickDuo();
+  assert.equal(h.pose(), 'book');
+  assert.equal(h.properties['--fold-top'], undefined);
+  h.state.width = 676; h.state.height = 900; h.state.segments = stacked();
+  h.event('window', 'orientationchange');
+  assert.equal(h.pose(), null, 'OFF only suppresses the top/bottom split');
+  h.state.width = 951; h.state.height = 676; h.state.segments = sideBySide();
+  h.event('window', 'orientationchange');
+  assert.equal(h.pose(), 'book');
+  const reloaded = setup({ width:951, height:676, segments:sideBySide(), savedMode:h.storage.get('sportshub:duo-mode') });
+  assert.equal(reloaded.pose(), 'book');
+  reloaded.state.posture = 'continuous';
+  reloaded.event('posture', 'change');
+  assert.equal(reloaded.pose(), null, 'fully open screen returns to the responsive wide layout');
 });

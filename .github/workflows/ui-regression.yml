@@ -1,6 +1,16 @@
 name: Sports Hub UI regression
 on:
   pull_request:
+  push:
+    branches: [main, 'fix/duo-*']
+    paths:
+      - '*.css'
+      - 'duo.js'
+      - 'desk.js'
+      - 'mobile-chrome.js'
+      - 'index.html'
+      - 'tests/**'
+      - '.github/workflows/ui-regression.yml'
   workflow_dispatch:
 
 permissions:
@@ -36,4 +46,11 @@ jobs:
           npm install --no-save --no-package-lock playwright@1.57.0
           npx playwright install --with-deps chromium
       - name: Manual Duo browser layout, selection and navigation
-        run: DUO_MANUAL_ONLY=1 node tests/duo-posture-browser.cjs
+        run: DUO_MANUAL_ONLY=1 DUO_SHOTS=duo-shots node tests/duo-posture-browser.cjs
+      - name: Save Duo layout review images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: duo-layout-review
+          path: duo-shots/
+          retention-days: 7

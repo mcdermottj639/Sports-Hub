@@ -25,8 +25,14 @@ const poses={
   seatedDesktop:{width:1280,height:900,feature:{orientation:'horizontal',offset:450,maskLength:0}},
   seatedShort:{width:466,height:677,feature:{orientation:'horizontal',offset:339,maskLength:0}},
   seatedNarrow:{width:390,height:677,feature:{orientation:'horizontal',offset:339,maskLength:0}},
+  seatedOuter:{width:382,height:618,feature:{orientation:'horizontal',offset:309,maskLength:0}},
+  seatedScreenshot:{width:373,height:677,feature:{orientation:'horizontal',offset:339,maskLength:0}},
   book:{width:951,height:676,feature:{orientation:'vertical',offset:475,maskLength:0}},
   folded:{width:466,height:677},open:{width:960,height:676},phone:{width:390,height:844},
+  outerSmall:{width:382,height:580,outer:true},outerLarge:{width:382,height:618,outer:true},
+  outerScreenshot:{width:373,height:677,outer:true},
+  outerTall:{width:373,height:760,outer:true},outerTiny:{width:320,height:568,outer:true},
+  bookOff:{width:951,height:676,bookOff:true},
 };
 const manualMode=process.env.DUO_MANUAL_ONLY==='1';
 // CI's Chromium may expose segments but report continuous posture despite CDP.
@@ -47,6 +53,17 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
     const context=await browser.newContext({viewport:{width:P.width,height:P.height},isMobile:mobile,hasTouch:mobile,serviceWorkers:'block'});
     const page=await context.newPage(),errors=[];page.setDefaultTimeout(6000);page.setDefaultNavigationTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
     if(manualMode && P.feature && P.feature.orientation==='horizontal') await page.addInitScript(()=>localStorage.setItem('sportshub:duo-mode','on'));
+    if(P.outer) await page.addInitScript(()=>{
+      if(!localStorage.getItem('sportshub:duo-mode'))localStorage.setItem('sportshub:duo-mode','off');
+    });
+    // Explicit synthetic sensor fixture, independent of CDP's native API support.
+    if(P.bookOff) await page.addInitScript(()=>{
+      if(!localStorage.getItem('sportshub:duo-mode'))localStorage.setItem('sportshub:duo-mode','off');
+      Object.defineProperty(window,'viewport',{configurable:true,value:{segments:[
+        {top:0,bottom:676,left:0,right:475},{top:0,bottom:676,left:475,right:951}
+      ]}});
+      Object.defineProperty(navigator,'devicePosture',{configurable:true,value:{type:'folded'}});
+    });
     if(noJsSegments)await page.addInitScript(()=>{try{delete window.viewport;Object.defineProperty(window,'viewport',{value:undefined,configurable:true});delete window.viewport;}catch(e){}});
     await page.route('**/*',route=>{
       const u=new URL(route.request().url());
@@ -67,7 +84,7 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
     await page.waitForTimeout(1800);
     return {page,context,errors};
   };
-  const shot=async(page,name)=>{if(shots){fs.mkdirSync(shots,{recursive:true});await page.screenshot({path:path.join(shots,name+'.png')});await page.fold();await page.waitForTimeout(400);}};
+  const shot=async(page,name)=>{if(shots){fs.mkdirSync(shots,{recursive:true});await page.screenshot({path:path.join(shots,name+'.png'),animations:'disabled'});await page.fold();await page.waitForTimeout(400);}};
   const check=async(label,fn)=>{try{await fn();console.log('ok  ',label);}catch(e){failures.push(label);console.log('FAIL',label,'—',e.message);}};
   const noOverflow=async page=>{const o=await page.evaluate(()=>({s:document.documentElement.scrollWidth,w:innerWidth}));assert.ok(o.s<=o.w,`scrollWidth ${o.s} > ${o.w}`);};
   try{
@@ -159,7 +176,7 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
       await context.close();}
     // A detected stacked fold must use the split layout above the ordinary
     // phone breakpoint too, with live ticker and reports in the top half.
-    for(const name of ['seatedWide','seatedDesktop','seatedShort','seatedNarrow']){
+    for(const name of ['seatedWide','seatedDesktop','seatedShort','seatedNarrow','seatedOuter','seatedScreenshot']){
       const {page,context,errors}=await open(name),P=poses[name],edge=P.feature.offset;
       await check(`${name}: visible split, dock and top ticker at wide widths`,async()=>{
         const s=await page.evaluate(()=>{
@@ -206,6 +223,35 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
         for(const team of s.teams) assert.ok(team.top>=s.card.top && team.bottom<s.pane.bottom,'team names above curve');
         assert.ok(s.scrollHeight>s.clientHeight && s.scrolled>0,'oversized card scrolls within its safe area');
       });
+      await check(`${name}: Lab and daily shortcuts precede the games and open directly`,async()=>{
+        const s=await page.evaluate(()=>{
+          const main=document.getElementById('main-content');main.scrollTop=0;
+          const rect=e=>e.getBoundingClientRect().toJSON();
+          return {main:rect(main),lab:rect(document.querySelector('#home > .se-entry')),
+            agenda:rect(document.querySelector('#home > .desk-agenda-card')),
+            shortcuts:[...document.querySelectorAll('.desk-quick-start button')].map(rect)};
+        });
+        assert.ok(s.lab.top>=s.main.top && s.lab.bottom<=s.agenda.top,'Lab is at the start of the lower page');
+        for(const b of s.shortcuts){
+          assert.ok(b.top>=s.main.top && b.bottom<=s.agenda.top,'daily shortcuts precede games');
+          assert.ok(b.height>=44 && b.left>=s.main.left && b.right<=s.main.right,'shortcut fits and remains tappable');
+        }
+        await shot(page,name+'-today');
+        await page.locator('.desk-quick-start [data-desk-route="fantasy"]').click();
+        assert.equal(await page.evaluate(()=>document.body.dataset.deskPanel),'fantasy');
+        await page.locator('#botbar [data-desk-route="today"]').click();
+        await page.locator('#home > .se-entry').click();
+        assert.equal(await page.evaluate(()=>document.body.dataset.deskPanel),'matchup-lab');
+        const lab=await page.evaluate(()=>({
+          ticker:document.getElementById('ticker').getBoundingClientRect(),
+          feature:document.getElementById('duo-feature').getBoundingClientRect()
+        }));
+        assert.equal(lab.ticker.top,0);assert.ok(lab.ticker.height>20,'Lab keeps the live ticker on the upper screen');
+        assert.ok(lab.feature.height>0 && lab.feature.bottom<=edge-72,'Lab keeps the featured game above the curve');
+        await shot(page,name+'-lab');
+        await page.locator('#matchup-lab-content [data-se-back]').click();
+        await page.waitForFunction(()=>document.body.dataset.deskPanel==='home');
+      });
       await check(`${name}: game selection and top-half report remain usable`,async()=>{
         await page.locator('#desk-agenda [data-desk-game="nfl:9003"]').click();
         await page.waitForFunction(()=>document.querySelector('#duo-feature [data-desk-game]')?.dataset.deskGame==='nfl:9003');
@@ -213,6 +259,14 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
         const r=await page.evaluate(()=>({hidden:document.getElementById('game-modal').classList.contains('hidden'),
           report:document.querySelector('#game-modal .modal-card').getBoundingClientRect(),ticker:document.getElementById('ticker').getBoundingClientRect()}));
         assert.equal(r.hidden,false);assert.ok(r.report.bottom<=edge-72);assert.ok(r.report.top>=r.ticker.bottom-1);
+        const close=await page.evaluate(()=>{
+          const card=document.querySelector('#game-modal .modal-card');
+          const detail=document.createElement('div');detail.style.height='1200px';card.append(detail);
+          card.scrollTop=500;
+          const button=document.getElementById('modal-x'),a=card.getBoundingClientRect(),b=button.getBoundingClientRect();
+          return {scrolled:card.scrollTop,visible:b.top>=a.top && b.bottom<=a.bottom,hit:document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)===button};
+        });
+        assert.ok(close.scrolled>0 && close.visible && close.hit,'Close stays reachable after report scrolling');
         await page.locator('#modal-x').click();
       });
       await check(`${name}: split and live ticker persist through all dock routes`,async()=>{
@@ -226,6 +280,210 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
       await shot(page,name);
       await check(`${name}: no sideways overflow`,()=>noOverflow(page));
       await check(`${name}: no page errors`,async()=>assert.deepEqual(errors,[]));
+      await context.close();
+    }
+    // Safari's outer-screen system strip is outside the web viewport. Exercise
+    // its actual narrow content widths with no invented inset or forced class.
+    // The 373px case is a conservative width inferred from Jack's screenshot;
+    // 382x580/618 are WebKit's documented Safari small/large viewports.
+    for(const name of ['outerSmall','outerLarge','outerScreenshot','outerTall','outerTiny']){
+      const {page,context,errors}=await open(name),P=poses[name];
+      // Populate the actual renderer: empty-record cards hid the density problem.
+      // Synthetic fixtures only, in a disposable context; never saved or sent.
+      await page.evaluate(()=>{
+        const tally={};
+        for(const [market,n,w,pushes,priced,pricedWins] of [['moneyline',413,270,0,156,75],['spread',170,93,2,110,58],['total',193,78,5,132,48]]){
+          for(let i=0;i<n;i++)tally[`${market}:${i}`]={s:'nba',a:market==='spread'?1:0,t:market==='total'?1:0,
+            c:i<w?1:0,pu:i>=n-pushes?1:0,
+            q:{v:AI_MODEL_VERSION,at:'2026-11-01T10:00:00Z',start:'2026-11-01T20:00:00Z',
+              price:(i<w?i<pricedWins:i>=n-pushes||i-w<priced-pricedWins-pushes)?-110:null}};
+        }
+        window.SportsHubCloudAI={...window.SportsHubCloudAI,
+          cached:()=>({at:Date.now(),rows:[],run:null}),maps:()=>({tally,pending:{}})};
+        window.SportsHubDesk.paintBrief();
+        document.querySelector('.desk-results-card .desk-mini-badge').textContent='SAMPLE';
+      });
+      await check(`${name}: split off uses the entire available web viewport`,async()=>{
+        const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
+          right:getComputedStyle(document.body).paddingRight,
+          forced:document.documentElement.classList.contains('pf-side-status'),
+          main:document.getElementById('main-content').getBoundingClientRect(),
+          dock:document.getElementById('botbar').getBoundingClientRect()}));
+        assert.equal(s.pose,undefined);assert.equal(s.forced,false);assert.equal(s.right,'0px');
+        assert.equal(s.main.left,0);assert.equal(s.main.right,P.width);assert.equal(s.dock.right,P.width);
+        await noOverflow(page);
+      });
+      await check(`${name}: direct shortcuts fit before the game list with split off`,async()=>{
+        const s=await page.evaluate(()=>({lab:document.querySelector('#home > .se-entry').getBoundingClientRect(),
+          agenda:document.querySelector('.desk-agenda-card').getBoundingClientRect(),
+          buttons:[...document.querySelectorAll('.desk-quick-start button')].map(b=>b.getBoundingClientRect().toJSON())}));
+        assert.ok(s.lab.height>=44 && s.lab.bottom<=s.agenda.top);
+        for(const b of s.buttons)assert.ok(b.height>=44 && b.left>=0 && b.right<=P.width && b.bottom<=s.agenda.top);
+        await shot(page,name+'-today');
+      });
+      await check(`${name}: watchlist, research and version fit together above the dock`,async()=>{
+        await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
+        const s=await page.evaluate(()=>{
+          const rect=s=>document.querySelector(s).getBoundingClientRect().toJSON();
+          return {watch:rect('#desk-board-fold > summary'),promo:rect('.desk-research-promo'),
+            button:rect('.desk-research-promo button'),footer:rect('.desk-version-foot'),
+            ticker:rect('#ticker'),dock:rect('#botbar')};
+        });
+        assert.ok(s.watch.height<=60 && s.watch.top>=s.ticker.bottom,'single-row watchlist is visible with the bottom cards');
+        assert.ok(s.promo.height<=76 && s.button.height>=44,'research is one compact action, not a banner');
+        assert.ok(s.footer.bottom<=s.dock.top-8,'version and final content clear navigation');
+        assert.ok(s.promo.left>=0 && s.promo.right<=P.width);
+        await shot(page,name+'-footer');
+      });
+      await check(`${name}: populated results stay compact without losing the record or explanation`,async()=>{
+        const before=await page.locator('#desk-results .desk-result').allTextContents();
+        assert.match(before[2],/193 settled · 132 priced/);assert.match(before[2],/78–110–5P/);
+        assert.ok(before.every(row=>row.includes('paper ROI')),'all three market ROIs remain present');
+        const card=await page.locator('.desk-results-card').boundingBox();
+        assert.ok(card.height<=340,`results card grew to ${card.height}px`);
+        assert.equal(await page.locator('.desk-record-caution').isVisible(),true,'research-only caveat stays visible');
+        await page.locator('.desk-record-details > summary').click();
+        assert.equal(await page.locator('.desk-record-details > p').isVisible(),true);
+        assert.match(await page.locator('.desk-record-details > p').innerText(),/Unpriced results do not enter ROI/);
+        await page.evaluate(()=>window.SportsHubDesk.paintBrief());
+        assert.equal(await page.locator('.desk-record-details').evaluate(e=>e.open),true,'refresh preserves expanded evidence');
+        assert.deepEqual(await page.locator('#desk-results .desk-result').allTextContents(),before,'expanding and refreshing never changes records');
+        await page.locator('.desk-record-details > summary').click();
+        assert.equal(await page.locator('.desk-record-details').evaluate(e=>e.open),false);
+      });
+      await check(`${name}: compact watchlist expands and research opens with working Back`,async()=>{
+        await page.locator('#desk-board-fold > summary').click();
+        assert.equal(await page.locator('#desk-board-fold').evaluate(e=>e.open),true);
+        await page.locator('#desk-board-fold > summary').click();
+        assert.equal(await page.locator('#desk-board-fold').evaluate(e=>e.open),false);
+        await page.locator('.desk-research-promo [data-desk-route="research"]').click();
+        assert.equal(await page.evaluate(()=>document.body.dataset.deskPanel),'research');
+        await page.goBack();
+        await page.waitForFunction(()=>document.body.dataset.deskPanel==='home');
+        await noOverflow(page);
+      });
+      await check(`${name}: split toggles without disabling the compact phone layout`,async()=>{
+        const density=()=>page.evaluate(()=>({
+          research:document.querySelector('.desk-research-promo').getBoundingClientRect().height,
+          watch:document.querySelector('#desk-board-fold > summary').getBoundingClientRect().height,
+          recordPadding:getComputedStyle(document.querySelector('.desk-results-card')).padding,
+          dock:document.getElementById('botbar').getBoundingClientRect().height
+        }));
+        const before=await density();
+        const sameDensity=async(message)=>{
+          const after=await density();
+          assert.equal(after.recordPadding,before.recordPadding,message);
+          // Scrolling can change rect subtraction by ~0.0001 CSS px.
+          for(const key of ['research','watch','dock'])
+            assert.ok(Math.abs(after[key]-before[key])<0.5,`${message}: ${key} ${before[key]} → ${after[key]}`);
+        };
+        await page.locator('#duo-toggle').click();
+        assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),'seated');
+        await sameDensity('mid-fold ON preserves compact cards and dock');
+        await page.locator('#duo-toggle').click();
+        const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
+          preference:localStorage.getItem('sportshub:duo-mode'),label:document.getElementById('duo-diag').textContent}));
+        assert.equal(s.pose,undefined);assert.equal(s.preference,'off');assert.match(s.label,/Mid-fold off/);
+        await sameDensity('mid-fold OFF preserves compact cards and dock');
+        await noOverflow(page);
+      });
+      if(name==='outerTall'){
+        await check('phone: compact layout survives toolbar-height changes above and below 720px',async()=>{
+          for(const height of [719,721,844,677]){
+            await page.setViewportSize({width:373,height});
+            await page.waitForTimeout(250);
+            const s=await page.evaluate(()=>({
+              lab:document.querySelector('#home > .se-entry').getBoundingClientRect(),
+              quick:document.querySelector('.desk-quick-start').getBoundingClientRect(),
+              dock:document.getElementById('botbar').getBoundingClientRect(),
+              columns:getComputedStyle(document.querySelector('.desk-stats')).gridTemplateColumns,
+              rowPadding:getComputedStyle(document.querySelector('.desk-game')).paddingTop
+            }));
+            assert.equal(s.lab.top,s.quick.top,'Lab and shortcuts stay in one row');
+            assert.equal(s.dock.height,56);assert.equal(s.dock.bottom,height);
+            assert.equal(s.columns.split(' ').length,2,'narrow stat tiles stay two columns');
+            assert.equal(s.rowPadding,'2px','compact game rows remain active');
+            await noOverflow(page);
+          }
+          await page.setViewportSize({width:P.width,height:P.height});
+        });
+        await check('phone: reload remembers mid-fold choice without changing baseline sizing',async()=>{
+          for(const pose of ['seated',undefined]){
+            await page.locator('#duo-toggle').click();
+            await page.reload({waitUntil:'load'});
+            await page.waitForFunction(expected=>document.documentElement.dataset.duoPose===expected,pose);
+            const s=await page.evaluate(()=>({
+              dock:document.getElementById('botbar').getBoundingClientRect().height,
+              label:document.getElementById('duo-toggle').getAttribute('aria-label'),
+              promo:document.querySelector('.desk-research-promo').getBoundingClientRect().height
+            }));
+            assert.equal(s.dock,56);assert.ok(s.promo<=76);assert.match(s.label,/mid-fold split/);
+            await noOverflow(page);
+          }
+        });
+      }
+      await check(`${name}: no page errors`,async()=>assert.deepEqual(errors,[]));
+      await context.close();
+    }
+    {const {page,context,errors}=await open('bookOff');
+      await check('mid-fold OFF: side-by-side fold avoidance stays active',async()=>{
+        const assertBook=async()=>{
+          const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
+            pressed:document.getElementById('duo-toggle').getAttribute('aria-pressed'),
+            agenda:document.querySelector('.desk-agenda-card').getBoundingClientRect(),
+            stats:document.querySelector('.desk-stats').getBoundingClientRect()}));
+          assert.equal(s.pose,'book');assert.equal(s.pressed,'false');
+          assert.ok(s.agenda.right<=463);assert.ok(s.stats.left>=487);
+          await noOverflow(page);
+        };
+        await assertBook();
+        await page.locator('#duo-toggle').click();
+        assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),'seated');
+        await page.locator('#duo-toggle').click();
+        await assertBook();
+        await page.reload({waitUntil:'load'});
+        await page.waitForFunction(()=>document.documentElement.dataset.duoPose==='book');
+        await assertBook();
+        await shot(page,'book-mid-fold-off');
+      });
+      await check('book with mid-fold OFF: no page errors',async()=>assert.deepEqual(errors,[]));
+      await context.close();}
+    // A separate hypothetical safe-area host, not Safari's reserved strip.
+    // Retain inset coverage without presenting it as native phone emulation.
+    for(const name of ['folded','open','seatedShort','seatedNarrow']){
+      const {page,context}=await open(name);
+      await page.evaluate(()=>{
+        window.__duoForce=true;
+        document.documentElement.classList.add('pf-side-status');
+        document.documentElement.style.setProperty('--duo-r','100px');
+        const style=document.createElement('style');
+        style.textContent='html.pf-side-status[data-duo-pose="seated"] #duo-feature{padding-right:100px!important}';
+        document.head.append(style);
+      });
+      await check(`${name}: inset-aware header controls fit without overlapping`,async()=>{
+        const s=await page.evaluate(()=>{
+          const bar=document.querySelector('.topbar').getBoundingClientRect();
+          return {bar,buttons:[...document.querySelectorAll('.topbar button')].filter(b=>b.getBoundingClientRect().width).map(b=>b.getBoundingClientRect().toJSON())};
+        });
+        for(let i=0;i<s.buttons.length;i++){
+          const b=s.buttons[i];assert.ok(b.left>=s.bar.left && b.right<=s.bar.right,`button outside header: ${JSON.stringify(b)}`);
+          assert.ok(b.height>=44);
+          if(i)assert.ok(b.left>=s.buttons[i-1].right,'header buttons overlap');
+        }
+      });
+      if(poses[name].feature){
+        await check(`${name}: inset preview keeps long abbreviations and live scores inside the card`,async()=>{
+          await page.evaluate(()=>{
+            const row=document.querySelector('#desk-agenda .duo-featured');
+            const names=row.querySelectorAll('.desk-match-team b');names[0].textContent='WAKE';names[1].textContent='TA&M';
+          });
+          await page.waitForFunction(()=>document.querySelector('#duo-feature .desk-match-team:last-child b')?.textContent==='TA&M');
+          const s=await page.evaluate(()=>[...document.querySelectorAll('#duo-feature .desk-match-team')].map(e=>({width:e.clientWidth,scroll:e.scrollWidth})));
+          for(const team of s)assert.ok(team.scroll<=team.width+1,`team overflow ${JSON.stringify(team)}`);
+        });
+      }
+      await check(`${name}: inset has no page overflow`,()=>noOverflow(page));
+      await shot(page,name+'-status-inset');
       await context.close();
     }
     // Book: list on the left page, the rest on the right, report on the right page.
@@ -259,7 +517,7 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
         await page.waitForFunction(()=>document.documentElement.dataset.duoPose==='seated',null,{timeout:2500});
       });
       await check('late fold: readout names the pose',async()=>{
-        const t=await page.evaluate(()=>document.getElementById('duo-diag')?.textContent||'');
+        const t=await page.evaluate(()=>document.getElementById('duo-diag')?.title||'');
         assert.match(t,/seated/);
       });
       await cdp.send('Emulation.setDeviceMetricsOverride',{width:676,height:900,deviceScaleFactor:2,mobile:true});
@@ -272,7 +530,7 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
     // v373: only the CSS half of the API (no window.viewport) still works.
     if(!manualMode) {const {page,context,errors}=await open('book',null,true);
       await check('css-only: book pose from media queries + env()',async()=>{
-        const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,vp:'viewport' in window,diag:document.getElementById('duo-diag')?.textContent||''}));
+        const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,vp:'viewport' in window,diag:document.getElementById('duo-diag')?.title||''}));
         assert.equal(s.vp,false);assert.equal(s.pose,'book');assert.match(s.diag,/css/);
       });
       await check('css-only: no page errors',async()=>assert.deepEqual(errors,[]));
