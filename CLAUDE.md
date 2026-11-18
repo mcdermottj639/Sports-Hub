@@ -332,10 +332,13 @@ fantasy/golf data are not refreshed by this cycle.
   positive-safe-area fallback for hosts that actually report insets) plus the v372
   half-fold poses (`html[data-duo-pose]` seated/book from the Viewport Segments
   API; live ticker and featured-game pane `#duo-feature` above the fold on
-  every seated route, page and dock below at all viewport widths). The header's
-  Duo toggle enables ONLY the mid-fold top/bottom split without sensors and remembers
-  ON/OFF on the device; OFF suppresses automatic seated splitting, never responsive
-  sizing or side-by-side fold avoidance. The upper
+  every seated route, page and dock below at all viewport widths). Since v391 the
+  split follows CFP Study Lab's Book-mode rules: four modes (Automatic / Book /
+  Top · bottom / Off, chooser on the More page, `?duo=` override), and the header
+  button reads 📖 Book (landscape) / ⬒ Split (portrait) / ✕ Single page. It shows
+  only on the big inner screen (`html.duo-big`, both sides ≥ 600px) and splits at
+  the middle when Safari reports no fold; the folded outer screen never splits from
+  a choice. Responsive phone sizing is always on in every mode. The upper
   card is top-aligned below the ticker; card and report end 48–80px before the
   upper fold boundary, leaving the curved area blank. The lower page keeps its
   existing boundary. Lab/Fantasy/Saved/Results share a compact row before the slate,
@@ -344,8 +347,8 @@ fantasy/golf data are not refreshed by this cycle.
   scrolling. Regular phone Today also keeps direct shortcuts in one row,
   renders watchlist/research as compact phone rows at every viewport height,
   keeps populated results tight with expandable counting notes, and uses the measured dock height for
-  footer clearance. The footer says “Mid-fold on/off”; this describes only the
-  optional split. Responsive optimization stays active in every mode and height. Safari's reserved control strip is outside web
+  footer clearance. The footer names the page layout (Book / Top·bottom / Single
+  page); this describes only the optional split. Responsive optimization stays active in every mode and height. Safari's reserved control strip is outside web
   content and cannot be reclaimed by CSS or viewport-fit=cover. `duo.css` loads LAST;
   layout only — never put content or behaviour in it. Optional browser check:
   `tests/duo-posture-browser.cjs`.
@@ -739,7 +742,53 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v390** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v391** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v391 — iPhone Duo Book button: CFP Study Lab's manual Book mode
+
+Jack, Nov 17 2026 (approved 9:00 PM ET, "Restart" 11:14 PM ET): Sports Hub
+"doesn't do the book fold" while CFP Study Lab does. Safari on his Duo reports
+no Viewport Segments (behind Safari feature flags, https://webkit.org/blog/18486/),
+so v372's book layout never switched on. Ported CFP v2.115.1's fallback into
+`duo.js`, reusing the existing v372 book/seated layouts. Layout only.
+
+- **Modes (same names as CFP):** Automatic / Book / Top · bottom / Off, stored
+  in `sportshub:duo-mode` (`auto|book|seated|off`; legacy `on` -> seated). A
+  chooser sits at the bottom of the More page with a `fold: …` diagnostic line;
+  `?duo=book|seated|off|auto` sets and remembers it. `window.SportsHubDuo`
+  exposes `setMode/mode/pose`.
+- **Detection order (CFP):** reported fold geometry first (a chosen Book or
+  Top · bottom also accepts geometry while posture says continuous); otherwise,
+  on the big inner screen only (both sides ≥ 600px → `html.duo-big`), split at
+  the middle of the layout viewport — Book when landscape, Top · bottom when
+  portrait — if the user chose it, or Automatic + posture "folded". Off = one
+  page even if sensors report a fold. The folded outer screen never splits from
+  a choice (Automatic with real stacked geometry still splits, as before).
+- **Button:** the existing header `#duo-toggle` now reads 📖 Book / ⬒ Split /
+  ✕ Single page and is hidden on the outer screen unless a split is active.
+  One tap = Book (landscape) or Top · bottom (portrait); tap again = Off.
+- **Persistence:** mode survives reloads; route (hash) and agenda filters were
+  already persistent and are untouched by a mode switch. duo.js now records the
+  current scroll into `history.state.deskScroll` while reading (debounced, and
+  on pagehide), so desk.js's existing `restoreRoute` brings the reading position
+  back after a reload. Mode switches keep the scroll (seated↔document transfer
+  unchanged).
+- **Book layout is unchanged:** Today puts The games ahead on the left page (own
+  scroll) and everything else on the right page; game reports open on the right
+  page on any route. Other routes keep the wide layout in Book.
+- Supersedes the v380/v389 contract that the button only toggles the mid-fold
+  split and that OFF keeps side-by-side fold avoidance (Jack asked for CFP's
+  behaviour, where Off is one page).
+- Tests: `tests/duo-detection.test.js` rewritten for the four modes (folded
+  outer screen never splits, middle-split geometry, legacy values, Off over
+  sensors); `tests/duo-posture-browser.cjs` adds 960×676 / 951×676 Book via the
+  button with no fold reported (halves at the middle, left page scrolls inside
+  itself, right page scrolls with the document, scrollWidth == innerWidth),
+  676×951 Top · bottom, ✕ Single page + reload, the More-page chooser, `?duo=`,
+  and route/filter/scroll persistence across a switch and reload; outer-screen
+  checks now assert no button and no split. Both the manual (CI) and automatic
+  (CDP displayFeature: book 951×676 @475, seated 466×677 @339) suites pass.
+- Physical iPhone Duo not verified.
 
 ### v390 — College basketball model merged onto the v389 Duo build
 
@@ -769,6 +818,8 @@ player props. Method, limitations and open measurements: `docs/CBB_MODEL.md`.
 ⚠️ v390: this CBB work is now merged and live; earlier notes calling it a separate unmerged branch are superseded.
 
 ### v389 — Duo optimization always; Duo mode only for mid-fold
+
+⚠️ SUPERSEDED in v391 for the button and OFF: the header button is now CFP's 📖 Book / ⬒ Split / ✕ Single page with four modes, and Off means one page even when sensors report a book fold. “Always Duo optimized” still holds.
 
 Jack's correction: “Duo mode is for when the duo is like mid fold view ...
 But its always gotta be duo optimized.” This supersedes any interpretation of
@@ -923,6 +974,8 @@ Jack's curved screen enough clearance; the card is now top-aligned and bounded
 well above the crease.
 
 ### v380 — Manual Duo button, independent of fold sensors
+
+⚠️ SUPERSEDED in v391: the manual split no longer applies on the folded outer screen (big inner screen only), and the button offers Book as well as Top · bottom.
 
 Jack's v379 screenshot shows `fold: n/a · ? seg · flat · M css`: the page is
 current, but the browser supplies no usable fold geometry. A visible **Duo**
@@ -9020,8 +9073,9 @@ rewrite.**
 
 ## localStorage keys
 
-- `sportshub:duo-mode` — manual Duo layout choice, `on` or `off`. Missing or
-  invalid values keep automatic fold detection. Device-only; no account sync.
+- `sportshub:duo-mode` — fold layout mode (v391): `auto`, `book`, `seated` or
+  `off`. Legacy `on` reads as `seated`, legacy `off` as `off`. Missing or invalid
+  values = `auto`. `?duo=book|seated|off|auto` writes it. Device-only; no sync.
 
 - `sportshub:sit-sort:v1` — v350 Situational trends sort and minimum-games choice (`{sort, min}`). Device-only view preference.
 

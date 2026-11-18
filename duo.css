@@ -208,6 +208,18 @@ html:not(.pf-side-status) body.desk-shell nav.tabs { padding-left:max(15px,env(s
 }
 :root[data-palette] .desk-shell #duo-toggle[aria-pressed="true"] { background:#def572; border-color:#174c40; color:#123e36; }
 :root[data-palette] .desk-shell #duo-toggle svg { width:16px; height:16px; flex:none; }
+/* v391 — Book / Split / Single page button, CFP Study Lab's rule: only on the
+   big inner screen (both sides >= 600px, html.duo-big) or while a split is on.
+   The folded outer screen never shows it and never splits from it. */
+html:not(.duo-big):not([data-duo-pose]) #duo-toggle { display:none!important; }
+/* v391 — Fold layout chooser on the More page. */
+.duo-settings { display:grid; gap:8px; margin:16px 0 0; padding:14px; border:1px solid #c2d2b7; border-radius:14px; background:#fbfdf5; color:#174c40; }
+.duo-settings b { font-size:14px; }
+.duo-settings p { margin:2px 0 0; font-size:12px; color:#4f6862; }
+.duo-mode-row { display:flex; flex-wrap:wrap; gap:6px; }
+.duo-mode-row button { min-height:44px; padding:0 12px; border:1px solid #c2d2b7; border-radius:10px; background:#fff; color:#174c40; font-size:13px; font-weight:700; }
+.duo-mode-row button[aria-pressed="true"] { background:#def572; border-color:#174c40; color:#123e36; }
+.duo-fold-diag { font-size:12px; color:#6b817c; overflow-wrap:anywhere; }
 @media (max-width:380px) {
   :root[data-palette] .desk-shell .desk-wordmark > span:last-child { display:none; }
   :root[data-palette] .desk-shell .head-right { gap:3px; }

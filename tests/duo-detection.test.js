@@ -185,11 +185,12 @@ test('unfolding clears pose and obsolete geometry even if segment rectangles lin
 });
 
 test('no sensors, one segment or no segment geometry leaves the layout flat', () => {
+  // v391: the outer (folded) screen never takes the middle-split fallback.
   for (const options of [
     { js: false, postureApi: false, css: false },
     { segments: [] }, { segments: [stacked()[0]] }, { segments: null },
   ]) {
-    const h = setup(options);
+    const h = setup({ width: 466, height: 677, ...options });
     assert.equal(h.pose(), null);
     assert.deepEqual(h.properties, {});
   }
@@ -202,7 +203,7 @@ test('invalid segment rectangles neither activate a pose nor throw', () => {
     [{ ...a, right: 0 }, b], [a, { ...b, bottom: 450 }],
     [a, { ...b, top: 400 }],
   ]) {
-    const h = setup({ segments });
+    const h = setup({ width: 466, height: 677, segments });
     assert.equal(h.pose(), null, JSON.stringify(segments));
     assert.deepEqual(h.properties, {});
   }
@@ -281,51 +282,76 @@ test('pageshow restores seated, book and flat states from current signals withou
   assert.deepEqual(h.properties, {});
 });
 
-test('Duo works without any fold API, exposes pressed state and remembers both choices', () => {
-  const h = setup({ js:false, postureApi:false, css:false, height:844 });
+test('v391 Book button works without any fold API: landscape book, remembered, tap again = single page', () => {
+  const h = setup({ js:false, postureApi:false, css:false, width:960, height:676 });
   assert.equal(h.pose(), null);
+  assert.equal(h.root.classList.contains('duo-big'), true);
   assert.equal(h.toggle.getAttribute('aria-pressed'), 'false');
+  assert.match(h.toggle.textContent, /Book/);
   h.clickDuo();
-  assert.equal(h.pose(), 'seated');
+  assert.equal(h.pose(), 'book');
+  assert.equal(h.properties['--fold-left'], '468px');
+  assert.equal(h.properties['--fold-right'], '492px');
+  assert.equal(h.storage.get('sportshub:duo-mode'), 'book');
   assert.equal(h.toggle.getAttribute('aria-pressed'), 'true');
-  assert.equal(h.properties['--fold-top'], '410px');
-  assert.equal(h.properties['--fold-bottom'], '434px');
-  assert.equal(h.storage.get('sportshub:duo-mode'), 'on');
-  assert.match(h.statusLabel(), /Mid-fold on/);
+  assert.match(h.toggle.textContent, /Single page/);
+  assert.match(h.statusLabel(), /Book/);
+  const reloaded = setup({ js:false, postureApi:false, css:false, width:960, height:676, savedMode:'book' });
+  assert.equal(reloaded.pose(), 'book');
   h.clickDuo();
   assert.equal(h.pose(), null);
-  assert.equal(h.toggle.getAttribute('aria-pressed'), 'false');
   assert.deepEqual(h.properties, {});
   assert.equal(h.storage.get('sportshub:duo-mode'), 'off');
-  assert.match(h.statusLabel(), /Mid-fold off/);
+  assert.match(h.statusLabel(), /Single page/);
 });
 
-test('saved Duo ON overrides continuous, invalid and side-by-side sensors on reload', () => {
-  for (const options of [
-    { js:false, postureApi:false, css:false },
-    { posture:'continuous', segments:[stacked()[0]] },
-    { segments:[{}, {}] },
-    { width:951, height:676, segments:sideBySide() },
-  ]) {
-    const h = setup({ ...options, savedMode:'on' });
-    assert.equal(h.pose(), 'seated');
-    assert.equal(h.toggle.getAttribute('aria-pressed'), 'true');
-    assert.equal(h.properties['--fold-left'], undefined);
-    h.event('window', 'pageshow');
-    assert.equal(h.pose(), 'seated');
+test('v391 portrait big screen: button splits top/bottom at the middle; legacy ON reads as Top·bottom', () => {
+  const h = setup({ js:false, postureApi:false, css:false, width:676, height:844 });
+  assert.match(h.toggle.textContent, /Split/);
+  h.clickDuo();
+  assert.equal(h.pose(), 'seated');
+  assert.equal(h.properties['--fold-top'], '410px');
+  assert.equal(h.properties['--fold-bottom'], '434px');
+  assert.equal(h.storage.get('sportshub:duo-mode'), 'seated');
+  for (const savedMode of ['on', 'seated']) {
+    const legacy = setup({ js:false, postureApi:false, css:false, width:676, height:844, savedMode });
+    assert.equal(legacy.pose(), 'seated', savedMode);
   }
-  const measured = setup({ savedMode:'on', posture:'continuous', segments:[
+  const measured = setup({ savedMode:'seated', posture:'continuous', segments:[
     {top:0, bottom:360, left:0, right:676}, {top:390, bottom:900, left:0, right:676},
   ] });
   assert.equal(measured.properties['--fold-top'], '360px');
   assert.equal(measured.properties['--fold-bottom'], '390px');
 });
 
-test('Duo OFF suppresses only automatic seated split across events, polling and reloads', () => {
+test('v391 the folded outer screen never splits and hides the button state', () => {
+  for (const [width, height] of [[466, 677], [390, 844], [373, 677], [382, 618]]) {
+    for (const savedMode of ['book', 'seated', 'on', 'auto', undefined]) {
+      const h = setup({ js:false, postureApi:false, css:false, width, height, savedMode });
+      assert.equal(h.pose(), null, `${width}x${height} ${savedMode}`);
+      assert.equal(h.root.classList.contains('duo-big'), false);
+      assert.deepEqual(h.properties, {});
+    }
+  }
+});
+
+test('v391 Automatic: posture "folded" with no geometry splits at the middle on the big screen only', () => {
+  const book = setup({ js:false, css:false, width:951, height:676 });
+  assert.equal(book.pose(), 'book');
+  assert.equal(book.properties['--fold-left'], '464px');
+  const seated = setup({ js:false, css:false, width:676, height:900 });
+  assert.equal(seated.pose(), 'seated');
+  assert.equal(seated.properties['--fold-top'], '438px');
+  const outer = setup({ js:false, css:false, width:466, height:677 });
+  assert.equal(outer.pose(), null);
+});
+
+test('v391 Off wins over every sensor, across events, polling and reloads', () => {
   const h = setup();
   assert.equal(h.pose(), 'seated');
   h.clickDuo();
   assert.equal(h.pose(), null);
+  assert.equal(h.storage.get('sportshub:duo-mode'), 'off');
   for (const [scope, event] of [['posture','change'], ['viewport','segmentschange'],
     ['window','resize'], ['window','pageshow'], ['document','visibilitychange']]) {
     h.event(scope, event);
@@ -334,20 +360,37 @@ test('Duo OFF suppresses only automatic seated split across events, polling and 
   }
   const reloaded = setup({ savedMode:h.storage.get('sportshub:duo-mode') });
   assert.equal(reloaded.pose(), null);
+  const book = setup({ width:951, height:676, segments:sideBySide(), savedMode:'off' });
+  assert.equal(book.pose(), null);
   reloaded.clickDuo();
   assert.equal(reloaded.pose(), 'seated');
 });
 
-test('manual Duo follows rotation and ignores a keyboard-only visual viewport resize', () => {
-  const h = setup({ js:false, postureApi:false, css:false, savedMode:'on' });
+test('v391 a chosen Book ignores stacked geometry; Automatic follows either pose', () => {
+  const h = setup({ width:951, height:676, segments:sideBySide(), savedMode:'book' });
+  assert.equal(h.pose(), 'book');
+  assert.equal(h.properties['--fold-left'], '463px');
+  h.state.width = 676; h.state.height = 900; h.state.segments = stacked();
+  h.event('window', 'orientationchange');
+  assert.equal(h.pose(), null, 'Book is not forced onto a portrait screen');
+  const auto = setup({ width:951, height:676, segments:sideBySide() });
+  assert.equal(auto.pose(), 'book');
+  auto.state.posture = 'continuous';
+  auto.event('posture', 'change');
+  assert.equal(auto.pose(), null, 'fully open screen returns to the responsive wide layout');
+});
+
+test('manual split follows rotation and ignores a keyboard-only visual viewport resize', () => {
+  const h = setup({ js:false, postureApi:false, css:false, savedMode:'seated' });
   h.window.visualViewport.height = 340;
   h.event('visualViewport', 'resize');
   assert.equal(h.properties['--fold-top'], '438px');
   h.state.height = 676; h.state.width = 960;
   h.event('window', 'orientationchange');
-  assert.equal(h.properties['--fold-top'], '326px');
-  assert.equal(h.properties['--fold-bottom'], '350px');
-  assert.equal(h.pose(), 'seated');
+  assert.equal(h.pose(), null, 'Top·bottom stays off once the screen is landscape');
+  h.clickDuo();
+  assert.equal(h.pose(), 'book');
+  assert.equal(h.properties['--fold-left'], '468px');
 });
 
 test('Duo toggle stays usable when storage throws or contains an invalid value', () => {
@@ -377,27 +420,3 @@ test('Duo transfers current scroll position between document and lower pane', ()
   assert.equal(h.main.scrollTop, 245);
 });
 
-
-test('Duo OFF preserves side-by-side fold optimization after toggle, rotation and reload', () => {
-  const h = setup({ width:951, height:676, segments:sideBySide(), savedMode:'off' });
-  assert.equal(h.pose(), 'book');
-  assert.equal(h.toggle.getAttribute('aria-pressed'), 'false');
-  assert.match(h.statusLabel(), /Mid-fold off/);
-  assert.equal(h.properties['--fold-right'], '487px');
-  h.clickDuo();
-  assert.equal(h.pose(), 'seated');
-  h.clickDuo();
-  assert.equal(h.pose(), 'book');
-  assert.equal(h.properties['--fold-top'], undefined);
-  h.state.width = 676; h.state.height = 900; h.state.segments = stacked();
-  h.event('window', 'orientationchange');
-  assert.equal(h.pose(), null, 'OFF only suppresses the top/bottom split');
-  h.state.width = 951; h.state.height = 676; h.state.segments = sideBySide();
-  h.event('window', 'orientationchange');
-  assert.equal(h.pose(), 'book');
-  const reloaded = setup({ width:951, height:676, segments:sideBySide(), savedMode:h.storage.get('sportshub:duo-mode') });
-  assert.equal(reloaded.pose(), 'book');
-  reloaded.state.posture = 'continuous';
-  reloaded.event('posture', 'change');
-  assert.equal(reloaded.pose(), null, 'fully open screen returns to the responsive wide layout');
-});
