@@ -36,24 +36,40 @@
   //   seated — segments stacked (laptop pose): --fold-top / --fold-bottom
   //   book   — segments side by side:          --fold-left / --fold-right
   // The crease gets a gutter of at least FOLD_GAP px, centred on the fold, so
-  // nothing tappable sits on the curve. The manual Duo button overrides
-  // mid-fold detection: ON splits top/bottom, OFF disables only that split.
-  // Responsive sizing and side-by-side fold avoidance are always active.
-  // Without a manual choice, automatic seated/book behavior is preserved.
+  // nothing tappable sits on the curve. Responsive phone sizing is always
+  // active; the mode (below) decides only whether the page splits in two.
   var FOLD_GAP = 24;
   var MODE_KEY = 'sportshub:duo-mode';
-  var manualMode = '';
+  // v391 (CFP Study Lab v2.115.1 port): four layout modes, same names as CFP.
+  //   auto   — follow the fold sensors when Safari reports them
+  //   book   — left · right pages, split at the middle when no fold is reported
+  //   seated — top · bottom halves, split at the middle when no fold is reported
+  //   off    — one page; no split from sensors or the button
+  // Legacy values from v380–v390: 'on' (mid-fold split) -> seated, 'off' -> off.
+  // ?duo=book|seated|off|auto overrides and is remembered, like CFP.
+  var MODES = { auto: 1, book: 1, seated: 1, off: 1 };
+  var mode = 'auto';
+  function readMode(v) { return v === 'on' ? 'seated' : (MODES[v] ? v : ''); }
   try {
-    var savedMode = localStorage.getItem(MODE_KEY);
-    if (savedMode === 'on' || savedMode === 'off') manualMode = savedMode;
-  } catch (_) { /* The toggle still works when device storage is unavailable. */ }
+    var q = typeof location !== 'undefined' && location.search ?
+      (location.search.match(/[?&]duo=(book|seated|off|auto)\b/) || [])[1] : '';
+    if (q) localStorage.setItem(MODE_KEY, q);
+    mode = readMode(localStorage.getItem(MODE_KEY)) || 'auto';
+  } catch (_) { /* The button still works when device storage is unavailable. */ }
+  function setMode(m) {
+    if (!MODES[m]) return;
+    mode = m;
+    try { localStorage.setItem(MODE_KEY, m); } catch (_) {}
+    pose();
+  }
   function bindToggle() {
     var button = document.getElementById('duo-toggle');
     if (!button) return;
     button.addEventListener('click', function () {
-      manualMode = root.getAttribute('data-duo-pose') === 'seated' ? 'off' : 'on';
-      try { localStorage.setItem(MODE_KEY, manualMode); } catch (_) {}
-      pose();
+      // One tap: Book when the screen is landscape, Top·bottom when portrait;
+      // tap again (✕ Single page) to go back to one page.
+      if (root.getAttribute('data-duo-pose')) setMode('off');
+      else setMode(window.innerWidth > window.innerHeight ? 'book' : 'seated');
     });
   }
   function mq(q) { try { return window.matchMedia ? window.matchMedia(q) : null; } catch (e) { return null; } }
@@ -115,34 +131,48 @@
     return '';
   }
   var lastSig = '';
+  function setFold(name, a, b) {
+    if (name === 'seated') {
+      var mid = (a.bottom + b.top) / 2;
+      var topEdge = Math.round(Math.min(a.bottom, mid - FOLD_GAP / 2));
+      root.style.setProperty('--fold-top', topEdge + 'px');
+      root.style.setProperty('--fold-bottom', Math.round(Math.max(b.top, mid + FOLD_GAP / 2)) + 'px');
+      root.style.setProperty('--fold-below', Math.round(window.innerHeight - topEdge) + 'px');
+    } else if (name === 'book') {
+      var midx = (a.right + b.left) / 2;
+      root.style.setProperty('--fold-left', Math.round(Math.min(a.right, midx - FOLD_GAP / 2)) + 'px');
+      root.style.setProperty('--fold-right', Math.round(Math.max(b.left, midx + FOLD_GAP / 2)) + 'px');
+    }
+  }
   function pose() {
     var seg = segments();
     var post = postureNow();
+    var W = window.innerWidth, H = window.innerHeight;
     var name = '';
-    if (seg.n === 2 && (manualMode === 'on' || post !== 'continuous')) {
+    var manual = mode === 'book' || mode === 'seated';
+    // 1) Reported fold geometry (Viewport Segments). A manual Book/Top·bottom
+    //    choice also accepts geometry while posture says "continuous".
+    if (mode !== 'off' && seg.n === 2 && (manual || post !== 'continuous')) {
       var a = seg.a, b = seg.b;
-      if (manualMode !== 'off' && b.top >= a.bottom - 1 && Math.abs(a.left - b.left) < 2) name = 'seated';
-      else if (manualMode !== 'on' && b.left >= a.right - 1 && Math.abs(a.top - b.top) < 2) name = 'book';
-      if (name === 'seated') {
-        var mid = (a.bottom + b.top) / 2;
-        root.style.setProperty('--fold-top', Math.round(Math.min(a.bottom, mid - FOLD_GAP / 2)) + 'px');
-        root.style.setProperty('--fold-bottom', Math.round(Math.max(b.top, mid + FOLD_GAP / 2)) + 'px');
-        root.style.setProperty('--fold-below', Math.round(window.innerHeight - Math.min(a.bottom, mid - FOLD_GAP / 2)) + 'px');
-      } else if (name === 'book') {
-        var midx = (a.right + b.left) / 2;
-        root.style.setProperty('--fold-left', Math.round(Math.min(a.right, midx - FOLD_GAP / 2)) + 'px');
-        root.style.setProperty('--fold-right', Math.round(Math.max(b.left, midx + FOLD_GAP / 2)) + 'px');
-      }
+      if (b.top >= a.bottom - 1 && Math.abs(a.left - b.left) < 2) name = 'seated';
+      else if (b.left >= a.right - 1 && Math.abs(a.top - b.top) < 2) name = 'book';
+      if (manual && name !== mode) name = '';
+      if (name) setFold(name, a, b);
     }
-    if (manualMode === 'on' && name !== 'seated') {
-      // Use the layout viewport, not keyboard/pinch-zoom visualViewport size.
-      // No sensor or feature flag is needed for the requested top/bottom view.
-      var halfway = Math.round(window.innerHeight / 2);
-      name = 'seated';
-      root.style.setProperty('--fold-top', (halfway - FOLD_GAP / 2) + 'px');
-      root.style.setProperty('--fold-bottom', (halfway + FOLD_GAP / 2) + 'px');
-      root.style.setProperty('--fold-below', (window.innerHeight - halfway + FOLD_GAP / 2) + 'px');
+    // 2) No geometry (Safari on the Duo reports none unless its flags are on):
+    //    split at the middle of the layout viewport when the user chose a split,
+    //    or posture alone says "folded". Only on the big inner screen (both sides
+    //    >= 600px), never the folded outer screen. Landscape = book,
+    //    portrait = top/bottom. innerWidth/innerHeight ignore the keyboard.
+    var big = Math.min(W, H) >= 600, wide = W > H;
+    var want = manual ? mode : (mode === 'auto' && post === 'folded' ? (wide ? 'book' : 'seated') : '');
+    if (!name && big && want === 'book' && wide) {
+      name = 'book'; setFold('book', { right: W / 2 }, { left: W / 2 });
     }
+    if (!name && big && want === 'seated' && !wide) {
+      name = 'seated'; setFold('seated', { bottom: H / 2 }, { top: H / 2 });
+    }
+    root.classList.toggle('duo-big', big);
     var wasSeated = root.getAttribute('data-duo-pose') === 'seated';
     var isSeated = name === 'seated';
     var main = document.getElementById('main-content');
@@ -163,17 +193,21 @@
         if (window.scrollTo) window.scrollTo({ top:scrollTop, behavior:'instant' });
       }
     }
-    var button = document.getElementById('duo-toggle');
-    if (button) {
-      button.setAttribute('aria-pressed', String(isSeated));
-      button.title = (isSeated ? 'Turn off' : 'Turn on') + ' mid-fold split. Device layout stays optimized.';
-    }
     diag(seg, post, name);
+    syncButton(name);
     feature();
   }
-  // The footer describes only the optional mid-fold split, never an
-  // optimization on/off state. Keep sensor details in its diagnostic title.
+  // The footer names the current page layout (Book / Top·bottom / Single page),
+  // never an optimization on/off state. Sensor details sit in its title.
   function diag(seg, post, name) {
+    var apis = (window.viewport && 'segments' in window.viewport ? 'S' : '') + (navigator.devicePosture ? 'P' : '') +
+      (MQ.v2 && MQ.v2.media !== 'not all' ? 'M' : '');
+    var txt = (apis ? ('fold: ' + (post || 'n/a') + ' · ' + (seg.n == null ? '?' : seg.n) + ' seg · ' +
+      (name || 'flat') + ' · ' + apis + (seg.src === 'css' ? ' css' : '')) : 'fold sensors off · ' + (name || 'flat')) +
+      ' · mode ' + mode;
+    root.setAttribute('data-duo-diag', txt);
+    var fd = document.getElementById('duo-fold-diag');
+    if (fd) fd.textContent = txt;
     var host = document.getElementById('home-version');
     if (!host) return;
     var el = document.getElementById('duo-diag');
@@ -183,14 +217,73 @@
       el.className = 'duo-diag';
       host.parentNode.appendChild(el);
     }
-    var apis = (window.viewport && 'segments' in window.viewport ? 'S' : '') + (navigator.devicePosture ? 'P' : '') +
-      (MQ.v2 && MQ.v2.media !== 'not all' ? 'M' : '');
-    var txt = apis ? ('fold: ' + (post || 'n/a') + ' · ' + (seg.n == null ? '?' : seg.n) + ' seg · ' +
-      (name || 'flat') + ' · ' + apis + (seg.src === 'css' ? ' css' : '')) : 'fold sensors off';
-    if (manualMode) txt += ' · mid-fold preference ' + manualMode;
     el.title = txt;
-    var label = ' · Mid-fold ' + (name === 'seated' ? 'on' : 'off');
+    var label = ' · ' + (name === 'book' ? 'Book' : name === 'seated' ? 'Top·bottom' : 'Single page');
     if (el.textContent !== label) el.textContent = label;
+  }
+  // v391: the visible button (big inner screen only, see duo.css) reads
+  // "📖 Book" in landscape, "⬒ Split" in portrait, "✕ Single page" while split.
+  function syncButton(name) {
+    var button = document.getElementById('duo-toggle');
+    if (!button) return;
+    var wide = window.innerWidth > window.innerHeight;
+    var text = name ? '✕ Single page' : (wide ? '📖 Book' : '⬒ Split');
+    var label = button.querySelector ? button.querySelector('span') : null;
+    if (label) { if (label.textContent !== text) label.textContent = text; }
+    else button.textContent = text;
+    button.setAttribute('aria-pressed', String(!!name));
+    button.setAttribute('aria-label', name ? 'Single page: undo the fold split' :
+      (wide ? 'Book: split into two pages at the fold' : 'Split: top and bottom halves at the fold'));
+    button.title = (root.getAttribute('data-duo-diag') || '') + ' — tap to ' +
+      (name ? 'go back to one page' : (wide ? 'split into two pages at the crease' : 'split top / bottom at the crease'));
+    var box = document.getElementById('duo-mode-choices');
+    if (box && box.querySelectorAll) box.querySelectorAll('[data-duo-mode]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-duo-mode') === mode));
+    });
+  }
+  // Settings override (More page), same four choices and labels as CFP.
+  function settingsControl() {
+    var host = document.getElementById('explore');
+    if (!host || document.getElementById('duo-mode-choices')) return;
+    var box = document.createElement('section');
+    box.className = 'duo-settings';
+    box.setAttribute('aria-label', 'Fold layout');
+    box.innerHTML = '<div><b>Fold layout (iPhone Duo)</b><p>Book and Top · bottom split at the middle even when Safari reports no fold. Only on the big inner screen.</p></div>' +
+      '<div class="duo-mode-row" id="duo-mode-choices" role="group" aria-label="Fold layout">' +
+      [['auto', 'Automatic'], ['book', 'Book'], ['seated', 'Top · bottom'], ['off', 'Off']].map(function (o) {
+        return '<button type="button" data-duo-mode="' + o[0] + '" aria-pressed="' + (mode === o[0]) + '">' + o[1] + '</button>';
+      }).join('') + '</div><small id="duo-fold-diag" class="duo-fold-diag"></small>';
+    host.appendChild(box);
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-duo-mode]');
+      if (b) setMode(b.getAttribute('data-duo-mode'));
+    });
+  }
+  // v391: keep the reading position across reloads. desk.js already restores
+  // history.state.deskScroll for the current route on load (restoreRoute), but
+  // only records it when you leave a route; record it while reading as well.
+  // Seated scrolls <main>; every other layout scrolls the document.
+  function scrollNow() {
+    var main = document.getElementById('main-content');
+    return root.getAttribute('data-duo-pose') === 'seated' && main ? main.scrollTop : (window.scrollY || 0);
+  }
+  var saveT = 0;
+  function recordScroll() {
+    try {
+      if (typeof history === 'undefined' || typeof location === 'undefined' || !location.hash) return;
+      var st = history.state || {};
+      var y = Math.round(scrollNow());
+      if (st.deskScroll === y) return;
+      var next = {};
+      for (var k in st) if (Object.prototype.hasOwnProperty.call(st, k)) next[k] = st[k];
+      next.deskScroll = y;
+      history.replaceState(next, '', location.hash);
+    } catch (_) {}
+  }
+  function watchScroll() {
+    if (typeof history === 'undefined') return;
+    document.addEventListener('scroll', function () { clearTimeout(saveT); saveT = setTimeout(recordScroll, 400); }, true);
+    window.addEventListener('pagehide', recordScroll);
   }
   // Folding usually does NOT change the viewport size, so resize alone never
   // fires: listen to the fold's own signals, and re-check on a slow timer as a
@@ -351,7 +444,8 @@
     if (!document.body || !window.MutationObserver) return;
     new MutationObserver(function () { soon(); }).observe(document.body, { attributes: true, attributeFilter: ['data-desk-panel'] });
   }
-  function start() { bindToggle(); probe(); pose(); watchPanel(); watchFold(); }
+  function start() { bindToggle(); settingsControl(); probe(); pose(); watchPanel(); watchFold(); watchScroll(); }
+  window.SportsHubDuo = { setMode: setMode, mode: function () { return mode; }, pose: function () { return root.getAttribute('data-duo-pose') || ''; } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
   window.addEventListener('resize', later);

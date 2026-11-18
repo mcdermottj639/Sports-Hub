@@ -33,6 +33,8 @@ const poses={
   outerScreenshot:{width:373,height:677,outer:true},
   outerTall:{width:373,height:760,outer:true},outerTiny:{width:320,height:568,outer:true},
   bookOff:{width:951,height:676,bookOff:true},
+  // v391: the big inner screen with NO fold reported (Safari on Jack's Duo).
+  bigWide:{width:960,height:676},bigWide951:{width:951,height:676},bigTall:{width:676,height:951},
 };
 const manualMode=process.env.DUO_MANUAL_ONLY==='1';
 // CI's Chromium may expose segments but report continuous posture despite CDP.
@@ -362,7 +364,7 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
         await page.waitForFunction(()=>document.body.dataset.deskPanel==='home');
         await noOverflow(page);
       });
-      await check(`${name}: split toggles without disabling the compact phone layout`,async()=>{
+      await check(`${name}: outer screen has no Book button and never splits, even when a split is chosen`,async()=>{
         const density=()=>page.evaluate(()=>({
           research:document.querySelector('.desk-research-promo').getBoundingClientRect().height,
           watch:document.querySelector('#desk-board-fold > summary').getBoundingClientRect().height,
@@ -370,21 +372,16 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
           dock:document.getElementById('botbar').getBoundingClientRect().height
         }));
         const before=await density();
-        const sameDensity=async(message)=>{
+        assert.equal(await page.locator('#duo-toggle').isVisible(),false,'no button on the folded outer screen');
+        for(const m of ['seated','book','auto']){
+          await page.evaluate(m=>window.SportsHubDuo.setMode(m),m);
+          assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),undefined,m);
           const after=await density();
-          assert.equal(after.recordPadding,before.recordPadding,message);
-          // Scrolling can change rect subtraction by ~0.0001 CSS px.
+          assert.equal(after.recordPadding,before.recordPadding,m);
           for(const key of ['research','watch','dock'])
-            assert.ok(Math.abs(after[key]-before[key])<0.5,`${message}: ${key} ${before[key]} → ${after[key]}`);
-        };
-        await page.locator('#duo-toggle').click();
-        assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),'seated');
-        await sameDensity('mid-fold ON preserves compact cards and dock');
-        await page.locator('#duo-toggle').click();
-        const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
-          preference:localStorage.getItem('sportshub:duo-mode'),label:document.getElementById('duo-diag').textContent}));
-        assert.equal(s.pose,undefined);assert.equal(s.preference,'off');assert.match(s.label,/Mid-fold off/);
-        await sameDensity('mid-fold OFF preserves compact cards and dock');
+            assert.ok(Math.abs(after[key]-before[key])<0.5,`${m}: ${key} ${before[key]} → ${after[key]}`);
+        }
+        await page.evaluate(()=>window.SportsHubDuo.setMode('off'));
         await noOverflow(page);
       });
       if(name==='outerTall'){
@@ -407,46 +404,178 @@ const manualMode=process.env.DUO_MANUAL_ONLY==='1';
           }
           await page.setViewportSize({width:P.width,height:P.height});
         });
-        await check('phone: reload remembers mid-fold choice without changing baseline sizing',async()=>{
-          for(const pose of ['seated',undefined]){
-            await page.locator('#duo-toggle').click();
-            await page.reload({waitUntil:'load'});
-            await page.waitForFunction(expected=>document.documentElement.dataset.duoPose===expected,pose);
-            const s=await page.evaluate(()=>({
+        await check('phone: a saved Book/Top·bottom choice does not split the outer screen after reload',async()=>{
+          for(const m of ['seated','book']){
+            await page.evaluate(m=>localStorage.setItem('sportshub:duo-mode',m),m);
+            await page.reload({waitUntil:'load'});await page.waitForTimeout(400);
+            const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
               dock:document.getElementById('botbar').getBoundingClientRect().height,
-              label:document.getElementById('duo-toggle').getAttribute('aria-label'),
-              promo:document.querySelector('.desk-research-promo').getBoundingClientRect().height
-            }));
-            assert.equal(s.dock,56);assert.ok(s.promo<=76);assert.match(s.label,/mid-fold split/);
+              promo:document.querySelector('.desk-research-promo').getBoundingClientRect().height}));
+            assert.equal(s.pose,undefined,m);assert.equal(s.dock,56);assert.ok(s.promo<=76);
             await noOverflow(page);
           }
+          await page.evaluate(()=>localStorage.setItem('sportshub:duo-mode','off'));
         });
       }
       await check(`${name}: no page errors`,async()=>assert.deepEqual(errors,[]));
       await context.close();
     }
     {const {page,context,errors}=await open('bookOff');
-      await check('mid-fold OFF: side-by-side fold avoidance stays active',async()=>{
-        const assertBook=async()=>{
-          const s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
-            pressed:document.getElementById('duo-toggle').getAttribute('aria-pressed'),
-            agenda:document.querySelector('.desk-agenda-card').getBoundingClientRect(),
-            stats:document.querySelector('.desk-stats').getBoundingClientRect()}));
-          assert.equal(s.pose,'book');assert.equal(s.pressed,'false');
-          assert.ok(s.agenda.right<=463);assert.ok(s.stats.left>=487);
-          await noOverflow(page);
-        };
-        await assertBook();
+      await check('Off: one page even when sensors report a book fold; Book button turns it on and back off',async()=>{
+        const state=()=>page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
+          pressed:document.getElementById('duo-toggle').getAttribute('aria-pressed'),
+          text:document.getElementById('duo-toggle').textContent,
+          agenda:document.querySelector('.desk-agenda-card').getBoundingClientRect(),
+          stats:document.querySelector('.desk-stats').getBoundingClientRect()}));
+        let s=await state();
+        assert.equal(s.pose,undefined);assert.equal(s.pressed,'false');assert.match(s.text,/Book/);
         await page.locator('#duo-toggle').click();
-        assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),'seated');
-        await page.locator('#duo-toggle').click();
-        await assertBook();
+        s=await state();
+        assert.equal(s.pose,'book');assert.equal(s.pressed,'true');assert.match(s.text,/Single page/);
+        assert.ok(s.agenda.right<=463);assert.ok(s.stats.left>=487);
+        await noOverflow(page);
         await page.reload({waitUntil:'load'});
         await page.waitForFunction(()=>document.documentElement.dataset.duoPose==='book');
-        await assertBook();
-        await shot(page,'book-mid-fold-off');
+        await page.locator('#duo-toggle').click();
+        assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),undefined);
+        await page.reload({waitUntil:'load'});await page.waitForTimeout(400);
+        assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),undefined);
       });
-      await check('book with mid-fold OFF: no page errors',async()=>assert.deepEqual(errors,[]));
+      await check('Off with sensors: no page errors',async()=>assert.deepEqual(errors,[]));
+      await context.close();}
+    // v391: Safari on Jack's Duo reports NO fold. The visible Book button,
+    // Settings and ?duo= must split at the middle on the big inner screen.
+    for(const name of ['bigWide','bigWide951']){
+      const {page,context,errors}=await open(name);
+      const P=poses[name],half=P.width/2;
+      const geo=()=>page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
+        visible:!!document.getElementById('duo-toggle').getBoundingClientRect().width,
+        text:document.getElementById('duo-toggle').textContent,
+        left:getComputedStyle(document.documentElement).getPropertyValue('--fold-left').trim(),
+        right:getComputedStyle(document.documentElement).getPropertyValue('--fold-right').trim(),
+        agenda:document.querySelector('.desk-agenda-card').getBoundingClientRect().toJSON(),
+        stats:document.querySelector('.desk-stats').getBoundingClientRect().toJSON(),
+        sw:document.documentElement.scrollWidth,w:innerWidth,mode:localStorage.getItem('sportshub:duo-mode')}));
+      await check(`${name}: no fold reported, 📖 Book button visible, single page`,async()=>{
+        const s=await geo();assert.equal(s.pose,undefined);assert.equal(s.visible,true);assert.match(s.text,/📖 Book/);
+      });
+      await check(`${name}: Book via button splits at the middle, both halves usable, no overflow`,async()=>{
+        await page.locator('#duo-toggle').click();
+        const s=await geo();
+        assert.equal(s.pose,'book');assert.equal(s.mode,'book');assert.match(s.text,/✕ Single page/);
+        assert.equal(s.left,Math.round(half-12)+'px');assert.equal(s.right,Math.round(half+12)+'px');
+        assert.ok(s.agenda.right<=half-12+1,`left page ends ${s.agenda.right}`);
+        assert.ok(s.stats.left>=half+12-1,`right page starts ${s.stats.left}`);
+        assert.ok(s.sw<=s.w,`scrollWidth ${s.sw} > ${s.w}`);
+        // Left page scrolls inside itself; right page scrolls with the document.
+        const sc=await page.evaluate(()=>{const a=document.querySelector('.desk-agenda-card');
+          const own=a.scrollHeight>a.clientHeight;a.scrollTop=120;const leftMoved=own?a.scrollTop>0:true;
+          window.scrollTo(0,300);const rightMoved=scrollY>0;const agendaTop=a.getBoundingClientRect().top;
+          window.scrollTo(0,0);a.scrollTop=0;return {own,leftMoved,rightMoved,agendaTop,oy:getComputedStyle(a).overflowY,pos:getComputedStyle(a).position};});
+        assert.equal(sc.oy,'auto');assert.equal(sc.pos,'sticky');assert.equal(sc.leftMoved,true);assert.equal(sc.rightMoved,true);
+        assert.ok(sc.agendaTop<120,'left page stays put while the right page scrolls');
+      });
+      await shot(page,name+'-book-button');
+      await check(`${name}: book persists on reload, ✕ Single page returns and persists`,async()=>{
+        await page.reload({waitUntil:'load'});await page.waitForTimeout(600);
+        assert.equal((await geo()).pose,'book');
+        await page.locator('#duo-toggle').click();
+        let s=await geo();assert.equal(s.pose,undefined);assert.equal(s.mode,'off');assert.match(s.text,/Book/);
+        await page.reload({waitUntil:'load'});await page.waitForTimeout(600);
+        s=await geo();assert.equal(s.pose,undefined);assert.ok(s.sw<=s.w);
+      });
+      if(name==='bigWide'){
+        await check('bigWide: mode switch keeps the route, filters and scroll position; reload keeps them too',async()=>{
+          await page.locator('[data-agenda-filter="nfl"]').first().click().catch(()=>{});
+          const filterBefore=await page.evaluate(()=>document.querySelector('[data-agenda-filter][aria-pressed="true"]')?.dataset.agendaFilter);
+          await page.evaluate(()=>window.scrollTo(0,260));await page.waitForTimeout(300);
+          const yBefore=await page.evaluate(()=>scrollY);
+          assert.ok(yBefore>100,`page scrolls (${yBefore})`);
+          // DOM click: Playwright's locator.click() would first scroll the header button into view.
+          await page.evaluate(()=>document.getElementById('duo-toggle').click());
+          const inBook=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,y:scrollY,hash:location.hash,
+            filter:document.querySelector('[data-agenda-filter][aria-pressed="true"]')?.dataset.agendaFilter}));
+          assert.equal(inBook.pose,'book');assert.equal(inBook.filter,filterBefore);
+          // The page re-flows into two columns; Chrome's scroll anchoring may nudge y a few px
+          // to keep the same content in view. It must not jump back to the top.
+          assert.ok(Math.abs(inBook.y-yBefore)<=40,`scroll ${yBefore} → ${inBook.y}`);
+          await page.evaluate(()=>window.scrollTo(0,220));await page.waitForTimeout(600);
+          // What is on screen (right page, mid-height) is the reading position.
+          const seen=()=>page.evaluate(()=>{const kids=[...document.querySelectorAll('#home.active > *')];const y=innerHeight*0.45;
+            const i=kids.findIndex(k=>{const r=k.getBoundingClientRect();return r.left>innerWidth/2&&r.top<=y&&r.bottom>=y;});
+            return i<0?null:{i,id:kids[i].id||kids[i].className,top:Math.round(kids[i].getBoundingClientRect().top)};});
+          const seenBefore=await seen();console.log('  in view:',JSON.stringify(seenBefore));
+          await page.reload({waitUntil:'load'});await page.waitForTimeout(2200);
+          const after=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,y:scrollY,hash:location.hash,
+            filter:document.querySelector('[data-agenda-filter][aria-pressed="true"]')?.dataset.agendaFilter}));
+          assert.equal(after.pose,'book');assert.equal(after.filter,filterBefore);assert.equal(after.hash,inBook.hash);
+          // Late-loading feeds re-flow the page and scroll anchoring keeps the content in view,
+          // so compare what is on screen, not only the raw offset.
+          assert.ok(after.y>100,`scroll after reload ${after.y} (was 220)`);
+          const seenAfter=await seen();
+          assert.ok(seenBefore,'a right-page card is in view');
+          assert.equal(seenAfter?.id,seenBefore.id,'same card in view after reload');
+          assert.ok(Math.abs(seenAfter.top-seenBefore.top)<=40,`card moved ${seenBefore.top} → ${seenAfter.top}`);
+          // Another route (tab) survives a mode switch and a reload.
+          await page.evaluate(()=>{location.hash='#/models/all/picks';});await page.waitForTimeout(800);
+          const panel=await page.evaluate(()=>document.body.dataset.deskPanel);
+          await page.locator('#duo-toggle').click();
+          await page.reload({waitUntil:'load'});await page.waitForTimeout(1200);
+          const r=await page.evaluate(()=>({panel:document.body.dataset.deskPanel,hash:location.hash,pose:document.documentElement.dataset.duoPose}));
+          assert.equal(r.panel,panel);assert.equal(r.hash,'#/models/all/picks');assert.equal(r.pose,undefined);
+          await page.evaluate(()=>{location.hash='#/today';});await page.waitForTimeout(600);
+        });
+        await check('bigWide: Settings (More) offers Automatic / Book / Top · bottom / Off and applies them',async()=>{
+          await page.evaluate(()=>{location.hash='#/more';});await page.waitForTimeout(800);
+          const labels=await page.locator('#duo-mode-choices [data-duo-mode]').allTextContents();
+          assert.deepEqual(labels,['Automatic','Book','Top · bottom','Off']);
+          await page.locator('#duo-mode-choices [data-duo-mode="book"]').click();
+          let s=await page.evaluate(()=>({pose:document.documentElement.dataset.duoPose,
+            pressed:document.querySelector('#duo-mode-choices [data-duo-mode="book"]').getAttribute('aria-pressed'),diag:document.getElementById('duo-fold-diag').textContent}));
+          assert.equal(s.pose,'book');assert.equal(s.pressed,'true');assert.match(s.diag,/mode book/);
+          await noOverflow(page);
+          await shot(page,'bigWide-settings-book');
+          await page.locator('#duo-mode-choices [data-duo-mode="seated"]').click();
+          assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),undefined,'Top · bottom does not split a landscape screen');
+          await page.locator('#duo-mode-choices [data-duo-mode="auto"]').click();
+          assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),undefined,'Automatic with no fold reported stays one page');
+          await page.locator('#duo-mode-choices [data-duo-mode="off"]').click();
+          await page.evaluate(()=>{location.hash='#/today';});await page.waitForTimeout(500);
+        });
+        await check('bigWide: ?duo=book override applies and is remembered; ?duo=off undoes it',async()=>{
+          await page.goto(page.url().replace(/[?#].*$/,'')+'?duo=book#/today',{waitUntil:'load'});await page.waitForTimeout(800);
+          assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),'book');
+          assert.equal(await page.evaluate(()=>localStorage.getItem('sportshub:duo-mode')),'book');
+          await page.goto(page.url().replace(/[?#].*$/,'')+'?duo=off#/today',{waitUntil:'load'});await page.waitForTimeout(800);
+          assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),undefined);
+        });
+      }
+      await check(`${name}: no page errors`,async()=>assert.deepEqual(errors,[]));
+      await context.close();
+    }
+    {const {page,context,errors}=await open('bigTall');
+      await check('bigTall: portrait big screen offers ⬒ Split; Top·bottom splits at the middle and scrolls below',async()=>{
+        assert.match(await page.locator('#duo-toggle').textContent(),/Split/);
+        await page.locator('#duo-toggle').click();
+        const s=await page.evaluate(()=>{const M=document.getElementById('main-content');M.scrollTop=200;
+          return {pose:document.documentElement.dataset.duoPose,top:getComputedStyle(document.documentElement).getPropertyValue('--fold-top').trim(),
+          bottom:getComputedStyle(document.documentElement).getPropertyValue('--fold-bottom').trim(),
+          pane:document.getElementById('duo-feature').getBoundingClientRect().bottom,main:M.getBoundingClientRect().top,moved:M.scrollTop,
+          mode:localStorage.getItem('sportshub:duo-mode'),sw:document.documentElement.scrollWidth,w:innerWidth};});
+        assert.equal(s.pose,'seated');assert.equal(s.mode,'seated');
+        assert.equal(s.top,Math.round(951/2-12)+'px');assert.equal(s.bottom,Math.round(951/2+12)+'px');
+        assert.ok(s.pane<=951/2,`upper pane ends ${s.pane}`);assert.ok(s.moved>0,'bottom half scrolls');
+        assert.ok(s.sw<=s.w);
+      });
+      await shot(page,'bigTall-top-bottom');
+      await check('bigTall: tap again = single page, persists on reload',async()=>{
+        await page.locator('#duo-toggle').click();
+        assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),undefined);
+        await page.reload({waitUntil:'load'});await page.waitForTimeout(600);
+        assert.equal(await page.evaluate(()=>document.documentElement.dataset.duoPose),undefined);
+        await noOverflow(page);
+      });
+      await check('bigTall: no page errors',async()=>assert.deepEqual(errors,[]));
       await context.close();}
     // A separate hypothetical safe-area host, not Safari's reserved strip.
     // Retain inset coverage without presenting it as native phone emulation.
