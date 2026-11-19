@@ -21,6 +21,7 @@ SOURCE = 'ESPN public scoreboard API'
 SITE = 'https://site.api.espn.com/apis/site/v2/sports/{path}'
 PATHS = {'nfl': 'football/nfl', 'nba': 'basketball/nba'}
 COUNTS = {'nfl': 32, 'nba': 30}
+PLACEHOLDERS = {'TBD', 'AFC', 'NFC', 'EAST', 'WEST', 'LEB', 'GIA', 'DUR'}
 
 
 def get(url, tries=3):
@@ -129,6 +130,10 @@ def build_league(sport, season, today, captured):
         comp = (e.get('competitions') or [{}])[0]
         sides = {c.get('homeAway'): c for c in comp.get('competitors', [])}
         if 'home' not in sides or 'away' not in sides:
+            continue
+        # Postseason/all-star placeholders (TBD, AFC/NFC, East/West) are not league teams.
+        if any(c.get('team', {}).get('abbreviation') in PLACEHOLDERS or not c.get('team', {}).get('id')
+               for c in sides.values()):
             continue
         for c in sides.values():
             t = c.get('team', {})
