@@ -81,6 +81,21 @@ advantage adjustment. Do not select/re-fit a correction on these games and then
 claim the same sample as validation. Original forecasts, prices, probabilities,
 settlements, model IDs and Supabase collectors are unchanged.
 
+## Daily ESPN refresh (v392, Nov 2026; replaces DraftKings)
+
+DraftKings is no longer available as a source. `.github/workflows/espn-lab-data.yml`
+runs `scripts/espn-lab-evidence.py` three times a day (and on manual dispatch).
+It reads ESPN's public site API (scoreboard for the season schedule and finals,
+game summaries for box scores), writes source `ESPN public scoreboard API` in
+the same schema 1, and publishes through `scripts/refresh-sports-evidence.js`,
+which validates it and archives the team profiles. Team stats are season
+averages from box scores; league ranks are computed by the script (1 = best;
+lower is better for points/yards allowed and turnovers; ties share a rank).
+The run fails and publishes nothing if team coverage is incomplete. Game ids
+are ESPN event ids. The file keeps its old name `data/draftkings-evidence.json`
+so the app code paths are unchanged. ⚠️ The ChatGPT connector contract below is
+SUPERSEDED for routine refreshes and kept only as history.
+
 ## Refresh contract
 
 `data/draftkings-evidence.json` is a public normalized snapshot, not a live API.
