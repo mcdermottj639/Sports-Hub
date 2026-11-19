@@ -124,6 +124,19 @@ refresh preserves the last published evidence and its original timestamps.
    need no app-version bump, frontend source change, PR or Edge deployment.
    Verify remote files and GitHub Pages success. Honor actual permission blocks.
 
+### Interim nflverse schedule supplement (Nov 19 2026)
+
+The DraftKings connector has returned access denied since 2026-11-12, so the
+snapshot stopped gaining new games. On Jack's request the NFL games list was
+supplemented from the public nflverse `nfldata` schedule (`data/games.csv`):
+final scores for the 14 games the Nov 11 capture listed as upcoming (each
+carries `scoreSource`/`scoreObservedAt`, cross-checked against
+`data/nfl-football-live.json`), plus upcoming games Nov 19-30 (each carries
+`source`). The query row names the nfldata commit. `capturedAt`, team stats and
+ranks are still the Nov 11 DraftKings capture, so the Lab keeps showing that
+date and the stale flag. NBA is unchanged. A restored DraftKings refresh
+replaces these rows by the normal contract.
+
 If any source fails or coverage is incomplete, keep the last good snapshot
 without resetting its date. Record the concrete failure. Do not touch model
 constants, saved official rows, odds sources, college props, PR #8, other repos
