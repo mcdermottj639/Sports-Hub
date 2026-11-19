@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// Accept a normalized connector snapshot. No credentials or API scraping.
+// Accept a normalized snapshot (retired DraftKings connector, or the daily ESPN job). No credentials.
 const fs=require('node:fs');
 const path=require('node:path');
 const C=require('../sports-evidence-core.js');
@@ -8,7 +8,7 @@ const root=path.resolve(__dirname,'..');
 function refresh(input,{write=false}={}) {
   const s=typeof input==='string'?JSON.parse(fs.readFileSync(input,'utf8')):input;
   const errors=C.validate(s);
-  if(s.source!=='DraftKings Sports connector'||s.kind!=='dated-snapshot')errors.push('Unexpected source');
+  if(!['DraftKings Sports connector','ESPN public scoreboard API'].includes(s.source)||s.kind!=='dated-snapshot')errors.push('Unexpected source');
   for(const [sport,count] of [['nfl',32],['nba',30]]) {
     if(s.leagues?.[sport]?.teams?.length!==count)errors.push('Incomplete '+sport+' team coverage');
     for(const g of s.leagues?.[sport]?.games||[])if(Date.parse(g.observedAt)>Date.parse(s.capturedAt)+60000)errors.push('Game observation after snapshot capture');

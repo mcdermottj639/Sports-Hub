@@ -299,7 +299,7 @@ fantasy/golf data are not refreshed by this cycle.
 ## Files
 
 - `matchup-context.js`, `matchup-context.css` — read-only compact full-screen model/market comparison, expandable model/source detail, exact ESPN game matching and contextual source reads. No forecast or grading writes.
-- `sports-evidence-core.js`, `sports-evidence.js`, `sports-evidence.css` — v364 game-focused full-screen `#/matchup-lab` from Today, plus embedded Research and NFL/NBA reports: visual ranks/form, score cross-checks, matched model diagnostics and a separate last-five replay. `data/draftkings-evidence.json` is a dated ChatGPT-connector snapshot; ESPN stays live. `scripts/refresh-sports-evidence.js` validates refreshes and saves immutable profiles in `data/evidence-observations/`. See `docs/SPORTS_EVIDENCE.md` for sources, refresh scope, leakage guards and initial findings. Data-only evidence refreshes need no app version bump; code changes follow the usual release ritual.
+- `sports-evidence-core.js`, `sports-evidence.js`, `sports-evidence.css` — v364 game-focused full-screen `#/matchup-lab` from Today, plus embedded Research and NFL/NBA reports: visual ranks/form, score cross-checks, matched model diagnostics and a separate last-five replay. `data/draftkings-evidence.json` is a dated snapshot rebuilt three times a day from ESPN's public site API by `scripts/espn-lab-evidence.py` (workflow `espn-lab-data.yml`, since v392; DraftKings is retired); ESPN stays live. `scripts/refresh-sports-evidence.js` validates refreshes and saves immutable profiles in `data/evidence-observations/`. See `docs/SPORTS_EVIDENCE.md` for sources, refresh scope, leakage guards and initial findings. Data-only evidence refreshes need no app version bump; code changes follow the usual release ritual.
 
 - `cbb-page.js`, `_shared/cbb-model.js`, `_shared/cbb-model-config.js` — men’s D1 Top 25 / tournament board and shared opponent-adjusted score model. `scripts/cbb-data.py` refreshes public D1 results three times daily in season; `scripts/validate-cbb.js` performs chronological replay. See `docs/CBB_MODEL.md` and `data/cbb-validation.json`. All CBB markets remain research-only, with no betting tier or college player props. The collector saves and grades CBB independently of other sports; migration `20261114102215_cbb_prediction_capture.sql` extends the sport constraint only.
 
@@ -742,7 +742,18 @@ claim a deployment is live merely because the branch update succeeded.
 Commit messages describe the change. Do not add a model identifier or a stale
 session attribution.
 
-Current version as of this writing: **v391** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+Current version as of this writing: **v392** (backend **b17-fantasy-league-rules**). v354 is reserved by the open, unmerged props PR #8.
+
+### v392 — Matchup Lab data from a daily ESPN job (DraftKings retired)
+
+DraftKings is gone as a Lab source, so the Lab snapshot stopped at Nov 11 and
+new games were missing. `scripts/espn-lab-evidence.py` now rebuilds the NFL and
+NBA snapshot from ESPN's public site API (season schedule, finals, box scores)
+and computes team season averages and league ranks itself;
+`espn-lab-data.yml` runs it at 10:41, 15:41 and 21:41 UTC and publishes through
+`refresh-sports-evidence.js`, which now accepts source `ESPN public scoreboard
+API`. The Lab labels its source from the snapshot (`ESPN` or `DraftKings`).
+No model numbers, rules or odds changed.
 
 ### v391 — iPhone Duo Book button: CFP Study Lab's manual Book mode
 
