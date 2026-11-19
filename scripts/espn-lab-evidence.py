@@ -67,12 +67,11 @@ def scoreboards(sport, season, today):
         urls = [SITE.format(path=PATHS[sport]) + f'/scoreboard?dates={season}&seasontype={st}&week={w}'
                 for st, weeks in ((2, range(1, 19)), (3, range(1, 6))) for w in weeks]
     else:
-        start, end, urls = datetime(season, 10, 1), today + timedelta(days=14), []
-        while start <= end:
-            stop = min(start + timedelta(days=6), end)
-            urls.append(SITE.format(path=PATHS[sport]) +
-                        f'/scoreboard?dates={start:%Y%m%d}-{stop:%Y%m%d}&limit=1000')
-            start = stop + timedelta(days=1)
+        # One request per day: the NBA scoreboard rejects date ranges (HTTP 400).
+        day, end, urls = datetime(season, 10, 15), today + timedelta(days=14), []
+        while day <= end:
+            urls.append(SITE.format(path=PATHS[sport]) + f'/scoreboard?dates={day:%Y%m%d}&limit=100')
+            day += timedelta(days=1)
     for url in urls:
         for e in get(url).get('events', []):
             events[e['id']] = e
